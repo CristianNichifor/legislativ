@@ -1,0 +1,44 @@
+{
+  "avertisment": "TEXT ILUSTRATIV, NU TEXT DE LEGE. Frazele de mai jos sunt scrise în stilul redactării legislative românești ca să pună pipeline-ul în mișcare fără portal. Nu sunt copiate din Legea nr. 98/2016 și nu trebuie citate ca atare. Când parserul din scripts/parsare.py va citi pagini reale, fișierul acesta se aruncă.",
+  "complet_pentru": ["hg"],
+  "proiect": "Prezenta lege reglementează achizițiile de stat. Autoritatea contractantă are obligația de a publica anunțul de participare în termen de 30 de zile de la data aprobării documentației.",
+  "acte": [
+    {
+      "tip": "lege",
+      "numar": "98",
+      "an": 2016,
+      "titlu": "privind achizițiile publice",
+      "publicat": "2016-05-23",
+      "vigoare": "2016-05-26",
+      "referinte_la": [],
+      "provizii": [
+        {
+          "locator": "art3",
+          "text": "În sensul prezentei legi, termenii și expresiile de mai jos au următoarele semnificații:\na) achiziție publică - achiziția de lucrări, de produse sau de servicii de către una ori mai multe autorități contractante;\nb) autoritate contractantă - entitățile prevăzute la art. 4;\nc) ofertant - orice operator economic care a depus o ofertă;"
+        },
+        {
+          "locator": "art7.alin2",
+          "text": "Autoritatea contractantă are obligația de a publica anunțul de participare în termen de 15 zile de la data aprobării documentației de atribuire."
+        },
+        {
+          "locator": "art235",
+          "text": "În termen de 30 de zile de la data intrării în vigoare a prezentei legi, Guvernul aprobă normele metodologice de aplicare a prezentei legi."
+        },
+        {
+          "locator": "art236",
+          "text": "În termen de 60 de zile de la data intrării în vigoare a prezentei legi, ministrul finanțelor publice emite ordinul privind formularele standard."
+        }
+      ]
+    },
+    {
+      "tip": "hg",
+      "numar": "395",
+      "an": 2016,
+      "titlu": "pentru aprobarea normelor metodologice de aplicare a Legii nr. 98/2016",
+      "publicat": "2016-06-02",
+      "vigoare": "2016-06-02",
+      "referinte_la": ["lege-98-2016"],
+      "provizii": []
+    }
+  ]
+}
