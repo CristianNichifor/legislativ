@@ -392,8 +392,11 @@ def _versiune_si_sw() -> str:
     sw.js retires the old cache. The corpus file already reflects every provision, so hashing it
     (and the graph) captures any change that matters to what the app shows.
     """
+    # Hash the browser-facing catalog, not the monolithic corpus.db — the corpus is not shipped to
+    # the client and need not even be present (a dataset release carries only the shards). index.json
+    # + manifest.json capture the act set and the counts; graf.db the amendment edges.
     h = hashlib.sha256()
-    for name in ("corpus.db", "graf.db"):
+    for name in ("index.json", "manifest.json", "graf.db"):
         p = DATA / name
         if p.is_file():
             h.update(p.read_bytes())
@@ -426,7 +429,8 @@ def main(sursa: str) -> None:
     if sursa == "gata":
         # The data is already in web/data — a dataset release was downloaded and extracted. Build
         # only the shell over it; do not rebuild or reshard what a slower job already produced.
-        if not (DATA / "corpus.db").is_file() or not (DATA / "index.json").is_file():
+        # The corpus itself is not needed here (the browser reads the shards); the catalog is.
+        if not (DATA / "index.json").is_file() or not (DATA / "graf.db").is_file():
             raise SystemExit("--sursa gata: web/data este incomplet (release-ul nu a fost extras)")
         # A collection release may carry no initiatives; the engines still open initiative.db, so
         # give them an empty one rather than let the open fail.

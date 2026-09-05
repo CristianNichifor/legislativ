@@ -8,7 +8,14 @@ name: collect
 #
 # Bounded on purpose: a full walk is ~25 000 pages and would exceed a runner's time budget. Dispatch
 # it with a page range; run it again with the next range to go further. The published archive is
-# `date.tar.gz` (the whole web/data tree) on the rolling `date-latest` release.
+# `date.tar.gz` (the web/data tree, minus the big corpus.db the browser never fetches) on the rolling
+# `date-latest` release.
+#
+# IMPORTANT: legislatie.just.ro's SOAP service refuses GitHub-hosted runner IPs (the token call is
+# dropped mid-connection). This job therefore only works on a **self-hosted runner** on an IP the
+# portal accepts (e.g. the maintainer's box). Until one is registered, build the dataset on a machine
+# that can reach the portal and upload it to the `date-latest` release by hand — that is exactly what
+# the Pages build consumes.
 
 on:
   workflow_dispatch:
@@ -69,6 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          rm -f web/data/corpus.db web/data/corpus.db-*   # browser reads the shards, not the corpus
           tar czf date.tar.gz -C web data
           if gh release view date-latest >/dev/null 2>&1; then
             gh release upload date-latest date.tar.gz --clobber
