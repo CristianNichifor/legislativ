@@ -193,3 +193,11 @@ def test_vecini_returns_deduped_neighbours(tmp_path):
     ids = [m["act_id"] for m in v["inbound"]]
     assert "lege-200-2024" in ids and "lege-201-2024" in ids
     assert ids.count("lege-200-2024") == 1  # deduped despite two amended articles
+
+
+def test_lint_flags_non_standard_drafting(tmp_path):
+    """A draft that says the right thing the wrong way — the drafting-technique pass."""
+    stare = _build(tmp_path)
+    out = _lint("Articolul 7 din Legea nr. 98/2016 se schimbă.", stare)
+    assert "drafting" in out
+    assert out["drafting"] and out["drafting"][0]["operatie"] == "modifica"

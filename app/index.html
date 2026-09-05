@@ -240,11 +240,14 @@ function chip(label,n,sev){ const on=n>0;
 
 function renderLint(d){
   const rp=d.repealed||[], tg=d.targets||[], dl=d.deadlines||[], tm=d.terminology||[], du=d.duplicates||[];
-  let h = `<div class="strip">`+chip("abrogate",rp.length,"blocking")+chip("atinge",tg.length,"note")
-    +chip("termene",dl.length,"material")+chip("terminologie",tm.length,"material")
-    +chip("duplicate",du.length,"note")+`</div>`;
+  const dr=d.drafting||[];
+  let h = `<div class="strip">`+chip("abrogate",rp.length,"blocking")+chip("redactare",dr.length,"material")
+    +chip("atinge",tg.length,"note")+chip("termene",dl.length,"material")
+    +chip("terminologie",tm.length,"material")+chip("duplicate",du.length,"note")+`</div>`;
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
+  if(dr.length) h += sec("Tehnică legislativă", dr.length,
+    dr.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],"","derived")).join(""));
   if(tg.length) h += sec("Ce atinge proiectul", tg.length,
     tg.map(t=>card(t.amendat_de>=8?"blocking":(t.amendat_de>0?"material":"note"),
       `<span class="plx">${esc(t.act_id)}</span>${t.titlu?" — "+esc(t.titlu).slice(0,120):""}`,

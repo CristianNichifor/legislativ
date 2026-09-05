@@ -42,3 +42,12 @@ blochează accesul web la `*.config` și la `bin/`.
 - Serviciul web în sine (`FreeWebService.svc/SOAP`, GetToken + Search) funcționează corect și este
   canalul potrivit pentru acces programatic — nimic de reproșat acolo.
 - Bucuroși să oferim detalii sau pași de reproducere pe un canal privat, la cerere.
+
+---
+
+## Notă: surse de tehnică legislativă (nu vulnerabilități)
+
+Regulile de redactare din `scripts/redactare.py` sunt codificate din documentele publice ale
+Consiliului Legislativ (clr.ro): *Ghidul pentru elaborarea proiectelor de acte normative* (2025)
+și Legea nr. 24/2000. Lista oficială a normelor de aplicare neelaborate (*SituatieNorme
+Neindeplinite*) este ground-truth pentru raportul de vid legislativ și merită importată ca atare.

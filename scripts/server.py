@@ -110,12 +110,19 @@ def _lint(draft: str, stare: Stare) -> dict:
             }
             for p in dubluri(draft, con)[:10]
         ]
+    from scripts.redactare import conformitate
+
+    drafting = [
+        {"gasit": a.gasit, "operatie": a.operatie, "explicatie": a.explicatie}
+        for a in conformitate(draft)
+    ]
     return {
         "deadlines": deadlines,
         "terminology": termen_hits,
         "duplicates": dup,
         "targets": _targets(draft, stare),
         "repealed": _repealed(draft, stare),
+        "drafting": drafting,
     }
 
 
