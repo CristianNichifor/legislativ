@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from scripts.api import Inregistrare
 from scripts.parsare import ActParsat
 from scripts.referinte import Act
 
@@ -106,6 +107,15 @@ CREATE TABLE IF NOT EXISTS cache (
     octeti    INTEGER NOT NULL,
     stare     INTEGER NOT NULL,
     adus_la   TEXT NOT NULL
+);
+
+-- Collection progress, so an interrupted run resumes instead of restarting. One row per page
+-- of the API's unfiltered enumeration, marked done once its acts are written. A 90-minute job
+-- that cannot resume is a job that never finishes, because something always interrupts it.
+CREATE TABLE IF NOT EXISTS progres (
+    pagina     INTEGER PRIMARY KEY,
+    acte       INTEGER NOT NULL,
+    terminat_la TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_relatii_catre ON relatii(catre_act);
@@ -268,6 +278,58 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
         "relatii": n("SELECT count(*) FROM relatii"),
         "pagini_in_cache": n("SELECT count(*) FROM cache"),
     }
+
+
+def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> None:
+    """Write one act from an API record: metadata, in-force date, and the flat full text.
+
+    The API's text has no article tree, so it is stored as a single searchable provision keyed
+    `text`. An act that later needs article-level locators is re-read from its HTML by
+    `scrie_act`, which replaces this row wholesale — the two paths never half-merge. Relation
+    flags are not written here because the API does not carry them; they come from the HTML.
+    """
+    con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
+    con.execute(
+        "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
+        " republicat_din, id_portal, id_act_portal, sursa_url, citit_la)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            act.id,
+            act.tip,
+            act.numar,
+            act.an,
+            rec.titlu,
+            rec.emitent,
+            _iso(rec.data_vigoare),
+            _iso(rec.data_vigoare),
+            None,
+            rec.id_portal,
+            "",
+            rec.link_html,
+            datetime.now(UTC).isoformat(timespec="seconds"),
+        ),
+    )
+    con.execute("DELETE FROM provizii_fts WHERE act_id = ?", (act.id,))
+    con.execute(
+        "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
+        " VALUES (?,?,?,?,?,?)",
+        (act.id, "text", 1, rec.text, _iso(rec.data_vigoare), None),
+    )
+    con.execute(
+        "INSERT INTO provizii_fts (text, act_id, locator) VALUES (?,?,?)",
+        (rec.text, act.id, "text"),
+    )
+
+
+def pagina_terminata(con: sqlite3.Connection, pagina: int, acte: int) -> None:
+    con.execute(
+        "INSERT OR REPLACE INTO progres (pagina, acte, terminat_la) VALUES (?,?,?)",
+        (pagina, acte, datetime.now(UTC).isoformat(timespec="seconds")),
+    )
+
+
+def pagini_terminate(con: sqlite3.Connection) -> set[int]:
+    return {r[0] for r in con.execute("SELECT pagina FROM progres")}
 
 
 def importa(cale_db: Path | str, parsate: Iterable[ActParsat]) -> list[Randament]:

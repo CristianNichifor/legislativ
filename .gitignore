@@ -19,3 +19,7 @@ sources/*.html.gz
 # this package is its own repository rather than a directory in a monorepo with a size gate.
 cache/
 corpus/
+# The built corpus itself: ~1 GB of SQLite, rebuilt by scripts/colector.py from the API.
+# It is an artifact, not source; a release asset if it needs sharing, never a committed blob.
+corpus.db
+corpus.db-*
