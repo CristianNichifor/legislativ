@@ -111,9 +111,10 @@
     font-size:.9rem;line-height:1.6}
   /* the native picker's calendar glyph is near-invisible on the dark surface; lift it */
   input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6);cursor:pointer}
-  /* resize is capped so the box stays within the viewport (room left for header + tabs above);
-     text beyond that scrolls inside instead of pushing the page open */
-  textarea{min-height:9rem;max-height:calc(100vh - 18rem);resize:vertical;overflow:auto;
+  /* resize is capped so the box stays within the viewport — the reserve (22rem) leaves room for
+     the header and tabs above AND the button row plus a gap below, so the buttons never sit on the
+     bottom edge. Text beyond the cap scrolls inside instead of pushing the page open. */
+  textarea{min-height:9rem;max-height:calc(100vh - 22rem);resize:vertical;overflow:auto;
     /* the last line was sitting on the border; give the caret room to breathe when the box grows.
        tab-size + pre-wrap keep pasted indentation and spacing as they were, not collapsed. */
     padding-bottom:1.4rem;tab-size:2;white-space:pre-wrap;overflow-wrap:break-word}
