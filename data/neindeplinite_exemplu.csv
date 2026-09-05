@@ -1,0 +1,16 @@
+# Format exemplu pentru lista oficială a normelor de aplicare neîndeplinite
+# (Consiliul Legislativ / SGG — „Situația normelor neîndeplinite").
+#
+# Coloane: act, instrument, scadenta, stadiu, sursa
+#   act        — actul de bază, citat ca în listă (ex.: „Legea nr. 98/2016")
+#   instrument — norma de aplicare cerută (ex.: „norme metodologice")
+#   scadenta   — termenul, ISO (2018-01-01) sau cu punct (01.01.2018); poate lipsi
+#   stadiu     — starea din listă (implicit „neîndeplinită")
+#   sursa      — de unde vine rândul (etichetă de proveniență)
+#
+# RÂNDURILE DE MAI JOS SUNT ILUSTRATIVE (sursa=exemplu) — pun în evidență formatul,
+# NU sunt lista autorității. Înlocuiește-le cu fișierul oficial descărcat.
+act,instrument,scadenta,stadiu,sursa
+"Legea nr. 98/2016 privind achizițiile publice","norme metodologice",2016-06-25,neelaborată,exemplu
+"Legea nr. 196/2016 privind venitul minim de incluziune","norme metodologice",2018-01-01,neelaborată,exemplu
+"Ordonanța de urgență a Guvernului nr. 57/2019 privind Codul administrativ","hotărâre a Guvernului",,în lucru,exemplu

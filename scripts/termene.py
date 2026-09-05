@@ -215,7 +215,13 @@ def obligatii(text: str, act: Act | None = None, locator: Locator | None = None)
         if pana_la is not None:
             luna = LUNI.get(cheie(pana_la.group("luna")))
             if luna:
-                data_limita = date(int(pana_la.group("an")), luna, int(pana_la.group("zi")))
+                # An impossible date — a drafting typo like "31 septembrie", or a day the regex
+                # matched from something that is not really a date — yields no fixed deadline
+                # rather than crashing the whole corpus scan on one bad match.
+                try:
+                    data_limita = date(int(pana_la.group("an")), luna, int(pana_la.group("zi")))
+                except ValueError:
+                    data_limita = None
 
         ancora_m = _ANCORE.search(frazǎ)
         ancora = (

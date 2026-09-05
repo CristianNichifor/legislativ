@@ -156,6 +156,25 @@ CREATE VIRTUAL TABLE IF NOT EXISTS initiative_fts USING fts5(
     titlu, obiect, plx_id UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
 );
 
+-- The authority's own list of implementing norms that were mandated and never issued
+-- (Consiliul Legislativ / SGG: *Situația normelor neîndeplinite*). This is ground truth for the
+-- gap report: `vid.py` derives the same claim from the corpus, and comparing the two turns a
+-- derived finding into one measured against the source. Imported from a file the user supplies —
+-- the tool stays offline — one row per outstanding norm, keyed by host act + instrument + which
+-- list it came from, so re-importing a newer list replaces its own rows and not another's.
+CREATE TABLE IF NOT EXISTS neindeplinite (
+    act_id       TEXT NOT NULL,          -- host act the norm implements, 'lege-196-2016'
+    act_citat    TEXT NOT NULL,          -- the act exactly as the list cites it
+    instrument   TEXT NOT NULL,          -- the norm to be issued, as named
+    tip_asteptat TEXT,                   -- mapped instrument type (hg/ordin/...) or NULL
+    scadenta     TEXT,                   -- ISO deadline, when the list gives one
+    stadiu       TEXT,                   -- the authority's status text
+    sursa        TEXT NOT NULL,          -- which list this row came from
+    citit_la     TEXT NOT NULL,
+    PRIMARY KEY (act_id, instrument, sursa)
+);
+CREATE INDEX IF NOT EXISTS idx_neindeplinite_act ON neindeplinite(act_id);
+
 CREATE INDEX IF NOT EXISTS idx_relatii_catre ON relatii(catre_act);
 CREATE INDEX IF NOT EXISTS idx_acte_tip_an   ON acte(tip, an);
 
@@ -350,7 +369,28 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
         "relatii": n("SELECT count(*) FROM relatii"),
         "pagini_in_cache": n("SELECT count(*) FROM cache"),
         "initiative": n("SELECT count(*) FROM initiative"),
+        "neindeplinite": n("SELECT count(*) FROM neindeplinite"),
     }
+
+
+def scrie_norma(con: sqlite3.Connection, norma) -> None:
+    """Upsert one outstanding-norm row from the authority's list. Re-importing the same list
+    replaces its rows — a newer list is a newer status, and status is what moves."""
+    con.execute(
+        "INSERT OR REPLACE INTO neindeplinite"
+        " (act_id, act_citat, instrument, tip_asteptat, scadenta, stadiu, sursa, citit_la)"
+        " VALUES (?,?,?,?,?,?,?,?)",
+        (
+            norma.act_id,
+            norma.act_citat,
+            norma.instrument,
+            norma.tip_asteptat,
+            norma.scadenta.isoformat() if norma.scadenta else None,
+            norma.stadiu,
+            norma.sursa,
+            datetime.now(UTC).isoformat(timespec="seconds"),
+        ),
+    )
 
 
 def scrie_initiativa(con: sqlite3.Connection, ini) -> None:

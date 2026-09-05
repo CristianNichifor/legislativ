@@ -85,3 +85,13 @@ def test_the_due_date_is_none_when_the_host_act_has_no_dates():
     )[0]
     assert o.scadenta() is None
     assert o.scadenta(vigoare=date(2016, 5, 26)) == date(2016, 6, 25)
+
+
+def test_an_impossible_fixed_date_does_not_crash_the_scan():
+    """A real act somewhere writes an out-of-range date ('31 septembrie'), or the regex matches a
+    day that is not one; that must yield no fixed deadline, not blow up the whole corpus scan."""
+    o = obligatii(
+        "Guvernul aprobă normele metodologice cel târziu până la data de 31 septembrie 2020."
+    )
+    assert len(o) == 1
+    assert o[0].data_limita is None  # impossible date dropped, obligation still returned

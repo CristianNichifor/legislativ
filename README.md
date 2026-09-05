@@ -110,6 +110,25 @@ replacing this set with those is the highest-value hour anyone can spend on this
 expanded, is marked `cunoscut_ratat`, and is left in. A gold set curated until it reports 100%
 reports nothing.
 
+**A third number, for the report that matters most.** The gap report — obligations the corpus
+cannot show were discharged — is derived from corpus text, so it is honest but unvalidated. The
+Consiliul Legislativ / SGG publish the answer key: *Situația normelor neîndeplinite*, the official
+list of implementing norms that were mandated and never issued. `scripts.neindeplinite` imports
+that list from a file (the tool stays offline) and compares it to the derived report, at the level
+of the host act:
+
+```
+uv run python -m scripts.neindeplinite --lista lista_oficiala.csv --corpus corpus.db --graf graf.db
+```
+
+It reports coverage — of the authority's outstanding norms whose host act the corpus actually
+holds, the fraction the tool independently flags — and names both the misses and the acts it
+cannot judge because they are not yet collected. That last set is kept out of the fraction on
+purpose: an act the scrape has not reached is not a disagreement with the authority, and scoring it
+as one would be the same confident-but-wrong output the whole package is built to avoid. The format
+is documented in `data/neindeplinite_exemplu.csv`; the committed rows there are illustrative, not
+the authority's list.
+
 ## What the gold set caught
 
 Every one of these looked right on the page and none was found by reading the pattern:
@@ -260,5 +279,6 @@ endpoint and a recorded fixture are the same shape.
 | `vigoare.py` | In force or not: repeals from the graph, and drafts that cite a repealed article. |
 | `imbogateste.py` | Index of which acts each pending initiative touches — "who is already on this law". |
 | `redactare.py` | Legistic drafting form (Legea 24/2000): flags intent said the wrong way, generates the right way. |
+| `neindeplinite.py` | The authority's list of unfulfilled norms, imported from a file, compared to the derived gap report. |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
 | `server.py` | Stdlib backend + UI: verify a draft, redactează a new one, search, and a zoomable connections graph. |
