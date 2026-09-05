@@ -31,10 +31,34 @@ the feature stays hidden, so the site works with or without the Worker.
   stores the result, returns it. Real generations are cached; the stub is not (so it's replaced the
   moment a key is added).
 - `GET /rescrie?act=&loc=` → cached rewrite or `404 negenerat`.
-- CORS is open (`*`) because it serves public law; the app's CSP already allows `https://*.workers.dev`.
+- The app's CSP already allows `https://*.workers.dev`.
+
+## Protecting the AI bill against bots
+
+A public rewrite endpoint that calls a paid model is a bill waiting to be abused. The Worker layers
+cheap, mostly-free defences (all configured in `wrangler.toml`):
+
+1. **Cache-first** — a repeat request is a free KV read; the model is never called twice for the same
+   provision.
+2. **Small input only** (`MAX_CHARS`, 4000) — a provision is short, so a request carrying a big prompt
+   is refused. The endpoint cannot be used as a free general-purpose LLM.
+3. **Per-IP rate limit** via the native Workers rate-limiting binding (`RL`) — no KV cost.
+4. **Daily cap** (`CAP_ZILNIC`) on new generations, in KV — a hard ceiling on spend.
+5. **Origin allowlist** (`ORIGINI`) — only the app's own pages are served.
+6. **Account spend cap** — set a monthly limit on the Mistral account. This is the backstop that
+   makes the ceiling absolute regardless of anything above.
+
+## Cheaper / better inference
+
+- **AI Gateway** (Cloudflare, free): point `MISTRAL_URL` at a gateway URL to get response caching,
+  rate limiting and cost analytics in front of Mistral, with no code change.
+- **Batch APIs** (~50% cheaper) for **bulk pre-generation** — Mistral's Batch API, or Cloudflare
+  **Workers AI Batch**. Use these to pre-warm the popular codes (Fiscal, Civil, Penal, Labour) into
+  KV ahead of time; on-demand single rewrites stay on the cache-first path here.
 
 ## Cost
 
-KV free tier covers it: reads are the common case (cache hits), writes happen once per new provision
-viewed in online mode. Mistral is called only on a miss. At thousands of queries/month this is free
-to a few euros — the whole point of caching the rewrite rather than regenerating per view.
+Cache-first + once-per-provision means the model is paid at most once per provision, ever. KV free
+tier (100k reads/day, 1k writes/day, 1 GB) covers it — reads dominate; a write happens only on a new
+generation. Mistral Small is ~$0.0003 per rewrite; the whole corpus rewritten over time is a few
+dollars, one-time. Day-to-day: effectively free.

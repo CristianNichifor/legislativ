@@ -7,10 +7,27 @@ compatibility_date = "2025-01-01"
 binding = "RESCRIERI"
 id = "8a788c5315bf4c61a72c23d3ef5f46d9"
 
+# Per-IP rate limit (native binding — no KV writes). Tune limit/period to taste.
+[[unsafe.bindings]]
+name = "RL"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
 [vars]
 MISTRAL_MODEL = "mistral-small-latest"
+# Comma-separated allowed Origins for the browser app. Set to your Pages origin to block casual abuse.
+ORIGINI = "https://cristiannichifor.github.io"
+# Hard ceiling on NEW rewrites per day (a spend cap). Leave unset to disable.
+CAP_ZILNIC = "1500"
+# Optional: point at an AI Gateway URL instead of Mistral directly, for free caching + analytics.
+# MISTRAL_URL = "https://gateway.ai.cloudflare.com/v1/<acct>/<gw>/mistral/v1/chat/completions"
 
 # MISTRAL_API_KEY is a secret, not a var — never commit it. Set it with:
 #   wrangler secret put MISTRAL_API_KEY
 # Until it is set, the Worker returns a clearly-labelled stub and caches nothing, so the whole
 # pipeline (app → Worker → KV) works end to end before any AI is wired in.
+#
+# Ultimate backstop: set a monthly spend limit on the Mistral account in its dashboard. With that +
+# the per-IP rate limit + the daily cap + cache-first + the small-input rule, a bot cannot run up
+# the bill.
