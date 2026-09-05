@@ -120,7 +120,17 @@ function card(cls, lead, metaParts, quote, tag){
 
 function render(d){
   const dl = d.deadlines||[], tm = d.terminology||[], du = d.duplicates||[], tg = d.targets||[];
+  const rp = d.repealed||[];
   let h = "";
+
+  if(rp.length){
+    h += `<section><div class="sec-head"><h2>Citezi lege abrogată</h2>`
+       + `<span class="count">${rp.length}</span></div>`;
+    h += rp.map(r => card("blocking",
+          `<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,
+          [esc(r.motiv)], "", "verbatim")).join("");
+    h += `</section>`;
+  }
 
   if(tg.length){
     h += `<section><div class="sec-head"><h2>Ce atinge proiectul</h2>`

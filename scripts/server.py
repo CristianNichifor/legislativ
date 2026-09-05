@@ -115,7 +115,35 @@ def _lint(draft: str, stare: Stare) -> dict:
         "terminology": termen_hits,
         "duplicates": dup,
         "targets": _targets(draft, stare),
+        "repealed": _repealed(draft, stare),
     }
+
+
+def _repealed(draft: str, stare: Stare) -> list[dict]:
+    """References in the draft to a repealed act or article — the citation it must not build on.
+
+    Read from the graph's `abroga` edges, so it appears only once a graph is built and only for
+    repeals whose acts are collected: silent where the data cannot reach, never a false "in
+    force". The highest-severity thing the linter can say, so it leads the answer in the UI.
+    """
+    if not stare.are_graf():
+        return []
+    from scripts.graf import _deschide_graf
+    from scripts.vigoare import citari_moarte
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        return [
+            {
+                "act_id": cm.act_id,
+                "locator": cm.locator,
+                "motiv": cm.motiv,
+                "intregul_act": cm.abrogare.este_intregul_act,
+            }
+            for cm in citari_moarte(draft, graf)
+        ]
+    finally:
+        graf.close()
 
 
 def _targets(draft: str, stare: Stare) -> list[dict]:
