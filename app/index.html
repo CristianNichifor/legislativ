@@ -267,6 +267,25 @@
     .redact-body{flex-direction:column}
     #r-compus{position:static;max-height:none;width:100%}
   }
+  /* pretty scrollbars everywhere, in place of the OS default */
+  *{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
+  ::-webkit-scrollbar{width:11px;height:11px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--rule);border-radius:8px;
+    border:3px solid var(--paper);background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:var(--ink-mute);border-radius:8px;
+    border:3px solid var(--paper);background-clip:padding-box}
+  ::-webkit-scrollbar-corner{background:transparent}
+  /* per-textarea toolbar: deterministic Format + local-AI rewrite by norm */
+  .txt-tools{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 0}
+  .txt-tools .mini{font-size:.68rem;padding:.2rem .55rem}
+  .txt-tools select.norma{height:1.95rem;font-size:.68rem;padding:.1rem 1.5rem .1rem .55rem;
+    background-size:.5rem;width:auto;min-width:0}
+  .txt-tools .txt-stat{font-size:.66rem;color:var(--ink-mute)}
+  /* live-preview badge on the composed act */
+  .r-live{display:inline-block;font-size:.6rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--good);border:1px solid var(--good);border-radius:999px;
+    padding:.05rem .45rem}
   /* the nested-block act builder — every block is a card */
   .tree{background:transparent;border:0;padding:.1rem 0;min-height:2.6rem}
   .tree:empty::before{content:"Niciun articol încă — apasă „+ articol”.";font-family:var(--sans);
@@ -409,10 +428,10 @@
             <input type="date" id="c-data" onclick="this.showPicker&&this.showPicker()" onfocus="this.showPicker&&this.showPicker()"></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
-          <label class="ai-toggle"><input type="checkbox" id="ai-local"> Rescriere AI locală <span class="hint">(în browser, privat)</span></label>
+          <label class="ai-toggle"><input type="checkbox" id="ai-local"> Rescriere cu AI, pe dispozitiv <span class="hint">(rulează în browser — textul nu pleacă nicăieri)</span></label>
           <select id="ai-model" class="ai-model" title="Modelul AI local" style="display:none"></select>
           <span class="hint" id="ai-sug" style="display:none"></span>
-          <span class="hint">local · fără cereri către portal</span></div>
+          <span class="hint">fără server și fără cheie · nimic nu se trimite către portal</span></div>
         <div id="cons-out"></div>
       </div>
 
@@ -685,21 +704,38 @@ function creeazaNod(nivel){
   wrap.innerHTML=`<div class="node-hd">
       <span class="lvl">${cfg.lvl}</span>
       <input class="num" type="text" placeholder="${cfg.ph}">
-      <input class="num artnou" placeholder="art. nou (12^1)" style="display:none;width:8rem">
+      <input class="num artnou" type="text" placeholder="art. nou (12^1)" style="display:none;width:8rem">
       <select class="op"><option value="">— fără modificare —</option>${cfg.ops.map(o=>`<option value="${o}">${OPT[o]}</option>`).join("")}</select>
       <button type="button" class="node-x" title="Șterge blocul">×</button>
     </div>
-    <div class="txt" hidden><span class="txt-lbl">Text nou al prevederii</span><textarea placeholder="Scrie aici textul care înlocuiește / se adaugă…"></textarea></div>
+    <div class="txt" hidden><span class="txt-lbl">Text nou al prevederii</span><textarea placeholder="Scrie aici textul care înlocuiește / se adaugă…"></textarea>
+      <div class="txt-tools">
+        <button type="button" class="ghost mini fmt" title="Curăță spațiile, majusculă la început, punct la final">Format</button>
+        <select class="norma" title="După ce normă rescrie AI">
+          <option value="nou">norme noi (limbaj natural)</option>
+          <option value="actual">norme actuale (juridic)</option>
+        </select>
+        <button type="button" class="ghost mini nlg" title="Rescrie cu AI local — textul rămâne pe dispozitiv">Rescrie AI</button>
+        <button type="button" class="ghost mini revino" hidden title="Revino la textul dinainte">↶ revino</button>
+        <span class="txt-stat"></span>
+      </div></div>
     <div class="kids"></div>`;
   const op=wrap.querySelector(":scope > .node-hd > .op");
   const txt=wrap.querySelector(":scope > .txt");
+  const ta=txt.querySelector("textarea");
   const artnou=wrap.querySelector(":scope > .node-hd > .artnou");
   op.onchange=()=>{ const v=op.value; txt.hidden=!(v==="modifica"||v==="completeaza"||v==="introduce");
     artnou.style.display=(v==="introduce")?"":"none"; };
-  wrap.querySelector(":scope > .node-hd > .node-x").onclick=()=>wrap.remove();
+  wrap.querySelector(":scope > .node-hd > .node-x").onclick=()=>{ wrap.remove(); programeazaLive(); };
+  // per-textarea tools: deterministic Format, and a local-AI rewrite by chosen norm (private)
+  const tools=txt.querySelector(".txt-tools"), revino=tools.querySelector(".revino"), stat=tools.querySelector(".txt-stat");
+  tools.querySelector(".fmt").onclick=()=>{ if(!ta.value.trim()){ stat.textContent="scrie întâi un text"; return; }
+    ta.dataset.prev=ta.value; ta.value=formateazaText(ta.value); revino.hidden=false; stat.textContent="formatat"; programeazaLive(); };
+  tools.querySelector(".nlg").onclick=()=>rescrieTextNod(ta, tools.querySelector(".norma").value, tools.querySelector(".nlg"), revino, stat);
+  revino.onclick=()=>{ if(ta.dataset.prev!=null){ ta.value=ta.dataset.prev; revino.hidden=true; stat.textContent=""; programeazaLive(); } };
   if(cfg.sub){ const kids=wrap.querySelector(":scope > .kids");
     const add=document.createElement("button"); add.type="button"; add.className="ghost node-add"; add.textContent=cfg.subEt;
-    add.onclick=()=>kids.append(creeazaNod(cfg.sub)); wrap.append(add); }
+    add.onclick=()=>{ kids.append(creeazaNod(cfg.sub)); programeazaLive(); }; wrap.append(add); }
   return wrap;
 }
 function citesteNod(wrap, nivel, path, act, out){
@@ -719,19 +755,55 @@ function compileArbore(act){
   [...$("#r-tree").children].filter(c=>c.classList&&c.classList.contains("node")).forEach(c=>citesteNod(c,"art",{},act,out));
   return out;
 }
-$("#r-add-art").onclick=()=>$("#r-tree").append(creeazaNod("art"));
+// deterministic tidy: collapse spaces per line, sentence-case, close with a period
+function formateazaText(t){
+  let s=(t||"").replace(/\r\n?/g,"\n").split("\n").map(l=>l.replace(/[ \t]+/g," ").trim()).join("\n").trim();
+  s=s.replace(/ +([,.;:])/g,"$1")                 // no space before , . ; :
+     .replace(/([,;:])(?=[^\s\d)])/g,"$1 ")        // one space after , ; :
+     .replace(/([a-zăâîșț])\(/gi,"$1 (")           // space before ( after a word (alineatul (2))
+     .replace(/\)(?=[a-zăâîșț])/gi,") ");          // space after ) before a word ((2) se)
+  if(s){ s=s.charAt(0).toUpperCase()+s.slice(1); if(!/[.!?;:]$/.test(s)) s+="."; }
+  return s;
+}
+// rewrite one block's own text with the local model (private) in the chosen drafting norm
+async function rescrieTextNod(ta, norma, btn, revino, stat){
+  const text=ta.value.trim();
+  if(!text){ stat.textContent="scrie întâi un text"; return; }
+  if(!aiLocalOn() || !LLM.disponibil()){
+    stat.textContent="pornește «Rescriere cu AI, pe dispozitiv» din fila Verifică (rulează local, privat)"; return; }
+  const sistem = norma==="actual" ? SIS_ACTUAL : SIS_CLAR;
+  btn.disabled=true; const et=btn.textContent; btn.innerHTML=`<span class="spin"></span>`;
+  stat.textContent="se încarcă modelul…";
+  try{
+    const prog=(r)=>{ stat.textContent=(r&&r.text)?r.text:"se rescrie…"; };
+    const nou=await LLM.rescrieCu(text, sistem, prog);
+    if(nou){ ta.dataset.prev=ta.value; ta.value=nou; revino.hidden=false;
+      stat.textContent = norma==="actual" ? "rescris · norme actuale" : "rescris · norme noi"; programeazaLive(); }
+    else stat.textContent="fără rezultat";
+  }catch(e){ stat.textContent="eroare: "+(e.message||e); }
+  finally{ btn.disabled=false; btn.textContent=et; }
+}
+$("#r-add-art").onclick=()=>{ $("#r-tree").append(creeazaNod("art")); programeazaLive(); };
 $("#r-goleste").onclick=()=>{ $("#r-tree").innerHTML=""; $("#r-tree").append(creeazaNod("art")); $("#r-compus").innerHTML=""; $("#r-out").innerHTML=""; };
-$("#r-compune").onclick=async ()=>{
-  if(!valideazaAct()){ $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
+// live preview: recompose (debounced) on any edit, so the right column tracks the tree in real time
+let liveSeq=0, liveTimer=null;
+function programeazaLive(){ clearTimeout(liveTimer); liveTimer=setTimeout(()=>compune(true), 500); }
+async function compune(live){
+  const btn=$("#r-compune");
+  if(!valideazaAct()){ if(live){ $("#r-compus").innerHTML=""; return; }
+    $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
   const act=citareAct();
   const interventii=compileArbore(act);
-  if(!interventii.length){ $("#r-out").innerHTML=empty("Pune o operație pe cel puțin un bloc (articol, alineat sau literă)."); return; }
-  $("#r-out").innerHTML="";
-  $("#r-compune").disabled=true; $("#r-compune").innerHTML=`<span class="spin"></span> se compune…`;
+  if(!interventii.length){ if(live){ $("#r-compus").innerHTML=""; return; }
+    $("#r-out").innerHTML=empty("Pune o operație pe cel puțin un bloc (articol, alineat sau literă)."); return; }
+  if(!live){ $("#r-out").innerHTML=""; btn.disabled=true; btn.innerHTML=`<span class="spin"></span> se compune…`; }
+  const seq=++liveSeq;
   try{
     const d=await (await fetch("/api/compune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({interventii})})).json();
+    if(seq!==liveSeq) return;   // a newer edit already superseded this compose
     if(d.error){ $("#r-compus").innerHTML=empty("Eroare: "+esc(d.error)); return; }
-    let h=`<div class="hint" style="margin-top:1rem">Titlu: <b>${esc(d.titlu)}</b></div>`
+    let h=`<div class="hint" style="margin:0 0 .4rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">`
+      +`<span class="r-live">live</span> Titlu: <b>${esc(d.titlu)}</b></div>`
       +`<div class="out-box" id="r-compus-text">${esc(d.text)}</div>`;
     if(d.curat) h+=`<p class="hint" style="color:var(--good)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`;
     else h+=(d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join("");
@@ -739,9 +811,14 @@ $("#r-compune").onclick=async ()=>{
     $("#r-compus").innerHTML=h;
     $("#r-ccopy").onclick=()=>{ navigator.clipboard?.writeText(d.titlu+"\n\n"+d.text); $("#r-ccopy").textContent="Copiat"; };
     $("#r-cinsert").onclick=()=>{ $("#draft").value=d.titlu+"\n\n"+d.text; selectTab("lint"); };
-  }catch(e){ $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
-  finally{ $("#r-compune").disabled=false; $("#r-compune").textContent="Compune actul"; }
-};
+  }catch(e){ if(seq===liveSeq && !live) $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+  finally{ if(!live){ btn.disabled=false; btn.textContent="Compune actul"; } }
+}
+$("#r-compune").onclick=()=>compune(false);
+$("#r-tree").addEventListener("input", programeazaLive);
+$("#r-tree").addEventListener("change", programeazaLive);
+["r-tip","r-nr","r-an","r-desc"].forEach(id=>{ const el=$("#"+id);
+  if(el){ el.addEventListener("input",programeazaLive); el.addEventListener("change",programeazaLive); } });
 $("#r-tree").append(creeazaNod("art"));   // start with one article block
 
 // ---- drafting suggestion (deterministic; top = plain reading, bottom = the required formula) ----
@@ -806,6 +883,10 @@ const SIS_CLAR="Rescrii prevederi legale românești în limbaj clar, stil danez
  +"idee pe propoziție; enunțul principal întâi; diateză activă cu actorul numit; propoziții relative "
  +"în loc de participii antepuse; fără duble negații; cifre pentru numere). NU schimba sensul, nu "
  +"adăuga și nu omite nimic; păstrează termenii definiți. Răspunde DOAR cu textul rescris.";
+const SIS_ACTUAL="Rescrii textul în registrul juridic român actual, conform normelor de tehnică "
+ +"legislativă (Legea nr. 24/2000): limbaj normativ formal, terminologie juridică consacrată și "
+ +"unitară, construcții precise și impersonale acolo unde e uzual. NU schimba sensul, nu adăuga și "
+ +"nu omite nimic; păstrează termenii definiți. Răspunde DOAR cu textul rescris.";
 const MODELE=[
   {id:"Qwen2.5-0.5B-Instruct-q4f16_1-MLC", et:"0,5B · rapid (~0,4 GB)"},
   {id:"Qwen2.5-1.5B-Instruct-q4f16_1-MLC", et:"1,5B · echilibrat (~1,1 GB)"},
@@ -820,10 +901,11 @@ const LLM={
     if(this.engine){ try{ await this.engine.unload?.(); }catch(e){} this.engine=null; }  // model changed → reload
     const m=await import("https://esm.run/@mlc-ai/web-llm");
     this.engine=await m.CreateMLCEngine(this.model,{initProgressCallback:prog}); this.modelIncarcat=this.model; return this.engine; },
-  async rescrie(text,prog){ const e=await this.incarca(prog);
+  async rescrieCu(text,sistem,prog){ const e=await this.incarca(prog);
     const r=await e.chat.completions.create({temperature:0.2,
-      messages:[{role:"system",content:SIS_CLAR},{role:"user",content:text}]});
-    return (r.choices&&r.choices[0]&&r.choices[0].message.content||"").trim(); }
+      messages:[{role:"system",content:sistem},{role:"user",content:text}]});
+    return (r.choices&&r.choices[0]&&r.choices[0].message.content||"").trim(); },
+  rescrie(text,prog){ return this.rescrieCu(text, SIS_CLAR, prog); }
 };
 function aiLocalOn(){ try{ return localStorage.getItem("ai_local")==="1"; }catch(e){ return false; } }
 // Suggest a model from what the device can plausibly run: RAM, cores, and the GPU's buffer limit.
