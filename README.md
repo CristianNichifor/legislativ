@@ -268,9 +268,10 @@ endpoint and a recorded fixture are the same shape.
 | --- | --- |
 | `text.py` | Cedilla folding, superscript article numbers, the stemmer. Everything downstream assumes it ran. |
 | `referinte.py` | Which act, which provision. Nominative and genitive, dotted thousands, three-level locators. |
-| `amendamente.py` | What one act does to another. Chapeau inheritance lives here. |
+| `amendamente.py` | What one act does to another. Chapeau inheritance lives here; captures the quoted replacement text an amendment supplies. |
 | `termene.py` | Obligations with a deadline and an anchor. |
 | `vid.py` | Obligations the corpus cannot show were discharged. |
+| `consolidare.py` | A provision's text as of a date — or an honest refusal when a change would not apply cleanly (`docs/CONSOLIDARE.md`). |
 | `definitii.py` | An act's own definition articles, and drafts that talk around them. |
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |

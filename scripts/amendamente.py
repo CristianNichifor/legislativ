@@ -71,6 +71,19 @@ _CHAPEAU = re.compile(
     re.IGNORECASE,
 )
 
+# The replacement text an amendment supplies, quoted verbatim after `... următorul cuprins:`.
+# It is what `modifică ... va avea următorul cuprins:` substitutes and what
+# `introduce ... cu următorul cuprins:` inserts — the payload consolidation needs and this module
+# did not previously keep. Romanian legal drafting quotes the block in guillemets «...», in the
+# low-9/high-6 pair „...", or in straight quotes; each is tried in turn and only a delimited block
+# is captured, because a payload read without clear delimiters is not one that can be called
+# verbatim. `DOTALL` because the quoted provision routinely spans several lines.
+_CONTINUT_NOU = re.compile(
+    r"urm(?:ă|a)tor(?:ul|ea)\s+cuprins\s*:\s*"
+    r"(?:«\s*(?P<g>.+?)\s*»|„\s*(?P<r>.+?)\s*(?:”|\")|\"\s*(?P<d>.+?)\s*\")",
+    re.IGNORECASE | re.DOTALL,
+)
+
 # A numbered point, at the start of a line: `12. La articolul 7, ...`
 _PUNCT_NUMEROTAT = re.compile(r"^\s{0,4}\d{1,3}\.\s+", re.MULTILINE)
 # Sentence end, guarding the abbreviations that legally must end in a full stop.
@@ -92,6 +105,7 @@ class Amendament:
     mostenit: bool = False
     locator_nou: Locator | None = None
     articole_noi: tuple[str, ...] = field(default=())
+    continut_nou: str | None = None
 
     @property
     def increderea(self) -> str:
@@ -125,6 +139,19 @@ def unitati(text: str) -> list[tuple[str, int]]:
                 brute.append((fraza, gasit if gasit >= 0 else pozitie))
             pozitie += len(fraza)
     return brute
+
+
+def _continut_nou(unitate: str) -> str | None:
+    """The verbatim replacement/inserted text a unit supplies, or None when it names none.
+
+    Only a block delimited by real quote marks is returned; a modification that says it changes a
+    provision without quoting the new text (or one this module could not delimit) yields None, so
+    consolidation sees an operation with no payload and refuses to splice rather than guess."""
+    m = _CONTINUT_NOU.search(unitate)
+    if not m:
+        return None
+    text = m.group("g") or m.group("r") or m.group("d")
+    return text.strip() or None
 
 
 def _fel(unitate: str) -> tuple[str, int] | None:
@@ -214,6 +241,7 @@ def amendamente(text: str, act_gazda: Act | None = None) -> list[Amendament]:
                 mostenit=mostenit,
                 locator_nou=dupa[0][0] if fel == "introduce" and dupa else None,
                 articole_noi=noi,
+                continut_nou=_continut_nou(unitate),
             )
         )
     return gasite

@@ -122,3 +122,48 @@ def test_abbreviations_that_end_in_a_full_stop_do_not_end_a_sentence():
     """`art.`, `alin.`, `nr.` all end in the character a naive splitter treats as a boundary."""
     bucati = unitati("Se aplică art. 5 din Legea nr. 98/2016. Articolul 15 se abrogă.")
     assert len(bucati) == 2
+
+
+def test_a_modification_captures_the_quoted_replacement_text():
+    """The payload consolidation needs: `va avea următorul cuprins: «...»`, verbatim."""
+    a = amendamente(
+        CHAPEAU + "1. La articolul 7, alineatul (2) se modifică și va avea următorul "
+        "cuprins:\n«(2) Autoritatea contractantă publică anunțul de participare.»",
+        act_gazda=GAZDA,
+    )[0]
+    assert a.fel == "modifica"
+    assert a.continut_nou == "(2) Autoritatea contractantă publică anunțul de participare."
+    assert a.increderea == "derived"  # target was inherited from the chapeau
+
+
+def test_an_insertion_captures_its_new_text_in_low9_high6_quotes():
+    """`se introduce ... cu următorul cuprins: „..."` — the other quote style, and an insert."""
+    a = amendamente(
+        CHAPEAU + "1. După articolul 12 se introduce un nou articol, art. 12^1, cu "
+        'următorul cuprins:\n„Art. 12^1. - Prezenta procedură se aplică integral."',
+        act_gazda=GAZDA,
+    )[0]
+    assert a.fel == "introduce"
+    assert a.continut_nou == "Art. 12^1. - Prezenta procedură se aplică integral."
+
+
+def test_a_multiline_payload_is_captured_whole():
+    a = amendamente(
+        CHAPEAU + "1. Articolul 7 se modifică și va avea următorul cuprins:\n"
+        "«Art. 7. -\n(1) Prima regulă.\n(2) A doua regulă.»",
+        act_gazda=GAZDA,
+    )[0]
+    assert a.continut_nou == "Art. 7. -\n(1) Prima regulă.\n(2) A doua regulă."
+
+
+def test_an_abrogation_carries_no_payload():
+    """Nothing to substitute; consolidation marks the provision repealed, it splices no text."""
+    a = amendamente(CHAPEAU + "1. Articolul 15 se abrogă.", act_gazda=GAZDA)[0]
+    assert a.fel == "abroga" and a.continut_nou is None
+
+
+def test_a_modification_without_a_quoted_block_yields_no_payload():
+    """A change that does not quote its new text leaves continut_nou None, so consolidation sees an
+    operation it cannot apply and refuses rather than inventing text."""
+    a = amendamente(CHAPEAU + "1. La articolul 7, alineatul (2) se modifică.", act_gazda=GAZDA)[0]
+    assert a.fel == "modifica" and a.continut_nou is None
