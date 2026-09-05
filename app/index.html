@@ -11,8 +11,7 @@
   :root{
     --paper:#f2f3f5; --surface:#fff; --sunk:#eceef1; --ink:#14171c; --ink-mid:#464d59;
     --ink-mute:#6b7280; --rule:#d7dae0; --rule-soft:#e6e8ec; --accent:#8a2b2e;
-    --accent-wash:#f4e6e5; --blocking:#8a2b2e; --material:#8a5c14; --note:#3f6478;
-    --good:#2f6b43;
+    --accent-wash:#f4e6e5; --blocking:#8a2b2e; --material:#8a5c14; --note:#3f6478; --good:#2f6b43;
     --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
     --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     --serif:"Spectral","Iowan Old Style",Georgia,serif;
@@ -30,7 +29,7 @@
   *{box-sizing:border-box}
   body{background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.55;
     margin:0;font-size:16px;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:64rem;margin:0 auto;padding:0 1.25rem 5rem}
+  .wrap{max-width:78rem;margin:0 auto;padding:0 1.25rem 5rem}
 
   header{border-bottom:2px solid var(--ink);padding:1.9rem 0 1.1rem;margin-bottom:1.5rem;
     display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem 1.2rem}
@@ -40,6 +39,36 @@
     letter-spacing:-.015em;margin:0;line-height:1.04}
   .stat{font-family:var(--sans);font-size:.78rem;color:var(--ink-mute);margin-left:auto}
   .stat b{color:var(--ink-mid);font-variant-numeric:tabular-nums}
+
+  .app{display:flex;gap:1.5rem;align-items:flex-start}
+  .main{flex:1;min-width:0}
+  aside.canvas{width:24rem;flex:none;position:sticky;top:1rem;
+    border:1px solid var(--rule);background:var(--surface)}
+  aside.canvas.collapsed{width:2.5rem}
+  .canvas-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem;
+    border-bottom:1px solid var(--rule-soft);font-family:var(--sans);font-size:.72rem;
+    font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-mute)}
+  aside.canvas.collapsed .canvas-head{writing-mode:vertical-rl;border-bottom:0;height:100%}
+  aside.canvas.collapsed .canvas-body{display:none}
+  .canvas-toggle{margin-left:auto;background:transparent;border:1px solid var(--rule);
+    color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;
+    padding:.15rem .45rem}
+  aside.canvas.collapsed .canvas-toggle{margin:0}
+  .canvas-body{padding:.5rem}
+  svg.graf{width:100%;height:auto;display:block}
+  .graf-empty{font-family:var(--sans);font-size:.8rem;color:var(--ink-mute);font-style:italic;
+    padding:1.5rem .5rem;text-align:center}
+  .legend{font-family:var(--sans);font-size:.68rem;color:var(--ink-mute);padding:.4rem .6rem .6rem;
+    display:flex;flex-wrap:wrap;gap:.3rem .9rem}
+  .legend span{display:flex;align-items:center;gap:.3rem}
+  .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
+  @media (max-width:900px){
+    .app{flex-direction:column}
+    aside.canvas{width:100%;position:static;order:-1}
+    aside.canvas.collapsed{width:100%}
+    aside.canvas.collapsed .canvas-head{writing-mode:horizontal-tb;height:auto;
+      border-bottom:1px solid var(--rule-soft)}
+  }
 
   .tabs{display:flex;gap:.35rem;margin-bottom:1rem}
   .tab{font-family:var(--sans);font-size:.82rem;font-weight:600;padding:.5rem 1rem;cursor:pointer;
@@ -62,7 +91,6 @@
     font-family:var(--sans);font-size:.82rem;font-weight:600;padding:.55rem 1rem;cursor:pointer}
   .hint{font-family:var(--sans);font-size:.76rem;color:var(--ink-mute)}
 
-  /* summary strip: severity at a glance */
   .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.75rem 0 .5rem}
   .chip{font-family:var(--sans);font-size:.76rem;font-weight:600;display:flex;align-items:center;
     gap:.5rem;padding:.4rem .8rem;background:var(--surface);border:1px solid var(--rule-soft);
@@ -71,10 +99,9 @@
   .chip.on.blocking{border-left-color:var(--blocking);color:var(--blocking)}
   .chip.on.material{border-left-color:var(--material);color:var(--material)}
   .chip.on.note{border-left-color:var(--note);color:var(--note)}
-  .chip.off{color:var(--ink-mute);opacity:.7}
-  .chip.off .n{color:var(--good)}
+  .chip.off{color:var(--ink-mute);opacity:.7} .chip.off .n{color:var(--good)}
 
-  section{margin-top:2rem;scroll-margin-top:1rem}
+  section{margin-top:2rem}
   .sec-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid var(--rule);
     padding-bottom:.45rem;margin-bottom:.9rem}
   h2{font-family:var(--serif);font-weight:600;font-size:1.2rem;margin:0}
@@ -97,10 +124,7 @@
   .plx{font-family:var(--mono);color:var(--accent)}
   .empty{font-family:var(--sans);font-size:.85rem;color:var(--ink-mute);font-style:italic}
   a{color:var(--accent);text-underline-offset:.15em}
-
-  .sr-hits .card .lead{font-size:.92rem}
-  .frag{font-family:var(--mono);font-size:.82rem}
-  .frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
+  .frag{font-family:var(--mono);font-size:.82rem} .frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
     border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px}
@@ -119,34 +143,54 @@
     <p class="stat" id="stat"><span class="spin"></span> se încarcă…</p>
   </header>
 
-  <div class="tabs" role="tablist">
-    <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
-    <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
-  </div>
+  <div class="app">
+    <div class="main">
+      <div class="tabs" role="tablist">
+        <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
+        <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
+      </div>
 
-  <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
-    <label for="draft">Textul proiectului</label>
-    <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
-    <div class="row">
-      <button class="go" id="go">Verifică</button>
-      <button class="ghost" id="sample">Exemplu</button>
-      <span class="hint">Rulează local · textul nu părăsește această mașină</span>
+      <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
+        <label for="draft">Textul proiectului</label>
+        <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+        <div class="row">
+          <button class="go" id="go">Verifică</button>
+          <button class="ghost" id="sample">Exemplu</button>
+          <span class="hint">Rulează local · textul nu părăsește această mașină</span>
+        </div>
+        <div id="lint-out"></div>
+      </div>
+
+      <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
+        <label for="q">Caută în text (fără diacritice contează la fel)</label>
+        <input type="search" id="q" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
+        <div class="row"><span class="hint">Enter pentru a căuta · în toate prevederile din corpus</span></div>
+        <div id="cauta-out"></div>
+      </div>
     </div>
-    <div id="lint-out"></div>
-  </div>
 
-  <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
-    <label for="q">Caută în text (fără diacritice contează la fel)</label>
-    <input type="search" id="q" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
-    <div class="row"><span class="hint">Enter pentru a căuta · caută în toate prevederile din corpus</span></div>
-    <div id="cauta-out"></div>
+    <aside class="canvas" id="canvas">
+      <div class="canvas-head">
+        Conexiuni
+        <button class="canvas-toggle" id="canvas-toggle" title="Restrânge / desfă" aria-expanded="true">⟩</button>
+      </div>
+      <div class="canvas-body">
+        <div id="graf-wrap"><p class="graf-empty">Verifică un proiect ca să vezi legăturile lui cu legislația.</p></div>
+        <div class="legend" id="legend" hidden>
+          <span><i style="background:var(--accent)"></i>proiect</span>
+          <span><i style="background:var(--blocking)"></i>abrogat / foarte amendat</span>
+          <span><i style="background:var(--material)"></i>amendat</span>
+          <span><i style="background:var(--note)"></i>atins</span>
+        </div>
+      </div>
+    </aside>
   </div>
 
   <footer>
     Verificări deterministe, fiecare cu sursa ei — fără model de limbaj. Ce citează abrogat, ce
     atinge (cât de amendat e, câte inițiative sunt deja pe acea lege), termene de implementare,
     terminologie față de termenii definiți, și inițiative în lucru care s-ar putea suprapune.
-    Contradicțiile, care ar cere un model, nu sunt încă incluse.
+    Panoul din dreapta arată aceleași legături ca graf.
   </footer>
 </div>
 
@@ -156,8 +200,7 @@ const esc = s => (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&
 const nf = n => (n||0).toLocaleString("ro");
 
 fetch("/api/rezumat").then(r=>r.json()).then(d=>{
-  $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · `
-    + `<b>${nf(d.provizii)}</b> prevederi`;
+  $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · <b>${nf(d.provizii)}</b> prevederi`;
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
@@ -165,12 +208,18 @@ function selectTab(which){
   const lint = which==="lint";
   $("#tab-lint").setAttribute("aria-selected", lint);
   $("#tab-cauta").setAttribute("aria-selected", !lint);
-  $("#pane-lint").hidden = !lint;
-  $("#pane-cauta").hidden = lint;
+  $("#pane-lint").hidden = !lint; $("#pane-cauta").hidden = lint;
   (lint ? $("#draft") : $("#q")).focus();
 }
 $("#tab-lint").onclick = ()=>selectTab("lint");
 $("#tab-cauta").onclick = ()=>selectTab("cauta");
+
+// ---- canvas collapse ----
+$("#canvas-toggle").onclick = ()=>{
+  const c = $("#canvas").classList.toggle("collapsed");
+  $("#canvas-toggle").setAttribute("aria-expanded", !c);
+  $("#canvas-toggle").textContent = c ? "⟨" : "⟩";
+};
 
 // ---- lint ----
 const SAMPLE = `La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică.\n`
@@ -178,33 +227,24 @@ const SAMPLE = `La articolul 7 din Legea nr. 98/2016 privind achizițiile public
  + `În termen de 30 de zile de la data intrării în vigoare, Guvernul aprobă normele metodologice de aplicare.`;
 $("#sample").onclick = ()=>{ $("#draft").value = SAMPLE; };
 
+const sec = (t,n,body)=>`<section><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`;
+const empty = t=>`<p class="empty">${t}</p>`;
 function card(cls, lead, meta, quote, tag){
-  return `<div class="card ${cls}">`
-    + (tag?`<span class="tag ${tag}">${tag}</span>`:"")
-    + `<span class="lead">${lead}</span>`
-    + ((meta&&meta.length)?`<div class="meta">${meta.map(m=>`<span>${m}</span>`).join("")}</div>`:"")
-    + (quote?`<div class="quote">${esc(quote)}</div>`:"")
-    + `</div>`;
+  return `<div class="card ${cls}">`+(tag?`<span class="tag ${tag}">${tag}</span>`:"")
+    +`<span class="lead">${lead}</span>`
+    +((meta&&meta.length)?`<div class="meta">${meta.map(m=>`<span>${m}</span>`).join("")}</div>`:"")
+    +(quote?`<div class="quote">${esc(quote)}</div>`:"")+`</div>`;
 }
-function chip(label, n, sev){
-  const on = n>0;
-  return `<span class="chip ${on?"on "+sev:"off"}"><span class="n">${on?n:"✓"}</span> ${label}</span>`;
-}
+function chip(label,n,sev){ const on=n>0;
+  return `<span class="chip ${on?"on "+sev:"off"}"><span class="n">${on?n:"✓"}</span> ${label}</span>`; }
 
 function renderLint(d){
   const rp=d.repealed||[], tg=d.targets||[], dl=d.deadlines||[], tm=d.terminology||[], du=d.duplicates||[];
-  let h = `<div class="strip">`
-    + chip("abrogate", rp.length, "blocking")
-    + chip("atinge", tg.length, "note")
-    + chip("termene", dl.length, "material")
-    + chip("terminologie", tm.length, "material")
-    + chip("duplicate", du.length, "note")
-    + `</div>`;
-
+  let h = `<div class="strip">`+chip("abrogate",rp.length,"blocking")+chip("atinge",tg.length,"note")
+    +chip("termene",dl.length,"material")+chip("terminologie",tm.length,"material")
+    +chip("duplicate",du.length,"note")+`</div>`;
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
-    rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,
-      [esc(r.motiv)],"","verbatim")).join(""));
-
+    rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
   if(tg.length) h += sec("Ce atinge proiectul", tg.length,
     tg.map(t=>card(t.amendat_de>=8?"blocking":(t.amendat_de>0?"material":"note"),
       `<span class="plx">${esc(t.act_id)}</span>${t.titlu?" — "+esc(t.titlu).slice(0,120):""}`,
@@ -212,37 +252,88 @@ function renderLint(d){
         t.ultima?`ultima: <b>${esc(t.ultima)}</b>`:"",
         t.initiative_in_lucru?`<b>${t.initiative_in_lucru}</b> inițiative în lucru îl ating`:"",
         t.amendat_de>=8?"consolidează, nu peticește":"" ].filter(Boolean),"")).join(""));
-
   h += sec("Termene de implementare", dl.length, dl.length
-    ? dl.map(o=>card("material",
-        `${o.instrument?esc(o.instrument.replace(/-/g," ")):"obligație"}`
+    ? dl.map(o=>card("material",`${o.instrument?esc(o.instrument.replace(/-/g," ")):"obligație"}`
         +(o.termen_zile?` — în <b>${o.termen_zile}</b> zile`:"")+(o.ancora?` de la ${esc(o.ancora)}`:""),
         [o.institutie?`emitent: <b>${esc(o.institutie)}</b>`:""].filter(Boolean),o.text)).join("")
     : empty("Niciun termen de implementare."));
-
   h += sec("Terminologie", tm.length, tm.length
     ? tm.map(t=>card(t.regula==="categorie-paralela"?"blocking":"note",esc(t.explicatie),[],"")).join("")
     : empty("Nicio abatere de la termenii definiți."));
-
   h += sec("Inițiative care s-ar putea suprapune", du.length, du.length
-    ? du.map(p=>card("note",
-        `<span class="plx">${esc(p.plx_id)}</span>${p.senat_id?" · Senat "+esc(p.senat_id):""}`
-        +` — ${esc(p.titlu).slice(0,130)}`,
+    ? du.map(p=>card("note",`<span class="plx">${esc(p.plx_id)}</span>${p.senat_id?" · Senat "+esc(p.senat_id):""} — ${esc(p.titlu).slice(0,130)}`,
         [esc(p.motiv), p.stadiu?`stadiu: ${esc(p.stadiu).slice(0,60)}`:""].filter(Boolean),"",p.incredere)).join("")
     : empty("Nicio inițiativă în lucru nu pare să acopere acest proiect."));
-
   $("#lint-out").innerHTML = h;
+  renderGraph(d);
 }
-const sec = (t,n,body)=>`<section><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`;
-const empty = t=>`<p class="empty">${t}</p>`;
+
+// ---- connection graph (self-contained SVG, radial) ----
+const SVGNS = "http://www.w3.org/2000/svg";
+function svgEl(tag, attrs){ const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
+function color(sev){ return {blocking:"var(--blocking)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)"; }
+
+function renderGraph(d){
+  const tg=d.targets||[], rp=d.repealed||[], du=d.duplicates||[];
+  const repealedActs = new Set(rp.map(r=>r.act_id));
+  // one node per act the draft touches; plus an aggregate for duplicate initiatives
+  const nodes = tg.map(t=>({
+    id:t.act_id, label:t.act_id,
+    sev: (repealedActs.has(t.act_id)||t.amendat_de>=8) ? "blocking" : (t.amendat_de>0?"material":"note"),
+    r: 13 + Math.min(14, (t.amendat_de||0)*1.3),
+    sub: t.initiative_in_lucru ? t.initiative_in_lucru+" init." : (t.amendat_de?t.amendat_de+"×":""),
+    repealed: repealedActs.has(t.act_id),
+  }));
+  if(du.length) nodes.push({id:"__dup",label:du.length+" duplicate",sev:"note",r:16,sub:"inițiative",dup:true});
+
+  const wrap = $("#graf-wrap");
+  if(!nodes.length){ wrap.innerHTML = `<p class="graf-empty">Proiectul nu trimite la nicio lege pe care o putem lega.</p>`;
+    $("#legend").hidden = true; return; }
+  $("#legend").hidden = false;
+
+  const W=340, H=Math.max(300, 150 + nodes.length*46), cx=W/2, cy=H/2;
+  const svg = svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"graf al legăturilor proiectului cu legislația"});
+  const R = Math.min(cx, cy) - 42;
+  const pos = nodes.map((n,i)=>{ const a = -Math.PI/2 + i*2*Math.PI/nodes.length;
+    return {x: cx + R*Math.cos(a), y: cy + R*Math.sin(a)}; });
+
+  // edges first (behind nodes)
+  pos.forEach((p,i)=>{
+    svg.appendChild(svgEl("line",{x1:cx,y1:cy,x2:p.x,y2:p.y,
+      stroke: nodes[i].repealed?"var(--blocking)":"var(--rule)",
+      "stroke-width": nodes[i].repealed?2:1.2, "stroke-dasharray": nodes[i].dup?"4 3":""}));
+  });
+  // act nodes
+  nodes.forEach((n,i)=>{
+    const p=pos[i], g=svgEl("g",{});
+    const t=svgEl("title",{}); t.textContent = n.label+(n.sub?" — "+n.sub:""); g.appendChild(t);
+    g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r,fill:color(n.sev),
+      "fill-opacity":n.dup?0.15:0.9, stroke:color(n.sev),"stroke-width":n.dup?1.5:0}));
+    if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",
+      stroke:"var(--blocking)","stroke-width":1.5}));
+    const lbl=svgEl("text",{x:p.x, y:p.y+n.r+13, "text-anchor":"middle",
+      "font-family":"var(--mono)","font-size":"10","fill":"var(--ink)"});
+    lbl.textContent = n.label.length>18 ? n.label.slice(0,17)+"…" : n.label; g.appendChild(lbl);
+    if(n.sub){ const s=svgEl("text",{x:p.x,y:p.y+n.r+24,"text-anchor":"middle",
+      "font-family":"var(--sans)","font-size":"9","fill":"var(--ink-mute)"}); s.textContent=n.sub; g.appendChild(s); }
+    svg.appendChild(g);
+  });
+  // center: the draft
+  svg.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--sans)",
+    "font-size":"10","font-weight":"600",fill:"#fff"}); c.textContent="PROIECT"; svg.appendChild(c);
+
+  wrap.innerHTML=""; wrap.appendChild(svg);
+}
 
 $("#go").onclick = async ()=>{
   const draft = $("#draft").value.trim();
   if(!draft){ $("#lint-out").innerHTML = empty("Lipește un text mai întâi."); return; }
-  $("#go").disabled = true; $("#go").innerHTML = `<span class="spin"></span> se verifică…`;
+  $("#go").disabled=true; $("#go").innerHTML=`<span class="spin"></span> se verifică…`;
   try{
-    const r = await fetch("/api/lint",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({draft})});
+    const r = await fetch("/api/lint",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft})});
     if(!r.ok) throw new Error((await r.json()).error||r.statusText);
     renderLint(await r.json());
   }catch(e){ $("#lint-out").innerHTML = empty("Eroare: "+esc(e.message||e)); }
@@ -252,26 +343,20 @@ $("#go").onclick = async ()=>{
 // ---- search ----
 let searchTimer;
 async function runSearch(){
-  const q = $("#q").value.trim();
+  const q=$("#q").value.trim();
   if(!q){ $("#cauta-out").innerHTML=""; return; }
-  $("#cauta-out").innerHTML = `<p class="empty"><span class="spin"></span> caut…</p>`;
+  $("#cauta-out").innerHTML=`<p class="empty"><span class="spin"></span> caut…</p>`;
   try{
-    const r = await fetch("/api/cauta?q="+encodeURIComponent(q));
-    const d = await r.json();
-    const res = d.results||[];
-    if(!res.length){ $("#cauta-out").innerHTML = empty("Niciun rezultat."); return; }
-    // portal snippet uses [ ] around hits; turn into <mark>
-    const frag = s => esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
-    $("#cauta-out").innerHTML = `<div class="sr-hits">` + sec("Rezultate", res.length,
-      res.map(x=>{
-        const link = x.sursa_url
-          ? `<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`
-          : `<span class="plx">${esc(x.act_id)}</span>`;
-        const titlu = x.titlu ? ` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>` : "";
-        return card("note", `${link} <span class="hint">${esc(x.locator)}</span>${titlu}`,
-          [`<span class="frag">${frag(x.fragment)}</span>`],"");
-      }).join("")) + `</div>`;
-  }catch(e){ $("#cauta-out").innerHTML = empty("Eroare: "+esc(e.message||e)); }
+    const d = await (await fetch("/api/cauta?q="+encodeURIComponent(q))).json();
+    const res=d.results||[];
+    if(!res.length){ $("#cauta-out").innerHTML=empty("Niciun rezultat."); return; }
+    const frag=s=>esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
+    $("#cauta-out").innerHTML=`<div>`+sec("Rezultate",res.length, res.map(x=>{
+      const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
+      const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
+      return card("note",`${link} <span class="hint">${esc(x.locator)}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
+    }).join(""))+`</div>`;
+  }catch(e){ $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
 }
 $("#q").addEventListener("keydown", e=>{ if(e.key==="Enter") runSearch(); });
 $("#q").addEventListener("input", ()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(runSearch,400); });
