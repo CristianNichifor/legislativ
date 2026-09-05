@@ -16,7 +16,7 @@ from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
 from scripts.graf import construieste
-from scripts.server import Stare, _cauta, _lint, _repealed, _targets, _vecini
+from scripts.server import Stare, _cauta, _lint, _redacteaza, _repealed, _targets, _vecini
 
 
 def _build(tmp_path: Path) -> Stare:
@@ -201,3 +201,20 @@ def test_lint_flags_non_standard_drafting(tmp_path):
     out = _lint("Articolul 7 din Legea nr. 98/2016 se schimbă.", stare)
     assert "drafting" in out
     assert out["drafting"] and out["drafting"][0]["operatie"] == "modifica"
+
+
+def test_redacteaza_generates_mandated_form():
+    """The draft assistant: a structured intent to the phrasing Legea 24/2000 requires. Pure —
+    no corpus needed."""
+    out = _redacteaza(
+        {
+            "op": ["modifica"],
+            "act": ["Legea nr. 98/2016"],
+            "articol": ["7"],
+            "alineat": ["2"],
+            "text": ["Autoritatea publică decide."],
+        }
+    )
+    assert out["text"].startswith("La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică")
+    assert "va avea următorul cuprins" in out["text"]
+    assert out["titlu"] == "Lege pentru modificarea art. 7 din Legea nr. 98/2016"

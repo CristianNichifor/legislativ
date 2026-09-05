@@ -203,6 +203,37 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
     return out
 
 
+def _redacteaza(qs: dict) -> dict:
+    """Turn a structured drafting intent into the mandated legistic text and title.
+
+    The visible half of the drafting-form layer: a form supplies the operation, the act and the
+    element, this returns the phrasing Legea 24/2000 requires, ready to paste. Pure — no corpus,
+    no graph — so it answers instantly and works before any collection.
+    """
+    from scripts.redactare import redacteaza, titlu_modificator
+
+    def g(k: str) -> str | None:
+        v = qs.get(k, [""])[0].strip()
+        return v or None
+
+    op = g("op") or "modifica"
+    act = g("act") or "…"
+    try:
+        text = redacteaza(
+            op,
+            act,
+            articol=g("articol"),
+            alineat=g("alineat"),
+            litera=g("litera"),
+            text_nou=g("text") or "…",
+            articol_nou=g("articol_nou"),
+        )
+        titlu = titlu_modificator(op, act, articol=g("articol"))
+        return {"text": text, "titlu": titlu}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
 def _cauta(q: str, stare: Stare) -> dict:
     if not q.strip():
         return {"results": []}
@@ -291,6 +322,8 @@ def face_handler(stare: Stare):
             elif ruta.path == "/api/vecini":
                 act = parse_qs(ruta.query).get("act", [""])[0]
                 self._json(_vecini(act, stare) if act else {"error": "act lipsă"})
+            elif ruta.path == "/api/redacteaza":
+                self._json(_redacteaza(parse_qs(ruta.query)))
             elif ruta.path == "/api/rezumat":
                 with depozit.deschide(stare.corpus, readonly=True) as con:
                     r = depozit.rezumat(con)

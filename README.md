@@ -261,4 +261,4 @@ endpoint and a recorded fixture are the same shape.
 | `imbogateste.py` | Index of which acts each pending initiative touches — "who is already on this law". |
 | `redactare.py` | Legistic drafting form (Legea 24/2000): flags intent said the wrong way, generates the right way. |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
-| `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |
+| `server.py` | Stdlib backend + UI: verify a draft, redactează a new one, search, and a zoomable connections graph. |

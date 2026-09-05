@@ -27,9 +27,11 @@
     --accent-wash:#2c2022; --blocking:#dd918c; --material:#d7ab6b; --note:#8fb5c8; --good:#7fb98f;
   }
   *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   body{background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.55;
     margin:0;font-size:16px;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:78rem;margin:0 auto;padding:0 1.25rem 5rem}
+  .wrap{max-width:none;margin:0;padding:0 2rem 5rem}   /* full viewport width */
 
   header{border-bottom:2px solid var(--ink);padding:1.9rem 0 1.1rem;margin-bottom:1.5rem;
     display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem 1.2rem}
@@ -42,7 +44,7 @@
 
   .app{display:flex;gap:1.5rem;align-items:flex-start}
   .main{flex:1;min-width:0}
-  aside.canvas{width:24rem;flex:none;position:sticky;top:1rem;
+  aside.canvas{width:28rem;flex:none;position:sticky;top:1rem;
     border:1px solid var(--rule);background:var(--surface)}
   aside.canvas.collapsed{width:2.5rem}
   .canvas-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem;
@@ -55,10 +57,16 @@
     padding:.15rem .45rem}
   aside.canvas.collapsed .canvas-toggle{margin:0}
   .canvas-body{padding:.5rem}
-  svg.graf{width:100%;height:auto;display:block}
+  .graf-box{position:relative;overflow:hidden;border:1px solid var(--rule-soft);
+    background:var(--paper);touch-action:none}
+  svg.graf{width:100%;height:auto;display:block;cursor:grab}
+  svg.graf:active{cursor:grabbing}
+  .graf-ctl{position:absolute;top:.4rem;right:.4rem;display:flex;gap:.25rem}
+  .graf-ctl button{width:1.6rem;height:1.6rem;border:1px solid var(--rule);background:var(--surface);
+    color:var(--ink-mid);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;padding:0}
   .graf-empty{font-family:var(--sans);font-size:.8rem;color:var(--ink-mute);font-style:italic;
     padding:1.5rem .5rem;text-align:center}
-  .legend{font-family:var(--sans);font-size:.68rem;color:var(--ink-mute);padding:.4rem .6rem .6rem;
+  .legend{font-family:var(--sans);font-size:.68rem;color:var(--ink-mute);padding:.4rem .2rem 0;
     display:flex;flex-wrap:wrap;gap:.3rem .9rem}
   .legend span{display:flex;align-items:center;gap:.3rem}
   .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
@@ -70,7 +78,7 @@
       border-bottom:1px solid var(--rule-soft)}
   }
 
-  .tabs{display:flex;gap:.35rem;margin-bottom:1rem}
+  .tabs{display:flex;gap:.35rem;margin-bottom:1rem;flex-wrap:wrap}
   .tab{font-family:var(--sans);font-size:.82rem;font-weight:600;padding:.5rem 1rem;cursor:pointer;
     background:transparent;border:0;border-bottom:2px solid transparent;color:var(--ink-mute)}
   .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
@@ -78,12 +86,13 @@
 
   label{display:block;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.1em;
     text-transform:uppercase;color:var(--ink-mute);margin:0 0 .5rem}
-  textarea,input[type=search]{width:100%;background:var(--surface);color:var(--ink);
-    border:1px solid var(--rule);padding:.85rem 1rem;font-family:var(--mono);font-size:.9rem;
-    line-height:1.6}
+  textarea,input[type=search],input[type=text],select{width:100%;background:var(--surface);
+    color:var(--ink);border:1px solid var(--rule);padding:.75rem 1rem;font-family:var(--mono);
+    font-size:.9rem;line-height:1.6}
   textarea{min-height:9rem;resize:vertical}
-  textarea:focus,input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+  textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
   button.go{font-family:var(--sans);font-size:.85rem;font-weight:600;background:var(--accent);
     color:#fff;border:0;padding:.6rem 1.4rem;cursor:pointer}
   button.go:disabled{opacity:.5;cursor:wait}
@@ -94,14 +103,16 @@
   .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.75rem 0 .5rem}
   .chip{font-family:var(--sans);font-size:.76rem;font-weight:600;display:flex;align-items:center;
     gap:.5rem;padding:.4rem .8rem;background:var(--surface);border:1px solid var(--rule-soft);
-    border-left:3px solid var(--rule)}
+    border-left:3px solid var(--rule);cursor:pointer}
+  .chip:hover{background:var(--sunk)}
+  .chip[disabled]{cursor:default;opacity:.7}
   .chip .n{font-variant-numeric:tabular-nums;font-size:1rem}
   .chip.on.blocking{border-left-color:var(--blocking);color:var(--blocking)}
   .chip.on.material{border-left-color:var(--material);color:var(--material)}
   .chip.on.note{border-left-color:var(--note);color:var(--note)}
-  .chip.off{color:var(--ink-mute);opacity:.7} .chip.off .n{color:var(--good)}
+  .chip.off .n{color:var(--good)}
 
-  section{margin-top:2rem}
+  section{margin-top:2rem;scroll-margin-top:1rem}
   .sec-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid var(--rule);
     padding-bottom:.45rem;margin-bottom:.9rem}
   h2{font-family:var(--serif);font-weight:600;font-size:1.2rem;margin:0}
@@ -125,20 +136,29 @@
   .empty{font-family:var(--sans);font-size:.85rem;color:var(--ink-mute);font-style:italic}
   a{color:var(--accent);text-underline-offset:.15em}
   .frag{font-family:var(--mono);font-size:.82rem} .frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
+  .out-box{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+    padding:.8rem 1rem;margin-top:1rem;font-family:var(--mono);font-size:.9rem;white-space:pre-wrap;
+    word-break:break-word}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
     border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px}
   @keyframes s{to{transform:rotate(360deg)}}
   @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 
+  #totop{position:fixed;right:1.2rem;bottom:1.2rem;width:2.6rem;height:2.6rem;border-radius:50%;
+    border:1px solid var(--rule);background:var(--surface);color:var(--accent);cursor:pointer;
+    font-size:1.1rem;line-height:1;box-shadow:0 2px 8px rgba(0,0,0,.15);display:none;z-index:20}
+  #totop.show{display:block}
+  #totop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
   footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:var(--sans);
-    font-size:.76rem;color:var(--ink-mute);max-width:60ch}
+    font-size:.76rem;color:var(--ink-mute);max-width:70ch}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <p class="eyebrow">legislativ · verificare proiect de act normativ</p>
+    <p class="eyebrow">legislativ · verificare și redactare de acte normative</p>
     <h1>Ce spune legea despre proiectul tău</h1>
     <p class="stat" id="stat"><span class="spin"></span> se încarcă…</p>
   </header>
@@ -147,6 +167,7 @@
     <div class="main">
       <div class="tabs" role="tablist">
         <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
+        <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
         <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
       </div>
 
@@ -161,6 +182,30 @@
         <div id="lint-out"></div>
       </div>
 
+      <div id="pane-redacteaza" role="tabpanel" aria-labelledby="tab-redacteaza" hidden>
+        <p class="hint" style="margin:.2rem 0 1rem">Spune ce vrei să faci; primești formularea cerută de Legea nr. 24/2000, gata de lipit.</p>
+        <div class="grid">
+          <div><label for="r-op">Operație</label>
+            <select id="r-op">
+              <option value="modifica">modifică</option>
+              <option value="completeaza">completează</option>
+              <option value="abroga">abrogă</option>
+              <option value="introduce">introduce (articol nou)</option>
+            </select></div>
+          <div><label for="r-act">Actul (cu identificare)</label>
+            <input type="text" id="r-act" placeholder="Legea nr. 98/2016 privind achizițiile publice"></div>
+          <div><label for="r-art">Articolul</label><input type="text" id="r-art" placeholder="7"></div>
+          <div><label for="r-alin">Alineatul</label><input type="text" id="r-alin" placeholder="2"></div>
+          <div><label for="r-lit">Litera</label><input type="text" id="r-lit" placeholder="a"></div>
+          <div id="r-nou-wrap" hidden><label for="r-nou">Articolul nou</label><input type="text" id="r-nou" placeholder="art. 12^1"></div>
+        </div>
+        <div style="margin-top:.7rem"><label for="r-text">Textul nou (dacă e cazul)</label>
+          <textarea id="r-text" style="min-height:5rem" placeholder="Conținutul noii prevederi…"></textarea></div>
+        <div class="row"><button class="go" id="r-go">Generează</button>
+          <span class="hint">Legea 24/2000 · formă article-first</span></div>
+        <div id="r-out"></div>
+      </div>
+
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
         <label for="q">Caută în text (fără diacritice contează la fel)</label>
         <input type="search" id="q" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
@@ -170,15 +215,14 @@
     </div>
 
     <aside class="canvas" id="canvas">
-      <div class="canvas-head">
-        Conexiuni
+      <div class="canvas-head">Conexiuni
         <button class="canvas-toggle" id="canvas-toggle" title="Restrânge / desfă" aria-expanded="true">⟩</button>
       </div>
       <div class="canvas-body">
         <div id="graf-wrap"><p class="graf-empty">Verifică un proiect ca să vezi legăturile lui cu legislația.</p></div>
         <div class="legend" id="legend" hidden>
           <span><i style="background:var(--accent)"></i>proiect</span>
-          <span><i style="background:var(--blocking)"></i>abrogat / foarte amendat</span>
+          <span><i style="background:var(--blocking)"></i>abrogat / mult amendat</span>
           <span><i style="background:var(--material)"></i>amendat</span>
           <span><i style="background:var(--note)"></i>atins</span>
         </div>
@@ -187,12 +231,11 @@
   </div>
 
   <footer>
-    Verificări deterministe, fiecare cu sursa ei — fără model de limbaj. Ce citează abrogat, ce
-    atinge (cât de amendat e, câte inițiative sunt deja pe acea lege), termene de implementare,
-    terminologie față de termenii definiți, și inițiative în lucru care s-ar putea suprapune.
-    Panoul din dreapta arată aceleași legături ca graf.
+    Verificări deterministe, fiecare cu sursa ei — fără model de limbaj. Panoul din dreapta arată
+    aceleași legături ca graf (rotița mărește, tragi ca să miști, clic pe un nod ca să-i vezi vecinii).
   </footer>
 </div>
+<button id="totop" title="Sus" aria-label="Înapoi sus">↑</button>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -204,30 +247,33 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
+const PANES = ["lint","redacteaza","cauta"];
 function selectTab(which){
-  const lint = which==="lint";
-  $("#tab-lint").setAttribute("aria-selected", lint);
-  $("#tab-cauta").setAttribute("aria-selected", !lint);
-  $("#pane-lint").hidden = !lint; $("#pane-cauta").hidden = lint;
-  (lint ? $("#draft") : $("#q")).focus();
+  PANES.forEach(p=>{
+    $("#tab-"+p).setAttribute("aria-selected", p===which);
+    $("#pane-"+p).hidden = p!==which;
+  });
+  const focusEl = {lint:"#draft",redacteaza:"#r-act",cauta:"#q"}[which];
+  if(focusEl) $(focusEl).focus();
 }
-$("#tab-lint").onclick = ()=>selectTab("lint");
-$("#tab-cauta").onclick = ()=>selectTab("cauta");
+PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
+
+// ---- back to top ----
+const totop=$("#totop");
+addEventListener("scroll",()=>{ totop.classList.toggle("show", scrollY>400); });
+totop.onclick=()=>scrollTo({top:0});
 
 // ---- canvas collapse ----
 $("#canvas-toggle").onclick = ()=>{
-  const c = $("#canvas").classList.toggle("collapsed");
+  const c=$("#canvas").classList.toggle("collapsed");
   $("#canvas-toggle").setAttribute("aria-expanded", !c);
-  $("#canvas-toggle").textContent = c ? "⟨" : "⟩";
+  $("#canvas-toggle").textContent = c?"⟨":"⟩";
 };
 
-// ---- lint ----
-const SAMPLE = `La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică.\n`
- + `Prezenta lege reglementează achizițiile de stat.\n`
- + `În termen de 30 de zile de la data intrării în vigoare, Guvernul aprobă normele metodologice de aplicare.`;
-$("#sample").onclick = ()=>{ $("#draft").value = SAMPLE; };
-
-const sec = (t,n,body)=>`<section><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`;
+// ---- helpers ----
+const slug = t => t.toLowerCase().replace(/[^a-z]+/g,"-").replace(/^-|-$/g,"");
+const sec = (t,n,body)=>{ const id="sec-"+slug(t);
+  return `<section id="${id}"><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`; };
 const empty = t=>`<p class="empty">${t}</p>`;
 function card(cls, lead, meta, quote, tag){
   return `<div class="card ${cls}">`+(tag?`<span class="tag ${tag}">${tag}</span>`:"")
@@ -235,15 +281,27 @@ function card(cls, lead, meta, quote, tag){
     +((meta&&meta.length)?`<div class="meta">${meta.map(m=>`<span>${m}</span>`).join("")}</div>`:"")
     +(quote?`<div class="quote">${esc(quote)}</div>`:"")+`</div>`;
 }
-function chip(label,n,sev){ const on=n>0;
-  return `<span class="chip ${on?"on "+sev:"off"}"><span class="n">${on?n:"✓"}</span> ${label}</span>`; }
+// chips carry the section id they jump to
+function chip(label,n,sev,secTitle){ const on=n>0;
+  return `<button class="chip ${on?"on "+sev:"off"}" data-sec="sec-${slug(secTitle)}" ${on?"":"disabled"}>`
+    +`<span class="n">${on?n:"✓"}</span> ${label}</button>`; }
+
+// ---- lint ----
+const SAMPLE = `La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică.\n`
+ + `Prezenta lege reglementează achizițiile de stat.\n`
+ + `În termen de 30 de zile de la data intrării în vigoare, Guvernul aprobă normele metodologice de aplicare.`;
+$("#sample").onclick = ()=>{ $("#draft").value = SAMPLE; };
 
 function renderLint(d){
-  const rp=d.repealed||[], tg=d.targets||[], dl=d.deadlines||[], tm=d.terminology||[], du=d.duplicates||[];
-  const dr=d.drafting||[];
-  let h = `<div class="strip">`+chip("abrogate",rp.length,"blocking")+chip("redactare",dr.length,"material")
-    +chip("atinge",tg.length,"note")+chip("termene",dl.length,"material")
-    +chip("terminologie",tm.length,"material")+chip("duplicate",du.length,"note")+`</div>`;
+  const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
+        tm=d.terminology||[], du=d.duplicates||[];
+  let h = `<div class="strip">`
+    +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
+    +chip("redactare",dr.length,"material","Tehnică legislativă")
+    +chip("atinge",tg.length,"note","Ce atinge proiectul")
+    +chip("termene",dl.length,"material","Termene de implementare")
+    +chip("terminologie",tm.length,"material","Terminologie")
+    +chip("duplicate",du.length,"note","Inițiative care s-ar putea suprapune")+`</div>`;
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
   if(dr.length) h += sec("Tehnică legislativă", dr.length,
@@ -268,127 +326,10 @@ function renderLint(d){
         [esc(p.motiv), p.stadiu?`stadiu: ${esc(p.stadiu).slice(0,60)}`:""].filter(Boolean),"",p.incredere)).join("")
     : empty("Nicio inițiativă în lucru nu pare să acopere acest proiect."));
   $("#lint-out").innerHTML = h;
+  $("#lint-out").querySelectorAll(".chip[data-sec]").forEach(c=>{
+    c.onclick=()=>{ const el=document.getElementById(c.dataset.sec); if(el) el.scrollIntoView({block:"start"}); };
+  });
   renderGraph(d);
-}
-
-// ---- connection graph (self-contained SVG, radial) ----
-const SVGNS = "http://www.w3.org/2000/svg";
-function svgEl(tag, attrs){ const e=document.createElementNS(SVGNS,tag);
-  for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
-function color(sev){ return {blocking:"var(--blocking)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)"; }
-// edge colour by kind of connection, so the *relation* reads, not just its existence
-function felColor(fel){ return {abroga:"var(--blocking)",modifica:"var(--material)",
-  completeaza:"var(--material)",deroga:"var(--material)",refera:"var(--rule)"}[fel]||"var(--rule)"; }
-const FEL_RO = {abroga:"abrogă",modifica:"modifică",completeaza:"completează",deroga:"derogă",
-  introduce:"introduce",proroga:"prorogă",suspenda:"suspendă",inlocuieste:"înlocuiește",refera:"citează"};
-
-let _lastLint = null;  // so "înapoi la proiect" can rebuild the home graph
-
-async function focusAct(actId){
-  const wrap = $("#graf-wrap");
-  wrap.innerHTML = `<p class="graf-empty"><span class="spin"></span> ${esc(actId)}…</p>`;
-  try{
-    const d = await (await fetch("/api/vecini?act="+encodeURIComponent(actId))).json();
-    drawFocus(actId, d);
-  }catch(e){ wrap.innerHTML = `<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
-}
-
-function drawFocus(actId, d){
-  const inb=(d.inbound||[]), outb=(d.outbound||[]);
-  const nodes = [
-    ...inb.map(m=>({...m, dir:"in"})),
-    ...outb.map(m=>({...m, dir:"out"})),
-  ];
-  const wrap = $("#graf-wrap");
-  const W=340, H=Math.max(300,150+nodes.length*30), cx=W/2, cy=H/2;
-  const svg = svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img",
-    "aria-label":"vecinii actului "+actId});
-  const R=Math.min(cx,cy)-46;
-  if(nodes.length){
-    nodes.forEach((n,i)=>{
-      const a=-Math.PI/2+i*2*Math.PI/nodes.length, x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
-      // arrow direction encodes who acts on whom: inbound points INTO the centre
-      const x1=n.dir==="in"?x:cx, y1=n.dir==="in"?y:cy, x2=n.dir==="in"?cx:x, y2=n.dir==="in"?cy:y;
-      svg.appendChild(svgEl("line",{x1,y1,x2,y2,stroke:felColor(n.fel),
-        "stroke-width":n.fel==="abroga"?2:1.3}));
-      const g=svgEl("g",{style:"cursor:pointer"}); g.addEventListener("click",()=>focusAct(n.act_id));
-      const ttl=svgEl("title",{}); ttl.textContent=`${FEL_RO[n.fel]||n.fel} · ${n.act_id}`
-        +(n.de_la?` (${n.de_la})`:"")+(n.titlu?` — ${n.titlu.slice(0,60)}`:""); g.appendChild(ttl);
-      g.appendChild(svgEl("circle",{cx:x,cy:y,r:11,fill:felColor(n.fel),"fill-opacity":.85}));
-      const lbl=svgEl("text",{x,y:y+22,"text-anchor":"middle","font-family":"var(--mono)",
-        "font-size":"9",fill:"var(--ink)"});
-      lbl.textContent=n.act_id.length>16?n.act_id.slice(0,15)+"…":n.act_id; g.appendChild(lbl);
-      svg.appendChild(g);
-    });
-  }
-  svg.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
-  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--mono)",
-    "font-size":"8.5","font-weight":"600",fill:"#fff"});
-  c.textContent=actId.length>14?actId.slice(0,13)+"…":actId; svg.appendChild(c);
-
-  wrap.innerHTML="";
-  const bar=document.createElement("div");
-  bar.innerHTML=`<button class="ghost" style="margin:0 0 .5rem;font-size:.72rem;padding:.3rem .7rem">← înapoi la proiect</button>`
-    +`<p class="hint" style="margin:.2rem 0 .6rem">`
-    +`<b>${inb.length}</b> îl modifică/citează · <b>${outb.length}</b> ținte. Clic pe un nod ca să mergi mai departe.</p>`;
-  bar.querySelector("button").onclick=()=>{ if(_lastLint) renderGraph(_lastLint); };
-  wrap.appendChild(bar); wrap.appendChild(svg);
-}
-
-function renderGraph(d){
-  _lastLint = d;
-  const tg=d.targets||[], rp=d.repealed||[], du=d.duplicates||[];
-  const repealedActs = new Set(rp.map(r=>r.act_id));
-  // one node per act the draft touches; plus an aggregate for duplicate initiatives
-  const nodes = tg.map(t=>({
-    id:t.act_id, label:t.act_id,
-    sev: (repealedActs.has(t.act_id)||t.amendat_de>=8) ? "blocking" : (t.amendat_de>0?"material":"note"),
-    r: 13 + Math.min(14, (t.amendat_de||0)*1.3),
-    sub: t.initiative_in_lucru ? t.initiative_in_lucru+" init." : (t.amendat_de?t.amendat_de+"×":""),
-    repealed: repealedActs.has(t.act_id),
-  }));
-  if(du.length) nodes.push({id:"__dup",label:du.length+" duplicate",sev:"note",r:16,sub:"inițiative",dup:true});
-
-  const wrap = $("#graf-wrap");
-  if(!nodes.length){ wrap.innerHTML = `<p class="graf-empty">Proiectul nu trimite la nicio lege pe care o putem lega.</p>`;
-    $("#legend").hidden = true; return; }
-  $("#legend").hidden = false;
-
-  const W=340, H=Math.max(300, 150 + nodes.length*46), cx=W/2, cy=H/2;
-  const svg = svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img",
-    "aria-label":"graf al legăturilor proiectului cu legislația"});
-  const R = Math.min(cx, cy) - 42;
-  const pos = nodes.map((n,i)=>{ const a = -Math.PI/2 + i*2*Math.PI/nodes.length;
-    return {x: cx + R*Math.cos(a), y: cy + R*Math.sin(a)}; });
-
-  // edges first (behind nodes)
-  pos.forEach((p,i)=>{
-    svg.appendChild(svgEl("line",{x1:cx,y1:cy,x2:p.x,y2:p.y,
-      stroke: nodes[i].repealed?"var(--blocking)":"var(--rule)",
-      "stroke-width": nodes[i].repealed?2:1.2, "stroke-dasharray": nodes[i].dup?"4 3":""}));
-  });
-  // act nodes
-  nodes.forEach((n,i)=>{
-    const p=pos[i], g=svgEl("g",{});
-    if(!n.dup){ g.setAttribute("style","cursor:pointer"); g.addEventListener("click",()=>focusAct(n.id)); }
-    const t=svgEl("title",{}); t.textContent = n.label+(n.sub?" — "+n.sub:"")+" · clic pentru vecini"; g.appendChild(t);
-    g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r,fill:color(n.sev),
-      "fill-opacity":n.dup?0.15:0.9, stroke:color(n.sev),"stroke-width":n.dup?1.5:0}));
-    if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",
-      stroke:"var(--blocking)","stroke-width":1.5}));
-    const lbl=svgEl("text",{x:p.x, y:p.y+n.r+13, "text-anchor":"middle",
-      "font-family":"var(--mono)","font-size":"10","fill":"var(--ink)"});
-    lbl.textContent = n.label.length>18 ? n.label.slice(0,17)+"…" : n.label; g.appendChild(lbl);
-    if(n.sub){ const s=svgEl("text",{x:p.x,y:p.y+n.r+24,"text-anchor":"middle",
-      "font-family":"var(--sans)","font-size":"9","fill":"var(--ink-mute)"}); s.textContent=n.sub; g.appendChild(s); }
-    svg.appendChild(g);
-  });
-  // center: the draft
-  svg.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
-  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--sans)",
-    "font-size":"10","font-weight":"600",fill:"#fff"}); c.textContent="PROIECT"; svg.appendChild(c);
-
-  wrap.innerHTML=""; wrap.appendChild(svg);
 }
 
 $("#go").onclick = async ()=>{
@@ -403,6 +344,134 @@ $("#go").onclick = async ()=>{
   finally{ $("#go").disabled=false; $("#go").textContent="Verifică"; }
 };
 
+// ---- draft assistant ----
+$("#r-op").onchange = ()=>{ $("#r-nou-wrap").hidden = $("#r-op").value!=="introduce"; };
+$("#r-go").onclick = async ()=>{
+  const p = new URLSearchParams({op:$("#r-op").value, act:$("#r-act").value.trim(),
+    articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
+    litera:$("#r-lit").value.trim(), text:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
+  try{
+    const d = await (await fetch("/api/redacteaza?"+p)).json();
+    if(d.error){ $("#r-out").innerHTML=empty("Eroare: "+esc(d.error)); return; }
+    $("#r-out").innerHTML =
+      `<div class="hint" style="margin-top:1rem">Titlu sugerat: <b>${esc(d.titlu)}</b></div>`
+      +`<div class="out-box" id="r-result">${esc(d.text)}</div>`
+      +`<div class="row"><button class="ghost" id="r-copy">Copiază</button>`
+      +`<button class="ghost" id="r-insert">Trimite la „Verifică”</button></div>`;
+    $("#r-copy").onclick=()=>{ navigator.clipboard?.writeText(d.text); $("#r-copy").textContent="Copiat"; };
+    $("#r-insert").onclick=()=>{ const t=$("#draft"); t.value=(t.value?t.value+"\n":"")+d.text; selectTab("lint"); };
+  }catch(e){ $("#r-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+};
+
+// ---- connection graph (self-contained SVG, radial, zoom+pan) ----
+const SVGNS="http://www.w3.org/2000/svg";
+function svgEl(tag,attrs){ const e=document.createElementNS(SVGNS,tag);
+  for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
+const color = sev=>({blocking:"var(--blocking)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)");
+const felColor = fel=>({abroga:"var(--blocking)",modifica:"var(--material)",completeaza:"var(--material)",
+  deroga:"var(--material)",refera:"var(--rule)"}[fel]||"var(--rule)");
+const FEL_RO={abroga:"abrogă",modifica:"modifică",completeaza:"completează",deroga:"derogă",
+  introduce:"introduce",proroga:"prorogă",suspenda:"suspendă",inlocuieste:"înlocuiește",refera:"citează"};
+let _lastLint=null;
+
+// wrap an <svg> in a zoom/pan box: wheel scales toward cursor, drag pans, buttons + dblclick reset
+function mountGraph(svg, viewport){
+  const box=document.createElement("div"); box.className="graf-box";
+  box.appendChild(svg);
+  const ctl=document.createElement("div"); ctl.className="graf-ctl";
+  ctl.innerHTML=`<button data-z="in" title="Mărește">+</button><button data-z="out" title="Micșorează">−</button><button data-z="reset" title="Resetează">⤢</button>`;
+  box.appendChild(ctl);
+  let k=1,x=0,y=0,drag=null;
+  const apply=()=>viewport.setAttribute("transform",`translate(${x} ${y}) scale(${k})`);
+  const zoom=(f,px,py)=>{ const nk=Math.max(.4,Math.min(6,k*f));
+    // keep the point under the cursor stable
+    x = px-(px-x)*(nk/k); y = py-(py-y)*(nk/k); k=nk; apply(); };
+  svg.addEventListener("wheel",e=>{ e.preventDefault();
+    const r=svg.getBoundingClientRect(), sx=(e.clientX-r.left)/r.width*svg.viewBox.baseVal.width,
+      sy=(e.clientY-r.top)/r.height*svg.viewBox.baseVal.height;
+    zoom(e.deltaY<0?1.15:1/1.15, sx, sy); },{passive:false});
+  svg.addEventListener("pointerdown",e=>{ drag={x:e.clientX,y:e.clientY,ox:x,oy:y}; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointermove",e=>{ if(!drag)return;
+    const r=svg.getBoundingClientRect(), sc=svg.viewBox.baseVal.width/r.width;
+    x=drag.ox+(e.clientX-drag.x)*sc; y=drag.oy+(e.clientY-drag.y)*sc; apply(); });
+  svg.addEventListener("pointerup",()=>{ drag=null; });
+  svg.addEventListener("dblclick",()=>{ k=1;x=0;y=0;apply(); });
+  ctl.onclick=e=>{ const z=e.target.dataset.z; const c=svg.viewBox.baseVal;
+    if(z==="in") zoom(1.25,c.width/2,c.height/2);
+    else if(z==="out") zoom(1/1.25,c.width/2,c.height/2);
+    else if(z==="reset"){ k=1;x=0;y=0;apply(); } };
+  return box;
+}
+
+function renderGraph(d){
+  _lastLint=d;
+  const tg=d.targets||[], rp=d.repealed||[], du=d.duplicates||[];
+  const repealedActs=new Set(rp.map(r=>r.act_id));
+  const nodes=tg.map(t=>({id:t.act_id,label:t.act_id,
+    sev:(repealedActs.has(t.act_id)||t.amendat_de>=8)?"blocking":(t.amendat_de>0?"material":"note"),
+    r:13+Math.min(14,(t.amendat_de||0)*1.3),
+    sub:t.initiative_in_lucru?t.initiative_in_lucru+" init.":(t.amendat_de?t.amendat_de+"×":""),
+    repealed:repealedActs.has(t.act_id)}));
+  if(du.length) nodes.push({id:"__dup",label:du.length+" duplicate",sev:"note",r:16,sub:"inițiative",dup:true});
+  const wrap=$("#graf-wrap");
+  if(!nodes.length){ wrap.innerHTML=`<p class="graf-empty">Proiectul nu trimite la nicio lege pe care o putem lega.</p>`; $("#legend").hidden=true; return; }
+  $("#legend").hidden=false;
+  const W=340,H=Math.max(300,150+nodes.length*46),cx=W/2,cy=H/2;
+  const svg=svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"graf al legăturilor proiectului"});
+  const vp=svgEl("g",{}); svg.appendChild(vp);
+  const R=Math.min(cx,cy)-42;
+  const pos=nodes.map((n,i)=>{ const a=-Math.PI/2+i*2*Math.PI/nodes.length; return {x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)}; });
+  pos.forEach((p,i)=>vp.appendChild(svgEl("line",{x1:cx,y1:cy,x2:p.x,y2:p.y,
+    stroke:nodes[i].repealed?"var(--blocking)":"var(--rule)","stroke-width":nodes[i].repealed?2:1.2,"stroke-dasharray":nodes[i].dup?"4 3":""})));
+  nodes.forEach((n,i)=>{ const p=pos[i],g=svgEl("g",{});
+    if(!n.dup){ g.setAttribute("style","cursor:pointer"); g.addEventListener("click",()=>focusAct(n.id)); }
+    const t=svgEl("title",{}); t.textContent=n.label+(n.sub?" — "+n.sub:"")+" · clic pentru vecini"; g.appendChild(t);
+    g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r,fill:color(n.sev),"fill-opacity":n.dup?0.15:0.9,stroke:color(n.sev),"stroke-width":n.dup?1.5:0}));
+    if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",stroke:"var(--blocking)","stroke-width":1.5}));
+    const lbl=svgEl("text",{x:p.x,y:p.y+n.r+13,"text-anchor":"middle","font-family":"var(--mono)","font-size":"10",fill:"var(--ink)"});
+    lbl.textContent=n.label.length>18?n.label.slice(0,17)+"…":n.label; g.appendChild(lbl);
+    if(n.sub){ const s=svgEl("text",{x:p.x,y:p.y+n.r+24,"text-anchor":"middle","font-family":"var(--sans)","font-size":"9",fill:"var(--ink-mute)"}); s.textContent=n.sub; g.appendChild(s); }
+    vp.appendChild(g);
+  });
+  vp.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--sans)","font-size":"10","font-weight":"600",fill:"#fff"});
+  c.textContent="PROIECT"; vp.appendChild(c);
+  wrap.innerHTML=""; wrap.appendChild(mountGraph(svg,vp));
+}
+
+async function focusAct(actId){
+  const wrap=$("#graf-wrap"); wrap.innerHTML=`<p class="graf-empty"><span class="spin"></span> ${esc(actId)}…</p>`;
+  try{ drawFocus(actId, await (await fetch("/api/vecini?act="+encodeURIComponent(actId))).json()); }
+  catch(e){ wrap.innerHTML=`<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
+}
+function drawFocus(actId,d){
+  const inb=(d.inbound||[]),outb=(d.outbound||[]);
+  const nodes=[...inb.map(m=>({...m,dir:"in"})),...outb.map(m=>({...m,dir:"out"}))];
+  const wrap=$("#graf-wrap");
+  const W=340,H=Math.max(300,150+nodes.length*30),cx=W/2,cy=H/2;
+  const svg=svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"vecinii actului "+actId});
+  const vp=svgEl("g",{}); svg.appendChild(vp);
+  const R=Math.min(cx,cy)-46;
+  nodes.forEach((n,i)=>{ const a=-Math.PI/2+i*2*Math.PI/(nodes.length||1),x=cx+R*Math.cos(a),y=cy+R*Math.sin(a);
+    const x1=n.dir==="in"?x:cx,y1=n.dir==="in"?y:cy,x2=n.dir==="in"?cx:x,y2=n.dir==="in"?cy:y;
+    vp.appendChild(svgEl("line",{x1,y1,x2,y2,stroke:felColor(n.fel),"stroke-width":n.fel==="abroga"?2:1.3}));
+    const g=svgEl("g",{style:"cursor:pointer"}); g.addEventListener("click",()=>focusAct(n.act_id));
+    const ttl=svgEl("title",{}); ttl.textContent=`${FEL_RO[n.fel]||n.fel} · ${n.act_id}`+(n.de_la?` (${n.de_la})`:"")+(n.titlu?` — ${n.titlu.slice(0,60)}`:""); g.appendChild(ttl);
+    g.appendChild(svgEl("circle",{cx:x,cy:y,r:11,fill:felColor(n.fel),"fill-opacity":.85}));
+    const lbl=svgEl("text",{x,y:y+22,"text-anchor":"middle","font-family":"var(--mono)","font-size":"9",fill:"var(--ink)"});
+    lbl.textContent=n.act_id.length>16?n.act_id.slice(0,15)+"…":n.act_id; g.appendChild(lbl); vp.appendChild(g);
+  });
+  vp.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--mono)","font-size":"8.5","font-weight":"600",fill:"#fff"});
+  c.textContent=actId.length>14?actId.slice(0,13)+"…":actId; vp.appendChild(c);
+  wrap.innerHTML="";
+  const bar=document.createElement("div");
+  bar.innerHTML=`<button class="ghost" style="margin:0 0 .5rem;font-size:.72rem;padding:.3rem .7rem">← înapoi la proiect</button>`
+    +`<p class="hint" style="margin:.2rem 0 .6rem"><b>${inb.length}</b> îl modifică/citează · <b>${outb.length}</b> ținte. Clic pe un nod ca să mergi mai departe.</p>`;
+  bar.querySelector("button").onclick=()=>{ if(_lastLint) renderGraph(_lastLint); };
+  wrap.appendChild(bar); wrap.appendChild(mountGraph(svg,vp));
+}
+
 // ---- search ----
 let searchTimer;
 async function runSearch(){
@@ -410,19 +479,19 @@ async function runSearch(){
   if(!q){ $("#cauta-out").innerHTML=""; return; }
   $("#cauta-out").innerHTML=`<p class="empty"><span class="spin"></span> caut…</p>`;
   try{
-    const d = await (await fetch("/api/cauta?q="+encodeURIComponent(q))).json();
+    const d=await (await fetch("/api/cauta?q="+encodeURIComponent(q))).json();
     const res=d.results||[];
     if(!res.length){ $("#cauta-out").innerHTML=empty("Niciun rezultat."); return; }
     const frag=s=>esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
-    $("#cauta-out").innerHTML=`<div>`+sec("Rezultate",res.length, res.map(x=>{
+    $("#cauta-out").innerHTML=`<div>`+sec("Rezultate",res.length,res.map(x=>{
       const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
       const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
       return card("note",`${link} <span class="hint">${esc(x.locator)}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
     }).join(""))+`</div>`;
   }catch(e){ $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
 }
-$("#q").addEventListener("keydown", e=>{ if(e.key==="Enter") runSearch(); });
-$("#q").addEventListener("input", ()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(runSearch,400); });
+$("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") runSearch(); });
+$("#q").addEventListener("input",()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(runSearch,400); });
 </script>
 </body>
 </html>
