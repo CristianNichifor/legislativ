@@ -234,13 +234,19 @@ def _gaseste_sfarsitul(client: Client, *, log=print) -> int:
 def _main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", default="corpus.db")
-    ap.add_argument("--lucratori", type=int, default=4, help="concurență (4 = sub pragul de 503)")
+    ap.add_argument("--lucratori", type=int, default=1, help="concurență (1 = lent și constant)")
     ap.add_argument("--start", type=int, default=1)
     ap.add_argument("--stop", type=int, default=None)
-    ap.add_argument("--pauza", type=float, default=0.0, help="secunde între pagini, per lucrător")
+    ap.add_argument("--pauza", type=float, default=0.5, help="secunde între pagini, per lucrător")
+    ap.add_argument("--timeout", type=float, default=90.0, help="secunde per cerere")
     a = ap.parse_args()
     p = colecteaza(
-        a.db, lucratori=a.lucratori, pagina_start=a.start, pagina_stop=a.stop, pauza=a.pauza
+        a.db,
+        lucratori=a.lucratori,
+        pagina_start=a.start,
+        pagina_stop=a.stop,
+        pauza=a.pauza,
+        timeout=a.timeout,
     )
     print(
         f"\ngata: {p.acte_scrise} acte normative scrise, {p.sarite_tip} sărite (alt tip), "
