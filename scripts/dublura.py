@@ -90,18 +90,22 @@ class Potrivire:
     titlu: str
     stadiu: str
     tinte_comune: tuple[str, ...]
+    acte_comune: tuple[str, ...]
     scor_text: float
     in_viata: bool
 
     @property
     def motiv(self) -> str:
         if self.tinte_comune:
-            return f"aceleași ținte: {', '.join(self.tinte_comune)}"
+            return f"aceeași prevedere: {', '.join(self.tinte_comune)}"
+        if self.acte_comune:
+            return f"același act: {', '.join(self.acte_comune)}"
         return f"asemănare de text ({self.scor_text:.0%})"
 
     @property
     def increderea(self) -> str:
-        """A shared target is a verbatim fact about both texts; a wording match is derived."""
+        """A shared provision is a verbatim fact about both texts; a shared act only, or a
+        wording match, is derived — they touch the same law, perhaps not the same article."""
         return "verbatim" if self.tinte_comune else "derived"
 
 
@@ -159,6 +163,11 @@ def _candidate(con: sqlite3.Connection, draft: str) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def _acte_din(tinte_set: set[str]) -> set[str]:
+    """The act ids inside a set of `act_id locator` targets, dropping the locator."""
+    return {t.split(" ")[0] for t in tinte_set}
+
+
 def _viu(stadiu: str) -> bool:
     return not any(m in cheie(stadiu) for m in STADII_MOARTE)
 
@@ -194,12 +203,17 @@ def dubluri(
         if doar_vii and not viu:
             continue
         text_cand = f"{rand['titlu']} {rand['obiect'] or ''}"
-        comune = sorted(tinte_draft & tinte(text_cand))
+        tinte_cand = tinte(text_cand)
+        comune = sorted(tinte_draft & tinte_cand)
+        # Act-level overlap catches the common case the exact match misses: a draft amending
+        # art. 7 of a law and an initiative amending the same law more broadly touch the same
+        # act without sharing a locator. Ranked below an exact provision match, above wording.
+        acte_comune = sorted(_acte_din(tinte_draft) & _acte_din(tinte_cand)) if not comune else []
         cuvinte_cand = {
             w for w in cheie(text_cand).split() if len(w) > 3 and w not in _CUVINTE_GOALE
         }
         scor = _scor_text(cuvinte_draft, cuvinte_cand)
-        if not comune and scor < prag_text:
+        if not comune and not acte_comune and scor < prag_text:
             continue
         rezultate.append(
             Potrivire(
@@ -208,12 +222,15 @@ def dubluri(
                 titlu=rand["titlu"],
                 stadiu=rand["stadiu"] or "",
                 tinte_comune=tuple(comune),
+                acte_comune=tuple(acte_comune),
                 scor_text=round(scor, 3),
                 in_viata=viu,
             )
         )
-    # Target overlap first (by count), then wording. A shared target beats any amount of prose.
-    rezultate.sort(key=lambda p: (len(p.tinte_comune), p.scor_text), reverse=True)
+    # Exact provision first, then shared act, then wording. Each tier beats the next entirely.
+    rezultate.sort(
+        key=lambda p: (len(p.tinte_comune), len(p.acte_comune), p.scor_text), reverse=True
+    )
     return rezultate
 
 

@@ -82,6 +82,24 @@ def test_a_shared_target_outranks_a_wording_match(tmp_path):
     assert hits[0].plx_id == "plx-tgt-2024"  # target match first, whatever the wording overlap
 
 
+def test_a_shared_act_matches_even_without_a_shared_article(tmp_path):
+    """A draft amending art. 7 and an initiative amending the whole law touch the same act; that
+    is a weaker signal than a shared article but stronger than shared prose, and it must surface."""
+    db = _db(
+        tmp_path,
+        _ini(
+            "plx-act-2024",
+            "Lege pentru modificarea și completarea Legii nr. 98/2016",
+            "modificarea Legii nr. 98/2016 privind achizițiile publice",
+        ),
+    )
+    draft = "modificarea articolului 7 din Legea nr. 98/2016"
+    with depozit.deschide(db, readonly=True) as con:
+        hits = dubluri(draft, con)
+    assert hits and hits[0].plx_id == "plx-act-2024"
+    assert "lege-98-2016" in hits[0].acte_comune and not hits[0].tinte_comune
+
+
 def test_a_dead_bill_is_not_offered_as_a_live_duplicate(tmp_path):
     db = _db(
         tmp_path,

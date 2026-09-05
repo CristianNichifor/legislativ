@@ -210,3 +210,9 @@ endpoint and a recorded fixture are the same shape.
 | `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
 | `parsare.py` | One portal page into an act: designation, issuer, publication, and the article tree. |
 | `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
+| `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
+| `colector.py` | Walks the whole corpus through the API — polite, resumable, keep-all. |
+| `cdep.py` | Pending initiatives from the Chamber of Deputies, with their Senate id. |
+| `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
+| `analiza.py` | The extractors over the live corpus: a deadline inventory and a term dictionary. |
+| `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |

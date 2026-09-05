@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linter legislativ</title>
+<style>
+  :root {
+    --paper:#f3f4f6; --surface:#fff; --ink:#14171c; --ink-mid:#464d59; --ink-mute:#6b7280;
+    --rule:#d7dae0; --rule-soft:#e6e8ec; --accent:#8a2b2e; --accent-wash:#f4e6e5;
+    --blocking:#8a2b2e; --material:#8a5c14; --note:#3f6478;
+    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --serif:"Spectral","Iowan Old Style",Georgia,serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --paper:#101319;--surface:#171b22;--ink:#e5e8ee;--ink-mid:#b0b7c3;--ink-mute:#8d95a3;
+    --rule:#2b313c;--rule-soft:#232833;--accent:#dd918c;--accent-wash:#2c2022;
+    --blocking:#dd918c;--material:#d7ab6b;--note:#8fb5c8;
+  }}
+  *{box-sizing:border-box}
+  body{background:var(--paper);color:var(--ink);font-family:var(--serif);
+    line-height:1.55;margin:0;font-size:16px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:60rem;margin:0 auto;padding:0 1.25rem 4rem}
+  header{border-bottom:2px solid var(--ink);padding:2rem 0 1.1rem;margin-bottom:1.75rem}
+  .eyebrow{font-family:var(--sans);font-size:.68rem;font-weight:600;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--accent);margin:0 0 .5rem}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(1.7rem,4vw,2.5rem);
+    letter-spacing:-.015em;margin:0;line-height:1.05}
+  .stat{font-family:var(--sans);font-size:.8rem;color:var(--ink-mute);margin-top:.7rem}
+  .stat b{color:var(--ink-mid);font-variant-numeric:tabular-nums}
+  label{display:block;font-family:var(--sans);font-size:.72rem;font-weight:600;
+    letter-spacing:.1em;text-transform:uppercase;color:var(--ink-mute);margin:0 0 .5rem}
+  textarea{width:100%;min-height:9rem;background:var(--surface);color:var(--ink);
+    border:1px solid var(--rule);border-radius:0;padding:.9rem 1rem;font-family:var(--mono);
+    font-size:.9rem;line-height:1.6;resize:vertical}
+  textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+  .row{display:flex;gap:.8rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
+  button{font-family:var(--sans);font-size:.85rem;font-weight:600;letter-spacing:.02em;
+    background:var(--accent);color:#fff;border:0;padding:.65rem 1.4rem;cursor:pointer}
+  button:disabled{opacity:.5;cursor:wait}
+  button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  .hint{font-family:var(--sans);font-size:.78rem;color:var(--ink-mute)}
+  section{margin-top:2.25rem}
+  .sec-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid var(--rule);
+    padding-bottom:.45rem;margin-bottom:1rem}
+  h2{font-family:var(--serif);font-weight:600;font-size:1.25rem;margin:0}
+  .count{font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--ink-mute);margin-left:auto}
+  .card{background:var(--surface);border:1px solid var(--rule-soft);padding:.85rem 1rem;
+    margin-bottom:.6rem;border-left:3px solid var(--rule)}
+  .card.blocking{border-left-color:var(--blocking)}
+  .card.material{border-left-color:var(--material)}
+  .card.note{border-left-color:var(--note)}
+  .card .lead{font-size:1.02rem;margin:0 0 .35rem}
+  .card .meta{font-family:var(--sans);font-size:.78rem;color:var(--ink-mid);
+    display:flex;flex-wrap:wrap;gap:.35rem 1rem}
+  .card .meta b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .quote{font-family:var(--mono);font-size:.82rem;background:var(--accent-wash);
+    color:var(--accent);padding:.5rem .7rem;margin:.5rem 0 0;white-space:pre-wrap;word-break:break-word}
+  .tag{font-family:var(--sans);font-size:.62rem;font-weight:600;letter-spacing:.08em;
+    text-transform:uppercase;padding:.12rem .45rem;border:1px solid currentColor}
+  .tag.verbatim{color:var(--blocking)} .tag.derived{color:var(--material)}
+  .empty{font-family:var(--sans);font-size:.85rem;color:var(--ink-mute);font-style:italic}
+  .plx{font-family:var(--mono);color:var(--accent)}
+  footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);
+    font-family:var(--sans);font-size:.76rem;color:var(--ink-mute)}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">legislativ · verificare proiect</p>
+    <h1>Ce spune legea despre proiectul tău</h1>
+    <p class="stat" id="stat">se încarcă corpusul…</p>
+  </header>
+
+  <label for="draft">Textul proiectului de act normativ</label>
+  <textarea id="draft" placeholder="Lipește aici textul proiectului. De exemplu: „Prezenta lege modifică articolul 7 din Legea nr. 98/2016 privind achizițiile publice. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+  <div class="row">
+    <button id="go">Verifică</button>
+    <button class="ghost" id="sample">Exemplu</button>
+    <span class="hint">Rulează local. Textul nu părăsește această mașină.</span>
+  </div>
+
+  <div id="out"></div>
+
+  <footer>
+    Trei verificări deterministe: termene de implementare, terminologie față de termenii definiți
+    în lege, și inițiative în lucru care ar putea acoperi acest proiect. Fără model de limbaj —
+    fiecare rezultat citează sursa. Contradicțiile (care cer un model) nu sunt încă incluse.
+  </footer>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => (s||"").replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+fetch("/api/rezumat").then(r=>r.json()).then(d=>{
+  $("#stat").innerHTML = `Corpus: <b>${(d.acte||0).toLocaleString("ro")}</b> acte · `
+    + `<b>${(d.initiative||0).toLocaleString("ro")}</b> inițiative în lucru · `
+    + `<b>${(d.provizii||0).toLocaleString("ro")}</b> prevederi indexate`;
+}).catch(()=>{ $("#stat").textContent = "corpus indisponibil"; });
+
+const SAMPLE = `Prezenta lege reglementează achizițiile de stat.\n`
+ + `La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică.\n`
+ + `În termen de 30 de zile de la data intrării în vigoare a prezentei legi, Guvernul aprobă `
+ + `normele metodologice de aplicare.`;
+$("#sample").onclick = () => { $("#draft").value = SAMPLE; };
+
+function card(cls, lead, metaParts, quote, tag){
+  return `<div class="card ${cls}">`
+    + (tag?`<span class="tag ${tag}">${tag}</span> `:"")
+    + `<p class="lead">${lead}</p>`
+    + (metaParts.length?`<div class="meta">${metaParts.map(m=>`<span>${m}</span>`).join("")}</div>`:"")
+    + (quote?`<div class="quote">${esc(quote)}</div>`:"")
+    + `</div>`;
+}
+
+function render(d){
+  const dl = d.deadlines||[], tm = d.terminology||[], du = d.duplicates||[];
+  let h = "";
+
+  h += `<section><div class="sec-head"><h2>Termene de implementare</h2>`
+     + `<span class="count">${dl.length}</span></div>`;
+  h += dl.length ? dl.map(o => card("material",
+        `${o.instrument ? o.instrument.replace(/-/g," ") : "obligație"}`
+        + (o.termen_zile ? ` — în <b>${o.termen_zile}</b> zile` : "")
+        + (o.ancora ? ` de la ${o.ancora}` : ""),
+        [o.institutie ? `emitent: <b>${esc(o.institutie)}</b>` : ""].filter(Boolean),
+        o.text)).join("")
+     : `<p class="empty">Niciun termen de implementare identificat.</p>`;
+  h += `</section>`;
+
+  h += `<section><div class="sec-head"><h2>Terminologie</h2>`
+     + `<span class="count">${tm.length}</span></div>`;
+  h += tm.length ? tm.map(t => card(t.regula==="categorie-paralela"?"blocking":"note",
+        esc(t.explicatie), [], "")).join("")
+     : `<p class="empty">Nicio abatere de la termenii definiți în lege.</p>`;
+  h += `</section>`;
+
+  h += `<section><div class="sec-head"><h2>Inițiative care s-ar putea suprapune</h2>`
+     + `<span class="count">${du.length}</span></div>`;
+  h += du.length ? du.map(p => card("note",
+        `<span class="plx">${esc(p.plx_id)}</span>`
+        + (p.senat_id?` · Senat ${esc(p.senat_id)}`:"") + ` — ${esc(p.titlu).slice(0,140)}`,
+        [`${esc(p.motiv)}`, p.stadiu?`stadiu: ${esc(p.stadiu).slice(0,60)}`:""].filter(Boolean),
+        "", p.incredere)).join("")
+     : `<p class="empty">Nicio inițiativă în lucru nu pare să acopere acest proiect.</p>`;
+  h += `</section>`;
+
+  $("#out").innerHTML = h;
+}
+
+$("#go").onclick = async () => {
+  const draft = $("#draft").value.trim();
+  if(!draft){ $("#out").innerHTML = `<p class="empty">Lipește un text mai întâi.</p>`; return; }
+  $("#go").disabled = true; $("#go").textContent = "se verifică…";
+  try{
+    const r = await fetch("/api/lint", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body:JSON.stringify({draft})});
+    if(!r.ok){ throw new Error((await r.json()).error || r.statusText); }
+    render(await r.json());
+  }catch(e){ $("#out").innerHTML = `<p class="empty">Eroare: ${esc(String(e.message||e))}</p>`; }
+  finally{ $("#go").disabled = false; $("#go").textContent = "Verifică"; }
+};
+</script>
+</body>
+</html>

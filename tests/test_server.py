@@ -1,0 +1,79 @@
+"""Tests for the backend wiring.
+
+The server adds no logic — it routes to the engines — so the tests exercise the routing
+functions directly over small temporary corpora rather than a live socket, which keeps them fast
+and deterministic. The one thing worth asserting is that `lint` returns all three sections from
+the two databases at once, and that search reaches the corpus FTS.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from pathlib import Path
+
+from scripts import depozit
+from scripts.api import Inregistrare
+from scripts.cdep import Initiativa
+from scripts.colector import act_din_inregistrare
+from scripts.server import Stare, _cauta, _lint
+
+
+def _build(tmp_path: Path) -> Stare:
+    corpus = tmp_path / "corpus.db"
+    initiative = tmp_path / "initiative.db"
+    rec = Inregistrare(
+        titlu="LEGE nr. 98 din 2016",
+        tip_act="LEGE",
+        numar="98",
+        an=None,
+        data_vigoare=date(2016, 5, 26),
+        emitent="PARLAMENTUL",
+        publicatie="MO",
+        link_html="http://legislatie.just.ro/Public/DetaliiDocument/178667",
+        text="Art. 3. - În sensul prezentei legi, termenii de mai jos au următoarele "
+        "semnificații:\na) achiziție publică - achiziția de lucrări sau servicii;",
+    )
+    with depozit.deschide(corpus) as con:
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    ini = Initiativa(
+        plx_id="plx-1-2024",
+        cam=2,
+        idp="1",
+        senat_id="L5/2024",
+        tip="propunere legislativa",
+        titlu="Lege pentru modificarea Legii nr. 98/2016",
+        obiect="modificarea articolului 7 din Legea nr. 98/2016",
+        urgenta=False,
+        stadiu="pe ordinea de zi",
+        camera_decizionala="Camera Deputaților",
+        data_inreg="2024-01-01",
+        sursa_url="",
+    )
+    with depozit.deschide(initiative) as con:
+        depozit.scrie_initiativa(con, ini)
+    return Stare(str(corpus), str(initiative))
+
+
+def test_lint_returns_all_three_sections_from_both_databases(tmp_path):
+    stare = _build(tmp_path)
+    draft = (
+        "La articolul 7 din Legea nr. 98/2016 privind achizițiile publice se modifică. "
+        "În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice. "
+        "Prezenta reglementează achizițiile de stat."
+    )
+    out = _lint(draft, stare)
+    assert any(d["termen_zile"] == 30 for d in out["deadlines"])
+    assert any(t["regula"] == "categorie-paralela" for t in out["terminology"])  # achiziții de stat
+    assert out["duplicates"] and out["duplicates"][0]["plx_id"] == "plx-1-2024"
+    assert out["duplicates"][0]["senat_id"] == "L5/2024"
+
+
+def test_search_reaches_the_corpus_fts(tmp_path):
+    stare = _build(tmp_path)
+    assert _cauta("achizitie", stare)["results"]  # diacritic-folded
+    assert _cauta("", stare)["results"] == []
+
+
+def test_the_terminology_dictionary_is_built_from_the_corpus(tmp_path):
+    stare = _build(tmp_path)
+    assert any(t.termen == "achiziție publică" for t in stare.termeni)
