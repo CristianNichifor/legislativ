@@ -44,7 +44,10 @@
 
   .app{display:flex;gap:1.5rem;align-items:flex-start}
   .main{flex:1;min-width:0}
-  aside.canvas{width:28rem;flex:none;position:sticky;top:1rem;
+  /* the panel is always full-viewport tall — collapsed or open — so its top lines up with the
+     textarea beside it and the collapsed strip stays a full-height bar, not a stub */
+  aside.canvas{width:28rem;flex:none;position:sticky;top:1rem;height:calc(100vh - 2rem);
+    display:flex;flex-direction:column;overflow:hidden;
     border:1px solid var(--rule);background:var(--surface)}
   aside.canvas.collapsed{width:2.5rem}
   .canvas-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem;
@@ -60,7 +63,9 @@
     color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;
     padding:.15rem .45rem}
   aside.canvas.collapsed .canvas-toggle{margin:0}
-  .canvas-body{padding:.5rem}
+  .canvas-body{padding:.5rem;flex:1;overflow:auto;display:flex;flex-direction:column}
+  #graf-wrap{flex:1;display:flex;flex-direction:column}
+  .graf-empty{margin:auto;text-align:center}
   .graf-box{position:relative;overflow:hidden;border:1px solid var(--rule-soft);
     background:var(--paper);touch-action:none}
   svg.graf{width:100%;height:auto;display:block;cursor:grab}
@@ -76,7 +81,7 @@
   .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
   @media (max-width:900px){
     .app{flex-direction:column}
-    aside.canvas{width:100%;position:static;order:-1}
+    aside.canvas{width:100%;position:static;order:-1;height:auto}
     aside.canvas.collapsed{width:100%}
     /* full-width on mobile, so the collapsed head goes back to a normal horizontal row */
     aside.canvas.collapsed .canvas-head{flex-direction:row;align-items:center;
@@ -96,8 +101,9 @@
   textarea,input[type=search],input[type=text],select{width:100%;background:var(--surface);
     color:var(--ink);border:1px solid var(--rule);padding:.75rem 1rem;font-family:var(--mono);
     font-size:.9rem;line-height:1.6}
-  /* resize is capped to the viewport; text beyond that scrolls inside the box */
-  textarea{min-height:9rem;max-height:calc(100vh - 2rem);resize:vertical;overflow:auto}
+  /* resize is capped so the box stays within the viewport (room left for header + tabs above);
+     text beyond that scrolls inside instead of pushing the page open */
+  textarea{min-height:9rem;max-height:calc(100vh - 18rem);resize:vertical;overflow:auto}
   textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
@@ -171,13 +177,14 @@
     <p class="stat" id="stat"><span class="spin"></span> se încarcă…</p>
   </header>
 
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
+    <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
+    <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
+  </div>
+
   <div class="app">
     <div class="main">
-      <div class="tabs" role="tablist">
-        <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
-        <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
-        <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
-      </div>
 
       <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
         <label for="draft">Textul proiectului</label>
