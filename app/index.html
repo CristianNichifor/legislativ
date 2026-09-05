@@ -202,6 +202,14 @@
   /* the drafting suggestion: two readings of the line being written — plain on top, the mandated
      Legea 24/2000 form below. Sits under the textarea, not at the caret, so it never covers text. */
   .ta-wrap{position:relative}
+  /* draft beside its plain-language rewrite; stacks on narrow screens */
+  .draft-split{display:flex;gap:1rem;align-items:stretch}
+  .draft-split>.ta-wrap{flex:1;min-width:0;display:flex;flex-direction:column}
+  .draft-clar{flex:1;min-width:0;border:1px solid var(--rule);border-left:3px solid var(--note);
+    background:var(--surface);padding:.6rem .8rem;overflow:auto;max-height:calc(100vh - 22rem)}
+  .draft-clar-body{font-family:var(--sans);font-size:.9rem;white-space:pre-wrap;word-break:break-word;
+    margin-top:.35rem;line-height:1.55}
+  @media (max-width:820px){ .draft-split{flex-direction:column} .draft-clar{max-height:24rem} }
   .suggest{margin-top:.5rem;border:1px solid var(--rule);border-left:3px solid var(--accent);
     background:var(--surface);overflow:hidden}
   .suggest-h{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
@@ -285,13 +293,20 @@
 
       <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
         <label for="draft">Textul proiectului</label>
-        <div class="ta-wrap">
-          <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
-          <div id="suggest" class="suggest" hidden aria-live="polite"></div>
+        <div class="draft-split">
+          <div class="ta-wrap">
+            <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+            <div id="suggest" class="suggest" hidden aria-live="polite"></div>
+          </div>
+          <div id="draft-clar" class="draft-clar" hidden>
+            <div class="suggest-h">Limbaj clar — sugestie, nu textul legii · pe dispozitiv (privat)</div>
+            <div id="draft-clar-body" class="draft-clar-body"><span class="hint">Apasă „Limbaj clar” pentru o rescriere în limbaj simplu.</span></div>
+          </div>
         </div>
         <div class="row">
           <button class="go" id="go">Verifică</button>
           <button class="ghost" id="sample">Exemplu</button>
+          <button class="ghost" id="draft-clar-btn">Limbaj clar</button>
           <span class="hint">Rulează local · textul nu părăsește această mașină</span>
         </div>
         <div id="lint-out"></div>
@@ -495,6 +510,22 @@ const SAMPLE = `La articolul 7 din Legea nr. 98/2016 privind achizițiile public
  + `Prezenta lege reglementează achizițiile de stat.\n`
  + `În termen de 30 de zile de la data intrării în vigoare, Guvernul aprobă normele metodologice de aplicare.`;
 $("#sample").onclick = ()=>{ $("#draft").value = SAMPLE; };
+
+// Plain-language rewrite of the PRIVATE draft — local model only, on the device, never sent out.
+$("#draft-clar-btn").onclick = async ()=>{
+  const draft=$("#draft").value.trim();
+  const panel=$("#draft-clar"), body=$("#draft-clar-body");
+  panel.hidden=false;
+  if(!draft){ body.innerHTML=`<span class="hint">Scrie sau lipește un text mai întâi.</span>`; return; }
+  if(!LLM.disponibil()){ body.innerHTML=empty("Rescrierea locală are nevoie de WebGPU (Chrome/Edge recent). Textul rămâne pe dispozitiv — nu se trimite nicăieri."); return; }
+  const btn=$("#draft-clar-btn"); btn.disabled=true; btn.innerHTML=`<span class="spin"></span> …`;
+  try{
+    const prog=(r)=>{ body.innerHTML=`<span class="hint"><span class="spin"></span> ${esc(r&&r.text?r.text:"se încarcă modelul AI…")}</span>`; };
+    const text=await LLM.rescrie(draft, prog);
+    body.textContent=text;
+  }catch(e){ body.innerHTML=empty("Eroare: "+esc(e.message||e)); }
+  finally{ btn.disabled=false; btn.textContent="Limbaj clar"; }
+};
 
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
