@@ -296,3 +296,5 @@ endpoint and a recorded fixture are the same shape.
 | `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
 | `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
 | `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |
+| `shard.py` | Turns a corpus into fetch-on-demand search shards: a compact act index, a prefix-sharded inverted index, one provisions file per act. |
+| `cauta_web.py` | The browser's search: fold-identical to the shard builder, it fetches only the shards a query's tokens need — coverage of the corpus, download of the query. |

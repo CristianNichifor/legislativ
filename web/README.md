@@ -39,12 +39,30 @@ wires the `fetch` shim).
 to `main`. To turn it on: **Settings → Pages → Source: GitHub Actions** (and make the repo public,
 or use Pages on a plan that allows private). No secrets are needed.
 
-## The honest limit, and where it goes
+## Search covers the corpus without shipping it
 
-The demo ships a handful of acts because the full corpus is ~4.5 GB — not shippable to a browser.
-Cross-corpus checks (search, "ce atinge", repealed) see only what is shipped: silent, never wrong,
-where the data does not reach. The path past it is a **sharded, per-act-fetchable dataset** on the
-static host — the same hosted-consolidated-DB / resync direction — so coverage stops being capped by
-the initial payload. A hardened build would also self-host the Pyodide runtime and externalise the
-inline scripts to drop `'unsafe-inline'`; neither changes the exfiltration guarantee, which rests on
-`connect-src`.
+Search is the first check moved off the shipped slice and onto **fetch-on-demand shards**
+(`scripts/shard.py` builds them, `scripts/cauta_web.py` reads them, in Pyodide). A query fetches
+only the inverted-index shards its own tokens fall in, ranks the acts those postings name, and
+fetches the provisions of just the top few to cut snippets. Verified in a browser: searching
+`autoritate contractantă` fetched `idx/au.json` + `idx/co.json` and three act files — nothing else.
+
+The economics, measured on the 11 272-act corpus collected so far:
+
+| Piece | Size | When it loads |
+| --- | --- | --- |
+| `index.json` (act catalogue) | 0.70 MB gzipped | once |
+| inverted index (795 prefix shards) | 6.82 MB gzipped total | **only the ~1 shard per query token** (~8 KB each) |
+| `acte/<id>.json` (provisions) | 111 MB total | **one file per result, on demand** |
+
+So a 259 MB SQLite corpus becomes ~0.7 MB up front and a few kilobytes per search. It scales the
+same way to the full body of law; the next optimisation is to shard the act index itself (0.7 MB
+for 11k grows with the corpus) and to serve a data release rather than rebuild in CI.
+
+## The remaining limit, and where it goes
+
+The lint passes that read the corpus ("ce atinge", repealed, terminology) still use the shipped
+slice — silent, never wrong, where the data does not reach; moving them onto the same shard layer
+(and the graph onto per-act shards) is the follow-on. A hardened build would also self-host the
+Pyodide runtime and externalise the inline scripts to drop `'unsafe-inline'`; neither changes the
+exfiltration guarantee, which rests on `connect-src`.

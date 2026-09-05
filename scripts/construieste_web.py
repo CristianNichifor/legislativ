@@ -38,7 +38,7 @@ import shutil
 import zipfile
 from pathlib import Path
 
-from scripts import depozit
+from scripts import depozit, shard
 from scripts.graf import construieste as construieste_graf
 from scripts.parsare import din_fisier
 
@@ -90,7 +90,11 @@ BOOT = """
       try {
         const parsed = new URL(u, location.origin);
         const body = (opts && opts.body) ? String(opts.body) : "";
-        const res = py.raspunde(parsed.pathname, parsed.search.slice(1), body);
+        // Search goes through the sharded, fetch-on-demand path (async); everything else is a
+        // synchronous call into the engines over the shipped data.
+        const res = (parsed.pathname === "/api/cauta")
+          ? await py.cauta(parsed.searchParams.get("q") || "")
+          : py.raspunde(parsed.pathname, parsed.search.slice(1), body);
         return new Response(res, {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
       } catch(e){
         return new Response(JSON.stringify({error:String(e)}), {status:500});
@@ -132,7 +136,19 @@ def _raspunde(path, query, body):
     return json.dumps(out, ensure_ascii=False)
 _raspunde
       `);
-      resolveReady({ raspunde: (p,q,b)=>raspunde(p,q,b) });
+      // The sharded search is async (it fetches index/act shards on demand), so it lives outside
+      // the synchronous dispatch above. It returns a JSON string, ready for a Response.
+      const cautaJson = pyodide.runPython(`
+import json as _json
+from scripts.cauta_web import cauta as _cauta_shard
+async def _cauta_json(q):
+    return _json.dumps(await _cauta_shard(q, 'data'), ensure_ascii=False)
+_cauta_json
+      `);
+      resolveReady({
+        raspunde: (p,q,b)=>raspunde(p,q,b),
+        cauta: (q)=>cautaJson(q),
+      });
     } catch(e){
       console.error(e);
       const s = document.getElementById("stat");
@@ -284,6 +300,7 @@ def main(sursa: str) -> None:
     else:
         _date_din_corpus()
     _finalizeaza_db()
+    shard.construieste(str(DATA / "corpus.db"), str(DATA))
     _bundle()
     _pagina()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
