@@ -14,7 +14,7 @@ from pathlib import Path
 
 from scripts import depozit
 from scripts.api import Inregistrare
-from scripts.colector import act_din_inregistrare, colecteaza, tip_normativ
+from scripts.colector import act_din_inregistrare, colecteaza, este_normativ, slug_tip
 
 
 def _rec(tip, numar, an=None, vig=None, titlu="", text="corp"):
@@ -44,11 +44,18 @@ class _FakeClient:
         return self._p.get(pagina, [])
 
 
-def test_only_the_six_normative_types_are_kept():
-    assert tip_normativ("LEGE") == "lege"
-    assert tip_normativ("ORDONANȚĂ DE URGENȚĂ") == "oug"
-    assert tip_normativ("ADEVERINȚĂ") is None
-    assert tip_normativ("AMENAJAMENT") is None
+def test_the_six_normative_types_get_canonical_slugs():
+    assert slug_tip("LEGE") == "lege"
+    assert slug_tip("ORDONANȚĂ DE URGENȚĂ") == "oug"
+    assert este_normativ("LEGE") and not este_normativ("ADEVERINȚĂ")
+
+
+def test_other_types_are_kept_with_a_derived_slug_not_dropped():
+    """Collection keeps everything keyable; the codes, the norms and the drafts matter. Type
+    filtering is the product's job at query time, not the collector's."""
+    assert slug_tip("CODUL FISCAL") == "codul-fiscal"
+    assert slug_tip("PROIECT DE LEGE") == "proiect-de-lege"
+    assert slug_tip("NORMĂ") == "norma"
 
 
 def test_the_year_is_recovered_when_the_api_leaves_it_blank():
@@ -67,22 +74,25 @@ def test_a_dotted_number_is_cleaned():
     assert a.id == "ordin-1802-2014"
 
 
-def test_a_run_keeps_normative_acts_and_skips_the_rest(tmp_path: Path):
+def test_a_run_keeps_every_keyable_act_including_drafts(tmp_path: Path):
+    """A numbered draft is kept — it is what duplicate-check needs. Only a numberless record
+    (no citable identity) is skipped."""
     db = tmp_path / "c.db"
     client = _FakeClient(
         {
             1: [
                 _rec("LEGE", "10", vig=date(2020, 1, 1)),
-                _rec("ADEVERINȚĂ", "5", vig=date(2020, 1, 1)),
-                _rec("HOTĂRÂRE", "20", vig=date(2020, 2, 1)),
+                _rec("PROIECT DE LEGE", "5", vig=date(2020, 1, 1)),
+                _rec("LISTĂ", "", vig=date(2020, 1, 1)),  # numberless -> skipped
             ],
-            2: [_rec("AMENAJAMENT", "1", vig=date(2020, 1, 1))],
+            2: [_rec("CODUL FISCAL", "227", vig=date(2015, 9, 1))],
         }
     )
     p = colecteaza(str(db), client=client, lucratori=2, pagina_start=1, pagina_stop=2)
-    assert p.acte_scrise == 2 and p.sarite_tip == 2
+    assert p.acte_scrise == 3 and p.sarite_tip == 1
     with depozit.deschide(db) as con:
-        assert {a.id for a in depozit.acte(con)} == {"lege-10-2020", "hg-20-2020"}
+        ids = {a.id for a in depozit.acte(con)}
+    assert ids == {"lege-10-2020", "proiect-de-lege-5-2020", "codul-fiscal-227-2015"}
 
 
 def test_a_second_run_resumes_and_does_nothing(tmp_path: Path):

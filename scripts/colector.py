@@ -36,13 +36,16 @@ from dataclasses import dataclass
 
 from scripts import depozit
 from scripts.api import Client, Inregistrare
-from scripts.referinte import TIPURI
 from scripts.text import cheie
 
-# The API returns a type as a display string; the linter keys acts by a slug. Only the six
-# normative types are kept — the ones that make, amend or implement law and therefore have edges
-# worth reasoning about. Everything else is enumerated, counted, and skipped.
-TIP_NORMATIV: dict[str, str] = {
+# The API returns a type as a display string; the linter keys acts by a slug. The six normative
+# types get short canonical slugs the rest of the package already speaks; every other type keeps
+# a slug derived from its name. Nothing is filtered by type at collection: the network cost of a
+# record is paid to enumerate it whether or not it is kept, so discarding it saves only disk and
+# throws away data that cannot be cheaply re-fetched — including the codes (Codul fiscal, muncii,
+# penal), the implementing norms `vid.py` hunts for, and the draft bills a duplicate-check needs.
+# The product filters by `tip` at query time; the collector keeps what it can key.
+TIP_CANONIC: dict[str, str] = {
     "lege": "lege",
     "ordonanta de urgenta": "oug",
     "ordonanta": "og",
@@ -50,6 +53,16 @@ TIP_NORMATIV: dict[str, str] = {
     "ordin": "ordin",
     "decret": "decret",
 }
+
+# The six the in-force linter reasons about. A query-time filter, not a collection-time one.
+TIP_NORMATIV: frozenset[str] = frozenset(TIP_CANONIC.values())
+
+
+def slug_tip(tip_act: str) -> str:
+    """Canonical slug for the six, a name-derived slug for the other 166."""
+    c = cheie(tip_act)
+    return TIP_CANONIC.get(c, re.sub(r"[^a-z0-9]+", "-", c).strip("-") or "necunoscut")
+
 
 _AN = re.compile(r"\b(1[6-9]\d{2}|20\d{2})\b")
 
@@ -64,9 +77,9 @@ class Progres:
     ultima_pagina: int
 
 
-def tip_normativ(tip_act: str) -> str | None:
-    """The slug for a normative type, or None for the 166 types the linter does not model."""
-    return TIP_NORMATIV.get(cheie(tip_act))
+def este_normativ(tip_act: str) -> bool:
+    """Whether a type is one of the six the in-force linter reasons about."""
+    return slug_tip(tip_act) in TIP_NORMATIV
 
 
 def _an(rec: Inregistrare) -> int | None:
@@ -79,21 +92,21 @@ def _an(rec: Inregistrare) -> int | None:
 
 
 def act_din_inregistrare(rec: Inregistrare):
-    """An API record to an `Act`, or None if it is a type the linter does not keep.
+    """An API record to an `Act`, or None when it cannot be keyed.
 
-    Year is taken from the record, then its in-force date, then its title — because the API's
-    `An` field comes back empty in practice, and an act with no year cannot be keyed or cited.
+    Keyable means a type slug, a number and a year — the three that make `tip-numar-an`, the id
+    every citation uses. Year is taken from the record, then its in-force date, then its title,
+    because the API's `An` field comes back empty in practice. A numberless record (a LISTĂ, a
+    RAPORT, a COMUNICAT) has no citable identity and is the only thing dropped; those are counted
+    so the skip is visible, not silent.
     """
     from scripts.referinte import Act
 
-    tip = tip_normativ(rec.tip_act)
-    if tip is None or tip not in TIPURI:
-        return None
     an = _an(rec)
     numar = rec.numar.replace(".", "") or None
     if an is None or numar is None:
         return None
-    return Act(tip, numar, an)
+    return Act(slug_tip(rec.tip_act), numar, an)
 
 
 def _pagina(client: Client, pagina: int, incercari: int = 6) -> list[Inregistrare]:
