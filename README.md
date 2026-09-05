@@ -274,6 +274,7 @@ endpoint and a recorded fixture are the same shape.
 | `consolidare.py` | A provision's text as of a date, spliced from the parsed tree — or an honest refusal when a change would not apply cleanly. Reads operations off an amending page (`operatii_amendatoare`). Gold-tested against the portal's own consolidated view (`docs/CONSOLIDARE.md`). |
 | `consolidat.py` | The consolidation surface: an act's touched provisions with attribution, from locally synced pages. Pluggable source (fixtures now, a hosted consolidated DB later). |
 | `sugestii.py` | While a draft is written: the legistic form of the line, plain restatement plus the Legea 24/2000 formula. Deterministic, no model. |
+| `compunere.py` | Legislation as code: a list of structured intents compiled into a whole amending act — and verified by reading it back through the extractor. |
 | `definitii.py` | An act's own definition articles, and drafts that talk around them. |
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |

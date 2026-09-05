@@ -331,6 +331,40 @@ def _redacteaza(qs: dict) -> dict:
         return {"error": str(e)}
 
 
+def _compune(interventii: list[dict]) -> dict:
+    """Compile a list of structured changes into a whole amending act, verified by re-reading it.
+
+    Legislation as code: the caller sends the intents (operation, act, locators, new text); this
+    returns the mandated Legea 24/2000 document plus `verificare` — the points that did not read
+    back as their own operation, so the drafter is told exactly what to look at.
+    """
+    from scripts.compunere import Interventie, compune
+
+    def g(i: dict, k: str) -> str | None:
+        v = str(i.get(k, "") or "").strip()
+        return v or None
+
+    ivs = [
+        Interventie(
+            operatie=g(i, "operatie") or "modifica",
+            act=g(i, "act") or "…",
+            articol=g(i, "articol"),
+            alineat=g(i, "alineat"),
+            litera=g(i, "litera"),
+            text_nou=g(i, "text_nou") or "…",
+            articol_nou=g(i, "articol_nou"),
+        )
+        for i in interventii
+    ]
+    r = compune(ivs)
+    return {
+        "titlu": r.titlu,
+        "text": r.text,
+        "verificare": list(r.verificare),
+        "curat": r.curat,
+    }
+
+
 def _sugereaza(qs: dict) -> dict:
     """The legistic form of the line being written — deterministic, no corpus, no model.
 

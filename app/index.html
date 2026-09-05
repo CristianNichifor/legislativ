@@ -266,8 +266,17 @@
         <div style="margin-top:.7rem"><label for="r-text">Textul nou (dacă e cazul)</label>
           <textarea id="r-text" style="min-height:5rem" placeholder="Conținutul noii prevederi…"></textarea></div>
         <div class="row"><button class="go" id="r-go">Generează</button>
+          <button class="ghost" id="r-add">Adaugă la act</button>
           <span class="hint">Legea 24/2000 · formă article-first</span></div>
         <div id="r-out"></div>
+        <div id="r-lista-wrap" hidden style="margin-top:1.2rem">
+          <div class="sec-head"><h2>Actul în lucru</h2><span class="count" id="r-lista-n">0</span></div>
+          <div id="r-lista"></div>
+          <div class="row"><button class="go" id="r-compune">Compune actul complet</button>
+            <button class="ghost" id="r-goleste">Golește</button>
+            <span class="hint">verificat prin recitire cu extractorul</span></div>
+          <div id="r-compus"></div>
+        </div>
       </div>
 
       <div id="pane-consolidat" role="tabpanel" aria-labelledby="tab-consolidat" hidden>
@@ -448,6 +457,52 @@ $("#r-go").onclick = async ()=>{
     $("#r-copy").onclick=()=>{ navigator.clipboard?.writeText(d.text); $("#r-copy").textContent="Copiat"; };
     $("#r-insert").onclick=()=>{ const t=$("#draft"); t.value=(t.value?t.value+"\n":"")+d.text; selectTab("lint"); };
   }catch(e){ $("#r-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+};
+
+// ---- legislation-as-code: stack structured changes, compile a whole act, verify by re-reading ----
+const OPV={modifica:"modifică",completeaza:"completează",abroga:"abrogă",introduce:"introduce"};
+let interventii=[];
+function renderInterventii(){
+  $("#r-lista-wrap").hidden = interventii.length===0;
+  $("#r-lista-n").textContent = interventii.length;
+  $("#r-lista").innerHTML = interventii.map((iv,idx)=>{
+    const loc=[iv.articol&&("art. "+iv.articol),iv.alineat&&("alin. ("+iv.alineat+")"),iv.litera&&("lit. "+iv.litera+")")].filter(Boolean).join(", ")||"actul întreg";
+    return `<div class="card note"><span class="tag">${esc(OPV[iv.operatie]||iv.operatie)}</span>`
+      +`<span class="lead">${esc(loc)} — <span class="plx">${esc(iv.act)}</span></span>`
+      +`<div class="meta"><span><button class="ghost" data-del="${idx}" style="font-size:.7rem;padding:.15rem .5rem">scoate</button></span></div></div>`;
+  }).join("");
+  $("#r-lista").querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick=()=>{ interventii.splice(+b.dataset.del,1); renderInterventii(); };
+  });
+}
+$("#r-add").onclick = ()=>{
+  const act=$("#r-act").value.trim();
+  if(!act){ $("#r-out").innerHTML=empty("Pune actul țintă mai întâi."); return; }
+  interventii.push({operatie:$("#r-op").value, act,
+    articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
+    litera:$("#r-lit").value.trim(), text_nou:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
+  renderInterventii();
+  ["#r-art","#r-alin","#r-lit","#r-text","#r-nou"].forEach(s=>$(s).value="");  // keep act, clear the rest
+  $("#r-art").focus();
+};
+$("#r-goleste").onclick = ()=>{ interventii=[]; renderInterventii(); $("#r-compus").innerHTML=""; };
+$("#r-compune").onclick = async ()=>{
+  if(!interventii.length){ $("#r-compus").innerHTML=empty("Adaugă cel puțin o intervenție."); return; }
+  $("#r-compune").disabled=true; $("#r-compune").innerHTML=`<span class="spin"></span> se compune…`;
+  try{
+    const d = await (await fetch("/api/compune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({interventii})})).json();
+    if(d.error){ $("#r-compus").innerHTML=empty("Eroare: "+esc(d.error)); return; }
+    let h = `<div class="hint" style="margin-top:1rem">Titlu: <b>${esc(d.titlu)}</b></div>`
+      +`<div class="out-box" id="r-compus-text">${esc(d.text)}</div>`;
+    if(d.curat){ h += `<p class="hint" style="color:var(--note)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`; }
+    else { h += (d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join(""); }
+    h += `<div class="row"><button class="ghost" id="r-ccopy">Copiază</button>`
+      +`<button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
+    $("#r-compus").innerHTML = h;
+    $("#r-ccopy").onclick=()=>{ navigator.clipboard?.writeText(d.titlu+"\n\n"+d.text); $("#r-ccopy").textContent="Copiat"; };
+    $("#r-cinsert").onclick=()=>{ $("#draft").value=d.titlu+"\n\n"+d.text; selectTab("lint"); };
+  }catch(e){ $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+  finally{ $("#r-compune").disabled=false; $("#r-compune").textContent="Compune actul complet"; }
 };
 
 // ---- drafting suggestion (deterministic; top = plain reading, bottom = the required formula) ----

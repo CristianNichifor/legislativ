@@ -35,6 +35,7 @@ from urllib.parse import parse_qs, urlparse
 from scripts.servicii import (
     Stare,
     _cauta,
+    _compune,
     _consolidat,
     _lint,
     _redacteaza,
@@ -90,7 +91,8 @@ def face_handler(stare: Stare):
                 self._json({"error": "not found"}, 404)
 
         def do_POST(self) -> None:  # noqa: N802
-            if urlparse(self.path).path != "/api/lint":
+            ruta = urlparse(self.path).path
+            if ruta not in ("/api/lint", "/api/compune"):
                 self._json({"error": "not found"}, 404)
                 return
             lung = int(self.headers.get("Content-Length", 0))
@@ -98,6 +100,9 @@ def face_handler(stare: Stare):
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except json.JSONDecodeError:
                 self._json({"error": "json invalid"}, 400)
+                return
+            if ruta == "/api/compune":
+                self._json(_compune(cerere.get("interventii", [])))
                 return
             draft = str(cerere.get("draft", "")).strip()
             if not draft:
