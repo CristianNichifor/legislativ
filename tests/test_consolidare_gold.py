@@ -25,7 +25,12 @@ from pathlib import Path
 
 import pytest
 
-from scripts.consolidare import Operatie, consolideaza, consolideaza_in
+from scripts.consolidare import (
+    Operatie,
+    consolideaza,
+    consolideaza_in,
+    operatii_amendatoare,
+)
 from scripts.parsare import citate_din_fisier, din_fisier
 from scripts.text import cheie
 
@@ -37,8 +42,18 @@ DUPA_208 = date(2023, 1, 1)
 
 
 @pytest.fixture(scope="module")
-def payloads():
-    return [p.text for p in citate_din_fisier(SURSE / "lege-208-2022.html.gz")]
+def citate208():
+    return citate_din_fisier(SURSE / "lege-208-2022.html.gz")
+
+
+@pytest.fixture(scope="module")
+def payloads(citate208):
+    return [p.text for p in citate208]
+
+
+@pytest.fixture(scope="module")
+def amendator208():
+    return din_fisier(SURSE / "lege-208-2022.html.gz")
 
 
 @pytest.fixture(scope="module")
@@ -85,6 +100,48 @@ def test_most_replacements_appear_verbatim_in_the_consolidated_act(payloads, leg
     substantiale = [cheie(t) for t in payloads if len(cheie(t)) >= 40]
     gasite = sum(1 for b in substantiale if any(b in p for p in provizii))
     assert gasite >= 15, f"doar {gasite} din {len(substantiale)} blocuri regăsite verbatim"
+
+
+def test_operations_are_read_off_the_amending_page_and_grouped_by_target(amendator208, citate208):
+    """`operatii_amendatoare` pairs each `S_CIT` block to the point that announces it and resolves
+    the point's target and locator — so consolidation can run *from* an amending page. Legea
+    208/2022 amends the whole 2016 procurement package, and the operations come out grouped by the
+    act each targets, every replacement carrying its payload."""
+    grup = operatii_amendatoare(amendator208, citate208)
+    assert set(grup) == {"lege-98-2016", "lege-99-2016", "lege-100-2016"}
+    ops98 = grup["lege-98-2016"]
+    assert len(ops98) == 20
+    # the modificari all carry the block they replace with; the operation date is the act's own
+    # entry into force, not invented.
+    modificari = [o for o in ops98 if o.fel == "modifica"]
+    assert modificari and all(o.continut_nou for o in modificari)
+    assert all(o.act == "lege-208-2022" for o in ops98)
+    assert all(o.data == amendator208.vigoare for o in ops98)
+
+
+def test_each_replacement_lands_on_the_provision_it_names(amendator208, citate208, lege98):
+    """The proof the pairing is not off by one: a modification's block appears verbatim inside the
+    provision its *own* resolved locator points at in the consolidated act. Not every one — a
+    whole-article block omits the `Articolul N -` heading, and some provisions the act splits into
+    alineate — but a solid majority land exactly where the point said they would."""
+    ops = operatii_amendatoare(amendator208, citate208)["lege-98-2016"]
+    byloc = {p.locator_id: cheie(p.text) for p in lege98.provizii}
+    la_locul_lui = sum(
+        1
+        for o in ops
+        if o.fel == "modifica"
+        and o.continut_nou
+        and o.locator in byloc
+        and cheie(o.continut_nou) in byloc[o.locator]
+    )
+    assert la_locul_lui >= 8, f"doar {la_locul_lui} blocuri au aterizat pe locatorul lor"
+
+
+def test_a_page_that_parses_skew_raises_rather_than_mispairs(amendator208, citate208):
+    """The one thing worse than refusing is pairing a payload to the wrong provision. If the count
+    of blocks and the count of points announcing one disagree, the join refuses outright."""
+    with pytest.raises(ValueError, match="s-a parsat strâmb"):
+        operatii_amendatoare(amendator208, citate208[:-1])
 
 
 def test_the_tree_is_the_provision_source(lege98):

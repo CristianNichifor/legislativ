@@ -34,8 +34,11 @@ from dataclasses import dataclass
 from datetime import date
 from typing import TYPE_CHECKING
 
+from scripts.amendamente import amendamente
+from scripts.text import cheie
+
 if TYPE_CHECKING:
-    from scripts.parsare import ActParsat
+    from scripts.parsare import ActParsat, Provizie
 
 _ACCEPTATE = frozenset({"modifica", "abroga"})
 
@@ -186,6 +189,58 @@ def consolideaza_in(
             continue
         rezultate[locator] = consolideaza(locator, original, operatii, la_data)
     return rezultate
+
+
+def operatii_amendatoare(
+    amendator: ActParsat,
+    citate: list[Provizie],
+    la_data: date | None = None,
+) -> dict[str, list[Operatie]]:
+    """Every operation an amending page performs, grouped by the act each one targets.
+
+    This is the bridge that lets consolidation run *from* an amending page rather than only be
+    measured against one. `amendamente.py` resolves, for each numbered point, what it does
+    (`fel`), to which act (`act_tinta`) and which provision (`locator`) — the whole
+    chapeau-inheritance apparatus — but not the replacement text, because the portal marks that in
+    an `S_CIT` block, not in the guillemets a person types. `parsare.citate` reads those blocks.
+    Here the two are joined: the points that say `... va avea următorul cuprins:` are exactly the
+    ones that carry a block, and they and the blocks appear in the same document order, so the
+    n-th such point takes the n-th block.
+
+    The alignment is checked, not trusted: if the count of replacement-announcing points and the
+    count of blocks disagree, the page parsed skew and this raises rather than pairing a payload
+    to the wrong provision — the one outcome consolidation must never reach. The operation date is
+    the amending act's own entry into force (`amendator.vigoare`); a law that staggers its articles
+    across several dates is not handled here, and an operation with no date will make the engine
+    refuse downstream, which is the correct visible failure.
+    """
+    plain = "\n".join(p.text for p in amendator.provizii)
+    ams = amendamente(plain, act_gazda=amendator.act)
+    data = la_data or amendator.vigoare
+    act_id = amendator.act.id
+
+    anunta = [a for a in ams if "urmatorul cuprins" in cheie(a.text)]
+    if len(anunta) != len(citate):
+        raise ValueError(
+            f"{act_id}: {len(anunta)} puncte anunță un cuprins nou dar pagina are "
+            f"{len(citate)} blocuri S_CIT — pagina s-a parsat strâmb, nu împerechez la orbeală."
+        )
+    bloc = {id(a): c.text for a, c in zip(anunta, citate, strict=True)}
+
+    grupat: dict[str, list[Operatie]] = {}
+    for a in ams:
+        if a.act_tinta is None or not a.locator:
+            continue
+        grupat.setdefault(a.act_tinta.id, []).append(
+            Operatie(
+                fel=a.fel,
+                locator=a.locator.id,
+                data=data,
+                act=act_id,
+                continut_nou=bloc.get(id(a)),
+            )
+        )
+    return grupat
 
 
 def raport(r: Rezultat) -> str:
