@@ -123,6 +123,25 @@
     font-size:.9rem;line-height:1.6}
   /* the native picker's calendar glyph is near-invisible on the dark surface; lift it */
   input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6);cursor:pointer}
+  /* custom dropdown chevron with the same 1rem inset as the text on the left, instead of the
+     native arrow jammed against the edge */
+  select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;
+    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%23888" stroke-width="1.4"/></svg>');
+    background-repeat:no-repeat;background-position:right 1rem center;background-size:.7rem}
+  [aria-invalid="true"]{border-color:var(--blocking)}
+  .req{color:var(--blocking)}
+  .opt{color:var(--ink-mute);font-weight:400;text-transform:none;letter-spacing:0}
+  /* a clear (×) button pinned in the corner of a text field, added by JS */
+  .clr-wrap{position:relative;display:block}
+  .clr-btn{position:absolute;top:.45rem;right:.45rem;width:1.4rem;height:1.4rem;border:1px solid var(--rule);
+    background:var(--surface);color:var(--ink-mute);cursor:pointer;border-radius:3px;line-height:1;
+    font-size:1rem;display:none;align-items:center;justify-content:center;padding:0;opacity:.75}
+  .clr-wrap.has-val .clr-btn{display:flex}
+  .clr-btn:hover{opacity:1;color:var(--ink);border-color:var(--ink-mute)}
+  /* grid cells: bottom-align the field so a label that wraps to two lines does not shove its box
+     down out of line with the others in the row */
+  .grid>div{display:flex;flex-direction:column}
+  .grid>div>input,.grid>div>select{margin-top:auto}
   /* resize is capped so the box stays within the viewport — the reserve (22rem) leaves room for
      the header and tabs above AND the button row plus a gap below, so the buttons never sit on the
      bottom edge. Text beyond the cap scrolls inside instead of pushing the page open. */
@@ -279,7 +298,7 @@
               <option value="abroga">abrogă</option>
               <option value="introduce">introduce (articol nou)</option>
             </select></div>
-          <div><label for="r-tip">Tipul actului</label>
+          <div><label for="r-tip">Tipul actului <span class="req" title="obligatoriu">*</span></label>
             <select id="r-tip">
               <option value="lege">Lege</option>
               <option value="oug">OUG</option>
@@ -288,9 +307,9 @@
               <option value="ordin">Ordin</option>
               <option value="decret">Decret</option>
             </select></div>
-          <div><label for="r-nr">Numărul</label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
-          <div><label for="r-an">Anul</label><input type="text" id="r-an" inputmode="numeric" placeholder="2016"></div>
-          <div><label for="r-desc">Identificare (opțional)</label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
+          <div><label for="r-nr">Numărul <span class="req" title="obligatoriu">*</span></label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
+          <div><label for="r-an">Anul <span class="req" title="obligatoriu">*</span></label><select id="r-an"><option value="">—</option></select></div>
+          <div><label for="r-desc">Identificare <span class="opt" title="opțional">(opțional)</span></label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
           <div><label for="r-art">Articolul</label><input type="text" id="r-art" placeholder="7"></div>
           <div><label for="r-alin">Alineatul</label><input type="text" id="r-alin" placeholder="2"></div>
           <div><label for="r-lit">Litera</label><input type="text" id="r-lit" placeholder="a"></div>
@@ -395,6 +414,30 @@ PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
     try{ tema==="auto"?localStorage.removeItem("tema"):localStorage.setItem("tema",tema); }catch(e){}
     aplica(tema);
   };
+})();
+
+// ---- clear (×) buttons on the big text fields ----
+(function(){
+  function adaugaClear(el){
+    const w=document.createElement("span"); w.className="clr-wrap";
+    el.parentNode.insertBefore(w, el); w.appendChild(el);
+    const b=document.createElement("button"); b.type="button"; b.className="clr-btn";
+    b.textContent="×"; b.title="Golește câmpul"; b.setAttribute("aria-label","Golește câmpul");
+    w.appendChild(b);
+    const sync=()=>w.classList.toggle("has-val", !!el.value);
+    b.onclick=()=>{ el.value=""; el.dispatchEvent(new Event("input",{bubbles:true})); sync(); el.focus(); };
+    el.addEventListener("input", sync); sync();
+  }
+  ["#draft","#r-text","#q"].forEach(s=>{ const e=$(s); if(e) adaugaClear(e); });
+})();
+
+// ---- act picker: fill the year dropdown, keep the number numeric ----
+(function(){
+  const an=$("#r-an");
+  if(an){ const acum=new Date().getFullYear();
+    for(let y=acum;y>=1900;y--){ const o=document.createElement("option"); o.value=String(y); o.textContent=String(y); an.appendChild(o); } }
+  const nr=$("#r-nr");
+  if(nr) nr.addEventListener("input",()=>{ nr.value=nr.value.replace(/\D+/g,""); });
 })();
 
 // ---- back to top ----
@@ -507,6 +550,13 @@ function citareAct(){
   const s=(TIP_CITARE[$("#r-tip").value]||"{n}/{a}").replace("{n}",n).replace("{a}",a);
   return d? s+" "+d : s;
 }
+function valideazaAct(){
+  const nr=$("#r-nr"), an=$("#r-an");
+  const okNr=/^\d+$/.test(nr.value.trim()), okAn=!!an.value;
+  nr.setAttribute("aria-invalid", okNr?"false":"true");
+  an.setAttribute("aria-invalid", okAn?"false":"true");
+  return okNr && okAn;
+}
 let actT;
 function resolveAct(){
   clearTimeout(actT);
@@ -525,8 +575,8 @@ function resolveAct(){
 ["#r-tip","#r-nr","#r-an"].forEach(s=>{ $(s).addEventListener("input",resolveAct); $(s).addEventListener("change",resolveAct); });
 $("#r-op").onchange = ()=>{ $("#r-nou-wrap").hidden = $("#r-op").value!=="introduce"; };
 $("#r-go").onclick = async ()=>{
+  if(!valideazaAct()){ $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
   const act=citareAct();
-  if(!act){ $("#r-out").innerHTML=empty("Pune tipul, numărul și anul actului."); return; }
   const p = new URLSearchParams({op:$("#r-op").value, act,
     articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
     litera:$("#r-lit").value.trim(), text:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
@@ -560,8 +610,8 @@ function renderInterventii(){
   });
 }
 $("#r-add").onclick = ()=>{
+  if(!valideazaAct()){ $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
   const act=citareAct();
-  if(!act){ $("#r-out").innerHTML=empty("Pune tipul, numărul și anul actului mai întâi."); return; }
   interventii.push({operatie:$("#r-op").value, act,
     articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
     litera:$("#r-lit").value.trim(), text_nou:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
