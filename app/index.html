@@ -253,6 +253,20 @@
     color:var(--ink-mid);cursor:pointer}
   .ai-toggle input{width:auto;margin:0}
   .ai-model{width:auto;font-size:.74rem;padding:.35rem 2rem .35rem .6rem;background-size:.6rem}
+  /* Conexiuni belongs to Verifică (the graph); hide it elsewhere so the working area gets the width */
+  .app:not([data-pane="lint"]) aside.canvas{display:none}
+  /* Redactează: act picker pinned to the top of the scroll, tree + composed output side by side */
+  .redact-head{position:sticky;top:0;z-index:4;background:var(--paper);
+    padding:.5rem 0 .55rem;margin-bottom:.5rem;border-bottom:1px solid var(--rule-soft)}
+  .redact-head .grid{margin-top:0}
+  .redact-body{display:flex;gap:1.5rem;align-items:flex-start}
+  .redact-left{flex:1;min-width:0}
+  #r-compus{flex:1;min-width:0;position:sticky;top:6.5rem;max-height:calc(100vh - 8rem);overflow:auto}
+  #r-compus:empty{display:none}   /* no reserved blank column until something is composed */
+  @media (max-width:900px){
+    .redact-body{flex-direction:column}
+    #r-compus{position:static;max-height:none;width:100%}
+  }
   /* the nested-block act builder */
   .tree{border:1px solid var(--rule-soft);background:var(--surface);padding:.4rem .6rem;min-height:2.6rem}
   .tree:empty::before{content:"Niciun articol încă — apasă „+ articol”.";font-family:var(--sans);
@@ -343,31 +357,37 @@
 
       <div id="pane-redacteaza" role="tabpanel" aria-labelledby="tab-redacteaza" hidden>
         <p class="hint" style="margin:.2rem 0 1rem">Construiește actul pe blocuri: alege actul-țintă, adaugă articole, iar sub ele alineate și litere. Pune operația și textul la nivelul dorit. Primești forma cerută de Legea nr. 24/2000, verificată prin recitire.</p>
-        <div class="grid">
-          <div><label for="r-tip">Tipul actului <span class="req" title="obligatoriu">*</span></label>
-            <select id="r-tip">
-              <option value="lege">Lege</option>
-              <option value="oug">OUG</option>
-              <option value="og">OG</option>
-              <option value="hg">HG</option>
-              <option value="ordin">Ordin</option>
-              <option value="decret">Decret</option>
-            </select></div>
-          <div><label for="r-nr">Numărul <span class="req" title="obligatoriu">*</span></label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
-          <div><label for="r-an">Anul <span class="req" title="obligatoriu">*</span></label><select id="r-an"><option value="">—</option></select></div>
-          <div><label for="r-desc">Identificare <span class="opt" title="opțional">(opțional)</span></label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
+        <div class="redact-head">
+          <div class="grid">
+            <div><label for="r-tip">Tipul actului <span class="req" title="obligatoriu">*</span></label>
+              <select id="r-tip">
+                <option value="lege">Lege</option>
+                <option value="oug">OUG</option>
+                <option value="og">OG</option>
+                <option value="hg">HG</option>
+                <option value="ordin">Ordin</option>
+                <option value="decret">Decret</option>
+              </select></div>
+            <div><label for="r-nr">Numărul <span class="req" title="obligatoriu">*</span></label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
+            <div><label for="r-an">Anul <span class="req" title="obligatoriu">*</span></label><select id="r-an"><option value="">—</option></select></div>
+            <div><label for="r-desc">Identificare <span class="opt" title="opțional">(opțional)</span></label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
+          </div>
+          <div id="r-act-info" class="hint" style="margin:.1rem 0 0;min-height:1.1rem"></div>
         </div>
-        <div id="r-act-info" class="hint" style="margin:.1rem 0 .6rem;min-height:1.1rem"></div>
-        <div class="tree" id="r-tree"></div>
-        <div class="row" style="margin-top:.5rem">
-          <button class="ghost" id="r-add-art">+ articol</button>
-          <span class="hint">adaugă articole; sub fiecare, alineate; sub alineat, litere</span>
+        <div class="redact-body">
+          <div class="redact-left">
+            <div class="tree" id="r-tree"></div>
+            <div class="row" style="margin-top:.5rem">
+              <button class="ghost" id="r-add-art">+ articol</button>
+              <span class="hint">adaugă articole; sub fiecare, alineate; sub alineat, litere</span>
+            </div>
+            <div class="row"><button class="go" id="r-compune">Compune actul</button>
+              <button class="ghost" id="r-goleste">Golește</button>
+              <span class="hint">verificat prin recitire cu extractorul</span></div>
+            <div id="r-out"></div>
+          </div>
+          <div id="r-compus"></div>
         </div>
-        <div class="row"><button class="go" id="r-compune">Compune actul</button>
-          <button class="ghost" id="r-goleste">Golește</button>
-          <span class="hint">verificat prin recitire cu extractorul</span></div>
-        <div id="r-out"></div>
-        <div id="r-compus"></div>
       </div>
 
       <div id="pane-consolidat" role="tabpanel" aria-labelledby="tab-consolidat" hidden>
@@ -443,11 +463,13 @@ function selectTab(which){
     $("#tab-"+p).setAttribute("aria-selected", p===which);
     $("#pane-"+p).hidden = p!==which;
   });
+  $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q"}[which];
   if(focusEl) $(focusEl).focus();
   if(which==="consolidat") loadConsAsezari();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
+$(".app").dataset.pane = "lint";   // initial tab
 
 // ---- theme: auto / light / dark, remembered per browser ----
 (function(){
