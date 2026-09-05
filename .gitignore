@@ -44,3 +44,4 @@ web/data/
 web/bundle.zip
 web/index.html
 web/worker.js
+web/sw.js

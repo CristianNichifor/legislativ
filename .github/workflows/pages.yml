@@ -31,8 +31,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Build the browser bundle from fixtures
-        run: uv run python -m scripts.construieste_web --sursa fixturi
+      - name: Use the dataset release if published, else the committed fixtures
+        id: date
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release download date-latest --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
+            mkdir -p web && tar xzf date.tar.gz -C web
+            echo "sursa=gata" >> "$GITHUB_OUTPUT"
+            echo "building from the collected dataset release"
+          else
+            echo "sursa=fixturi" >> "$GITHUB_OUTPUT"
+            echo "no dataset release yet — building the 4-act fixtures demo"
+          fi
+      - name: Build the browser bundle
+        run: uv run python -m scripts.construieste_web --sursa ${{ steps.date.outputs.sursa }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web

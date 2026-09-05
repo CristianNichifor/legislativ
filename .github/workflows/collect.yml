@@ -1,0 +1,79 @@
+name: collect
+
+# Grow the corpus server-side and publish it as a dataset release the Pages build consumes. This
+# is the slow, network-bound job — it talks to legislatie.just.ro's SOAP service — so it runs on
+# demand (and rarely), never on push, and never in a user's browser. It is incremental: it seeds
+# from the previous release, extends the walk by the page range given, rebuilds the graph and the
+# search shards, and republishes.
+#
+# Bounded on purpose: a full walk is ~25 000 pages and would exceed a runner's time budget. Dispatch
+# it with a page range; run it again with the next range to go further. The published archive is
+# `date.tar.gz` (the whole web/data tree) on the rolling `date-latest` release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "First SOAP page to walk"
+        default: "1"
+      stop:
+        description: "Last SOAP page to walk (inclusive)"
+        default: "50"
+      pauza:
+        description: "Seconds between pages (be polite to the ministry's server)"
+        default: "0.5"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Seed from the previous dataset release (if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release download date-latest --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
+            mkdir -p web && tar xzf date.tar.gz -C web
+            [ -f web/data/corpus.db ] && cp web/data/corpus.db corpus.db || true
+            echo "seeded from previous release"
+          else
+            echo "no previous release — starting fresh"
+          fi
+
+      - name: Walk the SOAP service (bounded)
+        run: |
+          uv run python -m scripts.colector --db corpus.db \
+            --start "${{ inputs.start }}" --stop "${{ inputs.stop }}" --pauza "${{ inputs.pauza }}"
+
+      - name: Rebuild the graph
+        run: uv run python -c "from scripts.graf import construieste; print(construieste('corpus.db','graf.db'), 'muchii')"
+
+      - name: Build the sharded dataset (web/data)
+        run: |
+          mkdir -p web/data
+          cp corpus.db web/data/corpus.db
+          cp graf.db web/data/graf.db
+          [ -f initiative.db ] && cp initiative.db web/data/initiative.db || true
+          uv run python -m scripts.shard --corpus web/data/corpus.db --out web/data
+
+      - name: Pack and publish the dataset release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tar czf date.tar.gz -C web data
+          if gh release view date-latest >/dev/null 2>&1; then
+            gh release upload date-latest date.tar.gz --clobber
+          else
+            gh release create date-latest date.tar.gz \
+              --title "Dataset (rolling)" \
+              --notes "Sharded corpus for the browser build. Rebuilt by the collect workflow."
+          fi

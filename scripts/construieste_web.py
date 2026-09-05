@@ -34,6 +34,8 @@ Standard library only. Run: `uv run python -m scripts.construieste_web [--sursa 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import shutil
 import zipfile
 from pathlib import Path
@@ -182,8 +184,56 @@ BOOT = """
     }
     return origFetch(url, opts);
   };
+  // The service worker caches the shell and the data (versioned), so a second visit is instant and
+  // works offline; a new build changes the version baked into sw.js, which retires the old cache.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(()=>{});
+  }
 })();
 </script>
+"""
+
+# The service worker: cache-first for this origin's shell and data, so repeat visits and repeat
+# queries are instant and the whole tool works offline once loaded. The version is a content hash
+# of the corpus and graph baked in at build time — when the data changes the string changes, the
+# browser sees a different sw.js, installs it, and `activate` deletes every older cache. That is the
+# resync: the client follows the server's data without a manual clear. Cross-origin requests (the
+# Pyodide CDN) are left to the network untouched.
+SW = """
+const VERSIUNE = "__VERSION__";
+const CACHE = "legislativ-" + VERSIUNE;
+const NUCLEU = [
+  "./", "./index.html", "./worker.js", "./bundle.zip",
+  "./data/corpus.db", "./data/initiative.db", "./data/graf.db",
+  "./data/index.json", "./data/manifest.json"
+];
+self.addEventListener("install", (e)=>{
+  e.waitUntil(
+    caches.open(CACHE).then(c=>c.addAll(NUCLEU)).catch(()=>{}).then(()=>self.skipWaiting())
+  );
+});
+self.addEventListener("activate", (e)=>{
+  e.waitUntil(
+    caches.keys()
+      .then(ks=>Promise.all(ks.map(k=>k===CACHE ? null : caches.delete(k))))
+      .then(()=>self.clients.claim())
+  );
+});
+self.addEventListener("fetch", (e)=>{
+  const req = e.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== location.origin) return;  // Pyodide CDN and the like go straight to network
+  e.respondWith(
+    caches.open(CACHE).then(async (c)=>{
+      const hit = await c.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res && res.ok) c.put(req, res.clone());  // fill the cache with per-act shards on first use
+      return res;
+    })
+  );
+});
 """
 
 
@@ -309,6 +359,29 @@ def _worker() -> None:
     print(f"  worker → {WEB / 'worker.js'}")
 
 
+def _versiune_si_sw() -> str:
+    """A content hash of the corpus and graph, written into the service worker and the manifest.
+
+    Same data → same version → the browser keeps its cache; changed data → new version → the new
+    sw.js retires the old cache. The corpus file already reflects every provision, so hashing it
+    (and the graph) captures any change that matters to what the app shows.
+    """
+    h = hashlib.sha256()
+    for name in ("corpus.db", "graf.db"):
+        p = DATA / name
+        if p.is_file():
+            h.update(p.read_bytes())
+    versiune = h.hexdigest()[:12]
+
+    (WEB / "sw.js").write_text(SW.replace("__VERSION__", versiune), encoding="utf-8")
+    manifest = DATA / "manifest.json"
+    date = json.loads(manifest.read_text()) if manifest.is_file() else {}
+    date["versiune"] = versiune
+    manifest.write_text(json.dumps(date, ensure_ascii=False), encoding="utf-8")
+    print(f"  sw + versiune → {versiune}")
+    return versiune
+
+
 def _pagina() -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
@@ -324,15 +397,30 @@ def _pagina() -> None:
 def main(sursa: str) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
-    if sursa == "fixturi":
-        _date_din_fixturi()
+    if sursa == "gata":
+        # The data is already in web/data — a dataset release was downloaded and extracted. Build
+        # only the shell over it; do not rebuild or reshard what a slower job already produced.
+        if not (DATA / "corpus.db").is_file() or not (DATA / "index.json").is_file():
+            raise SystemExit("--sursa gata: web/data este incomplet (release-ul nu a fost extras)")
+        # A collection release may carry no initiatives; the engines still open initiative.db, so
+        # give them an empty one rather than let the open fail.
+        ini = DATA / "initiative.db"
+        if not ini.is_file():
+            with depozit.deschide(str(ini)):
+                pass
+            print(f"  initiative (gol, lipsea din release) → {ini}")
+        print(f"  folosesc datele deja prezente în {DATA}")
     else:
-        _date_din_corpus()
-    _finalizeaza_db()
-    shard.construieste(str(DATA / "corpus.db"), str(DATA))
+        if sursa == "fixturi":
+            _date_din_fixturi()
+        else:
+            _date_din_corpus()
+        _finalizeaza_db()
+        shard.construieste(str(DATA / "corpus.db"), str(DATA))
     _bundle()
     _worker()
     _pagina()
+    _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
 
 
@@ -341,8 +429,11 @@ if __name__ == "__main__":
     implicit = "corpus" if (ROOT / "corpus.db").is_file() else "fixturi"
     ap.add_argument(
         "--sursa",
-        choices=("fixturi", "corpus"),
+        choices=("fixturi", "corpus", "gata"),
         default=implicit,
-        help="'fixturi' (reproductibil în CI, din sources/) sau 'corpus' (felie din corpus.db)",
+        help=(
+            "'fixturi' (reproductibil în CI, din sources/), 'corpus' (felie din corpus.db), "
+            "sau 'gata' (datele sunt deja în web/data, dintr-un release descărcat)"
+        ),
     )
     main(ap.parse_args().sursa)

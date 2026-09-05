@@ -15,6 +15,32 @@ draft, `performance.getEntriesByType('resource')` shows **zero** `/api/` request
 `fetch('https://example.com', {method:'POST', body:'DRAFT'})` is **blocked** by the policy. The
 only network calls are Pyodide (runtime + the `sqlite3` package) and the static public-law data.
 
+## Instant on repeat, offline, and it resyncs itself
+
+A service worker (`sw.js`) caches this origin's shell and data cache-first, so a second visit and a
+repeat query are instant and the whole tool works offline once loaded. The cache name carries a
+**content hash of the corpus and graph** (`versiune` in `manifest.json`); when the data changes the
+hash changes, the browser sees a different `sw.js`, installs it, and `activate` deletes every older
+cache. That is the resync — the client follows the server's data with no manual clear. Verified in a
+browser: the page is SW-controlled, the shell and databases are cached on first load, and per-act
+shards join the cache the moment a search first touches them.
+
+## Where the data comes from — fixtures now, a collected release as it grows
+
+The Pages build takes its data from a **dataset release** (`date-latest`, asset `date.tar.gz`) when
+one is published, and falls back to the committed 4-act fixtures otherwise — so the site always
+builds, and grows when there is more law to show. The release is produced by `.github/workflows/
+collect.yml`: a manual, bounded walk of the SOAP service that extends the corpus incrementally
+(seeding from the previous release), rebuilds the graph and the search shards, and republishes.
+Collection is server-side and slow; it never runs in a browser. Monitorul Oficial is a second
+source to add to that job later.
+
+Note the current tension this exposes: search reads the shards (per-query), but the other
+corpus-reading passes still open the whole `corpus.db`, which the worker downloads once (then the
+service worker caches it). That is fine for a bounded release of tens of MB; the full body of law
+needs those passes moved onto the same per-act shard layer and a prebuilt terminology dictionary —
+the next follow-on.
+
 ## The UI never freezes
 
 Pyodide, the engines and the data all live in a **Web Worker** (`worker.js`), off the main thread.
