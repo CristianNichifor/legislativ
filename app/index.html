@@ -106,9 +106,11 @@
 
   label{display:block;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.1em;
     text-transform:uppercase;color:var(--ink-mute);margin:0 0 .5rem}
-  textarea,input[type=search],input[type=text],select{width:100%;background:var(--surface);
+  textarea,input[type=search],input[type=text],input[type=date],select{width:100%;background:var(--surface);
     color:var(--ink);border:1px solid var(--rule);padding:.75rem 1rem;font-family:var(--mono);
     font-size:.9rem;line-height:1.6}
+  /* the native picker's calendar glyph is near-invisible on the dark surface; lift it */
+  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6);cursor:pointer}
   /* resize is capped so the box stays within the viewport (room left for header + tabs above);
      text beyond that scrolls inside instead of pushing the page open */
   textarea{min-height:9rem;max-height:calc(100vh - 18rem);resize:vertical;overflow:auto;
@@ -273,7 +275,7 @@
           <div><label for="c-act">Actul</label>
             <select id="c-act"><option value="">se încarcă…</option></select></div>
           <div><label for="c-data">La data (opțional)</label>
-            <input type="text" id="c-data" placeholder="2023-01-01"></div>
+            <input type="date" id="c-data"></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
           <span class="hint">local · fără cereri către portal</span></div>
@@ -369,9 +371,10 @@ $("#sample").onclick = ()=>{ $("#draft").value = SAMPLE; };
 
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
-        tm=d.terminology||[], du=d.duplicates||[];
+        tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[];
   let h = `<div class="strip">`
     +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
+    +chip("consolidat",co.length,"material","Verifică față de textul consolidat")
     +chip("redactare",dr.length,"material","Tehnică legislativă")
     +chip("atinge",tg.length,"note","Ce atinge proiectul")
     +chip("termene",dl.length,"material","Termene de implementare")
@@ -379,6 +382,14 @@ function renderLint(d){
     +chip("duplicate",du.length,"note","Inițiative care s-ar putea suprapune")+`</div>`;
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
+  if(co.length) h += sec("Verifică față de textul consolidat", co.length,
+    co.map(c=>card("material",
+      `<span class="plx">${esc(c.act_id)}</span> <span class="hint">${esc(c.locator)}</span> — a fost `
+        +(c.abrogat?"abrogat":"modificat")+(c.neconsolidat?" (parțial neconsolidat automat)":""),
+      [ c.prin&&c.prin.length?`prin: <b>${c.prin.map(esc).join(", ")}</b>`:"",
+        c.ultima?`ultima: <b>${esc(c.ultima)}</b>`:"",
+        c.unitati&&c.unitati.length?`unități: ${c.unitati.map(esc).join(", ")}`:"",
+        "vezi fila «Consolidat» pentru textul în vigoare" ].filter(Boolean),"","derived")).join(""));
   if(dr.length) h += sec("Tehnică legislativă", dr.length,
     dr.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],"","derived")).join(""));
   if(tg.length) h += sec("Ce atinge proiectul", tg.length,

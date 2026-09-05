@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from scripts.consolidat import acte_disponibile, consolideaza_local
+from scripts.consolidat import acte_disponibile, consolideaza_local, modificari_pentru
+from scripts.server import _consolidare_semnale
 
 
 def test_only_locally_available_acts_are_offered():
@@ -50,3 +51,29 @@ def test_the_summary_counts_add_up():
     refuzat = sum(1 for r in rez.values() if not r.complet)
     assert complet + refuzat == len(rez)
     assert complet >= 1 and refuzat >= 1
+
+
+def test_modificari_pentru_maps_touched_provisions_and_is_empty_off_catalog():
+    m = modificari_pentru("lege-98-2016", date(2023, 1, 1))
+    assert "art187.alin8.lita" in m and m["art187.alin8.lita"].schimbari
+    assert modificari_pentru("lege-999-9999") == {}
+
+
+def test_lint_flags_a_citation_to_a_since_amended_provision():
+    """The linter's consolidated-text pass: citing art. 187, whose alineate 208/2022 rewrote, is
+    told so and pointed at the current text."""
+    sig = _consolidare_semnale(
+        "La articolul 187 din Legea nr. 98/2016 privind achizițiile publice, "
+        "alineatul (8) se aplică."
+    )
+    assert sig and sig[0]["act_id"] == "lege-98-2016" and sig[0]["locator"] == "art187"
+    assert "lege-208-2022" in sig[0]["prin"]
+    assert any(u.startswith("art187") for u in sig[0]["unitati"])
+
+
+def test_lint_is_silent_on_an_unchanged_provision():
+    assert _consolidare_semnale("Articolul 200 din Legea nr. 98/2016 rămâne aplicabil.") == []
+
+
+def test_lint_is_silent_when_the_act_cannot_be_consolidated_locally():
+    assert _consolidare_semnale("Articolul 5 din Legea nr. 227/2015 se aplică.") == []

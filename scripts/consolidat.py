@@ -19,6 +19,7 @@ Standard library only, like the rest.
 from __future__ import annotations
 
 from datetime import date
+from functools import lru_cache
 from pathlib import Path
 
 from scripts.consolidare import Operatie, Rezultat, consolideaza_in, operatii_amendatoare
@@ -73,3 +74,26 @@ def consolideaza_local(
         operatii += operatii_amendatoare(amendator, citate).get(act_id, [])
     rezultate = consolideaza_in(tinta, operatii, la_data)
     return tinta, rezultate
+
+
+@lru_cache(maxsize=64)
+def _consolidat_cache(act_id: str, la_data: date | None) -> dict[str, Rezultat]:
+    """Parsing the fixtures on every lint would be wasteful — the corpus does not change between
+    requests — so the touched-provision map is memoised per (act, date)."""
+    _, rez = consolideaza_local(act_id, la_data=la_data)
+    return rez
+
+
+def modificari_pentru(act_id: str, la_data: date | None = None) -> dict[str, Rezultat]:
+    """The provisions of `act_id` a locally available amending act touched, keyed by locator.
+
+    Empty when the act cannot be consolidated locally — the honest answer a caller can act on
+    without special-casing. This is what the linter reads to tell a draft it may be citing a
+    provision that has since moved.
+    """
+    if act_id not in CATALOG:
+        return {}
+    try:
+        return _consolidat_cache(act_id, la_data)
+    except Exception:
+        return {}

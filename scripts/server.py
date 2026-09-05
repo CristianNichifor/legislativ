@@ -128,7 +128,59 @@ def _lint(draft: str, stare: Stare) -> dict:
         "targets": _targets(draft, stare),
         "repealed": _repealed(draft, stare),
         "drafting": drafting,
+        "consolidare": _consolidare_semnale(draft),
     }
+
+
+def _consolidare_semnale(draft: str) -> list[dict]:
+    """Where the draft cites a provision that has since been rewritten — check the current text.
+
+    The linter's other passes reason over acts as published; this one reasons over what they say
+    *now*. For each provision the draft cites whose act can be consolidated locally, it reports the
+    changes that provision (or a unit inside it) has undergone, so a drafter amending or relying on
+    `art. 187` is told alin. (8) was rewritten in 2022 and points them at the consolidated text
+    rather than the original. Silent where no consolidated form is synced — never a false "current".
+    """
+    from scripts.consolidat import modificari_pentru
+    from scripts.referinte import referinte
+
+    vazute: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for ref in referinte(draft):
+        if ref.act is None or not ref.locator:
+            continue
+        loc_id = ref.locator.id
+        cheie = (ref.act.id, loc_id)
+        if cheie in vazute:
+            continue
+        touched = modificari_pentru(ref.act.id)
+        if not touched:
+            continue
+        # provisions changed at the cited locator, or at a unit inside it (cite art. 187, alin. (8)
+        # changed). Only those that actually carry a change or a refusal are worth surfacing.
+        relevante = [
+            (lid, r)
+            for lid, r in touched.items()
+            if (lid == loc_id or lid.startswith(loc_id + "."))
+            and (r.schimbari or r.abrogat or not r.complet)
+        ]
+        if not relevante:
+            continue
+        vazute.add(cheie)
+        prin = sorted({s.act for _, r in relevante for s in r.schimbari})
+        date_ = [s.data.isoformat() for _, r in relevante for s in r.schimbari if s.data]
+        out.append(
+            {
+                "act_id": ref.act.id,
+                "locator": loc_id,
+                "abrogat": any(r.abrogat for _, r in relevante),
+                "neconsolidat": any(not r.complet for _, r in relevante),
+                "unitati": sorted(lid for lid, _ in relevante),
+                "prin": prin,
+                "ultima": max(date_, default=None),
+            }
+        )
+    return out
 
 
 def _repealed(draft: str, stare: Stare) -> list[dict]:
