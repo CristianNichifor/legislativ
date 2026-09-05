@@ -77,6 +77,17 @@ class Progres:
     ultima_pagina: int
 
 
+@dataclass(frozen=True)
+class Actualizare:
+    """What a freshness run did: which tail it re-walked, and how much of it was new."""
+
+    pagini: int  # pages re-fetched this run
+    acte_scrise: int  # rows upserted (new + rewritten)
+    acte_noi: int  # net growth in the corpus (after − before)
+    ultima_veche: int  # the corpus end when the run started
+    ultima_noua: int  # the corpus end the run discovered
+
+
 def este_normativ(tip_act: str) -> bool:
     """Whether a type is one of the six the in-force linter reasons about."""
     return slug_tip(tip_act) in TIP_NORMATIV
@@ -215,6 +226,75 @@ def colecteaza(
     return Progres(len(de_facut), scrise, sarite, ultima)
 
 
+def actualizeaza(
+    cale_db: str = "corpus.db",
+    *,
+    client: Client | None = None,
+    sfarsit: int | None = None,
+    margine: int = 3,
+    pauza: float = 0.0,
+    timeout: float = 90.0,
+    log=print,
+) -> Actualizare:
+    """Bring a fully-collected corpus up to date by re-walking its tail.
+
+    The API has no `modified-since` and no date filter, but its enumeration is chronological and
+    append-at-end — the whole resumable walk relies on that — so new law lands on new pages past
+    the old end, and a law amended since arrives as a new amending act on one of those pages. So
+    freshness is not a diff against the server; it is re-discovering the end and re-collecting from
+    a little before the previous end to it.
+
+    Two things make the tail, not just the new pages: the last page collected was very likely
+    *partial* when it was written (a page holds ten acts; the corpus rarely ends on a boundary), so
+    re-fetching it picks up the acts that filled it since — `pagina_terminata` is INSERT-OR-REPLACE,
+    the write is idempotent. `margine` is how many completed pages back from the old end to redo,
+    small cover against that partial page and ordinary churn.
+
+    This is for a corpus whose initial walk has finished. While it is still filling, the resumable
+    `colecteaza` is the mechanism — it already recomputes the end each run and collects whatever is
+    new — and this refuses an empty corpus rather than pretending a first walk is an update.
+    """
+    client = client or Client(timeout=timeout)
+    with depozit.deschide(cale_db, readonly=True) as con:
+        gata = depozit.pagini_terminate(con)
+        acte_inainte = depozit.rezumat(con)["acte"]
+    if not gata:
+        log("corpus gol — folosește `colecteaza` pentru colectarea inițială, nu `actualizeaza`")
+        return Actualizare(0, 0, 0, 0, 0)
+
+    ultima = max(gata)
+    if sfarsit is None:
+        sfarsit = _gaseste_sfarsitul(client, log=log)
+    start = max(1, ultima - margine + 1)
+    pagini = list(range(start, sfarsit + 1))
+    log(
+        f"sfârșit vechi ~{ultima}, sfârșit acum ~{sfarsit}; "
+        f"reîmprospătez {len(pagini)} pagini (de la {start})"
+    )
+
+    scrise = 0
+    with depozit.deschide(cale_db) as con:
+        for i, p in enumerate(pagini, start=1):
+            recs = _pagina(client, p, deadline=timeout + 30)
+            pe_pagina = 0
+            for rec in recs:
+                act = act_din_inregistrare(rec)
+                if act is None:
+                    continue
+                depozit.scrie_inregistrare(con, rec, act)
+                scrise += 1
+                pe_pagina += 1
+            depozit.pagina_terminata(con, p, pe_pagina)
+            if i % 50 == 0:
+                con.commit()
+                log(f"  {i}/{len(pagini)} pagini · {scrise} acte scrise")
+            if pauza:
+                time.sleep(pauza)
+        acte_dupa = depozit.rezumat(con)["acte"]
+
+    return Actualizare(len(pagini), scrise, acte_dupa - acte_inainte, ultima, sfarsit)
+
+
 def _gaseste_sfarsitul(client: Client, *, log=print) -> int:
     """Binary-search the last non-empty page. A dozen requests to size a quarter-million-doc job."""
     lo, hi = 1, 40000
@@ -239,7 +319,36 @@ def _main() -> int:
     ap.add_argument("--stop", type=int, default=None)
     ap.add_argument("--pauza", type=float, default=0.5, help="secunde între pagini, per lucrător")
     ap.add_argument("--timeout", type=float, default=90.0, help="secunde per cerere")
+    ap.add_argument(
+        "--actualizeaza",
+        action="store_true",
+        help="reîmprospătează un corpus deja colectat (re-parcurge coada), nu colecta de la zero",
+    )
+    ap.add_argument("--margine", type=int, default=3, help="pagini de coadă re-parcurse la update")
+    ap.add_argument(
+        "--graf",
+        nargs="?",
+        const="graf.db",
+        default=None,
+        help="după update, reconstruiește graful (implicit graf.db)",
+    )
     a = ap.parse_args()
+
+    if a.actualizeaza:
+        u = actualizeaza(a.db, margine=a.margine, pauza=a.pauza, timeout=a.timeout, sfarsit=a.stop)
+        print(
+            f"\ngata: {u.acte_noi} acte noi ({u.acte_scrise} scrise/rescrise), "
+            f"coadă {u.ultima_veche}→{u.ultima_noua}, {u.pagini} pagini re-parcurse"
+        )
+        if a.graf:
+            from scripts.graf import construieste
+
+            print(f"reconstruiesc graful în {a.graf}…")
+            construieste(a.db, a.graf)
+        with depozit.deschide(a.db) as con:
+            print("rezumat:", depozit.rezumat(con))
+        return 0
+
     p = colecteaza(
         a.db,
         lucratori=a.lucratori,

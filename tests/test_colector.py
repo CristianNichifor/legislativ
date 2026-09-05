@@ -14,7 +14,13 @@ from pathlib import Path
 
 from scripts import depozit
 from scripts.api import Inregistrare
-from scripts.colector import act_din_inregistrare, colecteaza, este_normativ, slug_tip
+from scripts.colector import (
+    act_din_inregistrare,
+    actualizeaza,
+    colecteaza,
+    este_normativ,
+    slug_tip,
+)
 
 
 def _rec(tip, numar, an=None, vig=None, titlu="", text="corp"):
@@ -101,6 +107,45 @@ def test_a_second_run_resumes_and_does_nothing(tmp_path: Path):
     colecteaza(str(db), client=client, lucratori=1, pagina_start=1, pagina_stop=1)
     again = colecteaza(str(db), client=client, lucratori=1, pagina_start=1, pagina_stop=1)
     assert again.pagini == 0
+
+
+def test_update_rewalks_the_tail_and_picks_up_new_and_late_acts(tmp_path: Path):
+    """Freshness: after the corpus grows, an update re-fetches the last (partial) page and any new
+    pages past the old end — a boundary act that filled the last page and a wholly new page both
+    land, and the net-new count is honest."""
+    db = tmp_path / "c.db"
+    initial = _FakeClient(
+        {
+            1: [_rec("LEGE", "10", vig=date(2020, 1, 1))],
+            2: [_rec("LEGE", "11", vig=date(2020, 1, 1))],
+        }
+    )
+    colecteaza(str(db), client=initial, lucratori=1, pagina_start=1, pagina_stop=2)
+
+    # time passes: page 2 was partial and gains an act, and a new page 3 appears
+    grown = _FakeClient(
+        {
+            1: [_rec("LEGE", "10", vig=date(2020, 1, 1))],
+            2: [_rec("LEGE", "11", vig=date(2020, 1, 1)), _rec("LEGE", "12", vig=date(2021, 1, 1))],
+            3: [_rec("LEGE", "13", vig=date(2021, 1, 1))],
+        }
+    )
+    u = actualizeaza(str(db), client=grown, sfarsit=3, margine=1)
+    assert u.acte_noi == 2  # lege-12 (late on the boundary page) and lege-13 (new page)
+    assert (u.ultima_veche, u.ultima_noua) == (2, 3)
+    assert u.pagini == 2  # margine=1 -> re-walk from page 2 to 3
+    with depozit.deschide(db) as con:
+        ids = {a.id for a in depozit.acte(con)}
+    assert ids == {"lege-10-2020", "lege-11-2020", "lege-12-2021", "lege-13-2021"}
+
+
+def test_update_refuses_an_empty_corpus(tmp_path: Path):
+    """An update is not a first walk; on an empty corpus it does nothing and says so."""
+    db = tmp_path / "c.db"
+    with depozit.deschide(db):
+        pass  # create the schema, collect nothing
+    u = actualizeaza(str(db), client=_FakeClient({}), sfarsit=5)
+    assert (u.pagini, u.acte_scrise, u.acte_noi) == (0, 0, 0)
 
 
 def test_the_full_text_is_searchable_after_a_run(tmp_path: Path):

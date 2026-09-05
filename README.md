@@ -44,6 +44,15 @@ uv run python -m scripts.colector --db corpus.db      # legislația
 uv run python -m scripts.cdep     --db initiative.db   # inițiativele din Parlament
 ```
 
+Odată colectat, îl ții la zi re-parcurgând coada — enumerarea serviciului e cronologică, așa că
+legile noi apar pe pagini noi la sfârșit, iar o lege modificată sosește ca act modificator nou.
+Serviciul nu are filtru „modificat după", deci actualizarea re-descoperă sfârșitul și re-colectează
+coada (ultima pagină, adesea parțială, plus paginile noi), apoi reconstruiește graful:
+
+```bash
+uv run python -m scripts.colector --db corpus.db --actualizeaza --graf graf.db
+```
+
 Graful de amendamente se construiește singur din corpus la prima pornire. Cine întreține proiectul
 împachetează corpusul pentru echipă cu `python -m scripts.impacheteaza` și îl atașează la un release.
 
@@ -270,7 +279,7 @@ endpoint and a recorded fixture are the same shape.
 | `parsare.py` | One portal page into an act: designation, issuer, publication, and the article tree. |
 | `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
 | `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
-| `colector.py` | Walks the whole corpus through the API — polite, resumable, keep-all. |
+| `colector.py` | Walks the whole corpus through the API — polite, resumable, keep-all; `--actualizeaza` re-walks the tail to stay current. |
 | `cdep.py` | Pending initiatives from the Chamber of Deputies, with their Senate id. |
 | `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
 | `analiza.py` | The extractors over the live corpus: a deadline inventory and a term dictionary. |
