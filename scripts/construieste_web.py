@@ -63,11 +63,16 @@ N_INITIATIVE = 300
 # rests on `connect-src`.
 CSP = (
     "default-src 'self'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-    # `*.workers.dev` is the opt-in plain-language rewrite service (a Cloudflare Worker). It only
-    # ever receives PUBLIC law text, never the user's draft — the draft is analysed locally and its
-    # connect target stays 'self'. Empty endpoint in the app = the feature and this call never fire.
-    "connect-src 'self' https://cdn.jsdelivr.net https://*.workers.dev; "
+    # esm.run/jsdelivr serve Pyodide and (opt-in) the WebLLM library; both are code, not data.
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://esm.run; "
+    # connect targets, all public artifacts — never the user's draft, which is analysed locally and
+    # whose only connect target is 'self':
+    #  · `*.workers.dev` — the opt-in cloud rewrite service (receives PUBLIC law text only);
+    #  · huggingface.co / hf.co — WebLLM's on-device model weights, for the opt-in local AI. The
+    #    provision text stays on the device; only the model is downloaded.
+    "connect-src 'self' https://cdn.jsdelivr.net https://esm.run https://*.workers.dev "
+    "https://huggingface.co https://*.huggingface.co https://hf.co https://*.hf.co "
+    "https://raw.githubusercontent.com; "
     "worker-src 'self' blob:; child-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
     "base-uri 'none'; form-action 'none'; object-src 'none'"

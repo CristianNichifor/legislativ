@@ -232,6 +232,9 @@
     padding:.5rem .7rem;margin:.45rem 0;font-family:var(--sans);font-size:.85rem;white-space:pre-wrap;
     word-break:break-word}
   .clar-box .suggest-h{margin-bottom:.3rem}
+  .ai-toggle{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--sans);font-size:.78rem;
+    color:var(--ink-mid);cursor:pointer}
+  .ai-toggle input{width:auto;margin:0}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
@@ -341,6 +344,7 @@
             <input type="date" id="c-data" onclick="this.showPicker&&this.showPicker()" onfocus="this.showPicker&&this.showPicker()"></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
+          <label class="ai-toggle"><input type="checkbox" id="ai-local"> Rescriere AI locală <span class="hint">(în browser, privat)</span></label>
           <span class="hint">local · fără cereri către portal</span></div>
         <div id="cons-out"></div>
       </div>
@@ -695,12 +699,40 @@ const FELV={modifica:"modifică",abroga:"abrogă",completeaza:"completează",int
 // The plain-language rewrite service (a Cloudflare Worker). Empty until deployed — leave it "" and
 // the side-by-side feature simply does not appear. It receives PUBLIC law text only, never a draft.
 const RESCRIERE_ENDPOINT="";
+
+// ---- local, in-browser plain-language rewrite (WebLLM / WebGPU) — private, no backend, no key ----
+const SIS_CLAR="Rescrii prevederi legale românești în limbaj clar, stil danez (propoziții scurte, o "
+ +"idee pe propoziție; enunțul principal întâi; diateză activă cu actorul numit; propoziții relative "
+ +"în loc de participii antepuse; fără duble negații; cifre pentru numere). NU schimba sensul, nu "
+ +"adăuga și nu omite nimic; păstrează termenii definiți. Răspunde DOAR cu textul rescris.";
+const LLM={
+  model:"Qwen2.5-0.5B-Instruct-q4f16_1-MLC", engine:null,
+  disponibil(){ return !!navigator.gpu; },
+  async incarca(prog){ if(this.engine) return this.engine;
+    const m=await import("https://esm.run/@mlc-ai/web-llm");
+    this.engine=await m.CreateMLCEngine(this.model,{initProgressCallback:prog}); return this.engine; },
+  async rescrie(text,prog){ const e=await this.incarca(prog);
+    const r=await e.chat.completions.create({temperature:0.2,
+      messages:[{role:"system",content:SIS_CLAR},{role:"user",content:text}]});
+    return (r.choices&&r.choices[0]&&r.choices[0].message.content||"").trim(); }
+};
+function aiLocalOn(){ try{ return localStorage.getItem("ai_local")==="1"; }catch(e){ return false; } }
+(function(){ const cb=$("#ai-local"); if(!cb) return;
+  cb.checked=aiLocalOn();
+  cb.onchange=()=>{
+    if(cb.checked && !LLM.disponibil()){ cb.checked=false;
+      alert("Rescrierea AI locală are nevoie de WebGPU (Chrome/Edge recent). Alternativ, se poate configura serviciul online."); return; }
+    try{ localStorage.setItem("ai_local", cb.checked?"1":"0"); }catch(e){}
+    if($("#c-act").value) $("#c-go").click();   // re-render so the buttons appear/disappear
+  };
+})();
+
 function renderCons(d){
   const r=d.rezumat||{};
   let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(d.la_data)}</b> · `
     +`<b>${r.atinse||0}</b> prevederi atinse · <b>${r.consolidate||0}</b> consolidate · `
     +`<b>${r.refuzate||0}</b> neconsolidate</span></div>`;
-  const clar = !!RESCRIERE_ENDPOINT;
+  const clar = !!RESCRIERE_ENDPOINT || aiLocalOn();
   h+=sec("Prevederi", (d.provizii||[]).length, (d.provizii||[]).map((p,i)=>{
     const cls=p.abrogat?"abrogat":(p.complet?"complet":"refuzat");
     let flag="";
@@ -720,15 +752,27 @@ function renderCons(d){
     b.onclick=()=>rescrie(b, (d.provizii||[])[+b.dataset.i], d.act_id);
   });
 }
+function clarBox(text, nota){
+  return `<div class="clar-box"><div class="suggest-h">Limbaj clar — sugestie, nu textul legii`
+    +(nota?` · ${esc(nota)}`:``)+`</div>${esc(text||"")}</div>`;
+}
 async function rescrie(btn, p, act){
   const out=$(`.cons-clar-out[data-out="${btn.dataset.i}"]`);
   btn.disabled=true; out.innerHTML=`<span class="hint"><span class="spin"></span> se rescrie…</span>`;
   try{
-    const d=await (await fetch(RESCRIERE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({act, loc:p.locator, text:p.text})})).json();
-    if(d.error){ out.innerHTML=empty("Eroare: "+esc(d.error)); return; }
-    out.innerHTML=`<div class="clar-box"><div class="suggest-h">Limbaj clar — sugestie, nu textul legii`
-      +(d.cached?` · din cache`:``)+`</div>${esc(d.rescriere||"")}</div>`;
+    if(RESCRIERE_ENDPOINT){
+      const d=await (await fetch(RESCRIERE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({act, loc:p.locator, text:p.text})})).json();
+      if(d.error){ out.innerHTML=empty("Eroare: "+esc(d.error)); return; }
+      out.innerHTML=clarBox(d.rescriere, d.cached?"din cache":"");
+    } else if(aiLocalOn()){
+      const prog=(r)=>{ out.innerHTML=`<span class="hint"><span class="spin"></span> `
+        +esc(r&&r.text?r.text:"se încarcă modelul AI…")+`</span>`; };
+      const text=await LLM.rescrie(p.text, prog);
+      out.innerHTML=clarBox(text, "AI local");
+    } else {
+      out.innerHTML=empty("Activează «Rescriere AI locală» sau configurează serviciul online.");
+    }
   }catch(e){ out.innerHTML=empty("Eroare: "+esc(e.message||e)); }
   finally{ btn.disabled=false; }
 }
