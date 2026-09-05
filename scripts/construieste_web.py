@@ -64,7 +64,10 @@ N_INITIATIVE = 300
 CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
-    "connect-src 'self' https://cdn.jsdelivr.net; "
+    # `*.workers.dev` is the opt-in plain-language rewrite service (a Cloudflare Worker). It only
+    # ever receives PUBLIC law text, never the user's draft — the draft is analysed locally and its
+    # connect target stays 'self'. Empty endpoint in the app = the feature and this call never fire.
+    "connect-src 'self' https://cdn.jsdelivr.net https://*.workers.dev; "
     "worker-src 'self' blob:; child-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
     "base-uri 'none'; form-action 'none'; object-src 'none'"

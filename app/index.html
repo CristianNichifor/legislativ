@@ -197,6 +197,10 @@
   .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
   .cons-attrib b{color:var(--ink-mid)}
   .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
+  .clar-box{border:1px solid var(--rule-soft);border-left:3px solid var(--note);background:var(--surface);
+    padding:.5rem .7rem;margin:.45rem 0;font-family:var(--sans);font-size:.85rem;white-space:pre-wrap;
+    word-break:break-word}
+  .clar-box .suggest-h{margin-bottom:.3rem}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
@@ -558,24 +562,45 @@ async function loadConsAsezari(){
   }catch(e){ $("#c-act").innerHTML=`<option value="">eroare la încărcare</option>`; }
 }
 const FELV={modifica:"modifică",abroga:"abrogă",completeaza:"completează",introduce:"introduce"};
+// The plain-language rewrite service (a Cloudflare Worker). Empty until deployed — leave it "" and
+// the side-by-side feature simply does not appear. It receives PUBLIC law text only, never a draft.
+const RESCRIERE_ENDPOINT="";
 function renderCons(d){
   const r=d.rezumat||{};
   let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(d.la_data)}</b> · `
     +`<b>${r.atinse||0}</b> prevederi atinse · <b>${r.consolidate||0}</b> consolidate · `
     +`<b>${r.refuzate||0}</b> neconsolidate</span></div>`;
-  h+=sec("Prevederi", (d.provizii||[]).length, (d.provizii||[]).map(p=>{
+  const clar = !!RESCRIERE_ENDPOINT;
+  h+=sec("Prevederi", (d.provizii||[]).length, (d.provizii||[]).map((p,i)=>{
     const cls=p.abrogat?"abrogat":(p.complet?"complet":"refuzat");
     let flag="";
     if(p.abrogat) flag=`<span class="cons-flag" style="color:var(--blocking)">ABROGAT</span>`;
     else if(!p.complet) flag=`<span class="cons-flag" style="color:var(--material)">neconsolidat</span>`;
-    let body=`<div><span class="cons-loc">${esc(p.locator)}</span>${flag}</div>`;
+    let body=`<div><span class="cons-loc">${esc(p.locator)}</span>${flag}`
+      +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}" style="font-size:.68rem;padding:.1rem .5rem;float:right">Limbaj clar</button>`:"")+`</div>`;
     if(!p.abrogat) body+=`<div class="cons-text">${esc(p.text)}</div>`;
+    body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
       +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(s.data):""})`).join(", ")+`</div>`;
     if(p.limitari&&p.limitari.length) body+=p.limitari.map(l=>`<p class="cons-refuz">⚠ ${esc(l)}</p>`).join("");
     return `<div class="cons-prov ${cls}">${body}</div>`;
   }).join("") || empty("Nicio prevedere atinsă."));
   $("#cons-out").innerHTML=h;
+  if(clar) $("#cons-out").querySelectorAll(".cons-clar").forEach(b=>{
+    b.onclick=()=>rescrie(b, (d.provizii||[])[+b.dataset.i], d.act_id);
+  });
+}
+async function rescrie(btn, p, act){
+  const out=$(`.cons-clar-out[data-out="${btn.dataset.i}"]`);
+  btn.disabled=true; out.innerHTML=`<span class="hint"><span class="spin"></span> se rescrie…</span>`;
+  try{
+    const d=await (await fetch(RESCRIERE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({act, loc:p.locator, text:p.text})})).json();
+    if(d.error){ out.innerHTML=empty("Eroare: "+esc(d.error)); return; }
+    out.innerHTML=`<div class="clar-box"><div class="suggest-h">Limbaj clar — sugestie, nu textul legii`
+      +(d.cached?` · din cache`:``)+`</div>${esc(d.rescriere||"")}</div>`;
+  }catch(e){ out.innerHTML=empty("Eroare: "+esc(e.message||e)); }
+  finally{ btn.disabled=false; }
 }
 $("#c-go").onclick=async ()=>{
   const act=$("#c-act").value;
