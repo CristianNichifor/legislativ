@@ -293,4 +293,6 @@ endpoint and a recorded fixture are the same shape.
 | `redactare.py` | Legistic drafting form (Legea 24/2000): flags intent said the wrong way, generates the right way. |
 | `neindeplinite.py` | The authority's list of unfulfilled norms, imported from a file, compared to the derived gap report. |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
-| `server.py` | Stdlib backend + UI: verify a draft, redactează a new one, search, and a zoomable connections graph. |
+| `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
+| `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
+| `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |

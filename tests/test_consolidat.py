@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date
 
 from scripts.consolidat import acte_disponibile, consolideaza_local, modificari_pentru
-from scripts.server import _consolidare_semnale
+from scripts.servicii import _consolidare_semnale
 
 
 def test_only_locally_available_acts_are_offered():

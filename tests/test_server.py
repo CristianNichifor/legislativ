@@ -16,7 +16,7 @@ from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
 from scripts.graf import construieste
-from scripts.server import Stare, _cauta, _lint, _redacteaza, _repealed, _targets, _vecini
+from scripts.servicii import Stare, _cauta, _lint, _redacteaza, _repealed, _targets, _vecini
 
 
 def _build(tmp_path: Path) -> Stare:

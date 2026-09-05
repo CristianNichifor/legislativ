@@ -1,0 +1,415 @@
+"""The engine-facing services, with no transport attached.
+
+Everything the app can answer is a function over a read-only corpus. These are those functions —
+one per question the UI asks — shaped into plain dicts ready to serialise, and nothing more. They
+know about the engines and the corpus; they know nothing about HTTP, sockets, or a browser.
+
+That separation is what lets the same logic run two ways from one implementation: `server.py`
+wraps these in `http.server` for the localhost tool, and the browser build drives them under
+Pyodide with no server at all. Neither is a second copy of the honesty-critical logic — both call
+these, so the tests that guard them guard both surfaces. Importing this module pulls in no
+transport, which is the point: it loads where `http.server`'s `socket` import would not.
+
+**Read-only.** Every corpus open is `mode=ro`; these never write, so they coexist with the
+collectors and answer from more law each time a page lands. The one held piece of state is the
+terminology dictionary, built once from the most recent acts, because rebuilding it per request
+would read the whole corpus on every keystroke.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from scripts import depozit
+from scripts.definitii import Termen, jargon
+from scripts.dublura import dubluri
+from scripts.termene import obligatii
+
+
+class Stare:
+    """What a session holds open: the corpora and the terminology dictionary.
+
+    Corpus connections are per-request (SQLite connections are not safe to share across threads),
+    but the term dictionary is built once here — it is the only expensive thing, and it changes
+    only as slowly as the corpus grows.
+    """
+
+    def __init__(
+        self,
+        corpus: str = "corpus.db",
+        initiative: str = "initiative.db",
+        graf: str = "graf.db",
+    ):
+        self.corpus = corpus
+        self.initiative = initiative
+        self.graf = graf
+        self.termeni: list[Termen] = self._dictionar()
+
+    def are_graf(self) -> bool:
+        return Path(self.graf).is_file()
+
+    # Built from the most recent acts only, not the whole corpus: definitions over a
+    # quarter-million acts would take minutes at startup, and the terminology check must answer
+    # instantly. The recent N carry the vocabulary a current draft is most likely to talk
+    # around; the bound is declared, not hidden, and raising it is config, not an edit.
+    def _dictionar(self, limita: int = 800) -> list[Termen]:
+        from scripts.analiza import termeni_corpus
+
+        try:
+            with depozit.deschide(self.corpus, readonly=True) as con:
+                return termeni_corpus(con, limita=limita)
+        except Exception:
+            return []
+
+
+def rezumat(stare: Stare) -> dict:
+    """The corpus headline the page opens with: how much law, how many bills."""
+    with depozit.deschide(stare.corpus, readonly=True) as con:
+        r = depozit.rezumat(con)
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        r["initiative"] = depozit.rezumat(con)["initiative"]
+    return r
+
+
+def _lint(draft: str, stare: Stare) -> dict:
+    """The deterministic passes over a pasted draft, each carrying its own provenance."""
+    obs = obligatii(draft)
+    deadlines = [
+        {
+            "text": o.text[:300],
+            "instrument": o.tip_asteptat,
+            "termen_zile": o.termen_zile,
+            "ancora": o.ancora,
+            "institutie": o.institutie_text or o.institutie,
+        }
+        for o in obs
+    ]
+    termen_hits = [
+        {
+            "fragment": a.fragment,
+            "termen_definit": a.termen.termen,
+            "regula": a.regula,
+            "explicatie": a.explicatie,
+        }
+        for a in jargon(draft, stare.termeni)
+    ]
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        dup = [
+            {
+                "plx_id": p.plx_id,
+                "senat_id": p.senat_id,
+                "titlu": p.titlu,
+                "stadiu": p.stadiu,
+                "motiv": p.motiv,
+                "incredere": p.increderea,
+            }
+            for p in dubluri(draft, con)[:10]
+        ]
+    from scripts.redactare import conformitate
+
+    drafting = [
+        {"gasit": a.gasit, "operatie": a.operatie, "explicatie": a.explicatie}
+        for a in conformitate(draft)
+    ]
+    return {
+        "deadlines": deadlines,
+        "terminology": termen_hits,
+        "duplicates": dup,
+        "targets": _targets(draft, stare),
+        "repealed": _repealed(draft, stare),
+        "drafting": drafting,
+        "consolidare": _consolidare_semnale(draft),
+    }
+
+
+def _consolidare_semnale(draft: str) -> list[dict]:
+    """Where the draft cites a provision that has since been rewritten — check the current text.
+
+    The linter's other passes reason over acts as published; this one reasons over what they say
+    *now*. For each provision the draft cites whose act can be consolidated locally, it reports the
+    changes that provision (or a unit inside it) has undergone, so a drafter amending or relying on
+    `art. 187` is told alin. (8) was rewritten in 2022 and points them at the consolidated text
+    rather than the original. Silent where no consolidated form is synced — never a false "current".
+    """
+    from scripts.consolidat import modificari_pentru
+    from scripts.referinte import referinte
+
+    vazute: set[tuple[str, str]] = set()
+    out: list[dict] = []
+    for ref in referinte(draft):
+        if ref.act is None or not ref.locator:
+            continue
+        loc_id = ref.locator.id
+        cheie = (ref.act.id, loc_id)
+        if cheie in vazute:
+            continue
+        touched = modificari_pentru(ref.act.id)
+        if not touched:
+            continue
+        # provisions changed at the cited locator, or at a unit inside it (cite art. 187, alin. (8)
+        # changed). Only those that actually carry a change or a refusal are worth surfacing.
+        relevante = [
+            (lid, r)
+            for lid, r in touched.items()
+            if (lid == loc_id or lid.startswith(loc_id + "."))
+            and (r.schimbari or r.abrogat or not r.complet)
+        ]
+        if not relevante:
+            continue
+        vazute.add(cheie)
+        prin = sorted({s.act for _, r in relevante for s in r.schimbari})
+        date_ = [s.data.isoformat() for _, r in relevante for s in r.schimbari if s.data]
+        out.append(
+            {
+                "act_id": ref.act.id,
+                "locator": loc_id,
+                "abrogat": any(r.abrogat for _, r in relevante),
+                "neconsolidat": any(not r.complet for _, r in relevante),
+                "unitati": sorted(lid for lid, _ in relevante),
+                "prin": prin,
+                "ultima": max(date_, default=None),
+            }
+        )
+    return out
+
+
+def _repealed(draft: str, stare: Stare) -> list[dict]:
+    """References in the draft to a repealed act or article — the citation it must not build on.
+
+    Read from the graph's `abroga` edges, so it appears only once a graph is built and only for
+    repeals whose acts are collected: silent where the data cannot reach, never a false "in
+    force". The highest-severity thing the linter can say, so it leads the answer in the UI.
+    """
+    if not stare.are_graf():
+        return []
+    from scripts.graf import _deschide_graf
+    from scripts.vigoare import citari_moarte
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        return [
+            {
+                "act_id": cm.act_id,
+                "locator": cm.locator,
+                "motiv": cm.motiv,
+                "intregul_act": cm.abrogare.este_intregul_act,
+            }
+            for cm in citari_moarte(draft, graf)
+        ]
+    finally:
+        graf.close()
+
+
+def _targets(draft: str, stare: Stare) -> list[dict]:
+    """For each act the draft amends or cites, what the graph knows about it.
+
+    The single most useful thing to tell someone amending a law is how amended it already is: a
+    provision on its twelfth revision is one to consolidate against, not to patch blind. Cheap —
+    one graph lookup per target act — and it is where in-force awareness will land once the graph
+    carries dates on every edge. Silent when no graph is built yet, rather than pretending.
+    """
+    if not stare.are_graf():
+        return []
+    from scripts.dublura import tinte
+    from scripts.graf import _deschide_graf, inbound
+
+    acte = sorted({t.split(" ")[0] for t in tinte(draft)})
+    if not acte:
+        return []
+    from scripts.imbogateste import initiative_pe_act
+
+    out: list[dict] = []
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        with (
+            depozit.deschide(stare.corpus, readonly=True) as con,
+            depozit.deschide(stare.initiative, readonly=True) as ini,
+        ):
+            for act_id in acte:
+                amend = inbound(graf, act_id, doar_amendamente=True)
+                rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
+                try:
+                    pendinte = initiative_pe_act(ini, act_id)
+                except Exception:
+                    pendinte = []
+                out.append(
+                    {
+                        "act_id": act_id,
+                        "titlu": (rand["titlu"] if rand else ""),
+                        "in_corpus": rand is not None,
+                        "amendat_de": len(amend),
+                        "ultima": max(
+                            (m.de_la.isoformat() for m in amend if m.de_la), default=None
+                        ),
+                        # pending bills already touching this act: the "someone's on it" signal
+                        "initiative_in_lucru": len(pendinte),
+                    }
+                )
+    finally:
+        graf.close()
+    return out
+
+
+def _redacteaza(qs: dict) -> dict:
+    """Turn a structured drafting intent into the mandated legistic text and title.
+
+    The visible half of the drafting-form layer: a form supplies the operation, the act and the
+    element, this returns the phrasing Legea 24/2000 requires, ready to paste. Pure — no corpus,
+    no graph — so it answers instantly and works before any collection.
+    """
+    from scripts.redactare import redacteaza, titlu_modificator
+
+    def g(k: str) -> str | None:
+        v = qs.get(k, [""])[0].strip()
+        return v or None
+
+    op = g("op") or "modifica"
+    act = g("act") or "…"
+    try:
+        text = redacteaza(
+            op,
+            act,
+            articol=g("articol"),
+            alineat=g("alineat"),
+            litera=g("litera"),
+            text_nou=g("text") or "…",
+            articol_nou=g("articol_nou"),
+        )
+        titlu = titlu_modificator(op, act, articol=g("articol"))
+        return {"text": text, "titlu": titlu}
+    except ValueError as e:
+        return {"error": str(e)}
+
+
+def _sugereaza(qs: dict) -> dict:
+    """The legistic form of the line being written — deterministic, no corpus, no model.
+
+    Pure over `sugestii.sugereaza`: it answers from the sentence alone, so it works before any
+    collection and adds no network call. Nothing recognised is a first-class answer, not an error —
+    the client simply shows no tooltip."""
+    from scripts.sugestii import sugereaza
+
+    text = qs.get("text", [""])[0]
+    s = sugereaza(text)
+    if s is None:
+        return {"detectat": False}
+    return {
+        "detectat": True,
+        "fel": s.fel,
+        "act_id": s.act_id,
+        "locator_id": s.locator_id,
+        "simplu": s.simplu,
+        "formula": s.formula,
+        "nestandard": s.nestandard,
+    }
+
+
+def _consolidat(qs: dict) -> dict:
+    """A provision's current wording with each change attributed, or the acts available to show.
+
+    With no `act`, it lists what this install can consolidate — the acts whose pages are synced
+    locally. With an `act`, it returns each touched provision as text-in-force plus attribution, or
+    an honest note where the engine refused. `la_data` is the as-of date; the operations carry
+    their own effective dates, so a past `la_data` correctly hides a later change.
+    """
+    from datetime import date
+
+    from scripts.consolidat import acte_disponibile, consolideaza_local
+
+    act_id = qs.get("act", [""])[0].strip()
+    if not act_id:
+        return {"acte": acte_disponibile()}
+
+    brut = qs.get("la_data", [""])[0].strip()
+    try:
+        la_data = date.fromisoformat(brut) if brut else None
+    except ValueError:
+        return {"error": f"dată invalidă: {brut}"}
+
+    try:
+        tinta, rez = consolideaza_local(act_id, la_data=la_data)
+    except KeyError:
+        return {"error": f"actul «{act_id}» nu este disponibil local pentru consolidare"}
+
+    provizii = [
+        {
+            "locator": r.locator,
+            "complet": r.complet,
+            "abrogat": r.abrogat,
+            "text": r.text,
+            "schimbari": [
+                {"act": s.act, "fel": s.fel, "data": s.data.isoformat() if s.data else None}
+                for s in r.schimbari
+            ],
+            "limitari": list(r.limitari),
+        }
+        for r in sorted(rez.values(), key=lambda r: r.locator)
+    ]
+    consolidate = sum(1 for p in provizii if p["complet"])
+    return {
+        "act_id": act_id,
+        "titlu": tinta.titlu,
+        "la_data": (la_data or date.today()).isoformat(),
+        "provizii": provizii,
+        "rezumat": {
+            "atinse": len(provizii),
+            "consolidate": consolidate,
+            "refuzate": len(provizii) - consolidate,
+        },
+    }
+
+
+def _cauta(q: str, stare: Stare) -> dict:
+    if not q.strip():
+        return {"results": []}
+    with depozit.deschide(stare.corpus, readonly=True) as con:
+        rows = depozit.cauta(con, q, 25)
+    return {"results": [dict(r) for r in rows]}
+
+
+def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
+    """One act's graph neighbourhood: who amends it, and what it amends or references.
+
+    The second hop of the connections canvas — click a law and see its own links, so the panel
+    becomes something to explore rather than glance at. Bounded per side (`limita`) because a
+    long-lived law is amended dozens of times and the point is the shape, not the census; inbound
+    is returned most-recent-first so the cap keeps what matters. Titles are looked up from the
+    corpus for the neighbours actually returned, so it stays cheap.
+    """
+    if not stare.are_graf():
+        return {"act": act_id, "inbound": [], "outbound": []}
+    from scripts.graf import _deschide_graf, inbound, outbound
+
+    def _dedup(muchii, other_of):
+        # One node per neighbouring act: the same act amending several articles is one amender,
+        # not five. Keep the first (most significant / most recent) edge, count the rest.
+        vazut: dict[str, object] = {}
+        for m in muchii:
+            other = other_of(m)
+            if other == act_id:
+                continue
+            if other not in vazut:
+                vazut[other] = m
+        return vazut
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        intra = _dedup(reversed(inbound(graf, act_id)), lambda m: m.din_act)
+        iese = _dedup(outbound(graf, act_id), lambda m: m.catre_act)
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+
+            def shape(other, m):
+                r = con.execute("SELECT titlu FROM acte WHERE id = ?", (other,)).fetchone()
+                return {
+                    "act_id": other,
+                    "fel": m.fel,
+                    "locator": m.locator,
+                    "de_la": m.de_la.isoformat() if m.de_la else None,
+                    "titlu": (r["titlu"] if r else "") or "",
+                }
+
+            inb = [shape(o, m) for o, m in list(intra.items())[:limita]]
+            outb = [shape(o, m) for o, m in list(iese.items())[:limita]]
+    finally:
+        graf.close()
+    return {"act": act_id, "inbound": inb, "outbound": outb}

@@ -37,3 +37,9 @@ corpus.db-*
 
 # Release artifacts: gzipped databases for a GitHub release, not source.
 dist/
+
+# The browser build (scripts/construieste_web.py). All regenerable from the corpus + app/ + the
+# scripts package, and the data slice is tens of MB — the build script is the source, not these.
+web/data/
+web/bundle.zip
+web/index.html
