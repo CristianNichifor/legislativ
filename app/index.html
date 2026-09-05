@@ -111,7 +111,10 @@
     font-size:.9rem;line-height:1.6}
   /* resize is capped so the box stays within the viewport (room left for header + tabs above);
      text beyond that scrolls inside instead of pushing the page open */
-  textarea{min-height:9rem;max-height:calc(100vh - 18rem);resize:vertical;overflow:auto}
+  textarea{min-height:9rem;max-height:calc(100vh - 18rem);resize:vertical;overflow:auto;
+    /* the last line was sitting on the border; give the caret room to breathe when the box grows.
+       tab-size + pre-wrap keep pasted indentation and spacing as they were, not collapsed. */
+    padding-bottom:1.4rem;tab-size:2;white-space:pre-wrap;overflow-wrap:break-word}
   textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
@@ -162,6 +165,37 @@
     padding:.8rem 1rem;margin-top:1rem;font-family:var(--mono);font-size:.9rem;white-space:pre-wrap;
     word-break:break-word}
 
+  /* the drafting suggestion: two readings of the line being written — plain on top, the mandated
+     Legea 24/2000 form below. Sits under the textarea, not at the caret, so it never covers text. */
+  .ta-wrap{position:relative}
+  .suggest{margin-top:.5rem;border:1px solid var(--rule);border-left:3px solid var(--accent);
+    background:var(--surface);overflow:hidden}
+  .suggest-h{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin-bottom:.25rem}
+  .suggest-plain{padding:.6rem .8rem;font-family:var(--sans);font-size:.86rem;color:var(--ink)}
+  .suggest-formula{padding:.6rem .8rem;border-top:1px dashed var(--rule-soft);
+    font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;color:var(--ink-mid);word-break:break-word}
+  .suggest-row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;
+    padding:.5rem .8rem;border-top:1px solid var(--rule-soft)}
+  .suggest-badge{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.03em;color:var(--material);border:1px solid var(--material);border-radius:2px;padding:.05rem .35rem}
+
+  /* consolidation surface: one provision per row, current wording + who changed it, or the honest
+     note when the engine refused rather than splice a change it could not apply cleanly. */
+  .cons-prov{border:1px solid var(--rule-soft);border-left:3px solid var(--note);
+    background:var(--surface);padding:.6rem .8rem;margin:.5rem 0}
+  .cons-prov.refuzat{border-left-color:var(--material)}
+  .cons-prov.abrogat{border-left-color:var(--blocking)}
+  .cons-loc{font-family:var(--mono);font-size:.82rem;color:var(--accent)}
+  .cons-flag{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.03em;margin-left:.5rem}
+  .cons-text{font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;word-break:break-word;
+    margin:.45rem 0;color:var(--ink)}
+  .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
+  .cons-attrib b{color:var(--ink-mid)}
+  .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
+  .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
+
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
     border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite;vertical-align:-1px}
   @keyframes s{to{transform:rotate(360deg)}}
@@ -188,6 +222,7 @@
   <div class="tabs" role="tablist">
     <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
     <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
+    <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
   </div>
 
@@ -196,7 +231,10 @@
 
       <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
         <label for="draft">Textul proiectului</label>
-        <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+        <div class="ta-wrap">
+          <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+          <div id="suggest" class="suggest" hidden aria-live="polite"></div>
+        </div>
         <div class="row">
           <button class="go" id="go">Verifică</button>
           <button class="ghost" id="sample">Exemplu</button>
@@ -227,6 +265,19 @@
         <div class="row"><button class="go" id="r-go">Generează</button>
           <span class="hint">Legea 24/2000 · formă article-first</span></div>
         <div id="r-out"></div>
+      </div>
+
+      <div id="pane-consolidat" role="tabpanel" aria-labelledby="tab-consolidat" hidden>
+        <p class="hint" style="margin:.2rem 0 1rem">Textul unei prevederi așa cum stă azi — cu fiecare schimbare atribuită actului care a făcut-o. Se citește din ce e sincronizat local; unde o schimbare nu poate fi aplicată curat, prevederea rămâne neconsolidată, cu motivul spus.</p>
+        <div class="grid">
+          <div><label for="c-act">Actul</label>
+            <select id="c-act"><option value="">se încarcă…</option></select></div>
+          <div><label for="c-data">La data (opțional)</label>
+            <input type="text" id="c-data" placeholder="2023-01-01"></div>
+        </div>
+        <div class="row"><button class="go" id="c-go">Arată</button>
+          <span class="hint">local · fără cereri către portal</span></div>
+        <div id="cons-out"></div>
       </div>
 
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
@@ -270,14 +321,15 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","cauta"];
+const PANES = ["lint","redacteaza","consolidat","cauta"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
     $("#pane-"+p).hidden = p!==which;
   });
-  const focusEl = {lint:"#draft",redacteaza:"#r-act",cauta:"#q"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q"}[which];
   if(focusEl) $(focusEl).focus();
+  if(which==="consolidat") loadConsAsezari();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
 
@@ -384,6 +436,92 @@ $("#r-go").onclick = async ()=>{
     $("#r-copy").onclick=()=>{ navigator.clipboard?.writeText(d.text); $("#r-copy").textContent="Copiat"; };
     $("#r-insert").onclick=()=>{ const t=$("#draft"); t.value=(t.value?t.value+"\n":"")+d.text; selectTab("lint"); };
   }catch(e){ $("#r-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+};
+
+// ---- drafting suggestion (deterministic; top = plain reading, bottom = the required formula) ----
+const suggestBox = $("#suggest");
+let suggestTimer, suggestFor="";
+function currentLine(ta){
+  const v=ta.value, pos=ta.selectionStart;
+  const start=v.lastIndexOf("\n",pos-1)+1;
+  let end=v.indexOf("\n",pos); if(end<0) end=v.length;
+  return {text:v.slice(start,end), start, end};
+}
+function hideSuggest(){ suggestBox.hidden=true; suggestBox.innerHTML=""; suggestFor=""; }
+async function refreshSuggest(){
+  const line=currentLine($("#draft")).text.trim();
+  if(line.length<8){ hideSuggest(); return; }
+  if(line===suggestFor) return;
+  try{
+    const d=await (await fetch("/api/sugereaza?text="+encodeURIComponent(line))).json();
+    if(!d.detectat){ hideSuggest(); return; }
+    suggestFor=line;
+    suggestBox.innerHTML =
+      `<div class="suggest-plain"><div class="suggest-h">Ce înțeleg</div>${esc(d.simplu)}</div>`
+     +`<div class="suggest-formula"><div class="suggest-h">Forma cerută de Legea 24/2000</div>${esc(d.formula)}</div>`
+     +`<div class="suggest-row">`
+       +(d.nestandard?`<span class="suggest-badge" title="Forma scrisă nu e cea legistică — Consiliul o trimite înapoi">de corectat</span>`:``)
+       +`<button class="ghost" id="suggest-insert">Inserează forma</button>`
+       +`<button class="ghost" id="suggest-x">Ascunde</button></div>`;
+    suggestBox.hidden=false;
+    // mousedown, not click: fires before the textarea's blur so the caret position still holds
+    $("#suggest-insert").addEventListener("mousedown",e=>{ e.preventDefault(); insertFormula(d.formula); });
+    $("#suggest-x").onclick=hideSuggest;
+  }catch(e){ hideSuggest(); }
+}
+function insertFormula(formula){
+  const ta=$("#draft"); const {start,end}=currentLine(ta);
+  ta.value = ta.value.slice(0,start)+formula+ta.value.slice(end);
+  const caret=start+formula.length;
+  ta.focus(); ta.selectionStart=ta.selectionEnd=caret;
+  hideSuggest();
+}
+$("#draft").addEventListener("input",()=>{ clearTimeout(suggestTimer); suggestTimer=setTimeout(refreshSuggest,350); });
+$("#draft").addEventListener("keydown",e=>{ if(e.key==="Escape") hideSuggest(); });
+
+// ---- consolidat (a provision's current wording + attribution; local source only) ----
+let consLoaded=false;
+async function loadConsAsezari(){
+  if(consLoaded) return; consLoaded=true;
+  try{
+    const d=await (await fetch("/api/consolidat")).json();
+    const sel=$("#c-act");
+    if(!d.acte||!d.acte.length){ sel.innerHTML=`<option value="">(niciun act sincronizat local)</option>`; return; }
+    sel.innerHTML=d.acte.map(a=>`<option value="${esc(a.act_id)}">${esc(a.act_id)} · ${a.amendatoare} modificator(i)</option>`).join("");
+  }catch(e){ $("#c-act").innerHTML=`<option value="">eroare la încărcare</option>`; }
+}
+const FELV={modifica:"modifică",abroga:"abrogă",completeaza:"completează",introduce:"introduce"};
+function renderCons(d){
+  const r=d.rezumat||{};
+  let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(d.la_data)}</b> · `
+    +`<b>${r.atinse||0}</b> prevederi atinse · <b>${r.consolidate||0}</b> consolidate · `
+    +`<b>${r.refuzate||0}</b> neconsolidate</span></div>`;
+  h+=sec("Prevederi", (d.provizii||[]).length, (d.provizii||[]).map(p=>{
+    const cls=p.abrogat?"abrogat":(p.complet?"complet":"refuzat");
+    let flag="";
+    if(p.abrogat) flag=`<span class="cons-flag" style="color:var(--blocking)">ABROGAT</span>`;
+    else if(!p.complet) flag=`<span class="cons-flag" style="color:var(--material)">neconsolidat</span>`;
+    let body=`<div><span class="cons-loc">${esc(p.locator)}</span>${flag}</div>`;
+    if(!p.abrogat) body+=`<div class="cons-text">${esc(p.text)}</div>`;
+    if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
+      +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(s.data):""})`).join(", ")+`</div>`;
+    if(p.limitari&&p.limitari.length) body+=p.limitari.map(l=>`<p class="cons-refuz">⚠ ${esc(l)}</p>`).join("");
+    return `<div class="cons-prov ${cls}">${body}</div>`;
+  }).join("") || empty("Nicio prevedere atinsă."));
+  $("#cons-out").innerHTML=h;
+}
+$("#c-go").onclick=async ()=>{
+  const act=$("#c-act").value;
+  if(!act){ $("#cons-out").innerHTML=empty("Alege un act."); return; }
+  const data=$("#c-data").value.trim();
+  $("#c-go").disabled=true; $("#c-go").innerHTML=`<span class="spin"></span> se consolidează…`;
+  try{
+    const q="/api/consolidat?act="+encodeURIComponent(act)+(data?"&la_data="+encodeURIComponent(data):"");
+    const d=await (await fetch(q)).json();
+    if(d.error){ $("#cons-out").innerHTML=empty("Eroare: "+esc(d.error)); return; }
+    renderCons(d);
+  }catch(e){ $("#cons-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+  finally{ $("#c-go").disabled=false; $("#c-go").textContent="Arată"; }
 };
 
 // ---- connection graph (self-contained SVG, radial, zoom+pan) ----

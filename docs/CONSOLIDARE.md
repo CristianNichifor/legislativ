@@ -124,16 +124,21 @@ alineate, provisions a later act touched again, and insertions with no prior tex
    in CI. **Done.**
 4. **Surface it** — the product shows the consolidated provision with each change attributed, and
    the linter checks drafts against consolidated rather than original text.
-   - Its prerequisite is **done**: `consolidare.operatii_amendatoare` pairs each `S_CIT` block to
-     the point that announces it (`La articolul 7, alineatul (2) ... va avea următorul cuprins:`),
-     resolves that point's target and locator through `amendamente.py`, and returns the operations
-     grouped by the act each targets — so consolidation now runs *from* an amending page end to
-     end, not only measured against one. The pairing checks its own alignment (equal counts of
-     blocks and announcing points) and refuses rather than mispair.
-   - Still to do: the UI/linter surface itself, and the finer target-locator granularity (an
-     amendment to `art. 227 alin. (1)` whose block the consolidated act stores under `art. 227`),
-     plus staggered per-provision entry dates, which the operation date currently approximates by
-     the amending act's single entry into force.
+   - The from-the-page bridge is **done**: `consolidare.operatii_amendatoare` pairs each `S_CIT`
+     block to the point that announces it (`La articolul 7, alineatul (2) ... va avea următorul
+     cuprins:`), resolves that point's target and locator through `amendamente.py`, and returns the
+     operations grouped by the act each targets. The pairing checks its own alignment (equal counts
+     of blocks and announcing points) and refuses rather than mispair.
+   - The **surface is done**: `consolidat.py` gathers the operations an act underwent from locally
+     available pages and runs the engine over its tree, and the `Consolidat` tab
+     (`GET /api/consolidat`) shows each touched provision as text-in-force with attribution, or an
+     honest neconsolidat note with the reason. The provision source is a seam — today the committed
+     fixtures, later a hosted, re-syncable consolidated DB (see the product decisions) — so it stays
+     local and never fetches from the portal per view.
+   - Still to do: the linter checking drafts against consolidated rather than original text; the
+     finer target-locator granularity (an amendment to `art. 227 alin. (1)` whose block the
+     consolidated act stores under `art. 227`); and staggered per-provision entry dates, which the
+     operation date currently approximates by the amending act's single entry into force.
 
 This document is the plan; phases 1 and 2 landed with it, phase 3 with the fixture above, and
 phase 4's from-the-page bridge with `operatii_amendatoare`.

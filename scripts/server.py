@@ -13,11 +13,16 @@ the acts collected so far — rebuilding it per request would read the whole cor
 keystroke, and a dictionary that is a few hours stale is a fine trade for a check that answers
 instantly.
 
-**Three endpoints, one question each:**
+**Endpoints, one question each:**
 - `POST /api/lint` — a pasted draft against the law: the deadlines it imposes, the defined terms
   it talks around, and the pending bills it may duplicate. The three deterministic passes, in one
   answer.
 - `GET /api/cauta?q=` — full-text search over every provision, diacritic-insensitive.
+- `GET /api/redacteaza` — a structured intent into the mandated Legea 24/2000 phrasing.
+- `GET /api/sugereaza?text=` — the legistic form of the line being written, offered as it is
+  typed: plain-language restatement plus the mandated formula. Deterministic, no model, no corpus.
+- `GET /api/consolidat[?act=]` — a provision's current wording with each change attributed, or the
+  acts available to show. Reads locally synced pages, never a live portal fetch.
 - `GET /` — the page that drives them.
 
 The contradiction pass is deliberately absent. It needs a model, it is the one output that can be
@@ -234,6 +239,81 @@ def _redacteaza(qs: dict) -> dict:
         return {"error": str(e)}
 
 
+def _sugereaza(qs: dict) -> dict:
+    """The legistic form of the line being written — deterministic, no corpus, no model.
+
+    Pure over `sugestii.sugereaza`: it answers from the sentence alone, so it works before any
+    collection and adds no network call. Nothing recognised is a first-class answer, not an error —
+    the client simply shows no tooltip."""
+    from scripts.sugestii import sugereaza
+
+    text = qs.get("text", [""])[0]
+    s = sugereaza(text)
+    if s is None:
+        return {"detectat": False}
+    return {
+        "detectat": True,
+        "fel": s.fel,
+        "act_id": s.act_id,
+        "locator_id": s.locator_id,
+        "simplu": s.simplu,
+        "formula": s.formula,
+        "nestandard": s.nestandard,
+    }
+
+
+def _consolidat(qs: dict) -> dict:
+    """A provision's current wording with each change attributed, or the acts available to show.
+
+    With no `act`, it lists what this install can consolidate — the acts whose pages are synced
+    locally. With an `act`, it returns each touched provision as text-in-force plus attribution, or
+    an honest note where the engine refused. `la_data` is the as-of date; the operations carry
+    their own effective dates, so a past `la_data` correctly hides a later change.
+    """
+    from datetime import date
+
+    from scripts.consolidat import acte_disponibile, consolideaza_local
+
+    act_id = qs.get("act", [""])[0].strip()
+    if not act_id:
+        return {"acte": acte_disponibile()}
+
+    brut = qs.get("la_data", [""])[0].strip()
+    try:
+        la_data = date.fromisoformat(brut) if brut else None
+    except ValueError:
+        return {"error": f"dată invalidă: {brut}"}
+
+    try:
+        tinta, rez = consolideaza_local(act_id, la_data=la_data)
+    except KeyError:
+        return {"error": f"actul «{act_id}» nu este disponibil local pentru consolidare"}
+
+    provizii = [
+        {
+            "locator": r.locator,
+            "complet": r.complet,
+            "abrogat": r.abrogat,
+            "text": r.text,
+            "schimbari": [
+                {"act": s.act, "fel": s.fel, "data": s.data.isoformat() if s.data else None}
+                for s in r.schimbari
+            ],
+            "limitari": list(r.limitari),
+        }
+        for r in sorted(rez.values(), key=lambda r: r.locator)
+    ]
+    consolidate = sum(1 for p in provizii if p["complet"])
+    return {
+        "act_id": act_id,
+        "titlu": tinta.titlu,
+        "la_data": (la_data or date.today()).isoformat(),
+        "provizii": provizii,
+        "rezumat": {"atinse": len(provizii), "consolidate": consolidate,
+                    "refuzate": len(provizii) - consolidate},
+    }
+
+
 def _cauta(q: str, stare: Stare) -> dict:
     if not q.strip():
         return {"results": []}
@@ -324,6 +404,10 @@ def face_handler(stare: Stare):
                 self._json(_vecini(act, stare) if act else {"error": "act lipsă"})
             elif ruta.path == "/api/redacteaza":
                 self._json(_redacteaza(parse_qs(ruta.query)))
+            elif ruta.path == "/api/sugereaza":
+                self._json(_sugereaza(parse_qs(ruta.query)))
+            elif ruta.path == "/api/consolidat":
+                self._json(_consolidat(parse_qs(ruta.query)))
             elif ruta.path == "/api/rezumat":
                 with depozit.deschide(stare.corpus, readonly=True) as con:
                     r = depozit.rezumat(con)

@@ -194,7 +194,7 @@ def consolideaza_in(
 def operatii_amendatoare(
     amendator: ActParsat,
     citate: list[Provizie],
-    la_data: date | None = None,
+    data_operatie: date | None = None,
 ) -> dict[str, list[Operatie]]:
     """Every operation an amending page performs, grouped by the act each one targets.
 
@@ -216,7 +216,7 @@ def operatii_amendatoare(
     """
     plain = "\n".join(p.text for p in amendator.provizii)
     ams = amendamente(plain, act_gazda=amendator.act)
-    data = la_data or amendator.vigoare
+    data = data_operatie or amendator.vigoare
     act_id = amendator.act.id
 
     anunta = [a for a in ams if "urmatorul cuprins" in cheie(a.text)]

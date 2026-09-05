@@ -271,7 +271,9 @@ endpoint and a recorded fixture are the same shape.
 | `amendamente.py` | What one act does to another. Chapeau inheritance lives here; captures the quoted replacement text an amendment supplies. |
 | `termene.py` | Obligations with a deadline and an anchor. |
 | `vid.py` | Obligations the corpus cannot show were discharged. |
-| `consolidare.py` | A provision's text as of a date, spliced from the parsed tree — or an honest refusal when a change would not apply cleanly. Gold-tested against the portal's own consolidated view (`docs/CONSOLIDARE.md`). |
+| `consolidare.py` | A provision's text as of a date, spliced from the parsed tree — or an honest refusal when a change would not apply cleanly. Reads operations off an amending page (`operatii_amendatoare`). Gold-tested against the portal's own consolidated view (`docs/CONSOLIDARE.md`). |
+| `consolidat.py` | The consolidation surface: an act's touched provisions with attribution, from locally synced pages. Pluggable source (fixtures now, a hosted consolidated DB later). |
+| `sugestii.py` | While a draft is written: the legistic form of the line, plain restatement plus the Legea 24/2000 formula. Deterministic, no model. |
 | `definitii.py` | An act's own definition articles, and drafts that talk around them. |
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |
