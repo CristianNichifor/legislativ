@@ -11,8 +11,10 @@ license = { text = "Apache-2.0" }
 # do not belong in this package.
 dependencies = []
 
+# jsonschema and referencing are here and not in `dependencies` on purpose: a document is
+# validated when it is written, not every time it is read, so the runtime footprint stays at zero.
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.23", "referencing>=0.37.0"]
 
 [tool.ruff]
 line-length = 100

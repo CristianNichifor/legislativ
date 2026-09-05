@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Fetched pages. The parser's fixtures are the exception and are un-ignored by name in
+# sources/README.md's terms — a parser test against a page nobody else can fetch is not a test.
+sources/*.html
+sources/*.html.gz
+
+# The corpus and its HTTP cache, once there is one. Re-fetchable by definition, and the reason
+# this package is its own repository rather than a directory in a monorepo with a size gate.
+cache/
+corpus/

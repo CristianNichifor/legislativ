@@ -3,15 +3,18 @@
 A linter for draft Romanian legislation: what a bill contradicts, what it re-names, and what the
 law already required that nobody ever issued.
 
-> **Nu e un simulator.** Everything else under `simulators/` takes a published proposal and lets a
-> reader argue with it. This reads law and reports on it, which is a different genus. It lives here
-> because this is where the repository keeps self-contained applications with their own pyproject,
-> tests and data, and inventing a second top-level home for a single occupant is how a directory
-> tree starts to rot. If a second tool of this kind appears, the two of them can move together.
+> **Split out of [romania-reforms](https://github.com/CristianNichifor/romania-reforms).** It began
+> as a directory there and carries that history. It left because it is a different genus — those
+> are simulators that take a published proposal and let a reader argue with it, published for the
+> public; this reads law and reports on it, for a research team — and because a legislative corpus
+> and its HTTP cache do not belong in a repository with a size gate.
 
-It runs on the same rule as the rest of the repository: **every finding carries the document and
-the article it came from, and where the data does not reach, the report says so instead of filling
-the gap with a plausible guess.**
+It keeps that repository's rule, which is the reason the split is a move rather than a fork:
+**every finding carries the document and the article it came from, and where the data does not
+reach, the report says so instead of filling the gap with a plausible guess.** The vocabulary that
+enforces it — `schema/provenance.schema.json`, with its three confidence levels and three
+limitation severities — is vendored from there. It is a copy, copies drift, and
+`tests/test_date.py` at least makes the drift loud.
 
 ## The ordering is the argument
 
@@ -41,7 +44,7 @@ model look like a quiet one.
 
 ## What is measured
 
-`data/etalon.json` is 36 hand-annotated cases; `python -m scripts.etalon` scores the deterministic
+`data/etalon.json` is 36 hand-annotated cases; `uv run python -m scripts.etalon` scores the deterministic
 extractors against it and names every case that fails.
 
 ```
@@ -112,29 +115,30 @@ carry the date but nothing consumes it.
 
 **A corpus.** `data/exemplu.json` is a four-provision fixture written in the register of Romanian
 legislation to put the pipeline in motion. Prose in that register is quotable as though it were the
-law, so the warning that it is not travels as a `blocking` limitation in
-`packages/provenance`'s vocabulary rather than as a field of its own — it means the same thing here
-as in every dataset in the repository, and both the schema and a test require it to stay there. It
-gets thrown away the moment the parser reads real pages.
+law, so the warning that it is not travels as a `blocking` limitation in the shared vocabulary
+rather than as a field of its own, and both the schema and a test require it to stay there. It gets
+thrown away the moment the parser reads real pages.
 
-Both data files declare a `$schema` under `schema/`, and both are validated by the repository-wide
-gate in `scripts/validate_data.py` along with the other 322 documents. Their provenance confidence
-is `assumed`, which is the accurate label: neither came from a source document, and `assumed` is
-defined in this repository as *not in any source document yet*.
+Both data files declare a `$schema` under `schema/` and are validated by `tests/test_date.py`.
+Their provenance confidence is `assumed`, which is the accurate label: neither came from a source
+document, and `assumed` is defined as *not in any source document yet*.
 
 ## Running it
 
 ```bash
-cd simulators/legislativ
-uv run --no-project --with pytest python -m pytest tests -q   # 75 tests
-uv run --no-project python -m scripts.etalon                  # precision / recall
-uv run --no-project python -m scripts.linter                  # the worked example
+uv sync --all-groups
+uv run pytest -q                  # 82 tests
+uv run python -m scripts.etalon   # precision / recall, with the failures named
+uv run python -m scripts.linter   # the worked example
 ```
 
-No dependencies. Every extractor is `re`, `difflib` and `datetime` — the layer that decides what a
-law says should not be the layer that needs a wheel to build. A model client, when there is one,
-brings its own and does not belong in this package: `analizeaza(..., model=...)` takes any callable
-from prompt to string, so Ollama, a free-tier endpoint and a recorded fixture are the same shape.
+**No runtime dependencies.** Every extractor is `re`, `difflib` and `datetime` — the layer that
+decides what a law says should not be the layer that needs a wheel to build. `jsonschema` is a dev
+dependency only: a document is validated when it is written, not every time it is read.
+
+A model client, when there is one, brings its own and does not belong in this package:
+`analizeaza(..., model=...)` takes any callable from prompt to string, so Ollama, a free-tier
+endpoint and a recorded fixture are the same shape.
 
 ## The modules
 
@@ -150,6 +154,3 @@ from prompt to string, so Ollama, a free-tier endpoint and a recorded fixture ar
 | `etalon.py` | Precision and recall, with the failures named. |
 | `linter.py` | The three reports, in the order they should be trusted. |
 | `parsare.py` | The contract for the stage that is not written. |
-
-Data files live under `data/` with their schemas in `schema/`, the same shape as every other
-simulator here, so the repository-wide validation gate covers them.

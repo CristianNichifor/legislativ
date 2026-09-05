@@ -1,0 +1,32 @@
+# One job. There is no pipeline stage to run: the collector that would reach the legislative
+# portal is a stub that raises, so what CI can check is the extractors and the number they are
+# allowed to claim — which is the part that matters anyway.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  linter:
+    name: extractors + gold set
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Checks
+        env:
+          # Determinism is a hard requirement: a test that depends on set iteration order or
+          # hash seeding is a test hiding a real bug.
+          PYTHONHASHSEED: '0'
+        run: |
+          uv sync --all-groups
+          uv run ruff check scripts tests
+          uv run ruff format --check scripts tests
+          uv run pytest -q
+      # The gold set is the product here as much as the code is. Running the harness in CI means
+      # a regression in an extractor fails the build instead of quietly lowering a number in a
+      # README nobody re-reads; test_etalon.py holds the floor it may not drop below.
+      - name: Etalon
+        run: uv run python -m scripts.etalon

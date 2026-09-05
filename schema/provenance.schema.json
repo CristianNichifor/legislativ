@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cristiannichifor.github.io/romania-reforms/schema/provenance.schema.json",
+  "title": "Provenance and limitations",
+  "description": "The vocabulary every simulator in this repository shares. Not a data format — a discipline. A number without provenance cannot be argued with, and a dataset without limitations pretends to know more than it does. — VENDORED from CristianNichifor/romania-reforms (packages/provenance). This is a copy, and a copy of a vocabulary is a thing that drifts: if the upstream definition changes, this file is the one that has to be brought forward by hand. It is copied rather than referenced because a linter that cannot validate its own data without cloning another repository is not standalone, and because these three confidence levels are the discipline this package runs on rather than an optional dependency of it.",
+  "$defs": {
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "locator",
+        "confidence"
+      ],
+      "description": "Required on every number that could be argued with.",
+      "properties": {
+        "source": {
+          "type": "string",
+          "description": "Source document id, e.g. 'csm-starea-justitiei-2023'."
+        },
+        "locator": {
+          "type": "string",
+          "description": "Where inside it, precisely enough to check: page, table, article, sheet and cell."
+        },
+        "confidence": {
+          "enum": [
+            "verbatim",
+            "derived",
+            "assumed"
+          ],
+          "description": "verbatim: copied from the source. derived: computed from it, formula recorded in note. assumed: not in any source document yet — must be resolved before publication."
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
+    "limitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "severity",
+        "affects"
+      ],
+      "description": "What this data cannot support. Travels with the data rather than living in a footnote, so a caveat reaches the page that needs it.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "blocking",
+            "material",
+            "note"
+          ],
+          "description": "blocking: an output that depends on this must not be shown as fact. material: changes how a figure should be read. note: worth knowing."
+        },
+        "affects": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Which outputs the limitation reaches, so a view can surface exactly the caveats its own numbers carry."
+        }
+      }
+    }
+  }
+}

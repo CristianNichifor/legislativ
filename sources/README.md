@@ -17,8 +17,7 @@ parser tested only against markup invented alongside it is a parser that has nev
 Keep whatever the fetch returned, unedited — the cedilla spellings and the superscript article
 numbers that `scripts/text.py` folds are exactly the details a tidied-up copy loses.
 
-One thing to know before saving them: the repository's `.gitignore` drops
-`simulators/*/sources/*.html`, because scraped pages are normally re-fetchable and large. Fixtures
-are the exception that rule was not written for — a parser test against a page nobody else can
-fetch is not a test. Un-ignore the three you keep, explicitly and by name, the way the Fiscal Code
-and the CSM reports already are, and say in the exception why that page had to be kept.
+One thing to know before saving them: `.gitignore` drops `sources/*.html`, because scraped pages
+are normally re-fetchable and large. Fixtures are the exception that rule was not written for — a
+parser test against a page nobody else can fetch is not a test. Un-ignore the three you keep,
+explicitly and by name, and say in the exception why that page had to be kept.
