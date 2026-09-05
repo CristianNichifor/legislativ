@@ -14,6 +14,7 @@ sources/*.html.gz
 # them even if it were willing to.
 !sources/lege-98-2016.html.gz
 !sources/decizie-815-2015.html.gz
+!sources/lege-310-2021.html.gz
 
 # The corpus and its HTTP cache, once there is one. Re-fetchable by definition, and the reason
 # this package is its own repository rather than a directory in a monorepo with a size gate.

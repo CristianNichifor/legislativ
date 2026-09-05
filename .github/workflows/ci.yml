@@ -30,3 +30,7 @@ jobs:
       # README nobody re-reads; test_etalon.py holds the floor it may not drop below.
       - name: Etalon
         run: uv run python -m scripts.etalon
+      # The honest number: reference recall against the portal's own S_LGI marks on committed
+      # real acts. Guards it in CI so a regression fails the build, not a README nobody re-reads.
+      - name: Etalon real
+        run: uv run python -m scripts.etalon_real

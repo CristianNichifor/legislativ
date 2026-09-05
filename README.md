@@ -92,6 +92,13 @@ referinte        100.0%      83.3%    0.91   5/0/1
 TOTAL            100.0%      97.6%    0.99   41/0/1
 ```
 
+**And a second number, measured against truth this project did not write.** `python -m
+scripts.etalon_real` checks reference extraction against the portal's own `S_LGI` marks — the
+Ministry wraps every citation it recognises in the running text, so those spans are an independent
+answer key. Over two citation-dense real laws (822 marks): **97,2% recall**. The synthetic set
+guards precision and the amendment and deadline extractors; this guards reference recall against
+real law. Neither alone is the measurement.
+
 **Read that number with the discount it deserves.** The cases are written in the register of
 Romanian legislative drafting, but they were written by the same hand as the patterns and none of
 them came off the portal. It measures whether the extractors do what they were designed to do; it
@@ -249,5 +256,6 @@ endpoint and a recorded fixture are the same shape.
 | `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
 | `analiza.py` | The extractors over the live corpus: a deadline inventory and a term dictionary. |
 | `graf.py` | The amendment graph, derived from the corpus text — who amends and references each act. |
+| `etalon_real.py` | Reference recall vs the portal's own S_LGI marks — the number measured against real law. |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
 | `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |
