@@ -118,6 +118,33 @@ CREATE TABLE IF NOT EXISTS progres (
     terminat_la TEXT NOT NULL
 );
 
+-- Pending legislative initiatives, from cdep.ro. A different corpus from `acte`: these are
+-- bills in motion, not law in force, and the question they answer is duplication — does a new
+-- draft repeat one already moving through Parliament. Keyed by the Chamber of Deputies id
+-- (plx), which the Fișa links to the Senate id, because one initiative has a number in each
+-- chamber and the two are the same bill seen from two rooms.
+CREATE TABLE IF NOT EXISTS initiative (
+    plx_id       TEXT PRIMARY KEY,      -- 'plx-33-2025'
+    cam          INTEGER NOT NULL,
+    idp          TEXT NOT NULL,         -- the portal handle, to refetch the Fișa
+    senat_id     TEXT,                  -- 'L576/2024', the same bill in the other chamber
+    tip          TEXT,                  -- 'propunere legislativa' | 'proiect de lege'
+    titlu        TEXT NOT NULL,
+    obiect       TEXT,                  -- what the bill sets out to do; the dedup text
+    urgenta      INTEGER NOT NULL DEFAULT 0,
+    stadiu       TEXT,                  -- 'raport depus...' — whether it is still alive
+    camera_decizionala TEXT,
+    data_inreg   TEXT,
+    sursa_url    TEXT,
+    citit_la     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_initiative_senat ON initiative(senat_id);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS initiative_fts USING fts5(
+    titlu, obiect, plx_id UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
+);
+
 CREATE INDEX IF NOT EXISTS idx_relatii_catre ON relatii(catre_act);
 CREATE INDEX IF NOT EXISTS idx_acte_tip_an   ON acte(tip, an);
 
@@ -142,10 +169,33 @@ def _iso(v: date | None) -> str | None:
 
 
 @contextmanager
-def deschide(cale: Path | str = "corpus.db") -> Iterator[sqlite3.Connection]:
-    """Open the corpus, creating it if absent. Commits on clean exit, rolls back on error."""
-    con = sqlite3.connect(str(cale))
+def deschide(
+    cale: Path | str = "corpus.db", *, readonly: bool = False
+) -> Iterator[sqlite3.Connection]:
+    """Open the corpus. Writers create the schema and commit; readers do neither.
+
+    `readonly=True` opens the file `mode=ro` and skips `executescript(SCHEMA)`. That matters
+    during collection: the schema statements are DDL — writes — so a plain open contends for the
+    writer lock even to read, and a reader that lands mid-batch dies with "database is locked"
+    while the collector holds it. A read-only connection under WAL reads the last committed state
+    concurrently with the writer and never wants that lock at all. The backend and the product
+    read this way; only the collector and importers open for write.
+    """
+    if readonly:
+        con = sqlite3.connect(f"file:{cale}?mode=ro", uri=True, timeout=30.0)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA busy_timeout = 30000")
+        try:
+            yield con
+        finally:
+            con.close()
+        return
+
+    con = sqlite3.connect(str(cale), timeout=30.0)
     con.row_factory = sqlite3.Row
+    # A reader and the collector's writer share the file under WAL; the busy timeout makes a
+    # write that lands mid-commit wait the moment out instead of failing.
+    con.execute("PRAGMA busy_timeout = 30000")
     try:
         con.executescript(SCHEMA)
         yield con
@@ -269,7 +319,13 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
     """What the corpus actually holds, for a report that states its own coverage."""
 
     def n(q: str) -> int:
-        return con.execute(q).fetchone()[0]
+        # Tolerant of a table a reader opened before a writer added it: a read-only connection to
+        # a mid-upgrade corpus counts what exists and reports zero for what does not, rather than
+        # crashing. A write-open runs the schema first, so for writers nothing is ever missing.
+        try:
+            return con.execute(q).fetchone()[0]
+        except sqlite3.OperationalError:
+            return 0
 
     return {
         "acte": n("SELECT count(*) FROM acte"),
@@ -277,7 +333,43 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
         "referinte_marcate": n("SELECT count(*) FROM referinte_marcate"),
         "relatii": n("SELECT count(*) FROM relatii"),
         "pagini_in_cache": n("SELECT count(*) FROM cache"),
+        "initiative": n("SELECT count(*) FROM initiative"),
     }
+
+
+def scrie_initiativa(con: sqlite3.Connection, ini) -> None:
+    """Upsert one initiative and its search row. Re-collecting replaces it — a later read of a
+    Fișa is a newer stage, and a bill's stage is the field most likely to have moved."""
+    con.execute("DELETE FROM initiative WHERE plx_id = ?", (ini.plx_id,))
+    con.execute("DELETE FROM initiative_fts WHERE plx_id = ?", (ini.plx_id,))
+    con.execute(
+        "INSERT INTO initiative (plx_id, cam, idp, senat_id, tip, titlu, obiect, urgenta,"
+        " stadiu, camera_decizionala, data_inreg, sursa_url, citit_la)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            ini.plx_id,
+            ini.cam,
+            ini.idp,
+            ini.senat_id,
+            ini.tip,
+            ini.titlu,
+            ini.obiect,
+            int(ini.urgenta),
+            ini.stadiu,
+            ini.camera_decizionala,
+            ini.data_inreg,
+            ini.sursa_url,
+            datetime.now(UTC).isoformat(timespec="seconds"),
+        ),
+    )
+    con.execute(
+        "INSERT INTO initiative_fts (titlu, obiect, plx_id) VALUES (?,?,?)",
+        (ini.titlu, ini.obiect or "", ini.plx_id),
+    )
+
+
+def initiative_vazute(con: sqlite3.Connection) -> set[str]:
+    return {r[0] for r in con.execute("SELECT idp FROM initiative")}
 
 
 def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> None:
