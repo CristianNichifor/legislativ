@@ -31,7 +31,13 @@
   @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
   body{background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.55;
     margin:0;font-size:16px;-webkit-font-smoothing:antialiased}
-  .wrap{max-width:none;margin:0;padding:0 2rem 5rem}   /* full viewport width */
+  /* fills the viewport up to 1920px; past that the textarea + sidebar block stays 1920 and
+     centres, instead of left-aligning and leaving all the slack on the right. A full-height
+     flex column so the .app row can claim the space below the header/tabs and the sidebar
+     fills it exactly — no overflow past the bottom edge. */
+  html,body{height:100%}
+  .wrap{max-width:1920px;margin-inline:auto;padding:0 2rem 2rem;
+    min-height:100vh;display:flex;flex-direction:column}
 
   header{border-bottom:2px solid var(--ink);padding:1.9rem 0 1.1rem;margin-bottom:1.5rem;
     display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem 1.2rem}
@@ -42,11 +48,12 @@
   .stat{font-family:var(--sans);font-size:.78rem;color:var(--ink-mute);margin-left:auto}
   .stat b{color:var(--ink-mid);font-variant-numeric:tabular-nums}
 
-  .app{display:flex;gap:1.5rem;align-items:flex-start}
+  .app{display:flex;gap:1.5rem;align-items:stretch;flex:1;min-height:0}
   .main{flex:1;min-width:0}
-  /* the panel is always full-viewport tall — collapsed or open — so its top lines up with the
-     textarea beside it and the collapsed strip stays a full-height bar, not a stub */
-  aside.canvas{width:28rem;flex:none;position:sticky;top:1rem;height:calc(100vh - 2rem);
+  /* the panel stretches to the full height of the .app row (which fills the viewport below the
+     header/tabs), so its top lines up with the textarea and the collapsed strip stays a
+     full-height bar, not a stub */
+  aside.canvas{width:28rem;flex:none;
     display:flex;flex-direction:column;overflow:hidden;
     border:1px solid var(--rule);background:var(--surface)}
   aside.canvas.collapsed{width:2.5rem}
