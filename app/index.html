@@ -249,6 +249,24 @@
     color:var(--ink-mid);cursor:pointer}
   .ai-toggle input{width:auto;margin:0}
   .ai-model{width:auto;font-size:.74rem;padding:.35rem 2rem .35rem .6rem;background-size:.6rem}
+  /* the nested-block act builder */
+  .tree{border:1px solid var(--rule-soft);background:var(--surface);padding:.4rem .6rem;min-height:2.6rem}
+  .tree:empty::before{content:"Niciun articol încă — apasă „+ articol”.";font-family:var(--sans);
+    font-size:.82rem;color:var(--ink-mute);font-style:italic}
+  .node{border-left:2px solid var(--rule);padding:.35rem 0 .35rem .7rem;margin:.4rem 0 .4rem .1rem}
+  .node.art{border-left-color:var(--accent)} .node.alin{border-left-color:var(--material)}
+  .node.lit{border-left-color:var(--note)}
+  .node-hd{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+  .node-hd .lvl{font-family:var(--sans);font-size:.66rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.03em;color:var(--ink-mute);min-width:4.4rem}
+  .node input.num{width:4.5rem}
+  .node select.op{width:auto;font-size:.78rem;padding:.35rem 1.8rem .35rem .5rem;background-size:.55rem}
+  .node .txt{margin:.35rem 0 0} .node .txt textarea{min-height:3.2rem;font-size:.82rem}
+  .node .kids{margin-left:.15rem}
+  .node-x{border:1px solid var(--rule);background:transparent;color:var(--ink-mute);cursor:pointer;
+    border-radius:3px;font-size:.9rem;line-height:1;padding:.05rem .4rem;margin-left:auto}
+  .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
+  .node-add{font-size:.7rem;padding:.15rem .55rem;margin-top:.3rem}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
@@ -313,15 +331,8 @@
       </div>
 
       <div id="pane-redacteaza" role="tabpanel" aria-labelledby="tab-redacteaza" hidden>
-        <p class="hint" style="margin:.2rem 0 1rem">Spune ce vrei să faci; primești formularea cerută de Legea nr. 24/2000, gata de lipit.</p>
+        <p class="hint" style="margin:.2rem 0 1rem">Construiește actul pe blocuri: alege actul-țintă, adaugă articole, iar sub ele alineate și litere. Pune operația și textul la nivelul dorit. Primești forma cerută de Legea nr. 24/2000, verificată prin recitire.</p>
         <div class="grid">
-          <div><label for="r-op">Operație</label>
-            <select id="r-op">
-              <option value="modifica">modifică</option>
-              <option value="completeaza">completează</option>
-              <option value="abroga">abrogă</option>
-              <option value="introduce">introduce (articol nou)</option>
-            </select></div>
           <div><label for="r-tip">Tipul actului <span class="req" title="obligatoriu">*</span></label>
             <select id="r-tip">
               <option value="lege">Lege</option>
@@ -334,26 +345,18 @@
           <div><label for="r-nr">Numărul <span class="req" title="obligatoriu">*</span></label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
           <div><label for="r-an">Anul <span class="req" title="obligatoriu">*</span></label><select id="r-an"><option value="">—</option></select></div>
           <div><label for="r-desc">Identificare <span class="opt" title="opțional">(opțional)</span></label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
-          <div><label for="r-art">Articolul</label><input type="text" id="r-art" placeholder="7"></div>
-          <div><label for="r-alin">Alineatul</label><input type="text" id="r-alin" placeholder="2"></div>
-          <div><label for="r-lit">Litera</label><input type="text" id="r-lit" placeholder="a"></div>
-          <div id="r-nou-wrap" hidden><label for="r-nou">Articolul nou</label><input type="text" id="r-nou" placeholder="art. 12^1"></div>
         </div>
-        <div id="r-act-info" class="hint" style="margin:.1rem 0 0;min-height:1.1rem"></div>
-        <div style="margin-top:.7rem"><label for="r-text">Textul nou (dacă e cazul)</label>
-          <textarea id="r-text" style="min-height:5rem" placeholder="Conținutul noii prevederi…"></textarea></div>
-        <div class="row"><button class="go" id="r-go">Generează</button>
-          <button class="ghost" id="r-add">Adaugă la act</button>
-          <span class="hint">Legea 24/2000 · formă article-first</span></div>
+        <div id="r-act-info" class="hint" style="margin:.1rem 0 .6rem;min-height:1.1rem"></div>
+        <div class="tree" id="r-tree"></div>
+        <div class="row" style="margin-top:.5rem">
+          <button class="ghost" id="r-add-art">+ articol</button>
+          <span class="hint">adaugă articole; sub fiecare, alineate; sub alineat, litere</span>
+        </div>
+        <div class="row"><button class="go" id="r-compune">Compune actul</button>
+          <button class="ghost" id="r-goleste">Golește</button>
+          <span class="hint">verificat prin recitire cu extractorul</span></div>
         <div id="r-out"></div>
-        <div id="r-lista-wrap" hidden style="margin-top:1.2rem">
-          <div class="sec-head"><h2>Actul în lucru</h2><span class="count" id="r-lista-n">0</span></div>
-          <div id="r-lista"></div>
-          <div class="row"><button class="go" id="r-compune">Compune actul complet</button>
-            <button class="ghost" id="r-goleste">Golește</button>
-            <span class="hint">verificat prin recitire cu extractorul</span></div>
-          <div id="r-compus"></div>
-        </div>
+        <div id="r-compus"></div>
       </div>
 
       <div id="pane-consolidat" role="tabpanel" aria-labelledby="tab-consolidat" hidden>
@@ -626,71 +629,77 @@ function resolveAct(){
   },350);
 }
 ["#r-tip","#r-nr","#r-an"].forEach(s=>{ $(s).addEventListener("input",resolveAct); $(s).addEventListener("change",resolveAct); });
-$("#r-op").onchange = ()=>{ $("#r-nou-wrap").hidden = $("#r-op").value!=="introduce"; };
-$("#r-go").onclick = async ()=>{
-  if(!valideazaAct()){ $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
-  const act=citareAct();
-  const p = new URLSearchParams({op:$("#r-op").value, act,
-    articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
-    litera:$("#r-lit").value.trim(), text:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
-  try{
-    const d = await (await fetch("/api/redacteaza?"+p)).json();
-    if(d.error){ $("#r-out").innerHTML=empty("Eroare: "+esc(d.error)); return; }
-    $("#r-out").innerHTML =
-      `<div class="hint" style="margin-top:1rem">Titlu sugerat: <b>${esc(d.titlu)}</b></div>`
-      +`<div class="out-box" id="r-result">${esc(d.text)}</div>`
-      +`<div class="row"><button class="ghost" id="r-copy">Copiază</button>`
-      +`<button class="ghost" id="r-insert">Trimite la „Verifică”</button></div>`;
-    $("#r-copy").onclick=()=>{ navigator.clipboard?.writeText(d.text); $("#r-copy").textContent="Copiat"; };
-    $("#r-insert").onclick=()=>{ const t=$("#draft"); t.value=(t.value?t.value+"\n":"")+d.text; selectTab("lint"); };
-  }catch(e){ $("#r-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+// ---- legislation-as-code: a nested block tree (Articol ▸ Alineat ▸ Literă), compiled + verified ----
+const NIVEL={
+  art:{lvl:"Articolul", ph:"7", ops:["modifica","completeaza","abroga","introduce"], sub:"alin", subEt:"+ alineat"},
+  alin:{lvl:"alineatul", ph:"2", ops:["modifica","completeaza","abroga"], sub:"lit", subEt:"+ literă"},
+  lit:{lvl:"litera", ph:"a", ops:["modifica","completeaza","abroga"], sub:null, subEt:null},
 };
-
-// ---- legislation-as-code: stack structured changes, compile a whole act, verify by re-reading ----
-const OPV={modifica:"modifică",completeaza:"completează",abroga:"abrogă",introduce:"introduce"};
-let interventii=[];
-function renderInterventii(){
-  $("#r-lista-wrap").hidden = interventii.length===0;
-  $("#r-lista-n").textContent = interventii.length;
-  $("#r-lista").innerHTML = interventii.map((iv,idx)=>{
-    const loc=[iv.articol&&("art. "+iv.articol),iv.alineat&&("alin. ("+iv.alineat+")"),iv.litera&&("lit. "+iv.litera+")")].filter(Boolean).join(", ")||"actul întreg";
-    return `<div class="card note"><span class="tag">${esc(OPV[iv.operatie]||iv.operatie)}</span>`
-      +`<span class="lead">${esc(loc)} — <span class="plx">${esc(iv.act)}</span></span>`
-      +`<div class="meta"><span><button class="ghost" data-del="${idx}" style="font-size:.7rem;padding:.15rem .5rem">scoate</button></span></div></div>`;
-  }).join("");
-  $("#r-lista").querySelectorAll("[data-del]").forEach(b=>{
-    b.onclick=()=>{ interventii.splice(+b.dataset.del,1); renderInterventii(); };
-  });
+const OPT={modifica:"se modifică",completeaza:"se completează",abroga:"se abrogă",introduce:"introduce articol nou"};
+function creeazaNod(nivel){
+  const cfg=NIVEL[nivel];
+  const wrap=document.createElement("div"); wrap.className="node "+nivel;
+  wrap.innerHTML=`<div class="node-hd">
+      <span class="lvl">${cfg.lvl}</span>
+      <input class="num" type="text" placeholder="${cfg.ph}">
+      <input class="num artnou" placeholder="art. nou (12^1)" style="display:none;width:8rem">
+      <select class="op"><option value="">— fără modificare —</option>${cfg.ops.map(o=>`<option value="${o}">${OPT[o]}</option>`).join("")}</select>
+      <button type="button" class="node-x" title="Șterge blocul">×</button>
+    </div>
+    <div class="txt" hidden><textarea placeholder="Textul nou al prevederii…"></textarea></div>
+    <div class="kids"></div>`;
+  const op=wrap.querySelector(":scope > .node-hd > .op");
+  const txt=wrap.querySelector(":scope > .txt");
+  const artnou=wrap.querySelector(":scope > .node-hd > .artnou");
+  op.onchange=()=>{ const v=op.value; txt.hidden=!(v==="modifica"||v==="completeaza"||v==="introduce");
+    artnou.style.display=(v==="introduce")?"":"none"; };
+  wrap.querySelector(":scope > .node-hd > .node-x").onclick=()=>wrap.remove();
+  if(cfg.sub){ const kids=wrap.querySelector(":scope > .kids");
+    const add=document.createElement("button"); add.type="button"; add.className="ghost node-add"; add.textContent=cfg.subEt;
+    add.onclick=()=>kids.append(creeazaNod(cfg.sub)); wrap.append(add); }
+  return wrap;
 }
-$("#r-add").onclick = ()=>{
+function citesteNod(wrap, nivel, path, act, out){
+  const num=wrap.querySelector(":scope > .node-hd > .num:not(.artnou)").value.trim();
+  const op=wrap.querySelector(":scope > .node-hd > .op").value;
+  const artnou=wrap.querySelector(":scope > .node-hd > .artnou");
+  const ta=wrap.querySelector(":scope > .txt > textarea");
+  const p={...path};
+  if(nivel==="art") p.articol=num; else if(nivel==="alin") p.alineat=num; else p.litera=num;
+  if(op) out.push({operatie:op, act, articol:p.articol||"", alineat:p.alineat||"", litera:p.litera||"",
+    text_nou:(ta?ta.value.trim():""), articol_nou:(op==="introduce"&&artnou?artnou.value.trim():"")});
+  const sub=NIVEL[nivel].sub, kids=wrap.querySelector(":scope > .kids");
+  if(sub&&kids) [...kids.children].filter(c=>c.classList&&c.classList.contains("node")).forEach(c=>citesteNod(c,sub,p,act,out));
+}
+function compileArbore(act){
+  const out=[];
+  [...$("#r-tree").children].filter(c=>c.classList&&c.classList.contains("node")).forEach(c=>citesteNod(c,"art",{},act,out));
+  return out;
+}
+$("#r-add-art").onclick=()=>$("#r-tree").append(creeazaNod("art"));
+$("#r-goleste").onclick=()=>{ $("#r-tree").innerHTML=""; $("#r-tree").append(creeazaNod("art")); $("#r-compus").innerHTML=""; $("#r-out").innerHTML=""; };
+$("#r-compune").onclick=async ()=>{
   if(!valideazaAct()){ $("#r-out").innerHTML=empty("Completează câmpurile obligatorii (*): numărul și anul actului."); return; }
   const act=citareAct();
-  interventii.push({operatie:$("#r-op").value, act,
-    articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
-    litera:$("#r-lit").value.trim(), text_nou:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
-  renderInterventii();
-  ["#r-art","#r-alin","#r-lit","#r-text","#r-nou"].forEach(s=>$(s).value="");  // keep the act, clear the rest
-  $("#r-art").focus();
-};
-$("#r-goleste").onclick = ()=>{ interventii=[]; renderInterventii(); $("#r-compus").innerHTML=""; };
-$("#r-compune").onclick = async ()=>{
-  if(!interventii.length){ $("#r-compus").innerHTML=empty("Adaugă cel puțin o intervenție."); return; }
+  const interventii=compileArbore(act);
+  if(!interventii.length){ $("#r-out").innerHTML=empty("Pune o operație pe cel puțin un bloc (articol, alineat sau literă)."); return; }
+  $("#r-out").innerHTML="";
   $("#r-compune").disabled=true; $("#r-compune").innerHTML=`<span class="spin"></span> se compune…`;
   try{
-    const d = await (await fetch("/api/compune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({interventii})})).json();
+    const d=await (await fetch("/api/compune",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({interventii})})).json();
     if(d.error){ $("#r-compus").innerHTML=empty("Eroare: "+esc(d.error)); return; }
-    let h = `<div class="hint" style="margin-top:1rem">Titlu: <b>${esc(d.titlu)}</b></div>`
+    let h=`<div class="hint" style="margin-top:1rem">Titlu: <b>${esc(d.titlu)}</b></div>`
       +`<div class="out-box" id="r-compus-text">${esc(d.text)}</div>`;
-    if(d.curat){ h += `<p class="hint" style="color:var(--note)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`; }
-    else { h += (d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join(""); }
-    h += `<div class="row"><button class="ghost" id="r-ccopy">Copiază</button>`
-      +`<button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
-    $("#r-compus").innerHTML = h;
+    if(d.curat) h+=`<p class="hint" style="color:var(--good)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`;
+    else h+=(d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join("");
+    h+=`<div class="row"><button class="ghost" id="r-ccopy">Copiază</button><button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
+    $("#r-compus").innerHTML=h;
     $("#r-ccopy").onclick=()=>{ navigator.clipboard?.writeText(d.titlu+"\n\n"+d.text); $("#r-ccopy").textContent="Copiat"; };
     $("#r-cinsert").onclick=()=>{ $("#draft").value=d.titlu+"\n\n"+d.text; selectTab("lint"); };
   }catch(e){ $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
-  finally{ $("#r-compune").disabled=false; $("#r-compune").textContent="Compune actul complet"; }
+  finally{ $("#r-compune").disabled=false; $("#r-compune").textContent="Compune actul"; }
 };
+$("#r-tree").append(creeazaNod("art"));   // start with one article block
 
 // ---- drafting suggestion (deterministic; top = plain reading, bottom = the required formula) ----
 const suggestBox = $("#suggest");
