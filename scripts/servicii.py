@@ -331,6 +331,23 @@ def _redacteaza(qs: dict) -> dict:
         return {"error": str(e)}
 
 
+def _act(qs: dict, stare: Stare) -> dict:
+    """Resolve tip/număr/an to an act id, and say whether the corpus carries it (with its title).
+
+    Lets the drafting form replace a free-text act field with pickers, and confirm — before the
+    user commits to a change — exactly which document they mean. `cunoscut=False` is not an error;
+    the act simply is not collected yet."""
+    from scripts.referinte import Act
+
+    tip = (qs.get("tip", [""])[0] or "lege").strip()
+    nr = (qs.get("nr", [""])[0] or "").strip()
+    an = (qs.get("an", [""])[0] or "").strip()
+    if not nr or not an.isdigit():
+        return {"act_id": "", "cunoscut": False, "titlu": ""}
+    act_id = Act(tip, nr, int(an)).id
+    return {"act_id": act_id, "cunoscut": stare.cunoscut(act_id), "titlu": stare.titlu(act_id)}
+
+
 def _compune(interventii: list[dict]) -> dict:
     """Compile a list of structured changes into a whole amending act, verified by re-reading it.
 

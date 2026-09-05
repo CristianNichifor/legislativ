@@ -91,3 +91,12 @@ def test_a_shard_backed_stare_needs_no_corpus_db(tmp_path):
     assert isinstance(st.termeni, list)
     r = rezumat(st)
     assert r["acte"] == 1 and r["provizii"] > 0 and r["initiative"] == 0
+
+    # the act resolver (structured tip/număr/an → id + corpus membership + title)
+    from scripts.servicii import _act
+
+    gasit = _act({"tip": ["decizie"], "nr": ["815"], "an": ["2015"]}, st)
+    assert gasit["act_id"] == "decizie-815-2015" and gasit["cunoscut"] and gasit["titlu"]
+    lipsa = _act({"tip": ["lege"], "nr": ["1"], "an": ["1900"]}, st)
+    assert lipsa["act_id"] == "lege-1-1900" and not lipsa["cunoscut"]
+    assert _act({"tip": ["lege"], "nr": [""], "an": ["2016"]}, st)["act_id"] == ""  # incomplete

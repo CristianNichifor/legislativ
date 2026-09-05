@@ -54,7 +54,11 @@
      header/tabs); the margin-top equals the height of the left column's field label
      (.7rem line + .5rem gap) so the panel box lines up with the textarea box beside it, not
      with the label above it. The collapsed strip inherits the same offset and full height. */
-  aside.canvas{width:28rem;flex:none;margin-top:calc(.7rem * 1.55 + .5rem);
+  /* sticky so the connections graph stays in view while the findings scroll past it; capped to the
+     viewport height with the body scrolling inside. align-self:flex-start opts it out of the row's
+     stretch so sticky has a defined box. */
+  aside.canvas{width:28rem;flex:none;align-self:flex-start;margin-top:calc(.7rem * 1.55 + .5rem);
+    position:sticky;top:1rem;max-height:calc(100vh - 2rem);
     display:flex;flex-direction:column;overflow:hidden;
     border:1px solid var(--rule);background:var(--surface)}
   aside.canvas.collapsed{width:2.5rem}
@@ -78,6 +82,9 @@
     background:var(--paper);touch-action:none}
   svg.graf{width:100%;height:auto;display:block;cursor:grab}
   svg.graf:active{cursor:grabbing}
+  .graf-box:fullscreen{width:100vw;height:100vh;background:var(--paper);
+    display:flex;align-items:center;justify-content:center}
+  .graf-box:fullscreen svg.graf{width:auto;height:100%;max-width:100%}
   .graf-ctl{position:absolute;top:.4rem;right:.4rem;display:flex;gap:.25rem}
   .graf-ctl button{width:1.6rem;height:1.6rem;border:1px solid var(--rule);background:var(--surface);
     color:var(--ink-mid);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;padding:0}
@@ -272,13 +279,24 @@
               <option value="abroga">abrogă</option>
               <option value="introduce">introduce (articol nou)</option>
             </select></div>
-          <div><label for="r-act">Actul (cu identificare)</label>
-            <input type="text" id="r-act" placeholder="Legea nr. 98/2016 privind achizițiile publice"></div>
+          <div><label for="r-tip">Tipul actului</label>
+            <select id="r-tip">
+              <option value="lege">Lege</option>
+              <option value="oug">OUG</option>
+              <option value="og">OG</option>
+              <option value="hg">HG</option>
+              <option value="ordin">Ordin</option>
+              <option value="decret">Decret</option>
+            </select></div>
+          <div><label for="r-nr">Numărul</label><input type="text" id="r-nr" inputmode="numeric" placeholder="98"></div>
+          <div><label for="r-an">Anul</label><input type="text" id="r-an" inputmode="numeric" placeholder="2016"></div>
+          <div><label for="r-desc">Identificare (opțional)</label><input type="text" id="r-desc" placeholder="privind achizițiile publice"></div>
           <div><label for="r-art">Articolul</label><input type="text" id="r-art" placeholder="7"></div>
           <div><label for="r-alin">Alineatul</label><input type="text" id="r-alin" placeholder="2"></div>
           <div><label for="r-lit">Litera</label><input type="text" id="r-lit" placeholder="a"></div>
           <div id="r-nou-wrap" hidden><label for="r-nou">Articolul nou</label><input type="text" id="r-nou" placeholder="art. 12^1"></div>
         </div>
+        <div id="r-act-info" class="hint" style="margin:.1rem 0 0;min-height:1.1rem"></div>
         <div style="margin-top:.7rem"><label for="r-text">Textul nou (dacă e cazul)</label>
           <textarea id="r-text" style="min-height:5rem" placeholder="Conținutul noii prevederi…"></textarea></div>
         <div class="row"><button class="go" id="r-go">Generează</button>
@@ -301,7 +319,7 @@
           <div><label for="c-act">Actul</label>
             <select id="c-act"><option value="">se încarcă…</option></select></div>
           <div><label for="c-data">La data (opțional)</label>
-            <input type="date" id="c-data"></div>
+            <input type="date" id="c-data" onclick="this.showPicker&&this.showPicker()" onfocus="this.showPicker&&this.showPicker()"></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
           <span class="hint">local · fără cereri către portal</span></div>
@@ -466,18 +484,50 @@ $("#go").onclick = async ()=>{
   const draft = $("#draft").value.trim();
   if(!draft){ $("#lint-out").innerHTML = empty("Lipește un text mai întâi."); return; }
   $("#go").disabled=true; $("#go").innerHTML=`<span class="spin"></span> se verifică…`;
+  const t0=performance.now();
   try{
     const r = await fetch("/api/lint",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft})});
     if(!r.ok) throw new Error((await r.json()).error||r.statusText);
     renderLint(await r.json());
+    const ms=performance.now()-t0;
+    const s=document.createElement("p"); s.className="hint"; s.style.margin=".4rem 0 0";
+    s.textContent="verificat în "+(ms<1000?Math.round(ms)+" ms":(ms/1000).toFixed(1)+" s");
+    $("#lint-out").appendChild(s);
   }catch(e){ $("#lint-out").innerHTML = empty("Eroare: "+esc(e.message||e)); }
   finally{ $("#go").disabled=false; $("#go").textContent="Verifică"; }
 };
 
-// ---- draft assistant ----
+// ---- draft assistant: structured act picker (tip/număr/an) → citation + corpus lookup ----
+const TIP_CITARE={lege:"Legea nr. {n}/{a}",oug:"Ordonanța de urgență a Guvernului nr. {n}/{a}",
+  og:"Ordonanța Guvernului nr. {n}/{a}",hg:"Hotărârea Guvernului nr. {n}/{a}",
+  ordin:"Ordinul nr. {n}/{a}",decret:"Decretul nr. {n}/{a}"};
+function citareAct(){
+  const n=$("#r-nr").value.trim(), a=$("#r-an").value.trim(), d=$("#r-desc").value.trim();
+  if(!n||!a) return "";
+  const s=(TIP_CITARE[$("#r-tip").value]||"{n}/{a}").replace("{n}",n).replace("{a}",a);
+  return d? s+" "+d : s;
+}
+let actT;
+function resolveAct(){
+  clearTimeout(actT);
+  const info=$("#r-act-info"), n=$("#r-nr").value.trim(), a=$("#r-an").value.trim();
+  if(!n||!a){ info.textContent=""; return; }
+  info.innerHTML=`→ <span class="plx">${esc($("#r-tip").value)}-${esc(n)}-${esc(a)}</span>`;
+  actT=setTimeout(async()=>{
+    try{
+      const d=await (await fetch(`/api/act?tip=${encodeURIComponent($("#r-tip").value)}&nr=${encodeURIComponent(n)}&an=${encodeURIComponent(a)}`)).json();
+      if(d&&d.act_id) info.innerHTML=`→ <span class="plx">${esc(d.act_id)}</span> `
+        +(d.cunoscut? `· <span style="color:var(--good)">${esc((d.titlu||"").slice(0,70))}</span>`
+                    : `· <span class="hint">încă neîn corpus</span>`);
+    }catch(e){}
+  },350);
+}
+["#r-tip","#r-nr","#r-an"].forEach(s=>{ $(s).addEventListener("input",resolveAct); $(s).addEventListener("change",resolveAct); });
 $("#r-op").onchange = ()=>{ $("#r-nou-wrap").hidden = $("#r-op").value!=="introduce"; };
 $("#r-go").onclick = async ()=>{
-  const p = new URLSearchParams({op:$("#r-op").value, act:$("#r-act").value.trim(),
+  const act=citareAct();
+  if(!act){ $("#r-out").innerHTML=empty("Pune tipul, numărul și anul actului."); return; }
+  const p = new URLSearchParams({op:$("#r-op").value, act,
     articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
     litera:$("#r-lit").value.trim(), text:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
   try{
@@ -510,13 +560,13 @@ function renderInterventii(){
   });
 }
 $("#r-add").onclick = ()=>{
-  const act=$("#r-act").value.trim();
-  if(!act){ $("#r-out").innerHTML=empty("Pune actul țintă mai întâi."); return; }
+  const act=citareAct();
+  if(!act){ $("#r-out").innerHTML=empty("Pune tipul, numărul și anul actului mai întâi."); return; }
   interventii.push({operatie:$("#r-op").value, act,
     articol:$("#r-art").value.trim(), alineat:$("#r-alin").value.trim(),
     litera:$("#r-lit").value.trim(), text_nou:$("#r-text").value.trim(), articol_nou:$("#r-nou").value.trim()});
   renderInterventii();
-  ["#r-art","#r-alin","#r-lit","#r-text","#r-nou"].forEach(s=>$(s).value="");  // keep act, clear the rest
+  ["#r-art","#r-alin","#r-lit","#r-text","#r-nou"].forEach(s=>$(s).value="");  // keep the act, clear the rest
   $("#r-art").focus();
 };
 $("#r-goleste").onclick = ()=>{ interventii=[]; renderInterventii(); $("#r-compus").innerHTML=""; };
@@ -662,7 +712,7 @@ function mountGraph(svg, viewport){
   const box=document.createElement("div"); box.className="graf-box";
   box.appendChild(svg);
   const ctl=document.createElement("div"); ctl.className="graf-ctl";
-  ctl.innerHTML=`<button data-z="in" title="Mărește">+</button><button data-z="out" title="Micșorează">−</button><button data-z="reset" title="Resetează">⤢</button>`;
+  ctl.innerHTML=`<button data-z="in" title="Mărește">+</button><button data-z="out" title="Micșorează">−</button><button data-z="reset" title="Resetează zoom">⟲</button><button data-z="full" title="Ecran complet">⤢</button>`;
   box.appendChild(ctl);
   let k=1,x=0,y=0,drag=null;
   const apply=()=>viewport.setAttribute("transform",`translate(${x} ${y}) scale(${k})`);
@@ -682,7 +732,8 @@ function mountGraph(svg, viewport){
   ctl.onclick=e=>{ const z=e.target.dataset.z; const c=svg.viewBox.baseVal;
     if(z==="in") zoom(1.25,c.width/2,c.height/2);
     else if(z==="out") zoom(1/1.25,c.width/2,c.height/2);
-    else if(z==="reset"){ k=1;x=0;y=0;apply(); } };
+    else if(z==="reset"){ k=1;x=0;y=0;apply(); }
+    else if(z==="full"){ if(!document.fullscreenElement) box.requestFullscreen&&box.requestFullscreen(); else document.exitFullscreen&&document.exitFullscreen(); } };
   return box;
 }
 

@@ -34,6 +34,7 @@ from urllib.parse import parse_qs, urlparse
 
 from scripts.servicii import (
     Stare,
+    _act,
     _cauta,
     _compune,
     _consolidat,
@@ -85,6 +86,8 @@ def face_handler(stare: Stare):
                 self._json(_sugereaza(parse_qs(ruta.query)))
             elif ruta.path == "/api/consolidat":
                 self._json(_consolidat(parse_qs(ruta.query)))
+            elif ruta.path == "/api/act":
+                self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/rezumat":
                 self._json(rezumat(stare))
             else:
