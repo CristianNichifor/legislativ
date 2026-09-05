@@ -61,7 +61,7 @@
     position:sticky;top:1rem;max-height:calc(100vh - 2rem);
     display:flex;flex-direction:column;overflow:hidden;
     border:1px solid var(--rule);background:var(--surface)}
-  aside.canvas.collapsed{width:2.5rem}
+  aside.canvas.collapsed{width:2.5rem;min-height:calc(100vh - 2rem)}
   .canvas-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem;
     border-bottom:1px solid var(--rule-soft);font-family:var(--sans);font-size:.72rem;
     font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-mute)}
@@ -221,8 +221,10 @@
   .cons-prov.refuzat{border-left-color:var(--material)}
   .cons-prov.abrogat{border-left-color:var(--blocking)}
   .cons-loc{font-family:var(--mono);font-size:.82rem;color:var(--accent)}
-  .cons-flag{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
-    letter-spacing:.03em;margin-left:.5rem}
+  .cons-flag{font-family:var(--sans);font-size:.62rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.03em;margin-left:.5rem;border:1px solid currentColor;border-radius:999px;
+    padding:.05rem .5rem;vertical-align:.05em}
+  .cons-flag.consolidat{color:var(--good)}
   .cons-text{font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;word-break:break-word;
     margin:.45rem 0;color:var(--ink)}
   .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
@@ -232,7 +234,10 @@
     padding:.5rem .7rem;margin:.45rem 0;font-family:var(--sans);font-size:.85rem;white-space:pre-wrap;
     word-break:break-word}
   .clar-box .suggest-h{margin-bottom:.3rem}
-  .ai-toggle{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--sans);font-size:.78rem;
+  /* override the global field-label styling this <label> would otherwise inherit (uppercase, a
+     bottom margin that pushed it out of line with the button beside it) */
+  .ai-toggle{margin:0;text-transform:none;letter-spacing:normal;font-weight:400;
+    display:inline-flex;align-items:center;gap:.4rem;font-family:var(--sans);font-size:.78rem;
     color:var(--ink-mid);cursor:pointer}
   .ai-toggle input{width:auto;margin:0}
   .ai-model{width:auto;font-size:.74rem;padding:.35rem 2rem .35rem .6rem;background-size:.6rem}
@@ -250,7 +255,7 @@
   #totop:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:var(--sans);
-    font-size:.76rem;color:var(--ink-mute);max-width:70ch}
+    font-size:.76rem;color:var(--ink-mute)}
 </style>
 <script>
   // Apply the saved theme before the body paints, so there is no flash of the wrong palette.
@@ -387,6 +392,16 @@
 const $ = s => document.querySelector(s);
 const esc = s => (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 const nf = n => (n||0).toLocaleString("ro");
+// "art104.alin8.litb" → "art. 104 · alin. (8) · lit. b)" — readable locators everywhere they show
+function locRo(id){ if(!id) return ""; return String(id).split(".").map(s=>{ let m;
+  if(m=s.match(/^art(.+)$/)) return "art. "+m[1];
+  if(m=s.match(/^alin(.+)$/)) return "alin. ("+m[1]+")";
+  if(m=s.match(/^lit(.+)$/)) return "lit. "+m[1]+")";
+  if(m=s.match(/^pct(.+)$/)) return "pct. "+m[1];
+  return s; }).join(" · "); }
+// best-effort readability: start each alineat marker "(N)" on its own line so a welded article body
+// is not one wall of text. Only numeric markers — letters like "art. 5)" are too ambiguous to split.
+function textLizibil(t){ return esc(t).replace(/([^\n])\s+(?=\((?:\d+(?:\^\d+)?)\)\s)/g,"$1\n"); }
 
 fetch("/api/rezumat").then(r=>r.json()).then(d=>{
   $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · <b>${nf(d.provizii)}</b> prevederi`;
@@ -500,7 +515,7 @@ function renderLint(d){
         +(c.abrogat?"abrogat":"modificat")+(c.neconsolidat?" (parțial neconsolidat automat)":""),
       [ c.prin&&c.prin.length?`prin: <b>${c.prin.map(esc).join(", ")}</b>`:"",
         c.ultima?`ultima: <b>${esc(c.ultima)}</b>`:"",
-        c.unitati&&c.unitati.length?`unități: ${c.unitati.map(esc).join(", ")}`:"",
+        c.unitati&&c.unitati.length?`unități: ${c.unitati.map(u=>esc(locRo(u))).join(", ")}`:"",
         "vezi fila «Consolidat» pentru textul în vigoare" ].filter(Boolean),"","derived")).join(""));
   if(dr.length) h += sec("Tehnică legislativă", dr.length,
     dr.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],"","derived")).join(""));
@@ -769,11 +784,12 @@ function renderCons(d){
   h+=sec("Prevederi", (d.provizii||[]).length, (d.provizii||[]).map((p,i)=>{
     const cls=p.abrogat?"abrogat":(p.complet?"complet":"refuzat");
     let flag="";
-    if(p.abrogat) flag=`<span class="cons-flag" style="color:var(--blocking)">ABROGAT</span>`;
+    if(p.abrogat) flag=`<span class="cons-flag" style="color:var(--blocking)">abrogat</span>`;
     else if(!p.complet) flag=`<span class="cons-flag" style="color:var(--material)">neconsolidat</span>`;
-    let body=`<div><span class="cons-loc">${esc(p.locator)}</span>${flag}`
+    else flag=`<span class="cons-flag consolidat">consolidat</span>`;
+    let body=`<div><span class="cons-loc">${esc(locRo(p.locator))}</span>${flag}`
       +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}" style="font-size:.68rem;padding:.1rem .5rem;float:right">Limbaj clar</button>`:"")+`</div>`;
-    if(!p.abrogat) body+=`<div class="cons-text">${esc(p.text)}</div>`;
+    if(!p.abrogat) body+=`<div class="cons-text">${textLizibil(p.text)}</div>`;
     body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
       +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(s.data):""})`).join(", ")+`</div>`;
@@ -947,7 +963,7 @@ async function runSearch(){
     $("#cauta-out").innerHTML=`<div>`+sec("Rezultate",res.length,res.map(x=>{
       const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
       const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
-      return card("note",`${link} <span class="hint">${esc(x.locator)}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
+      return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
     }).join(""))+`</div>`;
   }catch(e){ $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
 }
