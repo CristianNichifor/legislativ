@@ -50,7 +50,11 @@
   .canvas-head{display:flex;align-items:center;gap:.5rem;padding:.6rem .7rem;
     border-bottom:1px solid var(--rule-soft);font-family:var(--sans);font-size:.72rem;
     font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-mute)}
-  aside.canvas.collapsed .canvas-head{writing-mode:vertical-rl;border-bottom:0;height:100%}
+  .canvas-title{flex:1}
+  /* collapsed: a tidy vertical strip — toggle on top, label reading up the column, both centred */
+  aside.canvas.collapsed .canvas-head{flex-direction:column-reverse;align-items:center;
+    justify-content:flex-start;gap:.7rem;padding:.6rem .2rem;border-bottom:0}
+  aside.canvas.collapsed .canvas-title{flex:none;writing-mode:vertical-rl;transform:rotate(180deg)}
   aside.canvas.collapsed .canvas-body{display:none}
   .canvas-toggle{margin-left:auto;background:transparent;border:1px solid var(--rule);
     color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;
@@ -74,8 +78,11 @@
     .app{flex-direction:column}
     aside.canvas{width:100%;position:static;order:-1}
     aside.canvas.collapsed{width:100%}
-    aside.canvas.collapsed .canvas-head{writing-mode:horizontal-tb;height:auto;
-      border-bottom:1px solid var(--rule-soft)}
+    /* full-width on mobile, so the collapsed head goes back to a normal horizontal row */
+    aside.canvas.collapsed .canvas-head{flex-direction:row;align-items:center;
+      border-bottom:1px solid var(--rule-soft);padding:.6rem .7rem}
+    aside.canvas.collapsed .canvas-title{writing-mode:horizontal-tb;transform:none;flex:1}
+    aside.canvas.collapsed .canvas-toggle{margin-left:auto}
   }
 
   .tabs{display:flex;gap:.35rem;margin-bottom:1rem;flex-wrap:wrap}
@@ -89,7 +96,8 @@
   textarea,input[type=search],input[type=text],select{width:100%;background:var(--surface);
     color:var(--ink);border:1px solid var(--rule);padding:.75rem 1rem;font-family:var(--mono);
     font-size:.9rem;line-height:1.6}
-  textarea{min-height:9rem;resize:vertical}
+  /* resize is capped to the viewport; text beyond that scrolls inside the box */
+  textarea{min-height:9rem;max-height:calc(100vh - 2rem);resize:vertical;overflow:auto}
   textarea:focus,input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
@@ -215,7 +223,7 @@
     </div>
 
     <aside class="canvas" id="canvas">
-      <div class="canvas-head">Conexiuni
+      <div class="canvas-head"><span class="canvas-title">Conexiuni</span>
         <button class="canvas-toggle" id="canvas-toggle" title="Restrânge / desfă" aria-expanded="true">⟩</button>
       </div>
       <div class="canvas-body">
