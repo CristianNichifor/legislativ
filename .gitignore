@@ -23,3 +23,8 @@ corpus/
 # It is an artifact, not source; a release asset if it needs sharing, never a committed blob.
 corpus.db
 corpus.db-*
+# every sqlite artifact — the corpus, the initiatives, their WAL/SHM sidecars.
+# Built by the collectors from the API; a release asset if shared, never a committed blob.
+*.db
+*.db-shm
+*.db-wal

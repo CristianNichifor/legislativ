@@ -109,16 +109,43 @@ def act_din_inregistrare(rec: Inregistrare):
     return Act(slug_tip(rec.tip_act), numar, an)
 
 
+class _Trickle(Exception):
+    """The server accepted the connection and then withheld the response past the deadline."""
+
+
+def _cu_termen(fn, secunde: float):
+    """Run `fn` under a hard wall-clock deadline. A socket timeout is not enough here: this
+    server trickles a byte at a time, and a per-recv timeout never fires while bytes dribble in,
+    so a worker blocks forever in the read. A one-shot executor gives a deadline the trickle
+    cannot reset; if it lapses the underlying socket is abandoned (a rare leak, cheap against a
+    quarter-million pages) and the page is retried."""
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FTimeout
+
+    ex = ThreadPoolExecutor(max_workers=1)
+    fut = ex.submit(fn)
+    try:
+        return fut.result(timeout=secunde)
+    except FTimeout as e:
+        raise _Trickle from e
+    finally:
+        ex.shutdown(wait=False)
+
+
 def _pagina(client: Client, pagina: int, incercari: int = 6) -> list[Inregistrare]:
-    """One page, retried with exponential backoff on the service asking for room."""
+    """One page, under a hard deadline, retried with exponential backoff.
+
+    Backoff covers both the service asking for room (503/429) and the trickle-hang, because both
+    are the same event from the collector's side — the page did not arrive, wait and ask again.
+    """
     astept = 2.0
     for incercare in range(incercari):
         try:
-            return client.search(pagina=pagina, pe_pagina=10)
+            return _cu_termen(lambda: client.search(pagina=pagina, pe_pagina=10), 20.0)
         except urllib.error.HTTPError as e:
             if e.code not in (429, 500, 502, 503, 504) or incercare == incercari - 1:
                 raise
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, _Trickle):
             if incercare == incercari - 1:
                 raise
         time.sleep(astept)
