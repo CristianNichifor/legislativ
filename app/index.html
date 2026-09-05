@@ -51,9 +51,10 @@
   .app{display:flex;gap:1.5rem;align-items:stretch;flex:1;min-height:0}
   .main{flex:1;min-width:0}
   /* the panel stretches to the full height of the .app row (which fills the viewport below the
-     header/tabs), so its top lines up with the textarea and the collapsed strip stays a
-     full-height bar, not a stub */
-  aside.canvas{width:28rem;flex:none;
+     header/tabs); the margin-top equals the height of the left column's field label
+     (.7rem line + .5rem gap) so the panel box lines up with the textarea box beside it, not
+     with the label above it. The collapsed strip inherits the same offset and full height. */
+  aside.canvas{width:28rem;flex:none;margin-top:calc(.7rem * 1.55 + .5rem);
     display:flex;flex-direction:column;overflow:hidden;
     border:1px solid var(--rule);background:var(--surface)}
   aside.canvas.collapsed{width:2.5rem}
@@ -88,7 +89,7 @@
   .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
   @media (max-width:900px){
     .app{flex-direction:column}
-    aside.canvas{width:100%;position:static;order:-1;height:auto}
+    aside.canvas{width:100%;position:static;order:-1;height:auto;margin-top:0}
     aside.canvas.collapsed{width:100%}
     /* full-width on mobile, so the collapsed head goes back to a normal horizontal row */
     aside.canvas.collapsed .canvas-head{flex-direction:row;align-items:center;
