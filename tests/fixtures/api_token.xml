@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><GetTokenResponse xmlns="http://tempuri.org/"><GetTokenResult>TESTTOKEN0000000000000000000000000000000000000000000000000</GetTokenResult></GetTokenResponse></s:Body></s:Envelope>

@@ -92,10 +92,31 @@ Every one of these looked right on the page and none was found by reading the pa
 
 ## The corpus
 
-`legislatie.just.ro` is the only source. That was checked rather than assumed: **N-Lex** proxies its
-Romanian search straight back to the same portal, and neither **data.europa.eu** nor **data.gov.ro**
-carries Romanian legislation as text — their nearest hits are construction standards and procurement
-bulletins. There is no bulk download to prefer over reading pages.
+`legislatie.just.ro` is the only source, and it offers **an official free web service** — the right
+way in. That was checked rather than assumed: **N-Lex** proxies its Romanian search straight back to
+the same portal, neither **data.europa.eu** nor **data.gov.ro** carries Romanian legislation as text,
+and Romania publishes no `data.europa.eu` ELI for it. The two existing clients — the government's own
+`govro/legislatie-just-python-soap-client` (2015, MIT) and the newer `ro-eli-mcp` — both wrap this
+same service; both were read for the contract and neither is a dependency this package takes.
+
+**The API is the spine.** `scripts/api.py` speaks its SOAP directly — `GetToken`, then paged
+`Search` — with the standard library and no SOAP stack, because the service speaks one fixed dialect
+and two envelopes are less to reason about than `suds`. It needs no registration, returns records
+with the full text inline, and carries `DataVigoare`, **the in-force date the HTML search will not
+filter by**. Getting it working meant learning three things by calling it: the endpoint is
+`.svc/SOAP`, a named binding (posting to `.svc` or `?wsdl` is a 404); it has **no act-type filter**,
+so a search for number 98 returns the DECRET, the HG and the ORDIN that share it, and scoping to the
+six normative types is done client-side; and results come **ten to a page**, so a year is hundreds of
+pages.
+
+**The HTML is enrichment, not spine.** The API's `Text` is flattened — no `S_ART`, no `S_LGI`. So
+article-level locators and the publisher's own reference marks still come from the `DetaliiDocument`
+HTML that `parsare.py` reads, for the acts that need parsing to that depth. Two sources, each for
+what it is best at: the API to know the corpus and stay current, the HTML to read one act deeply.
+
+The HTML path also carries a constraint worth keeping: the portal answers an honest identifying
+`User-Agent` and refuses a bare one, and it does not answer GitHub Actions runners — so the corpus is
+built locally and committed, never fetched in CI.
 
 What one page yields, verified on Legea nr. 98/2016 (`sources/lege-98-2016.html.gz`):
 
@@ -128,16 +149,11 @@ database was the obvious alternative and loses on this corpus: the deepest quest
 
 ## What is not here
 
-**A collector.** `scripts/parsare.py` reads a saved page and `scripts/depozit.py` stores it, but
-nothing yet walks the portal to build a corpus. That is the next piece, and the constraint it has
-to respect is already in the schema: the `cache` table exists so a document is fetched **once,
-ever**. This reads a ministry's server on behalf of a political party, and the number of times it
-asks for the same act should be one.
-
-Two facts the collector will need, both established by reading real pages rather than reasoning:
-the portal answers a request carrying an honest, identifying `User-Agent` and refuses a bare one,
-and it does not answer GitHub Actions runners at all — so the corpus is built locally and
-committed, never fetched in CI.
+**A collector.** `scripts/api.py` talks to the portal's official web service and
+`scripts/depozit.py` stores what it returns, but nothing yet loops over the whole corpus. That
+loop is the next piece, and the constraint it must respect is already in the schema: the `cache`
+table exists so a document is fetched **once, ever**. This reads a ministry's server on behalf of a
+political party, and the number of times it asks for the same act should be one.
 
 **Consolidation.** The package records that article 7(2) changed on a date and by which act. It does
 not apply the amendment and compute what the article now says. That is a separate problem with its
@@ -163,7 +179,7 @@ document, and `assumed` is defined as *not in any source document yet*.
 
 ```bash
 uv sync --all-groups
-uv run pytest -q                  # 101 tests
+uv run pytest -q                  # 108 tests
 uv run python -m scripts.etalon   # precision / recall, with the failures named
 uv run python -m scripts.linter   # the worked example
 ```
@@ -191,5 +207,6 @@ endpoint and a recorded fixture are the same shape.
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |
 | `linter.py` | The three reports, in the order they should be trusted. |
+| `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
 | `parsare.py` | One portal page into an act: designation, issuer, publication, and the article tree. |
 | `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
