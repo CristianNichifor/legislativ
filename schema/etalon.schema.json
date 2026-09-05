@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cristiannichifor.github.io/romania-reforms/schema/etalon.schema.json",
+  "title": "Set etalon adnotat pentru extractoarele deterministe",
+  "description": "Cazurile pe care se măsoară precizia și acoperirea extractoarelor. Schema cere ca fiecare caz să spună de ce există, pentru că un set etalon fără motive nu poate fi întreținut: peste șase luni nimeni nu mai știe dacă un caz e acolo ca să prindă o regresie sau doar ca să umple lista. Cere și ca eșecurile cunoscute să rămână marcate, nu scoase — un set curățat până raportează 100% nu mai măsoară nimic.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "publisher", "period", "provenance", "limitations", "cazuri"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "publisher": { "type": "string" },
+    "period": { "type": "string" },
+    "provenance": { "$ref": "provenance.schema.json#/$defs/provenance" },
+    "limitations": {
+      "type": "array",
+      "items": { "$ref": "provenance.schema.json#/$defs/limitation" }
+    },
+    "cazuri": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "grup", "text", "asteptat", "nota"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z]+-[0-9]+$" },
+          "grup": { "enum": ["referinte", "amendamente", "obligatii"] },
+          "text": { "type": "string", "minLength": 10 },
+          "act_gazda": {
+            "type": "string",
+            "description": "Actul care se citește, pentru amendamentele a căror țintă e el însuși."
+          },
+          "nota": {
+            "type": "string",
+            "minLength": 10,
+            "description": "De ce e cazul aici. Obligatoriu: un caz fără motiv nu poate fi întreținut."
+          },
+          "cunoscut_ratat": {
+            "type": "boolean",
+            "description": "Eșec cunoscut, lăsat înăuntru intenționat ca să apară în raport."
+          },
+          "asteptat": {
+            "type": "object",
+            "additionalProperties": false,
+            "minProperties": 1,
+            "description": "Doar câmpurile pe care cazul le adnotează; extractoarele nenumite aici nu se scorează pe el.",
+            "properties": {
+              "acte": { "type": "array", "items": { "type": "string" } },
+              "referinte": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [{ "type": ["string", "null"] }, { "type": "string" }]
+                }
+              },
+              "amendamente": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "prefixItems": [
+                    { "enum": ["modifica", "abroga", "introduce", "completeaza", "deroga",
+                               "proroga", "suspenda", "inlocuieste"] },
+                    { "type": ["string", "null"] },
+                    { "type": "string" }
+                  ]
+                }
+              },
+              "articole_noi": { "type": "array", "items": { "type": "string" } },
+              "obligatii": {
+                "type": "array",
+                "items": {
+                  "type": "array",
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "prefixItems": [
+                    { "type": ["string", "null"] },
+                    { "type": ["integer", "null"] },
+                    { "enum": ["vigoare", "publicare", "data-fixa"] },
+                    { "type": ["string", "null"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

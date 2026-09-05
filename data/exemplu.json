@@ -1,6 +1,38 @@
 {
-  "avertisment": "TEXT ILUSTRATIV, NU TEXT DE LEGE. Frazele de mai jos sunt scrise în stilul redactării legislative românești ca să pună pipeline-ul în mișcare fără portal. Nu sunt copiate din Legea nr. 98/2016 și nu trebuie citate ca atare. Când parserul din scripts/parsare.py va citi pagini reale, fișierul acesta se aruncă.",
-  "complet_pentru": ["hg"],
+  "$schema": "../schema/exemplu.schema.json",
+  "id": "exemplu",
+  "title": "Corpus de probă: patru provizii în registrul redactării legislative",
+  "publisher": "Cristian Nichifor",
+  "period": "2026",
+  "provenance": {
+    "source": "redactare-proprie",
+    "locator": "data/exemplu.json; scris ca să pună pipeline-ul în mișcare fără portal",
+    "confidence": "assumed",
+    "note": "Numerele de act (Legea nr. 98/2016, HG nr. 395/2016) sunt reale; textul proviziilor nu este. Se aruncă în momentul în care scripts/parsare.py citește pagini reale."
+  },
+  "limitations": [
+    {
+      "id": "nu-text-de-lege",
+      "text": "NU TEXT DE LEGE. Frazele din acest fișier sunt scrise în stilul redactării legislative românești și tocmai de aceea sunt citabile ca și cum ar fi lege. Nu sunt copiate din Legea nr. 98/2016 și nu trebuie citate ca atare, nici într-o demonstrație.",
+      "severity": "blocking",
+      "affects": [
+        "provizii",
+        "contradictii",
+        "context"
+      ]
+    },
+    {
+      "id": "corpus-minim",
+      "text": "Două acte și patru provizii. Raportul de vid legislativ pe care îl produce arată cum arată raportul, nu ce lipsește din legislația română.",
+      "severity": "blocking",
+      "affects": [
+        "vid"
+      ]
+    }
+  ],
+  "complet_pentru": [
+    "hg"
+  ],
   "proiect": "Prezenta lege reglementează achizițiile de stat. Autoritatea contractantă are obligația de a publica anunțul de participare în termen de 30 de zile de la data aprobării documentației.",
   "acte": [
     {
@@ -37,7 +69,9 @@
       "titlu": "pentru aprobarea normelor metodologice de aplicare a Legii nr. 98/2016",
       "publicat": "2016-06-02",
       "vigoare": "2016-06-02",
-      "referinte_la": ["lege-98-2016"],
+      "referinte_la": [
+        "lege-98-2016"
+      ],
       "provizii": []
     }
   ]

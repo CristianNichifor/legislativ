@@ -1,5 +1,35 @@
 {
-  "nota": "Set etalon adnotat manual. Fiecare caz poartă motivul pentru care există. Cazurile marcate «cunoscut-ratat» sunt lăsate înăuntru intenționat: un set etalon din care sunt scoase eșecurile raportează 100% și nu mai măsoară nimic.",
+  "$schema": "../schema/etalon.schema.json",
+  "id": "etalon",
+  "title": "Set etalon adnotat manual pentru extractoarele deterministe",
+  "publisher": "Cristian Nichifor",
+  "period": "2026",
+  "provenance": {
+    "source": "redactare-proprie",
+    "locator": "scripts/etalon.py; 36 de cazuri scrise în registrul redactării legislative românești",
+    "confidence": "assumed",
+    "note": "Niciun caz nu vine de pe legislatie.just.ro. Sunt scrise în stilul actelor normative românești, dar de aceeași mână care a scris și tiparele — măsoară dacă extractoarele fac ce au fost proiectate să facă, nu cât din corpusul real acoperă. «assumed» e eticheta corectă până când setul e înlocuit cu fraze extrase din acte reale."
+  },
+  "limitations": [
+    {
+      "id": "etalon-nu-e-esantion",
+      "text": "Cazurile sunt scrise, nu eșantionate. Cifra de precizie și acoperire pe care o raportează scripts/etalon.py nu este acoperirea corpusului real, care va fi mai mică.",
+      "severity": "material",
+      "affects": [
+        "precizie",
+        "acoperire",
+        "f1"
+      ]
+    },
+    {
+      "id": "esecuri-pastrate",
+      "text": "Cazurile marcate «cunoscut_ratat» pică intenționat și rămân în set. Scoase, cifra ar crește și ar înceta să măsoare ceva.",
+      "severity": "note",
+      "affects": [
+        "acoperire"
+      ]
+    }
+  ],
   "cazuri": [
     {
       "id": "ref-01",

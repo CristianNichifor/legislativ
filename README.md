@@ -111,9 +111,16 @@ to `art. 15` means different provisions before and after, and `ActParsat.republi
 carry the date but nothing consumes it.
 
 **A corpus.** `data/exemplu.json` is a four-provision fixture written in the register of Romanian
-legislation to put the pipeline in motion. It is labelled `NU TEXT DE LEGE` in its own first field
-and a test asserts that label stays there, because prose in that register is quotable as though it
-were the law. It gets thrown away the moment the parser reads real pages.
+legislation to put the pipeline in motion. Prose in that register is quotable as though it were the
+law, so the warning that it is not travels as a `blocking` limitation in
+`packages/provenance`'s vocabulary rather than as a field of its own — it means the same thing here
+as in every dataset in the repository, and both the schema and a test require it to stay there. It
+gets thrown away the moment the parser reads real pages.
+
+Both data files declare a `$schema` under `schema/`, and both are validated by the repository-wide
+gate in `scripts/validate_data.py` along with the other 322 documents. Their provenance confidence
+is `assumed`, which is the accurate label: neither came from a source document, and `assumed` is
+defined in this repository as *not in any source document yet*.
 
 ## Running it
 
@@ -143,3 +150,6 @@ from prompt to string, so Ollama, a free-tier endpoint and a recorded fixture ar
 | `etalon.py` | Precision and recall, with the failures named. |
 | `linter.py` | The three reports, in the order they should be trusted. |
 | `parsare.py` | The contract for the stage that is not written. |
+
+Data files live under `data/` with their schemas in `schema/`, the same shape as every other
+simulator here, so the repository-wide validation gate covers them.

@@ -98,7 +98,10 @@ def test_a_model_that_answers_in_prose_costs_nothing_downstream():
 
 
 def test_the_example_fixture_says_it_is_not_real_legal_text():
-    """It is written in the register of Romanian legislation and would otherwise be quotable as
-    if it were the law."""
+    """It is written in the register of Romanian legislation and would otherwise be quotable as if
+    it were the law. The warning is a `blocking` limitation rather than a field of its own, so it
+    means here exactly what it means in every dataset in this repository."""
     date_ = json.loads(EXEMPLU.read_text(encoding="utf-8"))
-    assert "NU TEXT DE LEGE" in date_["avertisment"]
+    blocante = [lim for lim in date_["limitations"] if lim["severity"] == "blocking"]
+    assert any("NU TEXT DE LEGE" in lim["text"] for lim in blocante)
+    assert all(lim["affects"] for lim in date_["limitations"])

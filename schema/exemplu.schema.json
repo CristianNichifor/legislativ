@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cristiannichifor.github.io/romania-reforms/schema/exemplu.schema.json",
+  "title": "Corpus de probă pentru linter",
+  "description": "Un corpus minim care pune pipeline-ul în mișcare fără portalul legislativ. Textul e scris în registrul redactării legislative românești și tocmai de aceea e citabil ca și cum ar fi lege — schema cere o limitare de severitate «blocking» care să spună că nu este, pentru că avertismentul e singurul lucru care oprește o frază de aici să ajungă citată într-o comisie.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "publisher", "period", "provenance", "limitations", "acte", "proiect"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "publisher": { "type": "string" },
+    "period": { "type": "string" },
+    "provenance": { "$ref": "provenance.schema.json#/$defs/provenance" },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "provenance.schema.json#/$defs/limitation" },
+      "contains": {
+        "type": "object",
+        "properties": { "severity": { "const": "blocking" } },
+        "required": ["severity"]
+      },
+      "description": "Cel puțin una blocantă: textul nu e text de lege și nu poate fi citat ca atare."
+    },
+    "complet_pentru": {
+      "type": "array",
+      "items": { "enum": ["lege", "oug", "og", "hg", "ordin", "decret"] },
+      "description": "Tipurile de act pentru care corpusul se declară complet. Absența unui act de alt tip nu e un vid legislativ, ci o lipsă a colectării."
+    },
+    "proiect": { "type": "string", "minLength": 20 },
+    "acte": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["tip", "numar", "an", "titlu"],
+        "properties": {
+          "tip": { "enum": ["lege", "oug", "og", "hg", "ordin", "decret"] },
+          "numar": { "type": "string", "pattern": "^[0-9]+$" },
+          "an": { "type": "integer", "minimum": 1859, "maximum": 2100 },
+          "titlu": { "type": "string" },
+          "publicat": { "type": "string", "format": "date" },
+          "vigoare": { "type": "string", "format": "date" },
+          "referinte_la": { "type": "array", "items": { "type": "string" } },
+          "provizii": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["locator", "text"],
+              "properties": {
+                "locator": { "type": "string", "pattern": "^art[0-9]+(\\^[0-9]+)?(\\.[a-z]+[0-9a-z^]+)*$" },
+                "text": { "type": "string", "minLength": 10 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
