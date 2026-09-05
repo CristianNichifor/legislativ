@@ -215,4 +215,5 @@ endpoint and a recorded fixture are the same shape.
 | `cdep.py` | Pending initiatives from the Chamber of Deputies, with their Senate id. |
 | `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
 | `analiza.py` | The extractors over the live corpus: a deadline inventory and a term dictionary. |
+| `graf.py` | The amendment graph, derived from the corpus text — who amends and references each act. |
 | `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |
