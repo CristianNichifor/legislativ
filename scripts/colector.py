@@ -122,7 +122,7 @@ def _pagina(client: Client, pagina: int, incercari: int = 6) -> list[Inregistrar
             if incercare == incercari - 1:
                 raise
         time.sleep(astept)
-        astept = min(astept * 2, 60.0)
+        astept = min(astept * 2, 20.0)
     return []
 
 
@@ -142,7 +142,11 @@ def colecteaza(
     happiest with a single writer, and the network is the bottleneck anyway, so the writer is
     never what holds a run up.
     """
-    client = client or Client()
+    # A short request timeout is a robustness lever, not a speed one: this server occasionally
+    # accepts a connection and then does not answer, and at 60s a hung socket freezes a worker
+    # long enough that several stalling together look like a dead run. 25s fails fast to the
+    # backoff, which retries, so a stall self-heals instead of wedging.
+    client = client or Client(timeout=25.0)
     with depozit.deschide(cale_db) as con:
         gata = depozit.pagini_terminate(con)
 
