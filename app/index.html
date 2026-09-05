@@ -94,10 +94,12 @@
     display:flex;flex-wrap:wrap;gap:.3rem .9rem}
   .legend span{display:flex;align-items:center;gap:.3rem}
   .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
-  @media (max-width:900px){
+  /* below 1200px the 28rem sidebar crams the working area, so stack it — and put Conexiuni at the
+     BOTTOM (order:2), under the working area, not above it. */
+  @media (max-width:1200px){
     .app{flex-direction:column}
-    aside.canvas{width:100%;position:static;order:-1;height:auto;margin-top:0}
-    aside.canvas.collapsed{width:100%}
+    aside.canvas{width:100%;position:static;order:2;height:auto;max-height:none;margin-top:.8rem}
+    aside.canvas.collapsed{width:100%;min-height:0}
     /* full-width on mobile, so the collapsed head goes back to a normal horizontal row */
     aside.canvas.collapsed .canvas-head{flex-direction:row;align-items:center;
       border-bottom:1px solid var(--rule-soft);padding:.6rem .7rem}
@@ -259,8 +261,10 @@
   .node-hd{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
   .node-hd .lvl{font-family:var(--sans);font-size:.66rem;font-weight:600;text-transform:uppercase;
     letter-spacing:.03em;color:var(--ink-mute);min-width:4.4rem}
+  /* number input and op select: same moderate height, so a block reads as one tidy row */
+  .node input.num,.node select.op{height:2.15rem;font-size:.82rem;line-height:1.2;padding:.35rem .6rem}
   .node input.num{width:4.5rem}
-  .node select.op{width:auto;font-size:.78rem;padding:.35rem 1.8rem .35rem .5rem;background-size:.55rem}
+  .node select.op{width:auto;padding-right:1.8rem;background-size:.55rem}
   .node .txt{margin:.35rem 0 0} .node .txt textarea{min-height:3.2rem;font-size:.82rem}
   .node .kids{margin-left:.15rem}
   .node-x{border:1px solid var(--rule);background:transparent;color:var(--ink-mute);cursor:pointer;
