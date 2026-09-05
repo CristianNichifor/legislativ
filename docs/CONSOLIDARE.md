@@ -58,9 +58,11 @@ it is the result of applying operations, not a string that appears anywhere in a
 | --- | --- |
 | Target + operation + effective **date** of each amendment | exists — `graf.py` edges carry `de_la`, `amendamente.py` the target and verb |
 | The **replacement payload** (the quoted new text) | **the first gap** — `amendamente.Amendament` records the operation but not the text it substitutes |
-| A **provision tree** to splice into | only the HTML parse has it (`parsare.py`: `S_ART`/`S_ALN`/`S_LIT`); the flat SOAP text the collector stores has no structure below the whole document |
-| The **splice engine** — apply operations in date order → text as of a date | new (`consolidare.py`) |
+| A **provision tree** to splice into | exists — the HTML parse (`parsare.py`: `S_ART`/`S_ALN`/`S_LIT`), wired in via `consolidare.consolideaza_in`; the flat SOAP text the collector stores still has no structure below the whole document |
+| The **replacement payload as the portal emits it** | exists — `parsare.citate` reads the `S_CIT` block a real amending page wraps each replacement in; `amendamente._continut_nou` reads the guillemet form a human draft uses. Two shapes, same payload |
+| The **splice engine** — apply operations in date order → text as of a date | `consolidare.py` (`consolideaza`, and `consolideaza_in` over a parsed tree) |
 | The **honesty rail** — refuse to splice when any operation did not parse | part of the engine, non-negotiable |
+| The **gold test** — diff against the portal's own consolidated view | exists — `tests/test_consolidare_gold.py`, on committed fixtures |
 
 ## Data implication: on demand, per act — never the corpus
 
@@ -100,15 +102,30 @@ believes it can, diff the result against the portal's consolidated text of the s
 report agreement. A committed before/after fixture (an article of a real act plus the later act that
 amended it, and the portal's consolidated result) makes the number reproducible and lets CI hold it.
 
+That fixture is now committed and that test now runs. `sources/lege-208-2022.html.gz` is Legea
+208/2022, which amends Legea 98/2016; `sources/lege-98-2016.html.gz` is the portal's consolidated
+form of Legea 98/2016, which already carries those changes. `tests/test_consolidare_gold.py` reads
+Legea 208/2022's `S_CIT` replacement blocks, and asserts that the block it supplies for art. 187
+alin. (8) lit. a) equals — byte for byte after normalisation — the text the portal itself shows for
+that provision (zero-difference), and that a solid majority of the substantial replacements appear
+verbatim inside the provision they rewrote (a floor CI holds). The remainder are the deferred cases
+made visible, not hidden: whole-article replacements the consolidated act stores as separate
+alineate, provisions a later act touched again, and insertions with no prior text to sit in.
+
 ## Phases
 
 1. **Payload extraction** — `amendamente.py` captures the quoted replacement/inserted text. Small,
    self-contained, `verbatim`, and independently useful (a finding can quote the new wording).
 2. **The engine** — `consolidare.py`: apply operations to a provision in date order with the rail,
    over plain provision/operation structures. Unit-tested without any HTML.
-3. **The tree + the gold test** — wire `parsare`'s article tree in as the provision source, add the
-   before/after fixture, diff against the portal's consolidated view, hold it in CI.
+3. **The tree + the gold test** — wire `parsare`'s article tree in as the provision source
+   (`consolideaza_in`), read the portal's own `S_CIT` replacement blocks (`parsare.citate`), and
+   diff the result against the portal's consolidated view on a committed before/after fixture, held
+   in CI. **Done.**
 4. **Surface it** — the product shows the consolidated provision with each change attributed, and
-   the linter checks drafts against consolidated rather than original text.
+   the linter checks drafts against consolidated rather than original text. Still to do, and it
+   needs the target-locator resolution that pairs each `S_CIT` block to the provision it rewrites
+   (the running text `La articolul 7, alineatul (2) ...` before the block) so consolidation can run
+   from an amending page end to end, not only be measured against one.
 
-This document is the plan; phases 1 and 2 land with it.
+This document is the plan; phases 1 and 2 landed with it, and phase 3 with the fixture above.

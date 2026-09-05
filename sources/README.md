@@ -19,5 +19,20 @@ numbers that `scripts/text.py` folds are exactly the details a tidied-up copy lo
 
 One thing to know before saving them: `.gitignore` drops `sources/*.html`, because scraped pages
 are normally re-fetchable and large. Fixtures are the exception that rule was not written for — a
-parser test against a page nobody else can fetch is not a test. Un-ignore the three you keep,
+parser test against a page nobody else can fetch is not a test. Un-ignore the ones you keep,
 explicitly and by name, and say in the exception why that page had to be kept.
+
+## What is actually here
+
+- `lege-98-2016.html.gz` — a large substantive law, and the portal's *consolidated* form of it.
+- `decizie-815-2015.html.gz` — a Curtea Constituțională decision, `S_PAR` all the way down, no
+  article tree; the case that proves the parser does not return empty for a document without one.
+- `lege-310-2021.html.gz` — another substantive law (anti-doping), a second plain page.
+- `lege-208-2022.html.gz` — **the amending act.** It amends Legea 98/2016 and wraps each
+  replacement in an `S_CIT` block, so the chapeau, the numbered points and the replacement payloads
+  are real. It is the answer key for consolidation: `tests/test_consolidare_gold.py` checks that a
+  replacement it supplies equals the portal's consolidated text of the provision it rewrote. The
+  first three did not include an amending act — this is the one the list above asked for.
+
+Still missing from the list: a **republished** act, for the renumbering case nothing in the package
+can yet see.

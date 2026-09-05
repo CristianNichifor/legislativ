@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.parsare import din_fisier
+from scripts.parsare import citate_din_fisier, din_fisier
 
 SURSE = Path(__file__).resolve().parent.parent / "sources"
 
@@ -105,6 +105,26 @@ def test_an_act_with_no_article_tree_still_yields_its_text(decizie):
     assert len(decizie.provizii) == 50
     assert all(p.locator_id.startswith("par") for p in decizie.provizii)
     assert any("neconstituțional" in p.text for p in decizie.provizii)
+
+
+def test_an_amending_act_is_identified_like_any_other():
+    """Legea 208/2022 is the fixture the first three lacked — an amending act, so the chapeau,
+    the numbered points and the `S_CIT` replacement blocks are real rather than reconstructed."""
+    act = din_fisier(SURSE / "lege-208-2022.html.gz")
+    assert act.act.id == "lege-208-2022"
+    assert act.titlu.startswith("LEGE nr. 208 din 11 iulie 2022")
+
+
+def test_the_replacement_blocks_of_an_amending_act_are_read_off_the_markup():
+    """`citate` reads the `S_CIT` payload the portal wraps each replacement in — the marked-up
+    form of what a human draft puts in guillemets, and the payload consolidation splices."""
+    blocuri = citate_din_fisier(SURSE / "lege-208-2022.html.gz")
+    assert len(blocuri) == 46
+    assert all(b.locator_id.startswith("cit") for b in blocuri)
+    # every block is non-empty text, and the outermost-only rule kept them distinct payloads,
+    # not one article's alineate counted again as their own blocks.
+    assert all(b.text for b in blocuri)
+    assert any("Autoritatea contractantă" in b.text for b in blocuri)
 
 
 def test_legacy_cedilla_spellings_are_folded_on_the_way_in(decizie):

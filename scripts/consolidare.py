@@ -32,6 +32,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from scripts.parsare import ActParsat
 
 _ACCEPTATE = frozenset({"modifica", "abroga"})
 
@@ -146,6 +150,42 @@ def consolideaza(
         limitari=(),
         complet=True,
     )
+
+
+def consolideaza_in(
+    act: ActParsat,
+    operatii: list[Operatie],
+    la_data: date | None = None,
+) -> dict[str, Rezultat]:
+    """Consolidate every provision an operation touches, taking its original text from the tree.
+
+    This is the wiring the design pointed at: the provision's original wording is not passed in by
+    hand, it is read from the parsed act (`parsare.ActParsat.provizii`), which is the only source
+    in this package that has structure below the whole document. One `Rezultat` per distinct
+    locator the operations name; a locator no provision in the act carries is itself a refusal —
+    the operation targets text that is not there — returned `complet=False` with a limitation
+    rather than silently dropped, because a change that cannot be located is exactly the kind of
+    gap that must stay visible.
+    """
+    dupa_loc = {p.locator_id: p.text for p in act.provizii}
+    rezultate: dict[str, Rezultat] = {}
+    for locator in dict.fromkeys(op.locator for op in operatii):
+        original = dupa_loc.get(locator)
+        if original is None:
+            rezultate[locator] = Rezultat(
+                locator=locator,
+                text="",
+                abrogat=False,
+                la_data=la_data or date.today(),
+                limitari=(
+                    f"locatorul «{locator}» nu există în {act.act.id}; "
+                    "amendamentul nu poate fi aplicat unui text care nu a fost găsit.",
+                ),
+                complet=False,
+            )
+            continue
+        rezultate[locator] = consolideaza(locator, original, operatii, la_data)
+    return rezultate
 
 
 def raport(r: Rezultat) -> str:

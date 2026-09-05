@@ -15,6 +15,11 @@ sources/*.html.gz
 !sources/lege-98-2016.html.gz
 !sources/decizie-815-2015.html.gz
 !sources/lege-310-2021.html.gz
+# The amending-act fixture the other three lacked: Legea 208/2022 amends Legea 98/2016 and
+# supplies each replacement in an `S_CIT` block. It is the answer key for consolidation — a
+# payload it quotes must equal the portal's own consolidated text of the article it replaces —
+# and that gold test cannot exist without the page committed. 36 KB gzipped.
+!sources/lege-208-2022.html.gz
 
 # The corpus and its HTTP cache, once there is one. Re-fetchable by definition, and the reason
 # this package is its own repository rather than a directory in a monorepo with a size gate.

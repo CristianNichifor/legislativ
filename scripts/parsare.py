@@ -220,13 +220,17 @@ def _act_din_denumire(den: str) -> tuple[Act | None, date | None]:
 _CONTROL = re.compile(r"^\s*[+\-−]\s*")
 
 
-def _text_din(evenimente: list[tuple[str, str, str]], i: int) -> str:
-    brut = _CONTROL.sub("", re.sub(r"\s+", " ", evenimente[i][2]))
+def _curata(brut: str) -> str:
+    brut = _CONTROL.sub("", re.sub(r"\s+", " ", brut))
     # `Articolul 7Prezenta lege...` — the heading and its body are adjacent nodes with no
     # separator between them, so the join has to put one back or every article opens with its
     # own title welded to its first word.
     brut = re.sub(r"(Articolul\s+\d+(?:\^\d+)?)(?=[A-ZȘȚĂÂÎ(])", r"\1 - ", brut)
     return normalizeaza(brut)
+
+
+def _text_din(evenimente: list[tuple[str, str, str]], i: int) -> str:
+    return _curata(evenimente[i][2])
 
 
 def parseaza(html: str, url: str = "") -> ActParsat:
@@ -318,6 +322,95 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
             for i, (text, refs) in enumerate(paragrafe, start=1)
         ]
     return provizii
+
+
+class _Citate(HTMLParser):
+    """The replacement blocks an amending act supplies, read off `S_CIT`.
+
+    An amending act does not quote the new text of a provision in guillemets the way a person
+    drafting one does — the portal wraps it in a `<span class="S_CIT">`, the structured
+    replacement that follows `... va avea următorul cuprins:`. `amendamente._continut_nou` finds
+    the quoted form a human writes; this finds the marked-up form the publisher emits, and it is
+    the payload consolidation needs when the source is a real portal page rather than a typed
+    draft. Only the **outermost** `S_CIT` is taken: a replacement for an article carries its own
+    alineate as nested `S_CIT`, and counting those again would multiply one payload into several.
+
+    The skip logic mirrors `_Culegator` — void elements are never pushed, `script`/`style` bodies
+    are muted, and the `S_LIT_SHORT` hover-duplicate is dropped — so a captured block is cleaned
+    exactly the way a provision is, which is what lets it be compared to one byte for byte.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocuri: list[str] = []
+        self._stiva: list[bool] = []  # per open element: is it an S_CIT?
+        self._adanc = 0  # how many S_CIT are open — payload text is anything inside the outermost
+        self._buf: list[str] = []
+        self._sarit = 0
+        self._mut = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _Culegator.GOALE:
+            return
+        if tag in _Culegator.MUTE:
+            self._mut += 1
+            self._stiva.append(False)
+            return
+        clase = (dict(attrs).get("class") or "").split()
+        if self._sarit or any(c in _Culegator.IGNORATE for c in clase):
+            self._sarit += 1
+            self._stiva.append(False)
+            return
+        cit = "S_CIT" in clase
+        if cit:
+            self._adanc += 1
+        self._stiva.append(cit)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        return
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _Culegator.GOALE or not self._stiva:
+            return
+        cit = self._stiva.pop()
+        if tag in _Culegator.MUTE and self._mut:
+            self._mut -= 1
+            return
+        if self._sarit:
+            self._sarit -= 1
+            return
+        if cit:
+            self._adanc -= 1
+            if self._adanc == 0:
+                self.blocuri.append(_curata("".join(self._buf)))
+                self._buf = []
+
+    def handle_data(self, data: str) -> None:
+        if self._sarit or self._mut or not self._adanc:
+            return
+        self._buf.append(data)
+
+
+def citate(html: str) -> list[Provizie]:
+    """The replacement blocks an amending act supplies, in document order.
+
+    Each is returned as a `Provizie` with a positional `cit{n}` locator rather than the locator of
+    the provision it replaces: which target a block belongs to is written in the running text
+    before it (`La articolul 7, alineatul (2) ...`) and is `amendamente.py`'s to resolve, not the
+    parser's. The text is `verbatim` — a literal quotation of what the amending act says the
+    provision will now read — which is exactly what `consolidare` splices.
+    """
+    culegator = _Citate()
+    culegator.feed(html)
+    return [Provizie(f"cit{i}", text) for i, text in enumerate(culegator.blocuri, start=1) if text]
+
+
+def citate_din_fisier(cale: Path) -> list[Provizie]:
+    """`citate` over a saved page, gzipped or not — the amending-act fixtures are gzipped."""
+    brut = cale.read_bytes()
+    if cale.suffix == ".gz":
+        brut = gzip.decompress(brut)
+    return citate(brut.decode("utf-8", errors="replace"))
 
 
 def din_fisier(cale: Path, url: str = "") -> ActParsat:

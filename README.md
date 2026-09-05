@@ -271,13 +271,13 @@ endpoint and a recorded fixture are the same shape.
 | `amendamente.py` | What one act does to another. Chapeau inheritance lives here; captures the quoted replacement text an amendment supplies. |
 | `termene.py` | Obligations with a deadline and an anchor. |
 | `vid.py` | Obligations the corpus cannot show were discharged. |
-| `consolidare.py` | A provision's text as of a date — or an honest refusal when a change would not apply cleanly (`docs/CONSOLIDARE.md`). |
+| `consolidare.py` | A provision's text as of a date, spliced from the parsed tree — or an honest refusal when a change would not apply cleanly. Gold-tested against the portal's own consolidated view (`docs/CONSOLIDARE.md`). |
 | `definitii.py` | An act's own definition articles, and drafts that talk around them. |
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |
 | `linter.py` | The three reports, in the order they should be trusted. |
 | `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
-| `parsare.py` | One portal page into an act: designation, issuer, publication, and the article tree. |
+| `parsare.py` | One portal page into an act: designation, issuer, publication, the article tree, and the `S_CIT` replacement blocks an amending act carries. |
 | `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
 | `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
 | `colector.py` | Walks the whole corpus through the API — polite, resumable, keep-all; `--actualizeaza` re-walks the tail to stay current. |
