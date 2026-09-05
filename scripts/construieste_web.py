@@ -202,12 +202,15 @@ BOOT = """
 </script>
 """
 
-# The service worker: cache-first for this origin's shell and data, so repeat visits and repeat
-# queries are instant and the whole tool works offline once loaded. The version is a content hash
-# of the corpus and graph baked in at build time — when the data changes the string changes, the
-# browser sees a different sw.js, installs it, and `activate` deletes every older cache. That is the
-# resync: the client follows the server's data without a manual clear. Cross-origin requests (the
-# Pyodide CDN) are left to the network untouched.
+# The service worker. Two strategies, on purpose:
+#   - the **shell** (page, worker.js, bundle, the small catalog) is served **network-first**, so a
+#     redeploy shows the new UI on the next visit — cache is only the offline fallback. Serving the
+#     shell cache-first was the bug that pinned people to an old page after a UI change that did not
+#     touch the data.
+#   - the **big data** (the .db files, the search shards) is served **cache-first**: large, changes
+#     rarely, and versioned by the cache name, so it stays instant and offline once fetched.
+# The version is a content hash baked into sw.js at build time; a new build is a new sw.js, which the
+# browser installs and whose `activate` deletes every older cache — the resync, without a manual clear.
 SW = """
 const VERSIUNE = "__VERSION__";
 const CACHE = "legislativ-" + VERSIUNE;
@@ -216,6 +219,7 @@ const NUCLEU = [
   "./data/graf.db", "./data/initiative.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json"
 ];
+const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 self.addEventListener("install", (e)=>{
   e.waitUntil(
     caches.open(CACHE).then(c=>c.addAll(NUCLEU)).catch(()=>{}).then(()=>self.skipWaiting())
@@ -233,15 +237,27 @@ self.addEventListener("fetch", (e)=>{
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;  // Pyodide CDN and the like go straight to network
-  e.respondWith(
-    caches.open(CACHE).then(async (c)=>{
+  if (eBig(url.pathname)) {
+    e.respondWith(caches.open(CACHE).then(async (c)=>{
       const hit = await c.match(req);
       if (hit) return hit;
       const res = await fetch(req);
       if (res && res.ok) c.put(req, res.clone());  // fill the cache with per-act shards on first use
       return res;
-    })
-  );
+    }));
+  } else {
+    // shell: network-first, cache as the offline fallback
+    e.respondWith((async ()=>{
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) { const c = await caches.open(CACHE); c.put(req, res.clone()); }
+        return res;
+      } catch (err) {
+        const hit = await caches.open(CACHE).then(c=>c.match(req));
+        return hit || Response.error();
+      }
+    })());
+  }
 });
 """
 
