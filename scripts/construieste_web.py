@@ -63,57 +63,30 @@ CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; "
     "connect-src 'self' https://cdn.jsdelivr.net; "
-    "worker-src blob:; child-src blob:; "
+    "worker-src 'self' blob:; child-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
     "base-uri 'none'; form-action 'none'; object-src 'none'"
 )
 
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
 
-# The one script the browser build adds. It runs before the app's own inline script (document
-# order), so `window.fetch` is already redirected by the time the page calls `/api/…`. Every API
-# call is answered in-process by `scripts.servicii`; only Pyodide and the static data cross the
-# network, never the draft.
-BOOT = """
-<script src="__PYODIDE__"></script>
-<script>
-(function(){
-  const origFetch = window.fetch.bind(window);
-  let resolveReady, rejectReady;
-  const pyReady = new Promise((res, rej)=>{ resolveReady=res; rejectReady=rej; });
-  window.fetch = async function(url, opts){
-    const u = (typeof url === "string") ? url : (url && url.url);
-    if (u && u.indexOf("/api/") === 0) {
-      let py;
-      try { py = await pyReady; }
-      catch(e){ return new Response(JSON.stringify({error:"Pyodide indisponibil: "+e}), {status:503}); }
-      try {
-        const parsed = new URL(u, location.origin);
-        const body = (opts && opts.body) ? String(opts.body) : "";
-        // Search goes through the sharded, fetch-on-demand path (async); everything else is a
-        // synchronous call into the engines over the shipped data.
-        const res = (parsed.pathname === "/api/cauta")
-          ? await py.cauta(parsed.searchParams.get("q") || "")
-          : py.raspunde(parsed.pathname, parsed.search.slice(1), body);
-        return new Response(res, {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
-      } catch(e){
-        return new Response(JSON.stringify({error:String(e)}), {status:500});
-      }
-    }
-    return origFetch(url, opts);
-  };
-  async function boot(){
-    try {
-      const pyodide = await loadPyodide();
-      // sqlite3 is unvendored in Pyodide — the corpus is SQLite, so load it before the engines.
-      await pyodide.loadPackage("sqlite3");
-      const zip = await origFetch("bundle.zip").then(r=>r.arrayBuffer());
-      pyodide.unpackArchive(zip, "zip");
-      for (const name of ["corpus.db","initiative.db","graf.db"]) {
-        const buf = new Uint8Array(await origFetch("data/"+name).then(r=>r.arrayBuffer()));
-        pyodide.FS.writeFile(name, buf);
-      }
-      const raspunde = pyodide.runPython(`
+# The worker: Pyodide, the engines, and all the data — off the main thread. It loads Pyodide and
+# its sqlite3 package, unpacks the engines and fixtures into its own filesystem, mounts the data,
+# and then answers request messages. Nothing here touches the DOM, so no call it makes can ever
+# block the page: boot (seconds) and every lint or search run happen here, and the UI stays live.
+WORKER = """
+importScripts("__PYODIDE__");
+let raspunde, cautaJson;
+async function boot(){
+  const pyodide = await loadPyodide();
+  await pyodide.loadPackage("sqlite3");  // unvendored in Pyodide; the corpus is SQLite
+  const zip = await fetch("bundle.zip").then(r=>r.arrayBuffer());
+  pyodide.unpackArchive(zip, "zip");
+  for (const name of ["corpus.db","initiative.db","graf.db"]) {
+    const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
+    pyodide.FS.writeFile(name, buf);
+  }
+  raspunde = pyodide.runPython(`
 import sys, json
 if '.' not in sys.path: sys.path.insert(0, '.')
 from urllib.parse import parse_qs
@@ -135,28 +108,80 @@ def _raspunde(path, query, body):
     else: out = {'error':'not found'}
     return json.dumps(out, ensure_ascii=False)
 _raspunde
-      `);
-      // The sharded search is async (it fetches index/act shards on demand), so it lives outside
-      // the synchronous dispatch above. It returns a JSON string, ready for a Response.
-      const cautaJson = pyodide.runPython(`
+  `);
+  // Search is async (it fetches index/act shards on demand), so it is a separate coroutine.
+  cautaJson = pyodide.runPython(`
 import json as _json
 from scripts.cauta_web import cauta as _cauta_shard
 async def _cauta_json(q):
     return _json.dumps(await _cauta_shard(q, 'data'), ensure_ascii=False)
 _cauta_json
-      `);
-      resolveReady({
-        raspunde: (p,q,b)=>raspunde(p,q,b),
-        cauta: (q)=>cautaJson(q),
-      });
-    } catch(e){
-      console.error(e);
-      const s = document.getElementById("stat");
-      if (s) s.textContent = "eroare la pornirea motorului în browser: " + e;
-      rejectReady(e);
-    }
+  `);
+}
+const gata = boot().then(()=>postMessage({type:"ready"}))
+                   .catch(e=>{ postMessage({type:"error", error:String(e)}); throw e; });
+onmessage = async (e) => {
+  const {id, path, query, body} = e.data;
+  try {
+    await gata;
+    const res = (path === "/api/cauta")
+      ? await cautaJson(new URLSearchParams(query).get("q") || "")
+      : raspunde(path, query, body);
+    postMessage({id, ok:true, result:res});
+  } catch(err){
+    postMessage({id, ok:false, error:String(err)});
   }
-  boot();
+};
+"""
+
+# The main-thread manager: it owns no engine and no data — it starts the worker and turns each
+# `fetch('/api/…')` into a message to it, awaiting the reply. Because the work is in the worker,
+# the page never freezes: the spinner keeps spinning, the textarea keeps typing, while a lint or a
+# search runs. Runs before the app's own inline script (document order), so `window.fetch` is
+# already redirected by the time the page makes its first call.
+BOOT = """
+<script>
+(function(){
+  const origFetch = window.fetch.bind(window);
+  let resolveReady, rejectReady;
+  const ready = new Promise((res, rej)=>{ resolveReady=res; rejectReady=rej; });
+  const worker = new Worker("worker.js");
+  const pending = new Map(); let seq = 0;
+  worker.onmessage = (e)=>{
+    const m = e.data;
+    if (m.type === "ready"){ resolveReady(); return; }
+    if (m.type === "error"){
+      rejectReady(new Error(m.error));
+      const s = document.getElementById("stat");
+      if (s) s.textContent = "eroare la pornirea motorului: " + m.error;
+      return;
+    }
+    const p = pending.get(m.id); if (!p) return; pending.delete(m.id);
+    m.ok ? p.resolve(m.result) : p.reject(new Error(m.error));
+  };
+  worker.onerror = (e)=>{ rejectReady(new Error(e.message || "worker error")); };
+  function call(path, query, body){
+    return new Promise((resolve, reject)=>{
+      const id = ++seq; pending.set(id, {resolve, reject});
+      worker.postMessage({id, path, query, body});
+    });
+  }
+  window.fetch = async function(url, opts){
+    const u = (typeof url === "string") ? url : (url && url.url);
+    if (u && u.indexOf("/api/") === 0) {
+      try { await ready; }
+      catch(e){ return new Response(JSON.stringify({error:"motor indisponibil: "+e}), {status:503}); }
+      try {
+        const parsed = new URL(u, location.origin);
+        const body = (opts && opts.body) ? String(opts.body) : "";
+        const res = await call(parsed.pathname, parsed.search.slice(1), body);
+        return new Response(res, {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
+      } catch(e){
+        return new Response(JSON.stringify({error:String(e)}), {status:500});
+      }
+    }
+    return origFetch(url, opts);
+  };
 })();
 </script>
 """
@@ -279,15 +304,19 @@ def _bundle() -> None:
     print(f"  bundle → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
 
 
+def _worker() -> None:
+    (WEB / "worker.js").write_text(WORKER.replace("__PYODIDE__", PYODIDE), encoding="utf-8")
+    print(f"  worker → {WEB / 'worker.js'}")
+
+
 def _pagina() -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
     csp = f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
-    boot = BOOT.replace("__PYODIDE__", PYODIDE)
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
-    # Prepend the boot block right after <body> so it runs before the app's own inline script.
-    pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
+    # Prepend the manager block right after <body> so it runs before the app's own inline script.
+    pagina = pagina.replace("<body>", "<body>\n" + BOOT, 1)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
@@ -302,6 +331,7 @@ def main(sursa: str) -> None:
     _finalizeaza_db()
     shard.construieste(str(DATA / "corpus.db"), str(DATA))
     _bundle()
+    _worker()
     _pagina()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
 

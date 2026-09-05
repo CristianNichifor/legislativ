@@ -15,6 +15,15 @@ draft, `performance.getEntriesByType('resource')` shows **zero** `/api/` request
 `fetch('https://example.com', {method:'POST', body:'DRAFT'})` is **blocked** by the policy. The
 only network calls are Pyodide (runtime + the `sqlite3` package) and the static public-law data.
 
+## The UI never freezes
+
+Pyodide, the engines and the data all live in a **Web Worker** (`worker.js`), off the main thread.
+The page (`index.html`) owns no engine — it starts the worker and turns each `fetch('/api/…')` into
+a message to it, awaiting the reply. So neither boot (a few seconds) nor a heavy lint or search ever
+blocks the page. Verified in a browser: during a deliberately heavy 15.8-second lint the main thread
+painted 948 animation frames — ~60 fps throughout — where main-thread Pyodide would have frozen it
+solid. `typeof loadPyodide` on the page is `undefined`; it exists only in the worker.
+
 ## Build and run
 
 ```
