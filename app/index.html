@@ -107,12 +107,14 @@
     aside.canvas.collapsed .canvas-toggle{margin-left:auto}
   }
 
-  .tabs{display:flex;gap:.35rem;margin-bottom:1rem;flex-wrap:wrap}
+  .tabs{display:flex;gap:.35rem;margin-bottom:1rem;flex-wrap:wrap;position:relative;padding-right:8rem}
   .tab{font-family:var(--sans);font-size:.82rem;font-weight:600;padding:.5rem 1rem;cursor:pointer;
     background:transparent;border:0;border-bottom:2px solid transparent;color:var(--ink-mute)}
   .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
   .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .tema{margin-left:auto;align-self:center;background:transparent;border:1px solid var(--rule);
+  /* pinned to the top-right of the tab strip, so it never orphans onto its own line when the tabs
+     wrap on a narrow viewport */
+  .tema{position:absolute;top:0;right:0;background:transparent;border:1px solid var(--rule);
     color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.7rem;font-weight:600;
     letter-spacing:.04em;text-transform:lowercase;padding:.3rem .7rem;white-space:nowrap}
   .tema:hover{color:var(--ink);border-color:var(--ink-mute)}
@@ -255,20 +257,25 @@
   .tree{border:1px solid var(--rule-soft);background:var(--surface);padding:.4rem .6rem;min-height:2.6rem}
   .tree:empty::before{content:"Niciun articol încă — apasă „+ articol”.";font-family:var(--sans);
     font-size:.82rem;color:var(--ink-mute);font-style:italic}
-  .node{border-left:2px solid var(--rule);padding:.35rem 0 .35rem .7rem;margin:.4rem 0 .4rem .1rem}
+  .node{position:relative;border-left:2px solid var(--rule);padding:.35rem 0 .35rem .7rem;margin:.4rem 0 .4rem .1rem}
   .node.art{border-left-color:var(--accent)} .node.alin{border-left-color:var(--material)}
   .node.lit{border-left-color:var(--note)}
-  .node-hd{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap}
+  /* room on the right for the pinned × so the fields never run under it */
+  .node-hd{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;padding-right:2.4rem}
   .node-hd .lvl{font-family:var(--sans);font-size:.66rem;font-weight:600;text-transform:uppercase;
     letter-spacing:.03em;color:var(--ink-mute);min-width:4.4rem}
   /* number input and op select: same moderate height, so a block reads as one tidy row */
   .node input.num,.node select.op{height:2.15rem;font-size:.82rem;line-height:1.2;padding:.35rem .6rem}
   .node input.num{width:4.5rem}
-  .node select.op{width:auto;padding-right:1.8rem;background-size:.55rem}
-  .node .txt{margin:.35rem 0 0} .node .txt textarea{min-height:3.2rem;font-size:.82rem}
+  .node select.op{width:auto;min-width:12rem;padding-right:1.8rem;background-size:.55rem}
+  .node .txt{margin:.4rem 0 0;padding-right:2.4rem}
+  .node .txt-lbl{display:block;font-family:var(--sans);font-size:.66rem;font-weight:600;
+    text-transform:uppercase;letter-spacing:.03em;color:var(--ink-mute);margin-bottom:.2rem}
+  .node .txt textarea{min-height:3.2rem;font-size:.82rem}
   .node .kids{margin-left:.15rem}
-  .node-x{border:1px solid var(--rule);background:transparent;color:var(--ink-mute);cursor:pointer;
-    border-radius:3px;font-size:.9rem;line-height:1;padding:.05rem .4rem;margin-left:auto}
+  /* pinned to the block's own top-right, so it never wraps onto its own line */
+  .node-x{position:absolute;top:.4rem;right:.35rem;border:1px solid var(--rule);background:var(--surface);
+    color:var(--ink-mute);cursor:pointer;border-radius:3px;font-size:.9rem;line-height:1;padding:.1rem .4rem}
   .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
   .node-add{font-size:.7rem;padding:.15rem .55rem;margin-top:.3rem}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
@@ -650,7 +657,7 @@ function creeazaNod(nivel){
       <select class="op"><option value="">— fără modificare —</option>${cfg.ops.map(o=>`<option value="${o}">${OPT[o]}</option>`).join("")}</select>
       <button type="button" class="node-x" title="Șterge blocul">×</button>
     </div>
-    <div class="txt" hidden><textarea placeholder="Textul nou al prevederii…"></textarea></div>
+    <div class="txt" hidden><span class="txt-lbl">Text nou al prevederii</span><textarea placeholder="Scrie aici textul care înlocuiește / se adaugă…"></textarea></div>
     <div class="kids"></div>`;
   const op=wrap.querySelector(":scope > .node-hd > .op");
   const txt=wrap.querySelector(":scope > .txt");
