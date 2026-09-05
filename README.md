@@ -16,6 +16,39 @@ enforces it — `schema/provenance.schema.json`, with its three confidence level
 limitation severities — is vendored from there. It is a copy, copies drift, and
 `tests/test_date.py` at least makes the drift loud.
 
+## Pentru echipa de cercetare (cum se folosește)
+
+Un singur pas, local, fără să trimită nimic în afara mașinii — proiectul lipit rămâne pe calculatorul
+tău, iar verificarea nu face nicio cerere externă:
+
+```bash
+./ruleaza.sh
+```
+
+Se deschide în browser la `http://127.0.0.1:8000`. Lipești textul unui proiect de act normativ și
+vezi patru lucruri, fiecare cu sursa lui: **ce atinge** (ce legi modifică și de câte ori au fost deja
+amendate), **termenele** de implementare pe care le impune, **terminologia** față de termenii definiți
+în lege, și **inițiativele în lucru** care s-ar putea suprapune — ca să amendezi una existentă în loc
+să depui un duplicat.
+
+Ai nevoie o singură dată de corpus (baza de legislație). Fie îl descarci, dacă a fost publicat:
+
+```bash
+scripts/ia_corpus.sh https://github.com/CristianNichifor/legislativ/releases/download/<versiune>
+```
+
+fie îl construiești local (câteva ore, o singură dată, reia de unde a rămas dacă se oprește):
+
+```bash
+uv run python -m scripts.colector --db corpus.db      # legislația
+uv run python -m scripts.cdep     --db initiative.db   # inițiativele din Parlament
+```
+
+Graful de amendamente se construiește singur din corpus la prima pornire. Cine întreține proiectul
+împachetează corpusul pentru echipă cu `python -m scripts.impacheteaza` și îl atașează la un release.
+
+---
+
 ## The ordering is the argument
 
 A tool like this is usually built in pipeline order — scrape, parse, graph, ask a model — which

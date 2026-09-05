@@ -230,15 +230,27 @@ def serveste(
     corpus: str = "corpus.db",
     initiative: str = "initiative.db",
     graf: str = "graf.db",
+    deschide_browser: bool = True,
 ):
     stare = Stare(corpus, initiative, graf)
     server = ThreadingHTTPServer(("127.0.0.1", port), face_handler(stare))
     grafic = "cu graf" if stare.are_graf() else "fără graf"
+    url = f"http://127.0.0.1:{port}"
+    print(f"legislativ pe {url}  ({len(stare.termeni)} termeni în dicționar, {grafic})")
     print(
-        f"legislativ pe http://127.0.0.1:{port}  "
-        f"({len(stare.termeni)} termeni în dicționar, {grafic})"
-    )
-    server.serve_forever()
+        "proiectul lipit nu părăsește această mașină."
+    )  # localhost; lint face zero cereri externe
+    if deschide_browser:
+        # Bound to 127.0.0.1 only, so this is a local tool a researcher opens, not a service.
+        # A timer, because serve_forever blocks and the browser should open once it is listening.
+        import threading
+        import webbrowser
+
+        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\noprit.")
 
 
 if __name__ == "__main__":
@@ -249,5 +261,6 @@ if __name__ == "__main__":
     ap.add_argument("--corpus", default="corpus.db")
     ap.add_argument("--initiative", default="initiative.db")
     ap.add_argument("--graf", default="graf.db")
+    ap.add_argument("--fara-browser", action="store_true", help="nu deschide browserul")
     a = ap.parse_args()
-    serveste(a.port, a.corpus, a.initiative, a.graf)
+    serveste(a.port, a.corpus, a.initiative, a.graf, deschide_browser=not a.fara_browser)

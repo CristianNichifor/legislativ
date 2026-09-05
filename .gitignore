@@ -28,3 +28,6 @@ corpus.db-*
 *.db
 *.db-shm
 *.db-wal
+
+# Release artifacts: gzipped databases for a GitHub release, not source.
+dist/
