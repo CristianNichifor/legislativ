@@ -312,9 +312,14 @@ def cauta(con: sqlite3.Connection, intrebare: str, limita: int = 20) -> list[sql
     `remove_diacritics 2` is what makes `hotarare` find `hotărâre`, which matters because half
     the corpus was typed before the comma-below letters were reliably available.
     """
+    # Joined to `acte` for the source URL and title, so a result links straight to the act on the
+    # portal rather than to a search-by-number that returns a list — the difference between "here
+    # it is" and "go find it".
     return con.execute(
-        "SELECT act_id, locator, snippet(provizii_fts, 0, '[', ']', '…', 12) AS fragment"
-        " FROM provizii_fts WHERE provizii_fts MATCH ? ORDER BY rank LIMIT ?",
+        "SELECT f.act_id, f.locator, snippet(provizii_fts, 0, '[', ']', '…', 12) AS fragment,"
+        " a.titlu, a.sursa_url"
+        " FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
+        " WHERE provizii_fts MATCH ? ORDER BY rank LIMIT ?",
         (intrebare, limita),
     ).fetchall()
 
