@@ -216,4 +216,5 @@ endpoint and a recorded fixture are the same shape.
 | `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
 | `analiza.py` | The extractors over the live corpus: a deadline inventory and a term dictionary. |
 | `graf.py` | The amendment graph, derived from the corpus text — who amends and references each act. |
+| `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
 | `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |
