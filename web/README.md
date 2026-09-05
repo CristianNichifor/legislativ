@@ -35,11 +35,16 @@ collect.yml`: a manual, bounded walk of the SOAP service that extends the corpus
 Collection is server-side and slow; it never runs in a browser. Monitorul Oficial is a second
 source to add to that job later.
 
-Note the current tension this exposes: search reads the shards (per-query), but the other
-corpus-reading passes still open the whole `corpus.db`, which the worker downloads once (then the
-service worker caches it). That is fine for a bounded release of tens of MB; the full body of law
-needs those passes moved onto the same per-act shard layer and a prebuilt terminology dictionary —
-the next follow-on.
+The browser never downloads the whole `corpus.db`. Every corpus-reading pass now reads a small
+prebuilt catalog instead: titles from `index.json`, counts from `manifest.json`, the terminology
+dictionary from `termeni.json`, and the amendment graph and initiatives from their (small) own
+databases. Search reads per-act shards on demand. Verified in a browser: a full session — rezumat,
+lint with targets and terminology, search, connections — makes **zero** requests for `corpus.db`.
+The same `servicii` functions back the localhost server, where `corpus.db` *is* the source of
+truth; the seam is `Stare`, which answers `titlu`/`cunoscut`/`termeni`/`rezumat` from SQL there and
+from the catalog here. `corpus.db` stays in the dataset (it is what the shards are built from) but
+is never on the client's path. The graph is the next thing to shard as the corpus reaches the full
+body of law.
 
 ## The UI never freezes
 

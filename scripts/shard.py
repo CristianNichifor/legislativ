@@ -81,6 +81,21 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
             for t in _tokenuri(text):
                 postari.setdefault(t, set()).add(n)
 
+        n_provizii = con.execute("SELECT count(*) FROM provizii").fetchone()[0]
+        # The terminology dictionary, prebuilt here so the browser needs no corpus.db to run the
+        # terminology check — the same bounded (recent-N) dictionary the localhost server computes
+        # at startup, serialised. `jargon` matches on the term itself, so term + definition is all
+        # it needs carried across.
+        from scripts.analiza import termeni_corpus
+
+        termeni = [
+            {"termen": t.termen, "definitie": t.definitie}
+            for t in termeni_corpus(con, limita=800)
+        ]
+        (baza / "termeni.json").write_text(
+            json.dumps(termeni, ensure_ascii=False), encoding="utf-8"
+        )
+
     n_acte = len(acte)
     prag = _FRACTIE_STOP * n_acte if n_acte > _PRAG_ACTE else n_acte + 1
     pastrate = {t: sorted(a) for t, a in postari.items() if len(a) <= prag}
@@ -95,6 +110,8 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
 
     manifest = {
         "acte": n_acte,
+        "provizii": n_provizii,
+        "termeni": len(termeni),
         "tokeni": len(pastrate),
         "tokeni_scosi": len(postari) - len(pastrate),
         "shard_uri": len(shards),

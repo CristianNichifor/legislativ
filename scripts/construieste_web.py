@@ -84,9 +84,13 @@ async function boot(){
   await pyodide.loadPackage("sqlite3");  // unvendored in Pyodide; the corpus is SQLite
   const zip = await fetch("bundle.zip").then(r=>r.arrayBuffer());
   pyodide.unpackArchive(zip, "zip");
-  for (const name of ["corpus.db","initiative.db","graf.db"]) {
+  try { pyodide.FS.mkdir("data"); } catch (e) {}
+  // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
+  // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
+  // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
+  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
-    pyodide.FS.writeFile(name, buf);
+    pyodide.FS.writeFile("data/"+name, buf);
   }
   raspunde = pyodide.runPython(`
 import sys, json
@@ -94,7 +98,7 @@ if '.' not in sys.path: sys.path.insert(0, '.')
 from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat)
-_stare = Stare('corpus.db', 'initiative.db', 'graf.db')
+_stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
     if path == '/api/rezumat': out = rezumat(_stare)
@@ -204,8 +208,8 @@ const VERSIUNE = "__VERSION__";
 const CACHE = "legislativ-" + VERSIUNE;
 const NUCLEU = [
   "./", "./index.html", "./worker.js", "./bundle.zip",
-  "./data/corpus.db", "./data/initiative.db", "./data/graf.db",
-  "./data/index.json", "./data/manifest.json"
+  "./data/graf.db", "./data/initiative.db",
+  "./data/index.json", "./data/termeni.json", "./data/manifest.json"
 ];
 self.addEventListener("install", (e)=>{
   e.waitUntil(

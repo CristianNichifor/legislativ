@@ -13,6 +13,7 @@ from pathlib import Path
 from scripts.cauta_web import _fragment, _tokenuri
 from scripts.depozit import deschide, scrie_act
 from scripts.parsare import din_fisier
+from scripts.servicii import Stare, rezumat
 from scripts.shard import construieste
 
 SURSE = Path(__file__).resolve().parent.parent / "sources"
@@ -62,3 +63,31 @@ def test_the_snippet_is_empty_handed_gracefully_when_nothing_matches():
     act = {"provizii": [{"loc": "par1", "text": "Un text fără termenul căutat."}]}
     frag = _fragment(act, ["inexistent"])
     assert frag["locator"] == "par1"  # falls back to the first provision rather than crashing
+
+
+def test_a_shard_backed_stare_needs_no_corpus_db(tmp_path):
+    """The engine-shard refactor: with `date_dir`, titles, counts and the dictionary come from the
+    catalog. The shard output has no corpus.db in it at all — yet Stare answers everything, which
+    is exactly the browser's situation, where the corpus is never downloaded."""
+    corpus = tmp_path / "c.db"
+    with deschide(str(corpus)) as con:
+        scrie_act(con, din_fisier(SURSE / "decizie-815-2015.html.gz"))
+        con.commit()
+    out = tmp_path / "data"
+    construieste(str(corpus), str(out), log=lambda *_: None)
+    with deschide(str(out / "initiative.db")):  # empty initiatives db, as a real release may have
+        pass
+    assert not (out / "corpus.db").exists()  # the catalog carries no monolithic corpus
+
+    st = Stare(
+        str(out / "corpus.db"),  # a path that does not exist — and is never opened in shard mode
+        str(out / "initiative.db"),
+        str(out / "graf.db"),
+        date_dir=str(out),
+    )
+    assert st.pe_shard
+    assert st.titlu("decizie-815-2015").lower().startswith("decizie")
+    assert st.cunoscut("decizie-815-2015") and not st.cunoscut("lege-1-1900")
+    assert isinstance(st.termeni, list)
+    r = rezumat(st)
+    assert r["acte"] == 1 and r["provizii"] > 0 and r["initiative"] == 0

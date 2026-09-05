@@ -18,6 +18,7 @@ would read the whole corpus on every keystroke.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from scripts import depozit
@@ -27,11 +28,18 @@ from scripts.termene import obligatii
 
 
 class Stare:
-    """What a session holds open: the corpora and the terminology dictionary.
+    """What a session holds open: the data, and the terminology dictionary built from it.
 
-    Corpus connections are per-request (SQLite connections are not safe to share across threads),
-    but the term dictionary is built once here — it is the only expensive thing, and it changes
-    only as slowly as the corpus grows.
+    Two backings, one interface. On the **localhost** server `corpus.db` is the source of truth —
+    titles, counts and the dictionary come from it by SQL. In the **browser** the whole corpus is
+    not shippable, so a `date_dir` of shards backs the same three needs instead: titles from
+    `index.json`, counts from `manifest.json`, and the dictionary from a prebuilt `termeni.json`.
+    Everything else the engines read — the amendment graph and the initiatives — is small enough to
+    stay a real database either way. The point of the seam is that no engine below cares which
+    backing it has; they call `titlu`, `cunoscut`, `termeni`, `rezumat`, and get an answer.
+
+    Corpus connections (localhost) are per-request — SQLite connections are not safe to share
+    across threads — but the dictionary is built once here, the one expensive thing.
     """
 
     def __init__(
@@ -39,20 +47,34 @@ class Stare:
         corpus: str = "corpus.db",
         initiative: str = "initiative.db",
         graf: str = "graf.db",
+        *,
+        date_dir: str | None = None,
     ):
         self.corpus = corpus
         self.initiative = initiative
         self.graf = graf
+        self.date_dir = Path(date_dir) if date_dir else None
+        self._titluri: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
+
+    @property
+    def pe_shard(self) -> bool:
+        return self.date_dir is not None
 
     def are_graf(self) -> bool:
         return Path(self.graf).is_file()
 
     # Built from the most recent acts only, not the whole corpus: definitions over a
-    # quarter-million acts would take minutes at startup, and the terminology check must answer
-    # instantly. The recent N carry the vocabulary a current draft is most likely to talk
-    # around; the bound is declared, not hidden, and raising it is config, not an edit.
+    # quarter-million acts would take minutes, and the terminology check must answer instantly. The
+    # recent N carry the vocabulary a current draft is most likely to talk around. On shards the
+    # same bounded dictionary arrives prebuilt as `termeni.json`.
     def _dictionar(self, limita: int = 800) -> list[Termen]:
+        if self.pe_shard:
+            cale = self.date_dir / "termeni.json"
+            if not cale.is_file():
+                return []
+            brut = json.loads(cale.read_text(encoding="utf-8"))
+            return [Termen(termen=t["termen"], definitie=t["definitie"]) for t in brut]
         from scripts.analiza import termeni_corpus
 
         try:
@@ -61,11 +83,41 @@ class Stare:
         except Exception:
             return []
 
+    def _index(self) -> dict[str, str]:
+        if self._titluri is None:
+            cale = self.date_dir / "index.json" if self.pe_shard else None
+            if cale and cale.is_file():
+                index = json.loads(cale.read_text(encoding="utf-8"))
+                self._titluri = {a["id"]: a.get("titlu", "") for a in index}
+            else:
+                self._titluri = {}
+        return self._titluri
+
+    def titlu(self, act_id: str) -> str:
+        """The act's title, from the shard index in the browser or `acte` on localhost."""
+        if self.pe_shard:
+            return self._index().get(act_id, "")
+        with depozit.deschide(self.corpus, readonly=True) as con:
+            rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
+            return (rand["titlu"] if rand else "") or ""
+
+    def cunoscut(self, act_id: str) -> bool:
+        """Whether the corpus carries this act at all — the honest 'in corpus' signal."""
+        if self.pe_shard:
+            return act_id in self._index()
+        with depozit.deschide(self.corpus, readonly=True) as con:
+            return con.execute("SELECT 1 FROM acte WHERE id = ?", (act_id,)).fetchone() is not None
+
 
 def rezumat(stare: Stare) -> dict:
     """The corpus headline the page opens with: how much law, how many bills."""
-    with depozit.deschide(stare.corpus, readonly=True) as con:
-        r = depozit.rezumat(con)
+    if stare.pe_shard:
+        cale = stare.date_dir / "manifest.json"
+        m = json.loads(cale.read_text(encoding="utf-8")) if cale.is_file() else {}
+        r = {"acte": m.get("acte", 0), "provizii": m.get("provizii", 0)}
+    else:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            r = depozit.rezumat(con)
     with depozit.deschide(stare.initiative, readonly=True) as con:
         r["initiative"] = depozit.rezumat(con)["initiative"]
     return r
@@ -221,13 +273,11 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
     out: list[dict] = []
     graf = _deschide_graf(stare.graf, readonly=True)
     try:
-        with (
-            depozit.deschide(stare.corpus, readonly=True) as con,
-            depozit.deschide(stare.initiative, readonly=True) as ini,
-        ):
+        # Titles and corpus-membership come from `stare` (the shard index in the browser, `acte`
+        # on localhost), so this no longer opens the whole corpus — only the initiatives DB.
+        with depozit.deschide(stare.initiative, readonly=True) as ini:
             for act_id in acte:
                 amend = inbound(graf, act_id, doar_amendamente=True)
-                rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
                 try:
                     pendinte = initiative_pe_act(ini, act_id)
                 except Exception:
@@ -235,8 +285,8 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
                 out.append(
                     {
                         "act_id": act_id,
-                        "titlu": (rand["titlu"] if rand else ""),
-                        "in_corpus": rand is not None,
+                        "titlu": stare.titlu(act_id),
+                        "in_corpus": stare.cunoscut(act_id),
                         "amendat_de": len(amend),
                         "ultima": max(
                             (m.de_la.isoformat() for m in amend if m.de_la), default=None
@@ -396,20 +446,19 @@ def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
     try:
         intra = _dedup(reversed(inbound(graf, act_id)), lambda m: m.din_act)
         iese = _dedup(outbound(graf, act_id), lambda m: m.catre_act)
-        with depozit.deschide(stare.corpus, readonly=True) as con:
 
-            def shape(other, m):
-                r = con.execute("SELECT titlu FROM acte WHERE id = ?", (other,)).fetchone()
-                return {
-                    "act_id": other,
-                    "fel": m.fel,
-                    "locator": m.locator,
-                    "de_la": m.de_la.isoformat() if m.de_la else None,
-                    "titlu": (r["titlu"] if r else "") or "",
-                }
+        def shape(other, m):
+            # Title from `stare` (shard index or `acte`), so no whole-corpus open here either.
+            return {
+                "act_id": other,
+                "fel": m.fel,
+                "locator": m.locator,
+                "de_la": m.de_la.isoformat() if m.de_la else None,
+                "titlu": stare.titlu(other),
+            }
 
-            inb = [shape(o, m) for o, m in list(intra.items())[:limita]]
-            outb = [shape(o, m) for o, m in list(iese.items())[:limita]]
+        inb = [shape(o, m) for o, m in list(intra.items())[:limita]]
+        outb = [shape(o, m) for o, m in list(iese.items())[:limita]]
     finally:
         graf.close()
     return {"act": act_id, "inbound": inb, "outbound": outb}
