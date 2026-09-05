@@ -52,7 +52,7 @@ def corpus_din_graf(
         randuri = corp.execute(
             "SELECT id, tip, numar, an, titlu, publicat, vigoare FROM acte"
         ).fetchall()
-    graf = _deschide_graf(graf_db)
+    graf = _deschide_graf(graf_db, readonly=True)
     try:
         for r in randuri:
             tinte = {m.catre_act for m in outbound(graf, r["id"])}

@@ -15,7 +15,8 @@ from scripts import depozit
 from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
-from scripts.server import Stare, _cauta, _lint
+from scripts.graf import construieste
+from scripts.server import Stare, _cauta, _lint, _targets
 
 
 def _build(tmp_path: Path) -> Stare:
@@ -77,3 +78,42 @@ def test_search_reaches_the_corpus_fts(tmp_path):
 def test_the_terminology_dictionary_is_built_from_the_corpus(tmp_path):
     stare = _build(tmp_path)
     assert any(t.termen == "achiziție publică" for t in stare.termeni)
+
+
+def test_targets_report_how_amended_each_touched_act_is(tmp_path):
+    """The graph turns "you amend Legea X" into "Legea X is on its Nth revision" — the fact most
+    worth surfacing to someone about to patch it."""
+    stare = _build(tmp_path)
+    # build a graph where one act amends Legea 98/2016
+    corpus2 = tmp_path / "corpus.db"
+    from datetime import date
+
+    from scripts.api import Inregistrare
+    from scripts.colector import act_din_inregistrare
+
+    with depozit.deschide(corpus2) as con:
+        rec = Inregistrare(
+            titlu="LEGE nr. 200 din 2024",
+            tip_act="LEGE",
+            numar="200",
+            an=None,
+            data_vigoare=date(2024, 1, 1),
+            emitent="X",
+            publicatie="MO",
+            link_html="http://legislatie.just.ro/Public/DetaliiDocument/2000",
+            text="Articolul 7 din Legea nr. 98/2016 se modifică.",
+        )
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    graf_db = tmp_path / "graf.db"
+    construieste(str(corpus2), str(graf_db))
+    stare.graf = str(graf_db)
+
+    out = _targets("Propunere pentru modificarea Legii nr. 98/2016.", stare)
+    l98 = next((t for t in out if t["act_id"] == "lege-98-2016"), None)
+    assert l98 and l98["amendat_de"] >= 1
+
+
+def test_targets_are_empty_without_a_graph(tmp_path):
+    stare = _build(tmp_path)
+    stare.graf = str(tmp_path / "nonexistent.db")
+    assert _targets("modificarea Legii nr. 98/2016", stare) == []

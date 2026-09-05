@@ -48,10 +48,19 @@ class Stare:
     only as slowly as the corpus grows.
     """
 
-    def __init__(self, corpus: str = "corpus.db", initiative: str = "initiative.db"):
+    def __init__(
+        self,
+        corpus: str = "corpus.db",
+        initiative: str = "initiative.db",
+        graf: str = "graf.db",
+    ):
         self.corpus = corpus
         self.initiative = initiative
+        self.graf = graf
         self.termeni: list[Termen] = self._dictionar()
+
+    def are_graf(self) -> bool:
+        return Path(self.graf).is_file()
 
     # Built from the most recent acts only, not the whole corpus: definitions over a
     # quarter-million acts would take minutes at startup, and the terminology check must answer
@@ -101,7 +110,51 @@ def _lint(draft: str, stare: Stare) -> dict:
             }
             for p in dubluri(draft, con)[:10]
         ]
-    return {"deadlines": deadlines, "terminology": termen_hits, "duplicates": dup}
+    return {
+        "deadlines": deadlines,
+        "terminology": termen_hits,
+        "duplicates": dup,
+        "targets": _targets(draft, stare),
+    }
+
+
+def _targets(draft: str, stare: Stare) -> list[dict]:
+    """For each act the draft amends or cites, what the graph knows about it.
+
+    The single most useful thing to tell someone amending a law is how amended it already is: a
+    provision on its twelfth revision is one to consolidate against, not to patch blind. Cheap —
+    one graph lookup per target act — and it is where in-force awareness will land once the graph
+    carries dates on every edge. Silent when no graph is built yet, rather than pretending.
+    """
+    if not stare.are_graf():
+        return []
+    from scripts.dublura import tinte
+    from scripts.graf import _deschide_graf, inbound
+
+    acte = sorted({t.split(" ")[0] for t in tinte(draft)})
+    if not acte:
+        return []
+    out: list[dict] = []
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            for act_id in acte:
+                amend = inbound(graf, act_id, doar_amendamente=True)
+                rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
+                out.append(
+                    {
+                        "act_id": act_id,
+                        "titlu": (rand["titlu"] if rand else ""),
+                        "in_corpus": rand is not None,
+                        "amendat_de": len(amend),
+                        "ultima": max(
+                            (m.de_la.isoformat() for m in amend if m.de_la), default=None
+                        ),
+                    }
+                )
+    finally:
+        graf.close()
+    return out
 
 
 def _cauta(q: str, stare: Stare) -> dict:
@@ -172,10 +225,19 @@ def face_handler(stare: Stare):
     return Handler
 
 
-def serveste(port: int = 8000, corpus: str = "corpus.db", initiative: str = "initiative.db"):
-    stare = Stare(corpus, initiative)
+def serveste(
+    port: int = 8000,
+    corpus: str = "corpus.db",
+    initiative: str = "initiative.db",
+    graf: str = "graf.db",
+):
+    stare = Stare(corpus, initiative, graf)
     server = ThreadingHTTPServer(("127.0.0.1", port), face_handler(stare))
-    print(f"legislativ pe http://127.0.0.1:{port}  ({len(stare.termeni)} termeni în dicționar)")
+    grafic = "cu graf" if stare.are_graf() else "fără graf"
+    print(
+        f"legislativ pe http://127.0.0.1:{port}  "
+        f"({len(stare.termeni)} termeni în dicționar, {grafic})"
+    )
     server.serve_forever()
 
 
@@ -186,5 +248,6 @@ if __name__ == "__main__":
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--corpus", default="corpus.db")
     ap.add_argument("--initiative", default="initiative.db")
+    ap.add_argument("--graf", default="graf.db")
     a = ap.parse_args()
-    serveste(a.port, a.corpus, a.initiative)
+    serveste(a.port, a.corpus, a.initiative, a.graf)

@@ -64,7 +64,20 @@ class Muchie:
     de_la: date | None
 
 
-def _deschide_graf(cale: str):
+def _deschide_graf(cale: str, *, readonly: bool = False):
+    """Open the graph. Writers create the schema; readers open `mode=ro` and skip the DDL.
+
+    The read-only path matters for the same reason it does on the corpus: `executescript(SCHEMA)`
+    is a write, so a reader that ran it would contend for the writer lock — and the server or a
+    gap report reading the graph while `construieste` rebuilds it would wedge exactly as two
+    collectors on one file did. A ro connection reads the last committed state and never wants
+    that lock.
+    """
+    if readonly:
+        con = sqlite3.connect(f"file:{cale}?mode=ro", uri=True, timeout=30.0)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA busy_timeout = 30000")
+        return con
     con = sqlite3.connect(cale, timeout=30.0)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)

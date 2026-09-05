@@ -119,8 +119,21 @@ function card(cls, lead, metaParts, quote, tag){
 }
 
 function render(d){
-  const dl = d.deadlines||[], tm = d.terminology||[], du = d.duplicates||[];
+  const dl = d.deadlines||[], tm = d.terminology||[], du = d.duplicates||[], tg = d.targets||[];
   let h = "";
+
+  if(tg.length){
+    h += `<section><div class="sec-head"><h2>Ce atinge proiectul</h2>`
+       + `<span class="count">${tg.length}</span></div>`;
+    h += tg.map(t => card(t.amendat_de>=8?"blocking":(t.amendat_de>0?"material":"note"),
+          `<span class="plx">${esc(t.act_id)}</span>`
+          + (t.titlu?` — ${esc(t.titlu).slice(0,120)}`:""),
+          [ t.in_corpus ? `amendat de <b>${t.amendat_de}</b> ori` : "neîncă în corpus",
+            t.ultima ? `ultima dată: <b>${esc(t.ultima)}</b>` : "",
+            t.amendat_de>=8 ? "consolidează, nu peticește" : "" ].filter(Boolean),
+          "")).join("");
+    h += `</section>`;
+  }
 
   h += `<section><div class="sec-head"><h2>Termene de implementare</h2>`
      + `<span class="count">${dl.length}</span></div>`;
