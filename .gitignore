@@ -8,6 +8,12 @@ __pycache__/
 # sources/README.md's terms — a parser test against a page nobody else can fetch is not a test.
 sources/*.html
 sources/*.html.gz
+# Except the parser's fixtures. A parser tested only against markup invented alongside it has
+# never been tested, and these two pages are what every selector in scripts/parsare.py was read
+# off. 229 KB gzipped, and the portal refuses GitHub Actions runners, so CI could not fetch
+# them even if it were willing to.
+!sources/lege-98-2016.html.gz
+!sources/decizie-815-2015.html.gz
 
 # The corpus and its HTTP cache, once there is one. Re-fetchable by definition, and the reason
 # this package is its own repository rather than a directory in a monorepo with a size gate.

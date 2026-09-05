@@ -90,18 +90,54 @@ Every one of these looked right on the page and none was found by reading the pa
   the Government. Correcting the annotation is legitimate; correcting the annotation *because the
   extractor disagreed with it* would not have been, and the case note records which happened.
 
+## The corpus
+
+`legislatie.just.ro` is the only source. That was checked rather than assumed: **N-Lex** proxies its
+Romanian search straight back to the same portal, and neither **data.europa.eu** nor **data.gov.ro**
+carries Romanian legislation as text — their nearest hits are construction standards and procurement
+bulletins. There is no bulk download to prefer over reading pages.
+
+What one page yields, verified on Legea nr. 98/2016 (`sources/lege-98-2016.html.gz`):
+
+| | |
+| --- | --- |
+| designation, issuer, publication date | `S_DEN`, `S_EMT_BDY`, `S_PUB_BDY` |
+| **246 articles**, 724 alineate, 465 litere | `S_ART` / `S_ALN` / `S_LIT`, nested |
+| 1 435 addressable provisions | one row per level, so a finding can quote any of them |
+| 512 publisher-marked citations | `S_LGI` spans |
+| four relation flags | `ActiuniInduse`, `Actiunisuferite`, `Referape`, `Referitde` |
+
+**246 is the portal's own count, and the parser is checked against it** rather than against a number
+written down here — the same discipline the court importer next door uses.
+
+**`S_LGI` is the find worth naming.** The portal wraps every citation it recognises in the running
+text in a span. It does not resolve them, so `referinte.py` still decides *which* act is meant — but
+it means reference *positions* arrive marked by the publisher. That is recall ground truth over real
+documents, which is the one thing the gold set below cannot buy.
+
+**Neither portal number identifies the act.** Requesting document `178667` returns a page whose own
+`id_act` reads `290673`. The first is a search handle, the second a consolidated form; the act is
+`lege-98-2016`, which is what the law calls itself and what every citation in every other act uses.
+Both portal numbers are stored — one to refetch by, one to audit by — and neither is a key.
+
+**Stored in SQLite**, because `sqlite3` is standard library and the corpus therefore costs no
+dependency. FTS5 gives diacritic-insensitive search, so `hotarare` finds `hotărâre` — which matters
+when half the corpus was typed before the comma-below letters were reliably available. A graph
+database was the obvious alternative and loses on this corpus: the deepest question anyone asks is
+*what points at this act and what does it point at*, which is two indexed selects.
+
 ## What is not here
 
-**The parser.** `scripts/parsare.py` is a stub that raises. `legislatie.just.ro` was not reachable
-from the environment this was written in, so nothing here has seen the portal's markup, and a parser
-written against imagined markup is the most expensive thing a project like this can carry: it looks
-finished, its invented fixtures pass, and it fails on the first real page. `ActParsat` is the
-contract the rest of the package consumes — fill it from real HTML and everything downstream runs
-unchanged. Two things worth settling in the same ten minutes, because both change the design rather
-than the code: whether a document id addresses an act or a *version* of one (if it is versions,
-walking an id range returns the same law at six dates with nothing marking which is in force), and
-what `robots.txt` says. This is a tool for a political party; a prototype assembled by hammering a
-Ministry of Justice server is a story that gets told about the party rather than about the tool.
+**A collector.** `scripts/parsare.py` reads a saved page and `scripts/depozit.py` stores it, but
+nothing yet walks the portal to build a corpus. That is the next piece, and the constraint it has
+to respect is already in the schema: the `cache` table exists so a document is fetched **once,
+ever**. This reads a ministry's server on behalf of a political party, and the number of times it
+asks for the same act should be one.
+
+Two facts the collector will need, both established by reading real pages rather than reasoning:
+the portal answers a request carrying an honest, identifying `User-Agent` and refuses a bare one,
+and it does not answer GitHub Actions runners at all — so the corpus is built locally and
+committed, never fetched in CI.
 
 **Consolidation.** The package records that article 7(2) changed on a date and by which act. It does
 not apply the amendment and compute what the article now says. That is a separate problem with its
@@ -127,14 +163,16 @@ document, and `assumed` is defined as *not in any source document yet*.
 
 ```bash
 uv sync --all-groups
-uv run pytest -q                  # 82 tests
+uv run pytest -q                  # 101 tests
 uv run python -m scripts.etalon   # precision / recall, with the failures named
 uv run python -m scripts.linter   # the worked example
 ```
 
-**No runtime dependencies.** Every extractor is `re`, `difflib` and `datetime` — the layer that
-decides what a law says should not be the layer that needs a wheel to build. `jsonschema` is a dev
-dependency only: a document is validated when it is written, not every time it is read.
+**No runtime dependencies.** Every extractor is `re`, `difflib` and `datetime`; the parser is
+`html.parser` and the corpus is `sqlite3` — all standard library. The layer that decides what a law
+says should not be the layer that needs a wheel to build, and a legal corpus is not the place to
+discover that two HTML libraries disagree about where a tag ends. `jsonschema` is a dev dependency
+only: a document is validated when it is written, not every time it is read.
 
 A model client, when there is one, brings its own and does not belong in this package:
 `analizeaza(..., model=...)` takes any callable from prompt to string, so Ollama, a free-tier
@@ -153,4 +191,5 @@ endpoint and a recorded fixture are the same shape.
 | `validare.py` | The gate between a model's output and a reader. |
 | `etalon.py` | Precision and recall, with the failures named. |
 | `linter.py` | The three reports, in the order they should be trusted. |
-| `parsare.py` | The contract for the stage that is not written. |
+| `parsare.py` | One portal page into an act: designation, issuer, publication, and the article tree. |
+| `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
