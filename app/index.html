@@ -273,8 +273,67 @@ const SVGNS = "http://www.w3.org/2000/svg";
 function svgEl(tag, attrs){ const e=document.createElementNS(SVGNS,tag);
   for(const k in attrs) e.setAttribute(k, attrs[k]); return e; }
 function color(sev){ return {blocking:"var(--blocking)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)"; }
+// edge colour by kind of connection, so the *relation* reads, not just its existence
+function felColor(fel){ return {abroga:"var(--blocking)",modifica:"var(--material)",
+  completeaza:"var(--material)",deroga:"var(--material)",refera:"var(--rule)"}[fel]||"var(--rule)"; }
+const FEL_RO = {abroga:"abrogă",modifica:"modifică",completeaza:"completează",deroga:"derogă",
+  introduce:"introduce",proroga:"prorogă",suspenda:"suspendă",inlocuieste:"înlocuiește",refera:"citează"};
+
+let _lastLint = null;  // so "înapoi la proiect" can rebuild the home graph
+
+async function focusAct(actId){
+  const wrap = $("#graf-wrap");
+  wrap.innerHTML = `<p class="graf-empty"><span class="spin"></span> ${esc(actId)}…</p>`;
+  try{
+    const d = await (await fetch("/api/vecini?act="+encodeURIComponent(actId))).json();
+    drawFocus(actId, d);
+  }catch(e){ wrap.innerHTML = `<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
+}
+
+function drawFocus(actId, d){
+  const inb=(d.inbound||[]), outb=(d.outbound||[]);
+  const nodes = [
+    ...inb.map(m=>({...m, dir:"in"})),
+    ...outb.map(m=>({...m, dir:"out"})),
+  ];
+  const wrap = $("#graf-wrap");
+  const W=340, H=Math.max(300,150+nodes.length*30), cx=W/2, cy=H/2;
+  const svg = svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"vecinii actului "+actId});
+  const R=Math.min(cx,cy)-46;
+  if(nodes.length){
+    nodes.forEach((n,i)=>{
+      const a=-Math.PI/2+i*2*Math.PI/nodes.length, x=cx+R*Math.cos(a), y=cy+R*Math.sin(a);
+      // arrow direction encodes who acts on whom: inbound points INTO the centre
+      const x1=n.dir==="in"?x:cx, y1=n.dir==="in"?y:cy, x2=n.dir==="in"?cx:x, y2=n.dir==="in"?cy:y;
+      svg.appendChild(svgEl("line",{x1,y1,x2,y2,stroke:felColor(n.fel),
+        "stroke-width":n.fel==="abroga"?2:1.3}));
+      const g=svgEl("g",{style:"cursor:pointer"}); g.addEventListener("click",()=>focusAct(n.act_id));
+      const ttl=svgEl("title",{}); ttl.textContent=`${FEL_RO[n.fel]||n.fel} · ${n.act_id}`
+        +(n.de_la?` (${n.de_la})`:"")+(n.titlu?` — ${n.titlu.slice(0,60)}`:""); g.appendChild(ttl);
+      g.appendChild(svgEl("circle",{cx:x,cy:y,r:11,fill:felColor(n.fel),"fill-opacity":.85}));
+      const lbl=svgEl("text",{x,y:y+22,"text-anchor":"middle","font-family":"var(--mono)",
+        "font-size":"9",fill:"var(--ink)"});
+      lbl.textContent=n.act_id.length>16?n.act_id.slice(0,15)+"…":n.act_id; g.appendChild(lbl);
+      svg.appendChild(g);
+    });
+  }
+  svg.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--mono)",
+    "font-size":"8.5","font-weight":"600",fill:"#fff"});
+  c.textContent=actId.length>14?actId.slice(0,13)+"…":actId; svg.appendChild(c);
+
+  wrap.innerHTML="";
+  const bar=document.createElement("div");
+  bar.innerHTML=`<button class="ghost" style="margin:0 0 .5rem;font-size:.72rem;padding:.3rem .7rem">← înapoi la proiect</button>`
+    +`<p class="hint" style="margin:.2rem 0 .6rem">`
+    +`<b>${inb.length}</b> îl modifică/citează · <b>${outb.length}</b> ținte. Clic pe un nod ca să mergi mai departe.</p>`;
+  bar.querySelector("button").onclick=()=>{ if(_lastLint) renderGraph(_lastLint); };
+  wrap.appendChild(bar); wrap.appendChild(svg);
+}
 
 function renderGraph(d){
+  _lastLint = d;
   const tg=d.targets||[], rp=d.repealed||[], du=d.duplicates||[];
   const repealedActs = new Set(rp.map(r=>r.act_id));
   // one node per act the draft touches; plus an aggregate for duplicate initiatives
@@ -308,7 +367,8 @@ function renderGraph(d){
   // act nodes
   nodes.forEach((n,i)=>{
     const p=pos[i], g=svgEl("g",{});
-    const t=svgEl("title",{}); t.textContent = n.label+(n.sub?" — "+n.sub:""); g.appendChild(t);
+    if(!n.dup){ g.setAttribute("style","cursor:pointer"); g.addEventListener("click",()=>focusAct(n.id)); }
+    const t=svgEl("title",{}); t.textContent = n.label+(n.sub?" — "+n.sub:"")+" · clic pentru vecini"; g.appendChild(t);
     g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r,fill:color(n.sev),
       "fill-opacity":n.dup?0.15:0.9, stroke:color(n.sev),"stroke-width":n.dup?1.5:0}));
     if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",

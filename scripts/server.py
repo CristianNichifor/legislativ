@@ -204,6 +204,54 @@ def _cauta(q: str, stare: Stare) -> dict:
     return {"results": [dict(r) for r in rows]}
 
 
+def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
+    """One act's graph neighbourhood: who amends it, and what it amends or references.
+
+    The second hop of the connections canvas — click a law and see its own links, so the panel
+    becomes something to explore rather than glance at. Bounded per side (`limita`) because a
+    long-lived law is amended dozens of times and the point is the shape, not the census; inbound
+    is returned most-recent-first so the cap keeps what matters. Titles are looked up from the
+    corpus for the neighbours actually returned, so it stays cheap.
+    """
+    if not stare.are_graf():
+        return {"act": act_id, "inbound": [], "outbound": []}
+    from scripts.graf import _deschide_graf, inbound, outbound
+
+    def _dedup(muchii, other_of):
+        # One node per neighbouring act: the same act amending several articles is one amender,
+        # not five. Keep the first (most significant / most recent) edge, count the rest.
+        vazut: dict[str, object] = {}
+        for m in muchii:
+            other = other_of(m)
+            if other == act_id:
+                continue
+            if other not in vazut:
+                vazut[other] = m
+        return vazut
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        intra = _dedup(reversed(inbound(graf, act_id)), lambda m: m.din_act)
+        iese = _dedup(outbound(graf, act_id), lambda m: m.catre_act)
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+
+            def shape(other, m):
+                r = con.execute("SELECT titlu FROM acte WHERE id = ?", (other,)).fetchone()
+                return {
+                    "act_id": other,
+                    "fel": m.fel,
+                    "locator": m.locator,
+                    "de_la": m.de_la.isoformat() if m.de_la else None,
+                    "titlu": (r["titlu"] if r else "") or "",
+                }
+
+            inb = [shape(o, m) for o, m in list(intra.items())[:limita]]
+            outb = [shape(o, m) for o, m in list(iese.items())[:limita]]
+    finally:
+        graf.close()
+    return {"act": act_id, "inbound": inb, "outbound": outb}
+
+
 def face_handler(stare: Stare):
     class Handler(BaseHTTPRequestHandler):
         def _json(self, obj: dict, code: int = 200) -> None:
@@ -233,6 +281,9 @@ def face_handler(stare: Stare):
             elif ruta.path == "/api/cauta":
                 q = parse_qs(ruta.query).get("q", [""])[0]
                 self._json(_cauta(q, stare))
+            elif ruta.path == "/api/vecini":
+                act = parse_qs(ruta.query).get("act", [""])[0]
+                self._json(_vecini(act, stare) if act else {"error": "act lipsă"})
             elif ruta.path == "/api/rezumat":
                 with depozit.deschide(stare.corpus, readonly=True) as con:
                     r = depozit.rezumat(con)

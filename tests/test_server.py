@@ -16,7 +16,7 @@ from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
 from scripts.graf import construieste
-from scripts.server import Stare, _cauta, _lint, _repealed, _targets
+from scripts.server import Stare, _cauta, _lint, _repealed, _targets, _vecini
 
 
 def _build(tmp_path: Path) -> Stare:
@@ -151,3 +151,45 @@ def test_lint_flags_a_citation_to_a_repealed_article(tmp_path):
     assert out and out[0]["act_id"] == "lege-98-2016" and "abrogat" in out[0]["motiv"]
     # and it rides in the full lint answer
     assert "repealed" in _lint("Se aplică art. 7 din Legea nr. 98/2016.", stare)
+
+
+def test_vecini_returns_deduped_neighbours(tmp_path):
+    """Click-to-explore: one act's amenders and targets, one node per act even when it amends
+    several of its articles."""
+    from datetime import date
+
+    from scripts.api import Inregistrare
+    from scripts.colector import act_din_inregistrare
+    from scripts.graf import construieste
+
+    stare = _build(tmp_path)
+    corpus2 = tmp_path / "corpus.db"
+    with depozit.deschide(corpus2) as con:
+        for numar, text in [
+            (
+                "200",
+                "Articolul 7 din Legea nr. 98/2016 se modifică. "
+                "Articolul 8 din Legea nr. 98/2016 se modifică.",
+            ),
+            ("201", "Se abrogă Legea nr. 98/2016."),
+        ]:
+            rec = Inregistrare(
+                titlu=f"LEGE nr. {numar}",
+                tip_act="LEGE",
+                numar=numar,
+                an=None,
+                data_vigoare=date(2024, 1, 1),
+                emitent="X",
+                publicatie="MO",
+                link_html=f"http://legislatie.just.ro/Public/DetaliiDocument/{numar}0",
+                text=text,
+            )
+            depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    graf_db = tmp_path / "graf.db"
+    construieste(str(corpus2), str(graf_db))
+    stare.graf = str(graf_db)
+
+    v = _vecini("lege-98-2016", stare)
+    ids = [m["act_id"] for m in v["inbound"]]
+    assert "lege-200-2024" in ids and "lege-201-2024" in ids
+    assert ids.count("lege-200-2024") == 1  # deduped despite two amended articles
