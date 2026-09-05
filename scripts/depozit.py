@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS initiative (
 
 CREATE INDEX IF NOT EXISTS idx_initiative_senat ON initiative(senat_id);
 
+-- Which acts each initiative sets out to change, extracted from its title and obiect. Precomputed
+-- so "which pending bills touch Legea X" is a lookup, not a scan of every initiative's text on
+-- each query — the question a drafter amending X most wants answered.
+CREATE TABLE IF NOT EXISTS initiative_tinta (
+    plx_id   TEXT NOT NULL,
+    act_id   TEXT NOT NULL,
+    locator  TEXT,
+    PRIMARY KEY (plx_id, act_id, locator)
+);
+CREATE INDEX IF NOT EXISTS idx_initiative_tinta_act ON initiative_tinta(act_id);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS initiative_fts USING fts5(
     titlu, obiect, plx_id UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
 );

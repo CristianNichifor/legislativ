@@ -162,13 +162,22 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
     acte = sorted({t.split(" ")[0] for t in tinte(draft)})
     if not acte:
         return []
+    from scripts.imbogateste import initiative_pe_act
+
     out: list[dict] = []
     graf = _deschide_graf(stare.graf, readonly=True)
     try:
-        with depozit.deschide(stare.corpus, readonly=True) as con:
+        with (
+            depozit.deschide(stare.corpus, readonly=True) as con,
+            depozit.deschide(stare.initiative, readonly=True) as ini,
+        ):
             for act_id in acte:
                 amend = inbound(graf, act_id, doar_amendamente=True)
                 rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
+                try:
+                    pendinte = initiative_pe_act(ini, act_id)
+                except Exception:
+                    pendinte = []
                 out.append(
                     {
                         "act_id": act_id,
@@ -178,6 +187,8 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
                         "ultima": max(
                             (m.de_la.isoformat() for m in amend if m.de_la), default=None
                         ),
+                        # pending bills already touching this act: the "someone's on it" signal
+                        "initiative_in_lucru": len(pendinte),
                     }
                 )
     finally:

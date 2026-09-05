@@ -258,5 +258,6 @@ endpoint and a recorded fixture are the same shape.
 | `graf.py` | The amendment graph, derived from the corpus text — who amends and references each act. |
 | `etalon_real.py` | Reference recall vs the portal's own S_LGI marks — the number measured against real law. |
 | `vigoare.py` | In force or not: repeals from the graph, and drafts that cite a repealed article. |
+| `imbogateste.py` | Index of which acts each pending initiative touches — "who is already on this law". |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
 | `server.py` | A stdlib backend and a paste-a-draft UI over all three deterministic passes. |

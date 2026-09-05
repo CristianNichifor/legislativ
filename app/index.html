@@ -140,6 +140,7 @@ function render(d){
           + (t.titlu?` — ${esc(t.titlu).slice(0,120)}`:""),
           [ t.in_corpus ? `amendat de <b>${t.amendat_de}</b> ori` : "neîncă în corpus",
             t.ultima ? `ultima dată: <b>${esc(t.ultima)}</b>` : "",
+            t.initiative_in_lucru ? `<b>${t.initiative_in_lucru}</b> inițiative în lucru îl ating` : "",
             t.amendat_de>=8 ? "consolidează, nu peticește" : "" ].filter(Boolean),
           "")).join("");
     h += `</section>`;
