@@ -267,17 +267,25 @@
     .redact-body{flex-direction:column}
     #r-compus{position:static;max-height:none;width:100%}
   }
-  /* the nested-block act builder */
-  .tree{border:1px solid var(--rule-soft);background:var(--surface);padding:.4rem .6rem;min-height:2.6rem}
+  /* the nested-block act builder — every block is a card */
+  .tree{background:transparent;border:0;padding:.1rem 0;min-height:2.6rem}
   .tree:empty::before{content:"Niciun articol încă — apasă „+ articol”.";font-family:var(--sans);
     font-size:.82rem;color:var(--ink-mute);font-style:italic}
-  .node{position:relative;border-left:2px solid var(--rule);padding:.35rem 0 .35rem .7rem;margin:.4rem 0 .4rem .1rem}
-  .node.art{border-left-color:var(--accent)} .node.alin{border-left-color:var(--material)}
-  .node.lit{border-left-color:var(--note)}
+  /* one card per block. Opaque per-level tint so nesting stays legible, colored left edge + badge. */
+  .node{position:relative;border:1px solid var(--rule);border-left:3px solid var(--rule);
+    border-radius:9px;background:var(--surface);padding:.55rem .7rem .6rem;margin:.55rem 0;
+    box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .node.art{border-left-color:var(--accent); background:color-mix(in srgb,var(--accent) 5%,var(--surface))}
+  .node.alin{border-left-color:var(--material);background:color-mix(in srgb,var(--material) 6%,var(--surface))}
+  .node.lit{border-left-color:var(--note);   background:color-mix(in srgb,var(--note) 8%,var(--surface))}
   /* room on the right for the pinned × so the fields never run under it */
   .node-hd{display:flex;gap:.45rem;align-items:center;flex-wrap:wrap;padding-right:2.4rem}
-  .node-hd .lvl{font-family:var(--sans);font-size:.66rem;font-weight:600;text-transform:uppercase;
-    letter-spacing:.03em;color:var(--ink-mute);min-width:4.4rem}
+  .node-hd .lvl{font-family:var(--sans);font-size:.63rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);padding:.18rem .5rem;border-radius:999px;
+    background:color-mix(in srgb,var(--ink-mute) 14%,var(--surface));border:1px solid var(--rule-soft)}
+  .node.art  .node-hd .lvl{color:var(--accent);  background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
+  .node.alin .node-hd .lvl{color:var(--material);background:color-mix(in srgb,var(--material) 16%,var(--surface))}
+  .node.lit  .node-hd .lvl{color:var(--note);    background:color-mix(in srgb,var(--note) 20%,var(--surface))}
   /* number input and op select: same moderate height, so a block reads as one tidy row */
   .node input.num,.node select.op{height:2.15rem;font-size:.82rem;line-height:1.2;padding:.35rem .6rem}
   .node input.num{width:4.5rem}
@@ -286,12 +294,14 @@
   .node .txt-lbl{display:block;font-family:var(--sans);font-size:.66rem;font-weight:600;
     text-transform:uppercase;letter-spacing:.03em;color:var(--ink-mute);margin-bottom:.2rem}
   .node .txt textarea{min-height:3.2rem;font-size:.82rem}
-  .node .kids{margin-left:.15rem}
+  /* children nested inside the parent card, with a faint guide rail */
+  .node .kids{margin:.45rem 0 0 .2rem;padding-left:.6rem;border-left:1px dashed var(--rule-soft)}
+  .node .kids:empty{display:none}
   /* pinned to the block's own top-right, so it never wraps onto its own line */
-  .node-x{position:absolute;top:.4rem;right:.35rem;border:1px solid var(--rule);background:var(--surface);
-    color:var(--ink-mute);cursor:pointer;border-radius:3px;font-size:.9rem;line-height:1;padding:.1rem .4rem}
+  .node-x{position:absolute;top:.45rem;right:.45rem;border:1px solid var(--rule);background:var(--surface);
+    color:var(--ink-mute);cursor:pointer;border-radius:5px;font-size:.9rem;line-height:1;padding:.12rem .42rem}
   .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
-  .node-add{font-size:.7rem;padding:.15rem .55rem;margin-top:.3rem}
+  .node-add{font-size:.7rem;padding:.2rem .6rem;margin-top:.45rem;border-style:dashed}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
