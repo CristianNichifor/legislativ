@@ -1,0 +1,48 @@
+name: pages
+
+# Build the in-browser app (Pyodide, no server) from the committed fixtures and publish it to
+# GitHub Pages. The data is built by scripts/construieste_web.py --sursa fixturi, which needs
+# nothing git-ignored, so the deploy is reproducible from the repo alone. No secrets, no draft
+# ever leaves a visitor's browser — the page's CSP enforces it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "scripts/**"
+      - "sources/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let an in-progress run finish rather than cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build the browser bundle from fixtures
+        run: uv run python -m scripts.construieste_web --sursa fixturi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
