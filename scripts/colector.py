@@ -132,7 +132,9 @@ def _cu_termen(fn, secunde: float):
         ex.shutdown(wait=False)
 
 
-def _pagina(client: Client, pagina: int, incercari: int = 6) -> list[Inregistrare]:
+def _pagina(
+    client: Client, pagina: int, incercari: int = 6, deadline: float = 120.0
+) -> list[Inregistrare]:
     """One page, under a hard deadline, retried with exponential backoff.
 
     Backoff covers both the service asking for room (503/429) and the trickle-hang, because both
@@ -141,7 +143,7 @@ def _pagina(client: Client, pagina: int, incercari: int = 6) -> list[Inregistrar
     astept = 2.0
     for incercare in range(incercari):
         try:
-            return _cu_termen(lambda: client.search(pagina=pagina, pe_pagina=10), 20.0)
+            return _cu_termen(lambda: client.search(pagina=pagina, pe_pagina=10), deadline)
         except urllib.error.HTTPError as e:
             if e.code not in (429, 500, 502, 503, 504) or incercare == incercari - 1:
                 raise
@@ -161,6 +163,7 @@ def colecteaza(
     pagina_start: int = 1,
     pagina_stop: int | None = None,
     pauza: float = 0.0,
+    timeout: float = 90.0,
     log=print,
 ) -> Progres:
     """Fetch every page not already done, write the normative acts, skip the rest.
@@ -169,11 +172,14 @@ def colecteaza(
     happiest with a single writer, and the network is the bottleneck anyway, so the writer is
     never what holds a run up.
     """
-    # A short request timeout is a robustness lever, not a speed one: this server occasionally
-    # accepts a connection and then does not answer, and at 60s a hung socket freezes a worker
-    # long enough that several stalling together look like a dead run. 25s fails fast to the
-    # backoff, which retries, so a stall self-heals instead of wedging.
-    client = client or Client(timeout=25.0)
+    # The request timeout is generous on purpose. Under sustained collection this server
+    # throttles by trickling the body — the bytes still arrive, just slowly — so a short deadline
+    # does not fix a hang, it kills a read that was going to finish and retries it forever. A
+    # long timeout lets a throttled page complete; one worker keeps only one connection open at a
+    # time, which is what keeps the throttle from tightening in the first place. Slow and constant
+    # beats fast and wedged. The executor deadline downstream is a last-resort guard against a
+    # truly dead socket, set well above this so it fires only when the socket really is dead.
+    client = client or Client(timeout=timeout)
     with depozit.deschide(cale_db) as con:
         gata = depozit.pagini_terminate(con)
 
@@ -186,7 +192,7 @@ def colecteaza(
 
     scrise = sarite = ultima = 0
     with depozit.deschide(cale_db) as con, ThreadPoolExecutor(max_workers=lucratori) as ex:
-        viitoare = {ex.submit(_pagina, client, p): p for p in de_facut}
+        viitoare = {ex.submit(_pagina, client, p, deadline=timeout + 30): p for p in de_facut}
         for i, fut in enumerate(as_completed(viitoare), start=1):
             pagina = viitoare[fut]
             recs = fut.result()
