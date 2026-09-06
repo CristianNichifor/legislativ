@@ -381,6 +381,32 @@
     100%{box-shadow:0 0 0 3px transparent}}
   .node.flash{animation:nodeflash 1s ease-out}
 
+  /* legislation-as-code: a block read as a DACĂ…ATUNCI rule — prose in both norms, checks, cases. */
+  .regula-panel{margin-top:.5rem;padding:.6rem .8rem;border:1px solid var(--rule);
+    border-left:3px solid var(--note);border-radius:var(--r1);
+    background:color-mix(in srgb,var(--note) 5%,var(--surface));font-size:.82rem}
+  .regula-h{font-family:var(--sans);font-size:.62rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin-bottom:.45rem}
+  .regula-proza{font-family:var(--serif);margin:.2rem 0;line-height:1.5}
+  .rp-tag{display:inline-block;font-family:var(--sans);font-size:.6rem;font-weight:700;
+    text-transform:uppercase;letter-spacing:.03em;padding:.05rem .35rem;border-radius:var(--r1);
+    background:color-mix(in srgb,var(--good) 18%,transparent);color:var(--ink);margin-right:.4rem;
+    vertical-align:middle}
+  .rp-tag.actual{background:color-mix(in srgb,var(--material) 20%,transparent)}
+  .regula-vars{font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin:.4rem 0 .2rem}
+  .regula-vars code,.regula-tab td code{font-family:var(--mono)}
+  .regula-prob{margin:.4rem 0 0;padding-left:1.1rem;color:var(--material)}
+  .regula-prob li{margin:.15rem 0}
+  .regula-ok{color:var(--good);margin-top:.4rem}
+  .regula-err{color:var(--blocking)}
+  .regula-tab{border-collapse:collapse;margin-top:.5rem;font-family:var(--sans);font-size:.76rem;
+    width:100%}
+  .regula-tab th,.regula-tab td{border:1px solid var(--rule-soft);padding:.25rem .5rem;text-align:left}
+  .regula-tab th{background:var(--sunk);font-weight:600}
+  .regula-tab tr.da td{background:color-mix(in srgb,var(--good) 8%,transparent)}
+  .regula-tab tr.nu td{background:color-mix(in srgb,var(--blocking) 6%,transparent)}
+  .ghost.mini.logic.on{border-color:var(--note);color:var(--note)}
+
   @media (max-width:900px){
     .redact-body{flex-direction:column}
     #r-compus{position:static;max-height:none;width:100%}
@@ -897,9 +923,11 @@ function creeazaNod(nivel){
           <option value="actual">norme actuale (juridic)</option>
         </select>
         <button type="button" class="ghost mini nlg" title="Rescrie cu AI, după modul ales (local privat sau online prin API)">Rescrie AI</button>
+        <button type="button" class="ghost mini logic" title="Interpretează textul ca o regulă: DACĂ … ATUNCI … [ALTFEL …]">⚙ logică</button>
         <button type="button" class="ghost mini revino" hidden title="Revino la textul dinainte">↶ revino</button>
         <span class="txt-stat"></span>
       </div></div>
+    <div class="regula-panel" hidden></div>
     <div class="node-orig" hidden></div>
     <div class="kids"></div>`;
   const op=wrap.querySelector(":scope > .node-hd > .op");
@@ -918,10 +946,43 @@ function creeazaNod(nivel){
     ta.dataset.prev=ta.value; ta.value=formateazaText(ta.value); revino.hidden=false; stat.textContent="formatat"; programeazaLive(); };
   tools.querySelector(".nlg").onclick=()=>rescrieTextNod(ta, tools.querySelector(".norma").value, tools.querySelector(".nlg"), revino, stat);
   revino.onclick=()=>{ if(ta.dataset.prev!=null){ ta.value=ta.dataset.prev; revino.hidden=true; stat.textContent=""; programeazaLive(); } };
+  // legislation-as-code: read the block text as a DACĂ…ATUNCI rule and show prose + checks + cases
+  const panel=wrap.querySelector(":scope > .regula-panel"), logic=tools.querySelector(".logic");
+  let logicTimer=null;
+  const programeazaLogic=()=>{ if(panel.hidden) return; clearTimeout(logicTimer); logicTimer=setTimeout(()=>analizeazaRegula(ta.value, panel), 350); };
+  logic.onclick=()=>{ panel.hidden=!panel.hidden; logic.classList.toggle("on", !panel.hidden);
+    if(!panel.hidden){ if(!ta.value.trim()){ ta.value="DACĂ valoare >= 5000000 lei ATUNCI se aplică procedura deschisă ALTFEL se aplică procedura simplificată"; }
+      analizeazaRegula(ta.value, panel); } };
+  ta.addEventListener("input", programeazaLogic);
   if(cfg.sub){ const kids=wrap.querySelector(":scope > .kids");
     const add=document.createElement("button"); add.type="button"; add.className="ghost node-add"; add.textContent=cfg.subEt;
     add.onclick=()=>{ kids.append(creeazaNod(cfg.sub)); programeazaLive(); }; wrap.append(add); }
   return wrap;
+}
+// legislation-as-code: send a block's text to the deterministic rule engine and render the result —
+// the same provision in both norms, the checks (impossible condition, missing ALTFEL…), a case table.
+async function analizeazaRegula(text, panel){
+  if(!text || !text.trim()){ panel.innerHTML=`<span class="hint">Scrie o regulă: <code>DACĂ &lt;condiție&gt; ATUNCI &lt;consecință&gt; [ALTFEL …]</code>.</span>`; return; }
+  try{
+    const d=await (await fetch("/api/regula",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
+    if(!d.ok){ panel.innerHTML=`<div class="regula-err">⚠ ${esc(d.eroare||"nu am putut interpreta regula")}</div>`; return; }
+    let h=`<div class="regula-h">Regula, citită ca logică</div>`
+      +`<div class="regula-proza"><span class="rp-tag">limbaj clar</span>${esc(d.proza_nou)}</div>`
+      +`<div class="regula-proza"><span class="rp-tag actual">normă curentă</span>${esc(d.proza_actual)}</div>`;
+    if(d.variabile && d.variabile.length) h+=`<div class="regula-vars">Variabile: ${d.variabile.map(v=>`<code>${esc(v)}</code>`).join(", ")}</div>`;
+    if(d.probleme && d.probleme.length) h+=`<ul class="regula-prob">`+d.probleme.map(p=>`<li>⚠ ${esc(p)}</li>`).join("")+`</ul>`;
+    else if(d.conditionala) h+=`<div class="regula-ok">✓ regulă coerentă, ambele cazuri acoperite.</div>`;
+    if(d.cazuri && d.cazuri.length){
+      const vars=d.variabile||[];
+      h+=`<table class="regula-tab"><thead><tr>`+vars.map(v=>`<th>${esc(v)}</th>`).join("")
+        +`<th>condiție</th><th>consecință</th></tr></thead><tbody>`
+        +d.cazuri.map(row=>`<tr class="${row.adevarat?'da':'nu'}">`
+          +vars.map(v=>`<td><code>${esc(String(row.valori[v]))}</code></td>`).join("")
+          +`<td>${row.adevarat?'DA':'NU'}</td><td>${esc(row.consecinta)}</td></tr>`).join("")
+        +`</tbody></table>`;
+    }
+    panel.innerHTML=h;
+  }catch(e){ panel.innerHTML=`<div class="regula-err">eroare: ${esc(e.message||e)}</div>`; }
 }
 function citesteNod(wrap, nivel, path, act, out){
   const num=wrap.querySelector(":scope > .node-hd > .num:not(.artnou)").value.trim();

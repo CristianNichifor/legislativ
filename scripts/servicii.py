@@ -376,6 +376,16 @@ def _norma(text: str) -> dict:
     }
 
 
+def _regula(text: str) -> dict:
+    """Legislation as code: parse a provision-as-rule, render both norms, check it, list its cases.
+
+    Deterministic (see `scripts.lac`). A parse error comes back as data (`ok: false`), never raised,
+    so the editor shows it inline. No corpus, no model — pure over the one line written."""
+    from scripts.lac import analizeaza
+
+    return analizeaza(text or "")
+
+
 def _termeni(text: str, stare: Stare) -> dict:
     """The defined terms a draft uses, in reading order, each with its definition — so the editor
     can chip them and show the meaning on hover. Deterministic (see `definitii.recunoaste`)."""
