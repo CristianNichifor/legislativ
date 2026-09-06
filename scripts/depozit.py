@@ -211,24 +211,22 @@ CREATE INDEX IF NOT EXISTS idx_neindeplinite_act ON neindeplinite(act_id);
 CREATE INDEX IF NOT EXISTS idx_relatii_catre ON relatii(catre_act);
 CREATE INDEX IF NOT EXISTS idx_acte_tip_an   ON acte(tip, an);
 
+-- `content='provizii'` makes this an index and nothing else. Left to itself fts5 keeps a
+-- verbatim copy of everything it indexes: measured on the finished corpus, `provizii` held
+-- 1 952.7 MB of text and `provizii_fts_content` another 1 950.8 MB of the same text — a quarter
+-- of an 8.4 GB file, and the difference between a corpus that can be handed to a research team
+-- and one that cannot.
+--
+-- The cost is that the index is no longer maintained for us. Rows must be handed to fts5 as they
+-- are written, and — the part that bites — *before* they are deleted, because a cascade delete on
+-- `acte` removes `provizii` rows without fts5 ever hearing about it. `_sterge_fts` does that, and
+-- `test_replacing_an_act_leaves_no_stale_rows_in_an_external_index` is what stops it rotting.
 CREATE VIRTUAL TABLE IF NOT EXISTS provizii_fts USING fts5(
-    text, act_id UNINDEXED, locator UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
+    text, act_id UNINDEXED, locator UNINDEXED,
+    content = 'provizii', content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
 );
 
--- Which fts5 rows belong to which act, so that replacing an act can delete its rows by rowid.
--- `act_id` is UNINDEXED inside the fts5 table — that is what UNINDEXED means, and it is correct,
--- since nobody wants to full-text-search an id. But it also means `DELETE FROM provizii_fts
--- WHERE act_id = ?` has no index to use and degrades into `SCAN provizii_fts VIRTUAL TABLE`,
--- once per record written. Measured mid-collection: 65 ms per scan at 17 990 rows, ten records
--- to a page, so 0.65 s of every 1.0 s page was this one statement — and because the cost grows
--- with the table, the projection at the full 251 460 documents was 9.1 s per page. A collection
--- that starts at one second a page and ends at nine does not finish. This map turns the delete
--- into an indexed lookup that does not care how large the corpus gets.
-CREATE TABLE IF NOT EXISTS provizii_fts_rand (
-    act_id TEXT NOT NULL,
-    rand   INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_provizii_fts_rand ON provizii_fts_rand(act_id);
 """
 
 
@@ -292,7 +290,7 @@ def deschide(
     try:
         con.executescript(SCHEMA)
         _adauga_coloane(con)
-        _umple_harta_fts(con)
+        _migreaza_fts(con)
         yield con
         con.commit()
     except Exception:
@@ -329,47 +327,54 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
                 con.execute(f"ALTER TABLE {tabel} ADD COLUMN {nume} {tip}")
 
 
-def _umple_harta_fts(con: sqlite3.Connection) -> None:
-    """Backfill the rowid map for a corpus collected before it existed.
+def _migreaza_fts(con: sqlite3.Connection) -> None:
+    """Move a corpus off the content-owning index it may have been collected under.
 
-    One scan, once, on the first write-open of an older file. Without it `_sterge_fts` would find
-    nothing to delete for every act already in the corpus, and re-collecting a page would leave
-    the old full-text rows behind — the same act matching a search twice, with stale text. Guarded
-    on the map being empty while the index is not, so a normal open costs one counted query.
+    `CREATE VIRTUAL TABLE IF NOT EXISTS` is a no-op on a table that already exists, so a corpus
+    that took hours to collect would keep its old index and its duplicate copy of every provision
+    for ever. The text is already in `provizii`, so the index can simply be rebuilt from it —
+    nothing is re-fetched and nothing is at risk beyond the time it takes.
     """
-    randuri = con.execute("SELECT count(*) FROM provizii_fts_rand").fetchone()[0]
-    if randuri:
+    tabele = {
+        r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type IN ('table','view')")
+    }
+    if "provizii_fts_content" not in tabele and "provizii_fts_rand" not in tabele:
         return
-    if not con.execute("SELECT count(*) FROM provizii_fts").fetchone()[0]:
-        return
-    con.execute(
-        "INSERT INTO provizii_fts_rand (act_id, rand) SELECT act_id, rowid FROM provizii_fts"
+    con.execute("DROP TABLE IF EXISTS provizii_fts_rand")
+    con.execute("DROP TABLE IF EXISTS provizii_fts")
+    con.executescript(
+        "CREATE VIRTUAL TABLE provizii_fts USING fts5("
+        " text, act_id UNINDEXED, locator UNINDEXED,"
+        " content = 'provizii', content_rowid = 'rowid',"
+        " tokenize = 'unicode61 remove_diacritics 2');"
     )
+    con.execute("INSERT INTO provizii_fts(provizii_fts) VALUES('rebuild')")
 
 
 def _sterge_fts(con: sqlite3.Connection, act_id: str) -> None:
-    """Drop an act's full-text rows by rowid, via the map, never by scanning.
+    """Withdraw an act's rows from the index before they leave the table underneath it.
 
-    The obvious `DELETE FROM provizii_fts WHERE act_id = ?` is a full scan of the fts5 table,
-    because `act_id` is UNINDEXED there. Called once per record written, it made collection cost
-    grow with the corpus it was building.
+    With `content='provizii'` fts5 owns no copy, so a delete must hand back the *original* column
+    values against the original rowid — and it must happen before the rows go, because a cascade
+    delete on `acte` takes `provizii` with it silently. An index left holding withdrawn rows makes
+    an act match a search for text it no longer contains, which is the quiet kind of wrong.
     """
-    randuri = [
-        r[0] for r in con.execute("SELECT rand FROM provizii_fts_rand WHERE act_id = ?", (act_id,))
-    ]
-    if not randuri:
-        return
-    con.executemany("DELETE FROM provizii_fts WHERE rowid = ?", [(r,) for r in randuri])
-    con.execute("DELETE FROM provizii_fts_rand WHERE act_id = ?", (act_id,))
+    randuri = con.execute(
+        "SELECT rowid, text, act_id, locator FROM provizii WHERE act_id = ?", (act_id,)
+    ).fetchall()
+    for r in randuri:
+        con.execute(
+            "INSERT INTO provizii_fts(provizii_fts, rowid, text, act_id, locator)"
+            " VALUES('delete', ?, ?, ?, ?)",
+            (r[0], r[1], r[2], r[3]),
+        )
 
 
-def _scrie_fts(con: sqlite3.Connection, act_id: str, locator: str, text: str) -> None:
-    """One full-text row, remembering its rowid so it can be deleted without a scan."""
-    cur = con.execute(
-        "INSERT INTO provizii_fts (text, act_id, locator) VALUES (?,?,?)", (text, act_id, locator)
-    )
+def _scrie_fts(con: sqlite3.Connection, rowid: int, act_id: str, locator: str, text: str) -> None:
+    """Index one provision, under the rowid the content table gave it."""
     con.execute(
-        "INSERT INTO provizii_fts_rand (act_id, rand) VALUES (?,?)", (act_id, cur.lastrowid)
+        "INSERT INTO provizii_fts(rowid, text, act_id, locator) VALUES (?,?,?,?)",
+        (rowid, text, act_id, locator),
     )
 
 
@@ -380,6 +385,9 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
     and half of an old parse mixed with half of a new one is a corpus nobody can reason about.
     """
     act = parsat.act
+    # Before the cascade, not after: `DELETE FROM acte` takes `provizii` with it, and an
+    # external-content index cannot withdraw rows whose values are already gone.
+    _sterge_fts(con, act.id)
     con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
     con.execute(
         "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
@@ -401,11 +409,10 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
-    _sterge_fts(con, act.id)
 
     marcate = 0
     for ord_, p in enumerate(parsat.provizii, start=1):
-        con.execute(
+        cur = con.execute(
             "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la,"
             " vigoare_pana_la) VALUES (?,?,?,?,?,?)",
             (
@@ -417,7 +424,7 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
                 _iso(p.in_vigoare_pana_la),
             ),
         )
-        _scrie_fts(con, act.id, p.locator_id, p.text)
+        _scrie_fts(con, cur.lastrowid, act.id, p.locator_id, p.text)
         for ref in p.referinte_marcate:
             con.execute(
                 "INSERT INTO referinte_marcate (act_id, ord, locator, text) VALUES (?,?,?,?)",
@@ -651,6 +658,9 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
+    # Before the cascade, not after: `DELETE FROM acte` takes `provizii` with it, and an
+    # external-content index cannot withdraw rows whose values are already gone.
+    _sterge_fts(con, act.id)
     con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
     con.execute(
         "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
@@ -675,13 +685,12 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
-    _sterge_fts(con, act.id)
-    con.execute(
+    cur = con.execute(
         "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
         " VALUES (?,?,?,?,?,?)",
         (act.id, "text", 1, rec.text, _iso(rec.data_vigoare), None),
     )
-    _scrie_fts(con, act.id, "text", rec.text)
+    _scrie_fts(con, cur.lastrowid, act.id, "text", rec.text)
 
 
 def pagina_terminata(con: sqlite3.Connection, pagina: int, acte: int) -> None:
