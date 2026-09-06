@@ -24,6 +24,14 @@ with no quoted text, an operation with no date, and — for `introduce` — renu
 provisions that follow (the inserted article is shown, but the shift of later numbers is not
 applied). A case not handled is a `blocking` refusal, never a silent pass.
 
+**Republication is a renumbering boundary, so it is refused across, not remapped.** When the target
+act carries a republication date (`ActParsat.republicat_din`), an operation dated *before* it named
+a locator under the *old* numbering; after republication that same locator may point at a different
+provision. This engine does not remap locators across the boundary — it refuses any provision an
+older-than-republication operation touches, naming the act and the republication date, exactly the
+gap `vigoare.py` records. An operation on or after the republication date is under current numbering
+and applies normally.
+
 Standard library only. The consolidated text is `derived` — it is the result of applying
 operations, not a string that appears in any single source document; the payloads it splices are
 `verbatim`, being literal quotations from the amending acts.
@@ -91,15 +99,17 @@ def consolideaza(
     text_original: str,
     operatii: list[Operatie],
     la_data: date | None = None,
+    republicat_din: date | None = None,
 ) -> Rezultat:
     """The provision's text as of `la_data`, or the original with a blocking reason it could not be.
 
     Only operations that target this `locator` and took effect on or before `la_data` are
     considered; an operation dated after `la_data` is future, and is neither applied nor a defect.
     An operation this slice cannot apply — an unrecognised verb, a `modifica` with no quoted text,
-    or one with no date to place it in time — makes the whole provision refuse: `complet=False`,
-    `text` is the original, and `limitari` names the act. Applicable operations are applied in date
-    order; `abroga` marks the provision repealed and stops further text changes.
+    one with no date to place it in time, or one dated before the act's `republicat_din` (its
+    locator predates the republication renumbering) — makes the whole provision refuse:
+    `complet=False`, `text` is the original, and `limitari` names the act. Applicable operations are
+    applied in date order; `abroga` marks the provision repealed and stops further text changes.
     """
     la_data = la_data or date.today()
     ale_mele = [op for op in operatii if op.locator == locator]
@@ -125,10 +135,20 @@ def consolideaza(
                 f"operația «{op.fel}» din {op.act} nu este aplicată automat în această versiune; "
                 "citește actul modificator."
             )
-        elif op.fel in _CU_PAYLOAD and not op.continut_nou:
+            continue
+        if op.fel in _CU_PAYLOAD and not op.continut_nou:
             limitari.append(
                 f"{op.fel} din {op.act} nu citează textul nou; "
                 "nu poate fi aplicată fără a inventa text."
+            )
+            continue
+        if republicat_din is not None and op.data is not None and op.data < republicat_din:
+            # The locator was written against the pre-republication numbering; after republication
+            # it may name a different provision. We do not remap across the boundary — we refuse.
+            limitari.append(
+                f"amendamentul din {op.act} ({op.data:%d.%m.%Y}) este anterior republicării "
+                f"actului ({republicat_din:%d.%m.%Y}); locatorul «{op.locator}» se poate referi la "
+                "altă prevedere după renumerotare, așa că nu a fost aplicat."
             )
 
     if limitari:
@@ -202,7 +222,9 @@ def consolideaza_in(
                 complet=False,
             )
             continue
-        rezultate[locator] = consolideaza(locator, original, operatii, la_data)
+        rezultate[locator] = consolideaza(
+            locator, original, operatii, la_data, republicat_din=act.republicat_din
+        )
 
     # inserted provisions: an `introduce` adds a new provision after its anchor. Its text is the
     # payload; the shift it implies for later article numbers is not applied — the result says so.

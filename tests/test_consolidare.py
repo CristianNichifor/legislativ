@@ -156,3 +156,70 @@ def test_consolideaza_in_materialises_an_inserted_provision():
     assert len(inserate) == 1
     assert inserate[0].text == "Art. 7^1. - Nou." and inserate[0].complet
     assert any("renumerotarea" in lim for lim in inserate[0].limitari)
+
+
+# --- republication: the numbering boundary. A pre-republication operation named a locator under
+# the old numbering, so the engine refuses to apply it to the renumbered tree rather than guess. ---
+
+
+def test_a_pre_republication_amendment_refuses_the_provision():
+    r = consolideaza(
+        "art7",
+        "Art. 7. - Textul original.",
+        [Operatie("modifica", "art7", date(2018, 3, 1), "lege-1-2018", "Art. 7. - Textul nou.")],
+        la_data=date(2023, 1, 1),
+        republicat_din=date(2020, 1, 1),
+    )
+    assert not r.complet
+    assert r.text == "Art. 7. - Textul original."  # original kept, never the pre-republicare splice
+    assert any("anterior republicării" in lim for lim in r.limitari)
+
+
+def test_an_amendment_on_or_after_republication_applies_normally():
+    r = consolideaza(
+        "art7",
+        "Art. 7. - Textul original.",
+        [Operatie("modifica", "art7", date(2021, 6, 1), "lege-9-2021", "Art. 7. - Textul nou.")],
+        la_data=date(2023, 1, 1),
+        republicat_din=date(2020, 1, 1),
+    )
+    assert r.complet and r.text == "Art. 7. - Textul nou."  # post-republicare numbering, safe
+
+
+def test_a_provision_with_ops_both_sides_of_republication_refuses_whole():
+    ops = [
+        Operatie("modifica", "art7", date(2018, 1, 1), "lege-1-2018", "vechi"),
+        Operatie("modifica", "art7", date(2021, 1, 1), "lege-9-2021", "nou"),
+    ]
+    r = consolideaza(
+        "art7", "original", ops, la_data=date(2023, 1, 1), republicat_din=date(2020, 1, 1)
+    )
+    assert not r.complet and r.text == "original"  # one unsafe op refuses the whole provision
+
+
+def test_without_a_republication_date_nothing_changes():
+    # the rail is inert unless the act is actually republished — old behaviour is preserved
+    r = consolideaza(
+        "art7",
+        "original",
+        [Operatie("modifica", "art7", date(2018, 1, 1), "lege-1-2018", "nou")],
+        la_data=date(2023, 1, 1),
+    )
+    assert r.complet and r.text == "nou"
+
+
+def test_consolideaza_in_threads_the_acts_republication_date():
+    from scripts.consolidare import consolideaza_in
+    from scripts.parsare import ActParsat, Provizie
+    from scripts.referinte import Act
+
+    act = ActParsat(
+        act=Act("lege", "98", 2016),
+        titlu="L",
+        provizii=(Provizie("art7", "Art. 7. - Ancora."),),
+        republicat_din=date(2020, 1, 1),
+    )
+    ops = [Operatie("modifica", "art7", date(2018, 5, 1), "lege-1-2018", "Art. 7. - Nou.")]
+    rez = consolideaza_in(act, ops, la_data=date(2023, 1, 1))
+    assert not rez["art7"].complet
+    assert any("anterior republicării" in lim for lim in rez["art7"].limitari)

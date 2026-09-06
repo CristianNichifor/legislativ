@@ -86,6 +86,11 @@ _ASCUNS = re.compile(
     r'[^>]*value="(?P<val>[^"]*)"'
 )
 _NR_TTL = re.compile(r"(\d+(?:\^\d+)?)")
+# A republished act's own header carries the word `republicat(ă)`; the date on its publication line
+# is then the republication in Monitorul Oficial, not the first publication. We read it into
+# `republicat_din` so consolidation can refuse to apply pre-republication amendments to the
+# renumbered tree (see consolidare.py) instead of misattributing them.
+_REPUB = re.compile(r"republicat", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -247,8 +252,14 @@ def parseaza(html: str, url: str = "") -> ActParsat:
     den = primul("S_DEN")
     act, semnat = _act_din_denumire(den)
     pub = primul("S_PUB_BDY")
-    m_pub = _PUB.search(normalizeaza(pub))
+    pub_norm = normalizeaza(pub)
+    m_pub = _PUB.search(pub_norm)
     publicat = _data(m_pub.group("zi"), m_pub.group("luna"), m_pub.group("an")) if m_pub else None
+    # Only when the header actually says the act is republished, and only with a date to place it —
+    # never guess a republication, and never one we cannot pin in time.
+    republicat_din = (
+        publicat if publicat and (_REPUB.search(pub_norm) or _REPUB.search(den)) else None
+    )
 
     ascunse = {m.group("nume"): m.group("val") for m in _ASCUNS.finditer(html)}
     relatii = {
@@ -262,6 +273,7 @@ def parseaza(html: str, url: str = "") -> ActParsat:
         titlu=den,
         publicat=publicat,
         vigoare=publicat,
+        republicat_din=republicat_din,
         emitent=primul("S_EMT_BDY"),
         provizii=tuple(_provizii(ev)),
         sursa_url=url,
