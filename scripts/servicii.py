@@ -471,7 +471,7 @@ def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) ->
     return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
 
 
-def _nereparat_dict(n, norma=None) -> dict:
+def _nereparat_dict(n, norma=None, temeiuri: list[dict] | None = None) -> dict:
     """One `neconstitutional.Nereparat` row as a plain dict for the shipped register.
 
     `severitate` travels as the register means it — *evidential*: `blocking` says the corpus
@@ -502,6 +502,9 @@ def _nereparat_dict(n, norma=None) -> dict:
         "norma": "",
         "norma_granularitate": "",
         "norma_nota": "",
+        # On what constitutional ground it fell — the part of a strike that transfers to a rule
+        # somebody is writing now.
+        "temeiuri": temeiuri or [],
     }
     if norma is not None:
         rand |= {
@@ -510,6 +513,50 @@ def _nereparat_dict(n, norma=None) -> dict:
             "norma_nota": norma.nota,
         }
     return rand
+
+
+def _temeiuri_decizie(cx, id_portal: str, publicat: str | None) -> list[dict]:
+    """On what constitutional ground a decision struck — read once per decision, then cached.
+
+    The ground is the part of a strike that *transfers*. That art. 224 of the old Penal Code fell
+    is a fact about that article; that it fell on equality grounds is something a drafter can use
+    on a rule they are writing today.
+
+    Cached because a provision struck by four decisions asks for the same reasoning four times, and
+    reading the considerente means a regex pass over a document that runs to 12 000 characters at
+    the median.
+    """
+    from scripts.temeiuri import temeiuri
+
+    memo = getattr(_temeiuri_decizie, "_memo", None)
+    if memo is None:
+        memo = _temeiuri_decizie._memo = {}
+    if id_portal in memo:
+        return memo[id_portal]
+
+    rand = cx.execute("SELECT text FROM documente WHERE id_portal = ?", (id_portal,)).fetchone()
+    iesire: list[dict] = []
+    if rand and rand[0]:
+        la_data = None
+        if publicat:
+            try:
+                la_data = date.fromisoformat(publicat[:10])
+            except ValueError:
+                la_data = None
+        iesire = [
+            {
+                "articol": t.articol,
+                "alineate": list(t.alineate),
+                "fel": t.fel,
+                "nume": t.nume,
+                "eticheta": t.eticheta,
+                "citat": t.text,
+                "incredere": t.increderea,
+            }
+            for t in temeiuri(rand[0], la_data)
+        ]
+    memo[id_portal] = iesire
+    return iesire
 
 
 def construieste_norme_lovite(corpus_db: str) -> list[dict]:
@@ -551,11 +598,11 @@ def construieste_norme_lovite(corpus_db: str) -> list[dict]:
     try:
         index = versiuni(cx)
         randuri = cx.execute(
-            "SELECT act, locator, publicat, cheie_act FROM lovituri"
+            "SELECT act, locator, publicat, cheie_act, id_portal FROM lovituri"
             " WHERE act IS NOT NULL AND locator != '' ORDER BY publicat, cheie_act"
         ).fetchall()
         pe_unitate: dict[tuple[str, str], dict] = {}
-        for act, locator, publicat, decizie in randuri:
+        for act, locator, publicat, decizie, id_portal in randuri:
             an = int(publicat[:4]) if publicat else None
             p = textul(cx, act, locator, an, index)
             if not isinstance(p, Prevedere):
@@ -572,6 +619,7 @@ def construieste_norme_lovite(corpus_db: str) -> list[dict]:
                 "norma": p.text.strip()[:4000],
                 "norma_granularitate": p.granularitate,
                 "norma_nota": p.nota,
+                "temeiuri": _temeiuri_decizie(cx, id_portal, publicat),
             }
         return list(pe_unitate.values())
     finally:
@@ -605,6 +653,7 @@ def _reluare(draft: str, stare: Stare) -> dict:
                 "norma": r.norma[:400],
                 "severitate": r.severitate,
                 "motiv": r.motiv,
+                "temeiuri": list(r.temeiuri),
                 "incredere": r.increderea,
             }
             for r in gasite
@@ -648,6 +697,11 @@ def construieste_neconstitutional(
     cx = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
     try:
         index = versiuni(cx)
+        # `Lovitura` carries the decision's citation key, and resolving a decision by citation key
+        # is the collision `documente` exists to prevent — `decizie-5-1996` names a Court decision
+        # no better than an agency's. `lovituri` holds both keys for rows that are Court decisions
+        # by construction, so this map is exact rather than a lookup by name.
+        pe_cheie = dict(cx.execute("SELECT DISTINCT cheie_act, id_portal FROM lovituri").fetchall())
         iesire = []
         for n in randuri:
             p = n.lovitura.proviziune
@@ -656,7 +710,17 @@ def construieste_neconstitutional(
                 an = n.lovitura.publicat.year if n.lovitura.publicat else None
                 gasit = textul(cx, p.act, p.locator, an, index)
                 norma = gasit if isinstance(gasit, Prevedere) else None
-            iesire.append(_nereparat_dict(n, norma))
+            id_portal = pe_cheie.get(n.lovitura.decizie)
+            temeiuri = (
+                _temeiuri_decizie(
+                    cx,
+                    id_portal,
+                    n.lovitura.publicat.isoformat() if n.lovitura.publicat else None,
+                )
+                if id_portal
+                else []
+            )
+            iesire.append(_nereparat_dict(n, norma, temeiuri))
         return iesire
     finally:
         cx.close()
@@ -692,6 +756,7 @@ def _neconstitutional(draft: str, stare: Stare) -> list[dict]:
             "norma_granularitate": c.norma_granularitate,
             "norma_nota": c.norma_nota,
             "limitari": list(c.limitari),
+            "temeiuri": list(c.temeiuri),
             "incredere": c.increderea,
         }
         for c in coliziuni(draft, stare.neconstitutional)
