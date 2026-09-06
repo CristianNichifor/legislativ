@@ -222,6 +222,35 @@
   .watch-init{font-size:.8rem;margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--rule-soft)}
   .watch-init.nou{border-left-color:var(--material);
     background:color-mix(in srgb,var(--material) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
+  /* one bill's passage, opened under the bill it belongs to */
+  .parc-buton{font-size:.7rem;padding:.1rem .45rem;margin-left:.35rem;min-height:1.3rem;
+    vertical-align:.05em}
+  .parc{margin:.4rem 0 .6rem .5rem;padding:.5rem .7rem;border:1px solid var(--rule-soft);
+    border-radius:var(--r1);background:var(--sunk);font-size:.78rem}
+  .parc-h{font-family:var(--sans);font-size:.68rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin:.5rem 0 .25rem}
+  .parc-h:first-child{margin-top:0}
+  /* the tally, with the outcome carried next to it — the numbers alone do not say which way it
+     went, because an adoption writes no question at all */
+  .parc-vot{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline;margin:.15rem 0}
+  .parc-rez{font-weight:600;text-transform:uppercase;font-size:.66rem;letter-spacing:.03em;
+    border:1px solid currentColor;border-radius:999px;padding:.02rem .45rem}
+  .parc-rez.adoptat{color:var(--good)}
+  .parc-rez.respins{color:var(--blocking)}
+  .parc-cifre{font-family:var(--mono);font-size:.75rem}
+  .parc-etapa{display:grid;grid-template-columns:5.5rem 1fr;gap:.4rem;margin:.12rem 0;
+    line-height:1.45}
+  .parc-data{font-family:var(--mono);font-size:.72rem;color:var(--ink-mute);white-space:nowrap}
+  .parc-cam{font-size:.66rem;color:var(--ink-mute)}
+  .parc-aviz{margin:.12rem 0}
+  /* an opinion the Fișa records no verdict for. Muted rather than absent: an unanswered request
+     and an approval must not look alike, and neither must be invented */
+  .parc-sens{font-weight:600;font-size:.7rem}
+  .parc-sens.favorabil,.parc-sens.adoptare{color:var(--good)}
+  .parc-sens.negativ,.parc-sens.respingere{color:var(--blocking)}
+  .parc-sens.necunoscut{color:var(--ink-mute);font-weight:400;font-style:italic}
+  .parc-grup{font-family:var(--mono);font-size:.7rem;color:var(--accent)}
+  @media (max-width:34rem){ .parc-etapa{grid-template-columns:1fr} }
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
@@ -2593,12 +2622,71 @@ async function renderSupraveghere(){
       +(noi?` · <span class="watch-nou">${noi} inițiative noi</span>`:``)+`</div>`;
     if(inits.length) h+=`<div class="watch-inits"><div class="impact-h">Inițiative în lucru care îl ating (${inits.length})</div>`
       +inits.map(i=>`<div class="watch-init${vazute.has(i.plx_id)?"":" nou"}"><span class="plx">${esc(i.plx_id)}</span>`
-        +(i.senat_id?` · Senat ${esc(i.senat_id)}`:``)+` — ${esc((i.titlu||"").slice(0,110))} <span class="hint">[${esc((i.stadiu||"").slice(0,40))}]</span></div>`).join("")+`</div>`;
+        +(i.senat_id?` · Senat ${esc(i.senat_id)}`:``)+` — ${esc((i.titlu||"").slice(0,110))} <span class="hint">[${esc((i.stadiu||"").slice(0,40))}]</span>`
+        +` <button class="ghost mini parc-buton" data-plx="${esc(i.plx_id)}">parcurs</button>`
+        +`<div class="parc-loc" data-loc="${esc(i.plx_id)}"></div></div>`).join("")+`</div>`;
     else h+=`<div class="hint" style="margin:.3rem 0">Nicio inițiativă în lucru nu-l atinge.</div>`;
     return h+`</div>`;
   }).join("");
   try{ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }catch(e){}
   box.querySelectorAll(".watch-x").forEach(b=>b.onclick=()=>{ watchRemove(b.dataset.act); renderSupraveghere(); });
+  box.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+}
+// One bill's passage, fetched when asked for and not before: a watched act can carry a dozen
+// initiatives and none of them is being read until someone opens one.
+async function comutaParcurs(buton){
+  const gazda=buton.parentElement.querySelector(`.parc-loc[data-loc="${CSS.escape(buton.dataset.plx)}"]`);
+  if(!gazda) return;
+  if(gazda.firstChild){ gazda.innerHTML=""; buton.textContent="parcurs"; return; }
+  buton.textContent="ascunde";
+  gazda.innerHTML=`<div class="parc"><span class="spin"></span> încarc…</div>`;
+  const d=await fetch("/api/parcurs?plx="+encodeURIComponent(buton.dataset.plx))
+    .then(r=>r.json()).catch(()=>null);
+  gazda.innerHTML=d?parcursHtml(d):`<div class="parc">Parcursul nu a putut fi încărcat.</div>`;
+}
+function parcursHtml(d){
+  const et=d.etape||[], av=d.avize||[], vo=d.voturi||[], ini=d.initiatori||[];
+  // Collected per bill, so an act watched today can list initiatives whose Fișe have not been read
+  // yet. Saying so is the honest answer — an empty panel would read as "nothing happened".
+  if(!et.length && !av.length && !vo.length && !ini.length)
+    return `<div class="parc"><span class="hint">Parcursul acestei inițiative nu a fost încă citit.</span></div>`;
+  let h=`<div class="parc">`;
+  if(ini.length){
+    h+=`<div class="parc-h">Inițiatori (${ini.length})</div>`;
+    // Grouped the way the Fișa groups them: the parliamentary group is the answer to who backed it.
+    const peGrup={};
+    ini.forEach(i=>{ (peGrup[i.grup||"—"]=peGrup[i.grup||"—"]||[]).push(i.nume); });
+    h+=Object.entries(peGrup).map(([g,nume])=>
+      `<div><span class="parc-grup">${esc(g)}</span> — ${esc(nume.join(", "))}</div>`).join("");
+  }
+  if(vo.length){
+    h+=`<div class="parc-h">Voturi</div>`;
+    h+=vo.map(v=>{
+      // `rezultat` and not the tally: an adoption writes no question, so 275 for a bill and 296 to
+      // throw one out are the same three numbers with nothing between them.
+      const rez=v.rezultat?`<span class="parc-rez ${esc(v.rezultat)}">${esc(v.rezultat)}</span>`:"";
+      return `<div class="parc-vot">${rez}<span class="parc-data">${esc(v.data||"")}</span>`
+        +`<span class="parc-cifre">pentru ${v.pentru} · contra ${v.contra} · abțineri ${v.abtineri}`
+        +(v.absenti!=null?` · nu au votat ${v.absenti}`:``)+`</span>`
+        +(v.intrebare?` <span class="hint">(${esc(v.intrebare)})</span>`:``)
+        +(v.camera?` <span class="parc-cam">${esc(v.camera)}</span>`:``)+`</div>`;
+    }).join("");
+  }
+  if(av.length){
+    h+=`<div class="parc-h">Avize (${av.length})</div>`;
+    h+=av.map(a=>`<div class="parc-aviz"><span class="parc-sens ${esc(a.sens||"necunoscut")}">`
+      +esc(a.sens||(a.primit?"fără sens declarat":"cerut"))+`</span> — ${esc(a.de_la)}`
+      +(a.numar?` <span class="hint">nr. ${esc(a.numar)}</span>`:``)
+      +(a.data?` <span class="parc-data">${esc(a.data)}</span>`:``)+`</div>`).join("");
+  }
+  if(et.length){
+    h+=`<div class="parc-h">Etape (${et.length})</div>`;
+    h+=et.map(e=>`<div class="parc-etapa"><span class="parc-data">${esc(e.data||"—")}</span>`
+      +`<span>${esc(e.actiune)}`
+      +((e.comisii||[]).filter(Boolean).length?` <span class="hint">${esc(e.comisii.filter(Boolean).join("; "))}</span>`:``)
+      +(e.camera?` <span class="parc-cam">${esc(e.camera)}</span>`:``)+`</span></div>`).join("");
+  }
+  return h+`</div>`;
 }
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));

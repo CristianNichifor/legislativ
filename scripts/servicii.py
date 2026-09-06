@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -1197,6 +1198,84 @@ def _prevedere(qs: dict, stare: Stare) -> dict:
         "locator": locator,
         "titlu": stare.titlu(act_id),
         "text": (rand[0] if rand else "") or "",
+    }
+
+
+def _parcurs(qs: dict, stare: Stare) -> dict:
+    """How one bill moved: who signed it, who was asked, and how the room voted.
+
+    Read from the initiatives store, where `parcurs.colecteaza_parcurs` writes it. Returns empty
+    lists rather than an error when the passage has not been collected for that bill — a watchlist
+    is drawn from `initiative`, which is populated years before any of these rows are, and a card
+    that failed instead of saying "not read yet" would make an uncollected bill look like a broken
+    one.
+
+    Votes carry `rezultat` as well as the tally, because the tally alone does not say which way it
+    went: an adoption writes no question at all, so 275 votes *for* a bill and 296 votes to throw
+    one out are the same three numbers with nothing between them but a null field.
+    """
+    plx_id = (qs.get("plx", [""])[0] or "").strip()
+    if not plx_id:
+        return {"plx_id": "", "etape": [], "avize": [], "voturi": [], "initiatori": []}
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        try:
+            etape = [
+                {
+                    "data": r[0],
+                    "camera": r[1],
+                    "actiune": r[2],
+                    # split() on an empty string yields [""], which renders as a stray separator
+                    # where a step simply names no committee
+                    "comisii": [c for c in (r[3] or "").split("\n") if c],
+                }
+                for r in con.execute(
+                    "SELECT data, camera, actiune, comisii FROM initiativa_etapa"
+                    " WHERE plx_id = ? ORDER BY ord",
+                    (plx_id,),
+                )
+            ]
+            avize = [
+                {"de_la": r[0], "data": r[1], "sens": r[2], "numar": r[3], "primit": bool(r[4])}
+                for r in con.execute(
+                    "SELECT de_la, data, sens, numar, primit FROM initiativa_aviz"
+                    " WHERE plx_id = ? ORDER BY primit, data",
+                    (plx_id,),
+                )
+            ]
+            voturi = [
+                {
+                    "data": r[0],
+                    "camera": r[1],
+                    "intrebare": r[2],
+                    "pentru": r[3],
+                    "contra": r[4],
+                    "abtineri": r[5],
+                    "rezultat": r[6],
+                    "absenti": r[7],
+                }
+                for r in con.execute(
+                    "SELECT data, camera, intrebare, pentru, contra, abtineri, rezultat, absenti"
+                    " FROM initiativa_vot WHERE plx_id = ? ORDER BY data",
+                    (plx_id,),
+                )
+            ]
+            initiatori = [
+                {"nume": r[0], "grup": r[1], "camera": r[2], "idm": r[3]}
+                for r in con.execute(
+                    "SELECT nume, grup, camera, idm FROM initiativa_initiator"
+                    " WHERE plx_id = ? ORDER BY grup, nume",
+                    (plx_id,),
+                )
+            ]
+        except sqlite3.OperationalError:
+            # The store predates these tables — nothing has been collected yet.
+            return {"plx_id": plx_id, "etape": [], "avize": [], "voturi": [], "initiatori": []}
+    return {
+        "plx_id": plx_id,
+        "etape": etape,
+        "avize": avize,
+        "voturi": voturi,
+        "initiatori": initiatori,
     }
 
 
