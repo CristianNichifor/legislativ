@@ -5,13 +5,14 @@ This is the layer the product sits on: it gathers the operations an act has unde
 engine over the act's provision tree, and returns each touched provision as text-in-force plus the
 acts that changed it, or an honest note where consolidation was refused.
 
-**The provision source is a seam, on purpose.** Today it reads committed local pages — the target
-act and the amending acts that touch it, from `sources/`. That is offline and bounded, a demo of
-the surface rather than general coverage. The intended evolution (recorded with the product
-decisions) is a hosted database of consolidated law that a local install re-syncs; when that
-arrives it fills the same `CATALOG` shape and the surface above does not change. What must never
-happen here is a live per-request fetch from the portal on the product path — the tool stays
-local, and consolidation reads what has been synced, not what a page returns right now.
+**The provision source is a seam, on purpose.** The set of consolidatable acts is not hardcoded: it
+is *derived* from the committed local pages in `sources/` — an act is consolidatable when its own
+page is present and at least one present page amends it (`_catalog`). Coverage is exactly what has
+been synced, and it grows as more pages land. The intended evolution (recorded with the product
+decisions) is a hosted database of consolidated law that a local install re-syncs; when that arrives
+it feeds the same discovery, and the surface above does not change. What must never happen here is a
+live per-request fetch from the portal on the product path — the tool stays local, and consolidation
+reads what has been synced, not what a page returns right now.
 
 Standard library only, like the rest.
 """
@@ -27,25 +28,48 @@ from scripts.parsare import ActParsat, citate_din_fisier, din_fisier
 
 _SURSE = Path(__file__).resolve().parent.parent / "sources"
 
-# act id → the local pages that consolidate it. The seam a hosted, re-syncable source will later
-# fill; the keys are act ids because that is what the rest of the package keys on.
-CATALOG: dict[str, dict[str, object]] = {
-    "lege-98-2016": {
-        "tinta": "lege-98-2016.html.gz",
-        "amendatoare": ["lege-208-2022.html.gz"],
-    },
-}
+
+@lru_cache(maxsize=1)
+def _catalog() -> dict[str, dict[str, object]]:
+    """Which acts this install can consolidate, derived from the pages present in `sources/`.
+
+    An act is consolidatable when its own page is present and at least one present page performs an
+    operation on it. This replaces a hardcoded list: the set is exactly what has been synced, and it
+    grows as more pages land — the pluggable-source seam this module describes, filled from local
+    pages now and from the hosted consolidated database later. A page that cannot be parsed, or that
+    parses skew (its replacement-announcing points and its quoted blocks disagree), is skipped
+    rather than trusted — discovery must not invent a consolidation it cannot stand behind.
+    """
+    pagini: dict[str, str] = {}
+    for cale in sorted(_SURSE.glob("*.gz")):
+        try:
+            pagini[din_fisier(cale).act.id] = cale.name
+        except Exception:
+            continue
+    catalog: dict[str, dict[str, object]] = {}
+    for cale in sorted(_SURSE.glob("*.gz")):
+        try:
+            amendator = din_fisier(cale)
+            tinte = operatii_amendatoare(amendator, citate_din_fisier(cale))
+        except Exception:
+            continue  # not an amending page, or it parsed skew — either way, not a source of truth
+        for target_id in tinte:
+            if target_id not in pagini or target_id == amendator.act.id:
+                continue
+            spec = catalog.setdefault(target_id, {"tinta": pagini[target_id], "amendatoare": []})
+            amendatoare: list = spec["amendatoare"]  # type: ignore[assignment]
+            if cale.name not in amendatoare:
+                amendatoare.append(cale.name)
+    return catalog
 
 
 def acte_disponibile() -> list[dict]:
-    """The acts this install can consolidate right now — those whose pages are actually present."""
-    out: list[dict] = []
-    for act_id, spec in CATALOG.items():
-        tinta = _SURSE / str(spec["tinta"])
-        amendatoare = [a for a in spec["amendatoare"] if (_SURSE / a).is_file()]  # type: ignore[union-attr]
-        if tinta.is_file() and amendatoare:
-            out.append({"act_id": act_id, "amendatoare": len(amendatoare)})
-    return out
+    """The acts this install can consolidate right now, most-amended first."""
+    out = [
+        {"act_id": act_id, "amendatoare": len(spec["amendatoare"])}  # type: ignore[arg-type]
+        for act_id, spec in _catalog().items()
+    ]
+    return sorted(out, key=lambda a: (-a["amendatoare"], a["act_id"]))
 
 
 def consolideaza_local(
@@ -58,7 +82,7 @@ def consolideaza_local(
     was not changed) and one `Rezultat` per touched provision — consolidated text with attribution
     where the engine could apply the change, the original with a reason where it refused.
     """
-    spec = CATALOG.get(act_id)
+    spec = _catalog().get(act_id)
     if spec is None:
         raise KeyError(act_id)
     tinta = din_fisier(_SURSE / str(spec["tinta"]))
@@ -91,7 +115,7 @@ def modificari_pentru(act_id: str, la_data: date | None = None) -> dict[str, Rez
     without special-casing. This is what the linter reads to tell a draft it may be citing a
     provision that has since moved.
     """
-    if act_id not in CATALOG:
+    if act_id not in _catalog():
         return {}
     try:
         return _consolidat_cache(act_id, la_data)
