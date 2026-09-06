@@ -151,25 +151,29 @@ def test_both_backings_report_the_same_republication_date(tmp_path):
 
 def test_the_manifest_counts_acts_that_are_actually_structured(tmp_path):
     """A flattened act holds one `locator='text'` row, so provision count alone cannot tell a
-    corpus of article trees from a corpus of blobs — the two report the same shape."""
+    corpus of article trees from a corpus of blobs — the two report the same shape.
+
+    The fixture act is a Curtea Constituțională decision, which is why it is *not* the structured
+    one here: a decision has no article tree to parse and does not belong in either side of the
+    ratio. Two laws are added, one enriched and one flat.
+    """
     corpus = _corpus(tmp_path)
     with deschide(corpus) as con:
-        structurat = con.execute("SELECT id FROM acte LIMIT 1").fetchone()[0]
-        # a second, deliberately unenriched act: provizii has a foreign key into acte
-        con.execute(
-            "INSERT INTO acte (id, tip, titlu, citit_la)"
-            " VALUES ('lege-1-2000','lege','X','2020-01-01')"
+        con.executemany(
+            "INSERT INTO acte (id, tip, titlu, citit_la) VALUES (?,?,?,'2020-01-01')",
+            [("lege-1-2000", "lege", "structurata"), ("lege-2-2000", "lege", "aplatizata")],
         )
         con.execute("DELETE FROM provizii")
         con.executemany(
             "INSERT INTO provizii (act_id, locator, text, ord) VALUES (?,?,?,?)",
             [
-                (structurat, "art1", "x", 1),
-                (structurat, "art2", "y", 2),
-                ("lege-1-2000", "text", "z", 1),  # flattened: the whole act in one row
+                ("lege-1-2000", "art1", "x", 1),
+                ("lege-1-2000", "art2", "y", 2),
+                ("lege-2-2000", "text", "z", 1),  # flattened: the whole act in one row
             ],
         )
         con.commit()
     manifest = construieste(corpus, str(tmp_path / "web"), log=lambda *a, **k: None)
     assert manifest["provizii"] == 3
-    assert manifest["acte_structurate"] == 1  # not 2: the flattened act does not count
+    assert manifest["acte_structurate"] == 1  # not 2: the flattened law does not count
+    assert manifest["acte_normative"] == 2  # the decision in the fixture is not normative
