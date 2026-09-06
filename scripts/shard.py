@@ -54,9 +54,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
             }
             for r in acte
         ]
-        (baza / "index.json").write_text(
-            json.dumps(index, ensure_ascii=False), encoding="utf-8"
-        )
+        (baza / "index.json").write_text(json.dumps(index, ensure_ascii=False), encoding="utf-8")
 
         # token -> set of act positions, and one provisions file per act as we go.
         postari: dict[str, set[int]] = {}
@@ -89,8 +87,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
         from scripts.analiza import termeni_corpus
 
         termeni = [
-            {"termen": t.termen, "definitie": t.definitie}
-            for t in termeni_corpus(con, limita=800)
+            {"termen": t.termen, "definitie": t.definitie} for t in termeni_corpus(con, limita=800)
         ]
         (baza / "termeni.json").write_text(
             json.dumps(termeni, ensure_ascii=False), encoding="utf-8"

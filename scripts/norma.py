@@ -38,10 +38,15 @@ from scripts.text import fara_diacritice
 # front-loaded participle, the archaic connectors, numbers spelled out.
 _ACTUAL: tuple[tuple[re.Pattern[str], int], ...] = (
     # reflexive-passive legistic verbs — the single strongest tell of the old register
-    (re.compile(r"\bse (?:modifica|completeaza|abroga|aproba|dispune|instituie|stabile[sș]te|"
-                r"prevede|aplica|considera|efectueaza|realizeaza|desemneaza|deleaga|"
-                r"abiliteaza|mandateaza|adopta)\b"), 3),
-    (re.compile(r"\bprezent(?:ul|a|ei|ele|elor)\b"), 2),          # "prezentul act", "prezenta lege"
+    (
+        re.compile(
+            r"\bse (?:modifica|completeaza|abroga|aproba|dispune|instituie|stabile[sș]te|"
+            r"prevede|aplica|considera|efectueaza|realizeaza|desemneaza|deleaga|"
+            r"abiliteaza|mandateaza|adopta)\b"
+        ),
+        3,
+    ),
+    (re.compile(r"\bprezent(?:ul|a|ei|ele|elor)\b"), 2),  # "prezentul act", "prezenta lege"
     (re.compile(r"\b(?:prevederile|dispozitiile|dispozitiunile)\b"), 2),
     (re.compile(r"\bpotrivit\b"), 1),
     (re.compile(r"\bin conformitate cu\b"), 1),
@@ -50,20 +55,25 @@ _ACTUAL: tuple[tuple[re.Pattern[str], int], ...] = (
     (re.compile(r"\b(?:prevazut|prevazuta|prevazute|prevazuti)\b(?![^.]*\bcare\b)"), 1),
     (re.compile(r"\b(?:susmentionat|precitat|antemention)"), 1),
     # numbers spelled out, the current-register habit the plain norm drops for digits
-    (re.compile(r"\b(?:unsprezece|doisprezece|treisprezece|paisprezece|cincisprezece|"
-                r"saisprezece|saptesprezece|optsprezece|nouasprezece|douazeci|treizeci|"
-                r"patruzeci|cincizeci|saizeci|saptezeci|optzeci|nouazeci|"
-                r"o suta|doua sute|trei sute)\b"), 2),
+    (
+        re.compile(
+            r"\b(?:unsprezece|doisprezece|treisprezece|paisprezece|cincisprezece|"
+            r"saisprezece|saptesprezece|optsprezece|nouasprezece|douazeci|treizeci|"
+            r"patruzeci|cincizeci|saizeci|saptezeci|optzeci|nouazeci|"
+            r"o suta|doua sute|trei sute)\b"
+        ),
+        2,
+    ),
 )
 
 # Plain-language norm: the named duty, direct address, conditions after the statement, digits.
 _NOU: tuple[tuple[re.Pattern[str], int], ...] = (
-    (re.compile(r"\btrebuie sa\b"), 3),                            # a plain duty, named
+    (re.compile(r"\btrebuie sa\b"), 3),  # a plain duty, named
     (re.compile(r"\bnu are voie sa\b"), 3),
     (re.compile(r"\b(?:are|au) dreptul\b"), 2),
     (re.compile(r"\b(?:poate|pot) sa\b"), 1),
     (re.compile(r"\beste obligat(?:a|i|e)? sa\b"), 2),
-    (re.compile(r"^\s*daca\b[^.]*\batunci\b"), 3),                 # IF … THEN, the Danish shape
+    (re.compile(r"^\s*daca\b[^.]*\batunci\b"), 3),  # IF … THEN, the Danish shape
     (re.compile(r"\bnu poate depasi\b"), 1),
     # a bare digit + time-unit, the plain norm's "30 de zile" against the register's "treizeci"
     (re.compile(r"\b\d+\s+(?:zile|luni|ani|ore|zile lucratoare)\b"), 2),

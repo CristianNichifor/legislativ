@@ -72,16 +72,20 @@ def _nod_alineat(numar: str, corp: str) -> dict:
     return {"nivel": "alin", "numar": numar, "text": chapeau, "copii": copii}
 
 
-def _segmente(text: str, pat: re.Pattern, asteptate,
-              cere_majuscula: bool = False) -> tuple[str, list[tuple[str, str]]]:
+def _segmente(
+    text: str, pat: re.Pattern, asteptate, cere_majuscula: bool = False
+) -> tuple[str, list[tuple[str, str]]]:
     """Take the markers that match the expected sequence at a boundary; return the text before the
     first taken marker (the chapeau) and one (token, segment) per taken marker."""
     luate: list[tuple[str, int, int]] = []
     urmator = next(asteptate, None)
     for m in pat.finditer(text):
-        if (urmator is not None and m.group(1).lower() == urmator
-                and _la_granita(text, m.start())
-                and (not cere_majuscula or _urmeaza_majuscula(text, m.end()))):
+        if (
+            urmator is not None
+            and m.group(1).lower() == urmator
+            and _la_granita(text, m.start())
+            and (not cere_majuscula or _urmeaza_majuscula(text, m.end()))
+        ):
             luate.append((m.group(1), m.start(), m.end()))
             urmator = next(asteptate, None)
     if not luate:

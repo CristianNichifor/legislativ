@@ -47,8 +47,10 @@ def test_litere_in_alineat():
 
 def test_ignora_referinte_in_secventa():
     # "(2)" is cited inside alineat (1) before the real (2); the parser must not split there.
-    t = ("Articolul 5\n(1) Autoritatea, potrivit art. 7 alin. (2), decide.\n"
-         "(2) Termenul este de 30 de zile.")
+    t = (
+        "Articolul 5\n(1) Autoritatea, potrivit art. 7 alin. (2), decide.\n"
+        "(2) Termenul este de 30 de zile."
+    )
     art = _art(parseaza_text(t))
     assert [a["numar"] for a in art["copii"]] == ["1", "2"]
     assert "art. 7 alin. (2)" in art["copii"][0]["text"]

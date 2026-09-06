@@ -288,8 +288,7 @@ def _slice_corpus() -> None:
             (*CURATE, N_ACTE),
         )
         con.execute(
-            "INSERT INTO provizii SELECT * FROM plin.provizii "
-            "WHERE act_id IN (SELECT id FROM acte)"
+            "INSERT INTO provizii SELECT * FROM plin.provizii WHERE act_id IN (SELECT id FROM acte)"
         )
         con.execute(
             "INSERT INTO provizii_fts(text, act_id, locator) SELECT text, act_id, locator "
@@ -297,7 +296,7 @@ def _slice_corpus() -> None:
         )
         con.commit()
         con.execute("DETACH plin")
-    print(f"  corpus slice → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  corpus slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _slice_initiative() -> None:
@@ -316,7 +315,7 @@ def _slice_initiative() -> None:
         )
         con.commit()
         con.execute("DETACH plin")
-    print(f"  initiative slice → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  initiative slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _date_din_corpus() -> None:
@@ -348,7 +347,7 @@ def _date_din_fixturi() -> None:
             scrie_act(con, din_fisier(gz))
             n += 1
         con.commit()
-    print(f"  corpus din {n} fixturi → {corpus} ({corpus.stat().st_size/1e6:.2f} MB)")
+    print(f"  corpus din {n} fixturi → {corpus} ({corpus.stat().st_size / 1e6:.2f} MB)")
 
     ini = DATA / "initiative.db"
     if ini.exists():
@@ -390,7 +389,7 @@ def _bundle() -> None:
             z.write(p, f"scripts/{p.name}")
         for p in sorted((ROOT / "sources").glob("*.gz")):
             z.write(p, f"sources/{p.name}")
-    print(f"  bundle → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  bundle → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _worker() -> None:
