@@ -17,7 +17,16 @@ from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
 from scripts.graf import construieste
-from scripts.servicii import Stare, _cauta, _lint, _redacteaza, _repealed, _targets, _vecini
+from scripts.servicii import (
+    Stare,
+    _cauta,
+    _lint,
+    _norma,
+    _redacteaza,
+    _repealed,
+    _targets,
+    _vecini,
+)
 
 
 def _build(tmp_path: Path) -> Stare:
@@ -54,6 +63,65 @@ def _build(tmp_path: Path) -> Stare:
     with depozit.deschide(initiative) as con:
         depozit.scrie_initiativa(con, ini)
     return Stare(str(corpus), str(initiative))
+
+
+def test_lint_reports_normative_register_apart_from_operation_form(tmp_path):
+    """`limbaj` travels in its own key, partitioned out of `drafting` rather than added to it.
+
+    The two answer different questions. `drafting` says the operation was named with the wrong verb;
+    `limbaj` says the verb is right but the sentence is not written the way a norm is written.
+    `conformitate` returns both in one list, so the split has to be a partition — computing `limbaj`
+    separately would report every register finding twice, once under each heading.
+    """
+    stare = _build(tmp_path)
+    draft = (
+        "La articolul 7 din Legea nr. 98/2016 se modifică și va avea următorul cuprins: "
+        "Normele metodologice se vor aproba de Guvern. "
+        "Ofertantul trebuie să depună actele și/sau documentele, avizele etc."
+    )
+    out = _lint(draft, stare)
+    gasite = {a["gasit"].lower() for a in out["limbaj"]}
+    assert "se vor" in gasite  # future tense
+    assert any("trebuie s" in g for g in gasite)  # obligation stated indirectly
+    assert any("și/sau" in g or "si/sau" in g for g in gasite)  # ambiguous conjunction
+    assert any(g.startswith("etc") for g in gasite)  # open enumeration
+    # every finding explains itself and cites the rule, because the point is to fix the draft
+    assert all(a["explicatie"] for a in out["limbaj"])
+    # and none of this is also sitting in the operation-form pass — no finding is reported twice
+    assert all(a["operatie"] != "limbaj" for a in out["drafting"])
+    assert not {a["gasit"] for a in out["limbaj"]} & {a["gasit"] for a in out["drafting"]}
+    # this draft names its operation correctly and supplies the cuprins clause, so the form pass has
+    # nothing to say — which is the point: four findings, none of them about the verb
+    assert out["drafting"] == []
+
+
+def test_lint_still_reports_operation_form_errors_after_the_split(tmp_path):
+    """The partition must not swallow the half it was meant to leave alone."""
+    stare = _build(tmp_path)
+    out = _lint("Articolul 7 din Legea nr. 98/2016 se elimină.", stare)
+    assert any(a["operatie"] == "abroga" for a in out["drafting"])
+    assert out["limbaj"] == []
+
+
+def test_lint_limbaj_is_empty_for_a_draft_written_in_the_right_register(tmp_path):
+    stare = _build(tmp_path)
+    out = _lint("Autoritatea contractantă publică anunțul de participare.", stare)
+    assert out["limbaj"] == []
+
+
+def test_norma_carries_register_findings_alongside_coherence():
+    """The composer asks both questions of one text, so one round trip answers both."""
+    d = _norma("Normele metodologice se vor aproba de Guvern.")
+    assert [a["gasit"].lower() for a in d["limbaj"]] == ["se vor"]
+    # the coherence keys the badge already relies on are untouched
+    assert {"dominanta", "coerent", "raport", "unitati", "abateri"} <= set(d)
+
+
+def test_norma_register_findings_survive_a_neutral_text():
+    """A text with no norm markers is `neutru`: the badge stays silent, «etc.» is still «etc.»."""
+    d = _norma("Se depun actele, avizele etc.")
+    assert d["dominanta"] == "neutru"
+    assert any(a["gasit"].startswith("etc") for a in d["limbaj"])
 
 
 def test_lint_returns_all_three_sections_from_both_databases(tmp_path):

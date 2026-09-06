@@ -191,9 +191,22 @@ def _lint(draft: str, stare: Stare) -> dict:
         ]
     from scripts.redactare import conformitate, interventii_conflictuale
 
+    # `conformitate` returns both kinds of departure in one list, and they answer different
+    # questions: an operation-form error says the intent was named with the wrong verb, a `limbaj`
+    # one says the verb is right but the sentence is not written the way a norm is written. Reported
+    # together they shared a heading and a count, so "redactare: 4" could mean four wrong verbs, or
+    # four occurrences of «etc.», or any mix. Partitioned here — one pass, each finding in exactly
+    # one bucket, no double-reporting.
+    abateri = conformitate(draft)
     drafting = [
         {"gasit": a.gasit, "operatie": a.operatie, "explicatie": a.explicatie}
-        for a in conformitate(draft)
+        for a in abateri
+        if a.operatie != "limbaj"
+    ]
+    limbaj = [
+        {"gasit": a.gasit, "fragment": a.fragment, "explicatie": a.explicatie}
+        for a in abateri
+        if a.operatie == "limbaj"
     ]
     conflicte = [
         {"fel": c.fel, "act": c.act, "locator": c.locator, "explicatie": c.explicatie}
@@ -211,6 +224,7 @@ def _lint(draft: str, stare: Stare) -> dict:
         "repealed": _repealed(draft, stare),
         "calificate": _calificate(draft, stare),
         "drafting": drafting,
+        "limbaj": limbaj,
         "conflicte": conflicte,
         "consolidare": _consolidare_semnale(draft),
         "obligatii_neindeplinite": _obligatii_neindeplinite(draft, stare),
@@ -713,11 +727,21 @@ def _norma(text: str) -> dict:
     """Check a submitted project is written entirely in one drafting norm, not a mix of the two.
 
     Deterministic, no model (see `scripts.norma`). Returns the dominant norm, whether the project is
-    coherent, and the exact units that break from the majority so the editor can point at them."""
+    coherent, and the exact units that break from the majority so the editor can point at them.
+
+    It also carries the normative-register findings for the same text. Two different questions
+    about one piece of writing — *is it all in one norm* and *is it in the register a norm is
+    written in* — and the composer asks both of a draft it already has in hand, so they travel
+    together rather than costing a second round trip."""
     from scripts.norma import coerenta
+    from scripts.redactare import limbaj_normativ
 
     c = coerenta(text or "")
     return {
+        "limbaj": [
+            {"gasit": a.gasit, "fragment": a.fragment, "explicatie": a.explicatie}
+            for a in limbaj_normativ(text or "")
+        ],
         "dominanta": c.dominanta,
         "coerent": c.coerent,
         "raport": c.raport(),
