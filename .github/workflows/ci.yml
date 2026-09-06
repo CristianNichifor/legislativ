@@ -13,8 +13,8 @@ jobs:
     name: extractors + gold set
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - name: Checks
         env:
           # Determinism is a hard requirement: a test that depends on set iteration order or
