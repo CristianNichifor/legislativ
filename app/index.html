@@ -281,9 +281,13 @@
   ::-webkit-scrollbar-corner{background:transparent}
   /* per-textarea toolbar: deterministic Format + local-AI rewrite by norm */
   .txt-tools{display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin:.35rem 0 0}
-  .txt-tools .mini{font-size:.68rem;padding:.2rem .55rem}
-  .txt-tools select.norma{height:1.95rem;font-size:.68rem;padding:.1rem 1.5rem .1rem .55rem;
-    background-size:.5rem;width:auto;min-width:0}
+  /* Format / norm select / Rescrie AI / revino — one uniform pill row */
+  .txt-tools .mini,.txt-tools select.norma{font-family:var(--sans);font-size:.68rem;font-weight:600;
+    height:1.95rem;line-height:1;padding:0 .6rem;border:1px solid var(--accent);color:var(--accent);
+    background-color:transparent;border-radius:5px;box-sizing:border-box;display:inline-flex;
+    align-items:center}
+  .txt-tools select.norma{padding-right:1.7rem;width:auto;min-width:0;background-size:.5rem;
+    background-position:right .55rem center}
   .txt-tools .txt-stat{font-size:.66rem;color:var(--ink-mute)}
   /* live-preview badge on the composed act */
   .r-live{display:inline-block;font-size:.6rem;font-weight:700;text-transform:uppercase;
