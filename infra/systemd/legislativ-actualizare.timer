@@ -1,0 +1,19 @@
+[Unit]
+Description=Legislativ — verificare zilnică a legislației noi
+Documentation=https://github.com/CristianNichifor/legislativ
+
+[Timer]
+OnCalendar=daily
+
+# Două lucruri fac diferența dintre un timer care merge și unul care doar pare că merge.
+#
+# `Persistent=true`: dacă mașina a fost oprită la ora declanșării — un laptop, adică aproape
+# întotdeauna — rularea pierdută se execută la următoarea pornire. Fără asta, un timer zilnic pe
+# un laptop se declanșează în zilele în care se nimerește să fie pornit la miezul nopții.
+#
+# `RandomizedDelaySec`: nu cerem serviciului unui minister exact la aceeași secundă în fiecare zi.
+Persistent=true
+RandomizedDelaySec=45m
+
+[Install]
+WantedBy=timers.target
