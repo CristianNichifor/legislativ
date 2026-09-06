@@ -16,7 +16,10 @@ import gzip
 import hashlib
 from pathlib import Path
 
-FISIERE = ("corpus.db", "initiative.db", "graf.db")
+# The distribution, not the archive: `corpus.db` keeps every collided document's text and is
+# 6.4 GB, where the cut sent to a reader is 2.5 GB and 742 MB compressed. `scripts.distributie`
+# builds it; this ships it.
+FISIERE = ("corpus-distributie.db", "initiative.db", "graf.db")
 
 
 def impacheteaza(sursa: Path = Path("."), dist: Path = Path("dist")) -> list[tuple[str, int, str]]:
@@ -27,11 +30,21 @@ def impacheteaza(sursa: Path = Path("."), dist: Path = Path("dist")) -> list[tup
         cale = sursa / nume
         if not cale.is_file():
             continue
-        brut = cale.read_bytes()
-        comprimat = gzip.compress(brut, 9)
+        # Streamed, not slurped. This was `read_bytes()` then `gzip.compress()` — both the
+        # plaintext and the compressed copy in memory at once — written when the corpus was
+        # small. At 2.5 GB that is 5 GB of resident memory to produce one file, and at the 6.4 GB
+        # archive it does not complete at all.
         tinta = dist / f"{nume}.gz"
-        tinta.write_bytes(comprimat)
-        rezultat.append((f"{nume}.gz", len(comprimat), hashlib.sha256(comprimat).hexdigest()))
+        suma = hashlib.sha256()
+        octeti = 0
+        with cale.open("rb") as intrare, gzip.open(tinta, "wb", compresslevel=9) as iesire:
+            for bucata in iter(lambda: intrare.read(1 << 20), b""):
+                iesire.write(bucata)
+        with tinta.open("rb") as citit:
+            for bucata in iter(lambda: citit.read(1 << 20), b""):
+                suma.update(bucata)
+                octeti += len(bucata)
+        rezultat.append((f"{nume}.gz", octeti, suma.hexdigest()))
     return rezultat
 
 
