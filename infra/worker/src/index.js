@@ -130,7 +130,9 @@ export default {
       if (!success) return json({ error: "prea multe cereri, încearcă mai târziu" }, cors, 429);
     }
 
-    let act, loc, text, stil = "nou", reqModel;
+    // No default on `stil`: both branches below assign it (each with its own `|| "nou"`) and the
+    // third returns, so an initialiser here could never be read — it only looked like a fallback.
+    let act, loc, text, stil, reqModel;
     if (request.method === "GET") {
       act = url.searchParams.get("act"); loc = url.searchParams.get("loc");
       stil = url.searchParams.get("stil") || "nou";
