@@ -1169,6 +1169,37 @@ def _act(qs: dict, stare: Stare) -> dict:
     return {"act_id": act_id, "cunoscut": stare.cunoscut(act_id), "titlu": stare.titlu(act_id)}
 
 
+def _prevedere(qs: dict, stare: Stare) -> dict:
+    """One provision's stored text, by act and locator. What a citation chip shows on hover.
+
+    The consolidation view lists only the provisions an amendment *touched* — twenty rows for an
+    act with hundreds — so nearly every citation inside it points at an article of the same act
+    that is not on screen. Highlighting alone therefore answered almost nothing: measured on
+    Legea 98/2016, 48 of 50 chips had no visible target. This is the other half of following a
+    reference, and it reads the corpus as published rather than as consolidated.
+
+    `gasit=False` where the corpus does not hold that provision — an act stored as one flattened
+    row has no `art. 187` to return, and saying so is the point. A chip that quietly showed nothing
+    would be indistinguishable from a provision that says nothing.
+    """
+    act_id = (qs.get("act", [""])[0] or "").strip()
+    locator = (qs.get("loc", [""])[0] or "").strip()
+    if not act_id or not locator:
+        return {"gasit": False, "act_id": act_id, "locator": locator, "text": ""}
+    with depozit.deschide(stare.corpus, readonly=True) as con:
+        rand = con.execute(
+            "SELECT text FROM provizii WHERE act_id = ? AND locator = ? ORDER BY ord LIMIT 1",
+            (act_id, locator),
+        ).fetchone()
+    return {
+        "gasit": rand is not None,
+        "act_id": act_id,
+        "locator": locator,
+        "titlu": stare.titlu(act_id),
+        "text": (rand[0] if rand else "") or "",
+    }
+
+
 def _parseaza(text: str) -> dict:
     """Recover the Articol ▸ Alineat ▸ Literă tree from the pasted plain text of an act, so the
     editor can load an existing law as blocks to redact. Deterministic, no model."""
@@ -1335,12 +1366,20 @@ def _consolidat(qs: dict) -> dict:
     except KeyError:
         return {"error": f"actul «{act_id}» nu este disponibil local pentru consolidare"}
 
+    from scripts.ancore import ca_dict as _ancore
+
+    # The text handed to the page is the *normalised* one, because the anchor offsets are measured
+    # against it. Sending the raw text with offsets read off a normalised copy would draw every
+    # chip a few characters off wherever the original had a double space or a wrapped line.
+    ancorate = {r.locator: _ancore(r.text or "", propriu=r.locator) for r in rez.values()}
+
     provizii = [
         {
             "locator": r.locator,
             "complet": r.complet,
             "abrogat": r.abrogat,
-            "text": r.text,
+            "text": ancorate[r.locator]["text"] if r.text else r.text,
+            "ancore": ancorate[r.locator]["ancore"],
             "schimbari": [
                 {"act": s.act, "fel": s.fel, "data": s.data.isoformat() if s.data else None}
                 for s in r.schimbari

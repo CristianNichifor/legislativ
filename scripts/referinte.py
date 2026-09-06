@@ -464,15 +464,16 @@ def extinde_serii(
     """
     iesire: list[tuple[Locator, int, int]] = []
     for loc, start, end in locuri:
-        iesire.append((loc, start, end))
         camp = _adancimea(loc)
         if camp is None:
+            iesire.append((loc, start, end))
             continue
         interval = _INTERVAL_LITERA if camp == "litera" else _INTERVAL_NUMAR
         coada = _COADA_LITERA if camp == "litera" else _COADA_NUMAR
         marca = "litera" if camp == "litera" else "numar"
 
         capat = end
+        frati: list[tuple[Locator, int, int]] = []
         gama = interval.match(text, capat)
         if gama is not None:
             sir = _sirul(getattr(loc, camp), gama.group("pana"))
@@ -480,8 +481,17 @@ def extinde_serii(
                 for val in sir[1:]:
                     frate = _extinde(loc, val)
                     if frate is not None:
-                        iesire.append((frate, gama.start("pana"), gama.end()))
+                        frati.append((frate, gama.start("pana"), gama.end()))
                 capat = gama.end()
+        # The head of a range ends where the range does. Not cosmetic: `referinte` binds a locator
+        # to an act across the gap between them, and a head left at `art. 7` inside `art. 7-9 din
+        # Legea nr. 98/2016` has `-9 din ` as its gap, which is not a joining word. The head came
+        # out attached to no act while the two members it opened were attached to Legea 98/2016 —
+        # one citation resolving to two different acts, and the unattached head then read as an
+        # internal reference to the act being drafted. Enumerations never had this because their
+        # tail is already inside the `locatori` pattern, so the head's span covers it.
+        iesire.append((loc, start, capat))
+        iesire.extend(frati)
 
         candidati: list[tuple[Locator, int, int, bool]] = []
         for _ in range(_MAX_ENUMERARE):
