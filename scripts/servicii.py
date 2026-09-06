@@ -206,6 +206,7 @@ def _lint(draft: str, stare: Stare) -> dict:
         "duplicates": dup,
         "targets": _targets(draft, stare),
         "repealed": _repealed(draft, stare),
+        "calificate": _calificate(draft, stare),
         "drafting": drafting,
         "conflicte": conflicte,
         "consolidare": _consolidare_semnale(draft),
@@ -482,6 +483,33 @@ def _repealed(draft: str, stare: Stare) -> list[dict]:
                 "intregul_act": cm.abrogare.este_intregul_act,
             }
             for cm in citari_moarte(draft, graf)
+        ]
+    finally:
+        graf.close()
+
+
+def _calificate(draft: str, stare: Stare) -> list[dict]:
+    """References in the draft to a provision with a qualified status short of repeal — suspended,
+    derogated from, or with a prorogated term. Read from the graph's `suspenda`/`deroga`/`proroga`
+    edges; silent where the data cannot reach, and a provision already caught as repealed is not
+    repeated here. Material, not blocking: the citation is not dead, but it is not unqualified.
+    """
+    if not stare.are_graf():
+        return []
+    from scripts.graf import _deschide_graf
+    from scripts.vigoare import citari_calificate
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        return [
+            {
+                "act_id": cc.act_id,
+                "locator": cc.locator,
+                "eticheta": cc.eticheta,
+                "motiv": cc.motiv,
+                "intregul_act": cc.calificare.este_intregul_act,
+            }
+            for cc in citari_calificate(draft, graf)
         ]
     finally:
         graf.close()
