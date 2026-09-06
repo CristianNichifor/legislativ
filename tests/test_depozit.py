@@ -180,11 +180,11 @@ def test_refetching_the_same_document_updates_it_in_place(db):
 def test_rewriting_an_act_leaves_no_stale_full_text_rows(db):
     """Replacing an act must remove its old search rows, or it matches twice with stale text.
 
-    This was previously done with `DELETE FROM provizii_fts WHERE act_id = ?`, which is a full
-    scan of the fts5 table because `act_id` is UNINDEXED there. Correct, and it made collection
-    cost grow with the corpus: 65 ms per record at 18 000 rows, ten records to a page, projecting
-    to 9.1 s per page at the full 251 460 documents. The rowid map replaces the scan; this test
-    is what stops the replacement from quietly losing the delete.
+    This was once `DELETE FROM provizii_fts WHERE act_id = ?`, a full scan of the fts5 table
+    because `act_id` is UNINDEXED there — 65 ms per record at 18 000 rows, ten records to a page,
+    projecting to 9.1 s per page at the full corpus. It became a rowid map, and then went away
+    entirely when the index moved to external content and rowids came straight from `provizii`.
+    Through all three, this test is what stops the delete from quietly going missing.
     """
     from scripts.api import Inregistrare
     from scripts.colector import act_din_inregistrare
@@ -221,36 +221,11 @@ def test_rewriting_an_act_leaves_no_stale_full_text_rows(db):
             ).fetchone()[0]
             == 1
         )
-        # The map must not leak rows either, or it grows without bound.
-        assert con.execute("SELECT count(*) FROM provizii_fts_rand").fetchone()[0] == 1
-
-
-def test_a_corpus_written_before_the_map_existed_is_backfilled(db):
-    """An older corpus has full-text rows and no map; the first write-open must reconcile them."""
-    from scripts.api import Inregistrare
-    from scripts.colector import act_din_inregistrare
-
-    r = Inregistrare(
-        titlu="LEGE nr. 8/2001",
-        tip_act="LEGE",
-        numar="8",
-        an=2001,
-        data_vigoare=None,
-        emitent="Parlamentul",
-        publicatie="MO",
-        link_html="http://legislatie.just.ro/Public/DetaliiDocument/800",
-        text="text vechi de dinainte de harta",
-    )
-    with depozit.deschide(db) as con:
-        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
-        # Simulate the pre-migration state: index populated, map absent.
-        con.execute("DELETE FROM provizii_fts_rand")
-
-    with depozit.deschide(db) as con:
-        assert con.execute("SELECT count(*) FROM provizii_fts_rand").fetchone()[0] == 1
-        nou = Inregistrare(**{**r.__dict__, "text": "text nou"})
-        depozit.scrie_inregistrare(con, nou, act_din_inregistrare(nou))
-        assert con.execute("SELECT count(*) FROM provizii_fts").fetchone()[0] == 1
+        # The index must hold exactly one row per provision — no orphans left behind.
+        assert (
+            con.execute("SELECT count(*) FROM provizii_fts").fetchone()[0]
+            == con.execute("SELECT count(*) FROM provizii").fetchone()[0]
+        )
 
 
 def _rec_mo(text: str, vigoare=None):
@@ -374,3 +349,69 @@ def test_a_document_with_no_monitor_line_is_not_re_examined_forever(db):
 
     r2 = reciteste(db, log=lambda *_: None)
     assert r2["total"] == 0, f"re-examined {r2['total']} documents already tried"
+
+
+def test_the_index_no_longer_keeps_its_own_copy_of_the_text(db, lege):
+    """fts5 stores a verbatim copy of everything it indexes unless told otherwise.
+
+    Measured on the finished corpus: `provizii` 1 952.7 MB and `provizii_fts_content` 1 950.8 MB
+    — the same text twice, a quarter of an 8.4 GB file. `content='provizii'` makes the index read
+    from the table it indexes, which is the difference between a corpus you can hand someone and
+    one you cannot.
+    """
+    depozit.importa(db, [lege])
+    with depozit.deschide(db) as con:
+        tabele = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "provizii_fts_content" not in tabele, "the index is still storing its own copy"
+        assert "provizii_fts_rand" not in tabele, "the rowid map is redundant with external content"
+
+
+def test_search_still_works_and_still_quotes(db, lege):
+    """External content must not cost the snippet — a finding that cannot quote the law is not a
+    finding this package is allowed to emit."""
+    depozit.importa(db, [lege])
+    with depozit.deschide(db) as con:
+        rezultate = depozit.cauta(con, "achizitie publica", 5)
+        assert rezultate
+        assert any(r["fragment"] for r in rezultate), "no snippet came back"
+        assert all(r["act_id"] == "lege-98-2016" for r in rezultate)
+
+
+def test_replacing_an_act_leaves_no_stale_rows_in_an_external_index(db):
+    """With external content the index is not maintained automatically, and a cascade delete on
+    `acte` removes `provizii` rows without telling it. Getting this wrong leaves an act matching
+    a search with text it no longer contains."""
+    from scripts.colector import act_din_inregistrare
+
+    vechi = _rec_mo("LEGE nr. 9 din 1999 despre cadastru si publicitate imobiliara")
+    with depozit.deschide(db) as con:
+        depozit.scrie_inregistrare(con, vechi, act_din_inregistrare(vechi))
+        nou = type(vechi)(**{**vechi.__dict__, "text": "LEGE nr. 9 din 1999 text inlocuit complet"})
+        depozit.scrie_inregistrare(con, nou, act_din_inregistrare(nou))
+
+        assert not depozit.cauta(con, "cadastru", 5), "stale text still matches"
+        assert depozit.cauta(con, "inlocuit", 5)
+        n = con.execute("SELECT count(*) FROM provizii_fts").fetchone()[0]
+        assert n == con.execute("SELECT count(*) FROM provizii").fetchone()[0]
+
+
+def test_an_older_corpus_has_its_index_rebuilt(db, lege):
+    """A corpus collected under the content-owning index must migrate without being re-collected;
+    the text is already there, so the index can simply be rebuilt from it."""
+    import sqlite3 as _s
+
+    depozit.importa(db, [lege])
+    raw = _s.connect(db)
+    raw.executescript(
+        "DROP TABLE provizii_fts;"
+        "CREATE VIRTUAL TABLE provizii_fts USING fts5("
+        " text, act_id UNINDEXED, locator UNINDEXED,"
+        " tokenize = 'unicode61 remove_diacritics 2');"
+    )
+    raw.commit()
+    raw.close()
+
+    with depozit.deschide(db) as con:  # opening for write must notice and repair
+        tabele = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert "provizii_fts_content" not in tabele
+        assert depozit.cauta(con, "achizitie publica", 5)
