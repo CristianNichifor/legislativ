@@ -30,9 +30,17 @@ at runtime.
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from scripts.amendamente import amendamente
+from scripts.referinte import locatori
 from scripts.text import normalizeaza
+
+if TYPE_CHECKING:
+    from scripts.amendamente import Amendament
+    from scripts.referinte import Act
 
 # Non-standard ways drafters express each operation, mapped to the mandated verb. These are the
 # forms the Council rejects — the extractors ignore them, so they would otherwise pass unseen.
@@ -198,6 +206,86 @@ def conformitate(draft: str) -> list[Abatere]:
             )
 
     return sorted(abateri, key=lambda a: draft.find(a.fragment[:20]) if a.fragment else 0)
+
+
+@dataclass(frozen=True)
+class Conflict:
+    """Two or more points in one draft that act on the same target provision.
+
+    Not every repeat is a bug — two `completează` on one article each add their own text. A
+    collision is when the operations cannot both stand: a repeal beside any other change (a repealed
+    provision cannot then be modified), two full rewrites (the later silently wins), or the same
+    provision repealed twice. That is what this flags, keyed by the shared act and locator.
+    """
+
+    act: str  # target act id; "" when the point names no act (the host act being amended)
+    locator: str  # the shared locator id, e.g. "art7.alin2"
+    operatii: tuple[str, ...]
+    fragmente: tuple[str, ...]
+
+    @property
+    def fel(self) -> str:
+        if "abroga" in self.operatii and len(set(self.operatii)) > 1:
+            return "contradictie"  # repealed and also changed
+        if self.operatii.count("abroga") > 1:
+            return "abrogare-dubla"
+        return "suprascriere"  # two or more full rewrites
+
+    @property
+    def _tinta(self) -> str:
+        return f"«{self.locator}»" + (f" din {self.act}" if self.act else "")
+
+    @property
+    def explicatie(self) -> str:
+        ops = ", ".join(f"«{o}»" for o in dict.fromkeys(self.operatii))
+        if self.fel == "contradictie":
+            return (
+                f"{self._tinta} este și abrogat și modificat în același proiect ({ops}); o "
+                "prevedere abrogată nu mai poate fi modificată — păstrează o singură intervenție."
+            )
+        if self.fel == "abrogare-dubla":
+            return f"{self._tinta} este abrogat de mai multe ori în proiect; păstrează una singură."
+        return (
+            f"{self._tinta} este rescris de mai multe ori ({ops}); ultima rescriere o înlocuiește "
+            "pe cea dinainte — comasează într-o singură intervenție."
+        )
+
+    @property
+    def increderea(self) -> str:
+        return "derived"
+
+
+def _cheie_locator(text: str) -> str:
+    """The full locator path a point names, deepest last — `art7.alin2` where the extractor's own
+    locator keeps only `art7`. Two points that touch different alineate of one article read as
+    different keys here, so they are not mistaken for a collision.
+    """
+    return ".".join(loc.id for loc, _, _ in locatori(text))
+
+
+def interventii_conflictuale(draft: str, act_gazda: Act | None = None) -> list[Conflict]:
+    """Points in one draft that collide on the same provision — a contradiction or a silent
+    overwrite the drafter almost never intends. Read off the same extractor the corpus passes use,
+    so only correctly-formed amendments are grouped; a whole-act operation carries no locator and is
+    not a collision this can be sure of, so it is left out. The grouping key is the *full* locator
+    path (see `_cheie_locator`), so edits to different alineate of one article do not false-collide.
+    """
+    ams = amendamente(draft, act_gazda=act_gazda)
+    grupuri: dict[tuple[str, str], list[Amendament]] = defaultdict(list)
+    for a in ams:
+        loc = _cheie_locator(a.text)
+        if not loc:
+            continue
+        act = a.act_tinta.id if a.act_tinta else ""
+        grupuri[(act, loc)].append(a)
+
+    conflicte: list[Conflict] = []
+    for (act, loc), grup in grupuri.items():
+        ops = tuple(a.fel for a in grup)
+        coliziune = ("abroga" in ops and len(set(ops)) > 1) or ops.count("modifica") > 1
+        if len(grup) > 1 and (coliziune or ops.count("abroga") > 1):
+            conflicte.append(Conflict(act, loc, ops, tuple(a.text[:60] for a in grup)))
+    return sorted(conflicte, key=lambda c: draft.find(c.fragmente[0]) if c.fragmente else 0)
 
 
 def redacteaza(

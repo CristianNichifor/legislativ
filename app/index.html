@@ -954,11 +954,13 @@ function renderImpact(im){
 }
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
-        tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[];
+        tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[],
+        cf=d.conflicte||[];
   let h = `<div class="strip">`
     +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
     +chip("neindeplinite",on.length,"blocking","Obligații neîndeplinite ale actelor vizate")
     +chip("consolidat",co.length,"material","Verifică față de textul consolidat")
+    +chip("conflicte",cf.length,"blocking","Intervenții care se bat cap în cap")
     +chip("redactare",dr.length,"material","Tehnică legislativă")
     +chip("atinge",tg.length,"note","Ce atinge proiectul")
     +chip("termene",dl.length,"material","Termene de implementare")
@@ -982,6 +984,10 @@ function renderLint(d){
         c.ultima?`ultima: <b>${esc(c.ultima)}</b>`:"",
         c.unitati&&c.unitati.length?`unități: ${c.unitati.map(u=>esc(locRo(u))).join(", ")}`:"",
         "vezi fila «Consolidat» pentru textul în vigoare" ].filter(Boolean),"","derived")).join(""));
+  const felRo={contradictie:"contradicție",suprascriere:"rescriere dublă","abrogare-dubla":"abrogare dublă"};
+  if(cf.length) h += sec("Intervenții în conflict", cf.length,
+    cf.map(c=>card(c.fel==="contradictie"?"blocking":"material",
+      `<b>${esc(felRo[c.fel]||c.fel)}</b> — ${esc(c.explicatie)}`,[],"","derived")).join(""));
   if(dr.length) h += sec("Tehnică legislativă", dr.length,
     dr.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],"","derived")).join(""));
   if(tg.length) h += sec("Ce atinge proiectul", tg.length,
