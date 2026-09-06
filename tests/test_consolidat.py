@@ -28,13 +28,13 @@ def test_a_touched_provision_comes_back_consolidated_with_attribution():
     assert r.schimbari[0].data == date(2022, 7, 12)
 
 
-def test_an_unsupported_change_is_refused_not_spliced():
-    """208/2022 introduces new provisions too; `introduce` is out of this slice, so those come back
-    neconsolidate with a named reason rather than silently applied."""
+def test_introduce_is_materialised_as_a_new_provision():
+    """208/2022 introduces new provisions; each is now consolidated as its own result — the inserted
+    text, with the renumbering caveat — rather than refused."""
     _, rez = consolideaza_local("lege-98-2016", la_data=date(2023, 1, 1))
-    refuzate = [r for r in rez.values() if not r.complet]
-    assert refuzate
-    assert any("introduce" in lim for r in refuzate for lim in r.limitari)
+    inserate = [r for r in rez.values() if r.schimbari and r.schimbari[0].fel == "introduce"]
+    assert inserate
+    assert all(r.complet and any("renumerotarea" in lim for lim in r.limitari) for r in inserate)
 
 
 def test_the_as_of_date_hides_a_later_change():
@@ -50,7 +50,7 @@ def test_the_summary_counts_add_up():
     complet = sum(1 for r in rez.values() if r.complet)
     refuzat = sum(1 for r in rez.values() if not r.complet)
     assert complet + refuzat == len(rez)
-    assert complet >= 1 and refuzat >= 1
+    assert complet >= 1  # refused can now be 0: modifica/completeaza/introduce are all applied
 
 
 def test_modificari_pentru_maps_touched_provisions_and_is_empty_off_catalog():
