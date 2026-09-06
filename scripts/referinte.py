@@ -32,7 +32,7 @@ repository runs on.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from scripts.text import normalizeaza
@@ -150,6 +150,44 @@ _LEGATURA = re.compile(
 _LEGATURA_LOC = re.compile(
     r"^\s*,?\s*(?:al|ale|a|ai|din|de\s+la|dup(?:ă|a)|(?:î|i)nainte\s+de)\s+$", re.IGNORECASE
 )
+
+# `La articolele 7 și 8` names two articles, not one. The locator pattern stops at the first
+# number — there is no `art`/`alin` keyword in front of the second — so everything after it used
+# to be dropped, and an amendment to two articles was recorded against one. That is `ref-10` in
+# the gold set, kept there as a known miss; this is what closes it.
+#
+# One number per step, so the run is read as far as it actually goes and no further, and bounded
+# by the same reasoning as `_ENUMERARE_COADA`: a real enumeration is a handful of numbers, and an
+# unbounded run would let a list of unrelated figures graft itself onto a locator.
+#
+# The separator is captured because a comma alone does not make an enumeration. `art. 5, 30 de
+# zile de la publicare` is a deadline, `art. 7, 2024 a fost anul` is a year, `art. 5, 10% din
+# valoare` is a share — and reading the number after the comma as an article invents `art. 30`,
+# `art. 2024`, `art. 10`. Deadlines of the first kind are everywhere in Romanian law, so this is
+# not a corner case. A real enumeration closes with a conjunction (`7, 8 și 9`), which is what
+# `_conjunctie` below requires; a comma-only run is left unread. Missing one is a gap, inventing
+# one is a false citation, and this package prefers the gap.
+_COADA_NUMAR: Final[re.Pattern[str]] = re.compile(
+    r"\s*(?P<sep>,|și|si|ori|sau)\s*\(?(?P<numar>\d+(?:\^\d+)?)\)?", re.IGNORECASE
+)
+_CONJUNCTIE: Final[frozenset[str]] = frozenset({"și", "si", "ori", "sau"})
+_MAX_ENUMERARE: Final[int] = 10
+# Deepest first: the enumeration extends the innermost unit named, because that is the one being
+# listed. `art. 5 alin. (2) și (3)` lists paragraphs of article 5, not articles.
+_ADANCIME: Final[tuple[str, ...]] = ("punct", "litera", "alineat", "articol")
+
+
+def _extinde(loc: Locator, numar: str) -> Locator | None:
+    """The same position with its innermost unit replaced — one sibling of an enumeration.
+
+    Returns None where the innermost unit is a letter (`lit. a) și b)`): the tail this reads is
+    numeric, and writing a digit into `litera` would invent a position that cannot exist. Letter
+    enumerations stay unexpanded, as they were.
+    """
+    for camp in _ADANCIME:
+        if getattr(loc, camp):
+            return None if camp == "litera" else replace(loc, **{camp: numar})
+    return None
 
 
 @dataclass(frozen=True)
@@ -308,6 +346,38 @@ def locatori(text: str) -> list[tuple[Locator, int, int]]:
             # locators readable as the joining word it is.
             start = m.start() + (len(m.group(0)) - len(m.group(0).lstrip(" ,")))
             gasite.append((loc, start, m.end()))
+            # `articolele 7 și 8`: keep reading numbers off the tail, each one a sibling of the
+            # locator just matched. Collected first and accepted after, because whether this is an
+            # enumeration at all is only known once the run ends — see `_COADA_NUMAR`.
+            candidati: list[tuple[Locator, int, int, bool]] = []
+            capat = m.end()
+            for _ in range(_MAX_ENUMERARE):
+                coada = _COADA_NUMAR.match(text, capat)
+                if coada is None:
+                    break
+                frate = _extinde(loc, coada.group("numar"))
+                if frate is None:
+                    break
+                # Span runs from the number to the end of the tail match, so a closing `)` is
+                # inside it. Ending at the digit would leave `) din Legea …` as the gap to the
+                # act, which `_LEGATURA` rejects — and the sibling would come back unbound while
+                # its own first half was bound, which is worse than not reading it at all.
+                candidati.append(
+                    (
+                        frate,
+                        coada.start("numar"),
+                        coada.end(),
+                        coada.group("sep").lower() in _CONJUNCTIE,
+                    )
+                )
+                capat = coada.end()
+            # Keep the run only as far as its last conjunction: in `art. 7, 8 și 9, 10 zile` the
+            # enumeration is 7, 8, 9 and the 10 belongs to the sentence, not to the list.
+            ultima = max((i for i, c in enumerate(candidati) if c[3]), default=-1)
+            for frate, f_start, f_end, _conj in candidati[: ultima + 1]:
+                gasite.append((frate, f_start, f_end))
+            pozitie = candidati[ultima][2] if ultima >= 0 else m.end()
+            continue
         pozitie = m.end()
     return gasite
 

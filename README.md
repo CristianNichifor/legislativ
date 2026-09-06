@@ -127,9 +127,13 @@ does not measure how much of the real corpus they cover, and the real figure wil
 first honest number arrives with the first hundred sentences sampled from actual acts, and
 replacing this set with those is the highest-value hour anyone can spend on this package.
 
-**The set keeps its failures.** `ref-10` — article enumerations, *la articolele 7 și 8* — is not
-expanded, is marked `cunoscut_ratat`, and is left in. A gold set curated until it reports 100%
-reports nothing.
+**The set keeps its failures — and keeps the cases once they pass.** `ref-10` — article
+enumerations, *la articolele 7 și 8* — was the standing known miss. The locators now expand an
+enumeration, so it passes and stays in the set as a green case; `cunoscut_ratat` remains for the
+next real miss. The set therefore currently reads 100%, which is the number to distrust most: it
+says the extractors do not fail on 36 sentences written to exercise them, not that they cover the
+corpus. What stops that number being bought by deletion is that cases are never removed — the
+tests put a floor on the count — and the caveat above stands unchanged.
 
 **A third number, for the report that matters most.** The gap report — obligations the corpus
 cannot show were discharged — is derived from corpus text, so it is honest but unvalidated. The
@@ -290,10 +294,15 @@ not apply the amendment and compute what the article now says. That is a separat
 own failure modes, and warning an MP that they are citing a provision which has moved is already the
 job.
 
-**Article enumerations, and republication renumbering.** The first is a known miss in the gold set.
-The second is a hole with no marker yet: republication renumbers an act's articles, so a reference
-to `art. 15` means different provisions before and after, and `ActParsat.republicat_din` exists to
-carry the date but nothing consumes it.
+**Republication renumbering, remapped.** Republication renumbers an act's articles, so a reference
+to `art. 15` means different provisions before and after. `consolidare.py` refuses to apply a
+pre-republication operation across that boundary and `vigoare.py` qualifies rather than asserts a
+repeal that crosses it — but neither *remaps* a locator, because nothing in the corpus carries the
+old-to-new correspondence. Until something does, the boundary is a place where the tool says "this
+may not be the same provision", not one it can see through.
+
+(Article enumerations were the other entry here. `la articolele 7 și 8` now reads as both
+articles; `ref-10` in the gold set is green.)
 
 **A corpus.** `data/exemplu.json` is a four-provision fixture written in the register of Romanian
 legislation to put the pipeline in motion. Prose in that register is quotable as though it were the
