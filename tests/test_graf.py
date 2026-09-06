@@ -8,6 +8,7 @@ amendment. Built on a small corpus so the assertions do not drift with the colle
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -118,3 +119,53 @@ def test_rebuilding_replaces_rather_than_doubles(tmp_path):
         assert graf.execute("SELECT count(*) FROM muchii").fetchone()[0] == n1
     finally:
         graf.close()
+
+
+def test_parallel_extraction_gives_the_same_graph_as_sequential(tmp_path):
+    """Extraction is 93% of the build and pure CPU, so it is fanned out across processes.
+
+    The only thing that makes that safe is that it produces exactly the same edges — workers
+    read their own text and the parent stays the sole writer, so nothing about the result may
+    depend on how the work was divided.
+    """
+    from scripts import depozit
+    from scripts.api import Inregistrare
+    from scripts.colector import act_din_inregistrare
+    from scripts.graf import construieste
+
+    corpus = tmp_path / "corpus.db"
+    with depozit.deschide(corpus) as con:
+        for i in range(1, 25):
+            rec = Inregistrare(
+                titlu=f"LEGE nr. {i}/2020",
+                tip_act="LEGE",
+                numar=str(i),
+                an=2020,
+                data_vigoare=None,
+                emitent="Parlamentul",
+                publicatie="MO",
+                link_html=f"http://legislatie.just.ro/Public/DetaliiDocument/{i}",
+                text=(
+                    f"LEGE nr. {i} din 2020. Se modifică art. {i} din Legea nr. 98/2016 "
+                    f"și art. II din Legea nr. 249/2006, potrivit art. 5 alin. (2) "
+                    f"din Ordonanța de urgență a Guvernului nr. 57/2019."
+                ),
+            )
+            depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+
+    secvential = tmp_path / "secv.db"
+    paralel = tmp_path / "paral.db"
+    n1 = construieste(str(corpus), str(secvential), lucratori=1, log=lambda *_: None)
+    n2 = construieste(str(corpus), str(paralel), lucratori=4, log=lambda *_: None)
+    assert n1 == n2 and n1 > 0
+
+    def muchii(cale):
+        con = sqlite3.connect(cale)
+        try:
+            return sorted(
+                con.execute("SELECT din_act, catre_act, locator, fel, incredere, de_la FROM muchii")
+            )
+        finally:
+            con.close()
+
+    assert muchii(str(secvential)) == muchii(str(paralel))

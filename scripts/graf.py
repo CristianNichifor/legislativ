@@ -108,14 +108,69 @@ def _muchii_din_act(act: Act, text: str, publicat: date | None) -> Iterator[Much
         yield Muchie(act.id, r.act.id, r.locator.id, "refera", "derived", publicat)
 
 
+_CORP_LUCRATOR: sqlite3.Connection | None = None
+
+
+def _porneste_lucrator(corpus_db: str) -> None:
+    """One read-only connection per worker process, opened once and kept."""
+    global _CORP_LUCRATOR
+    _CORP_LUCRATOR = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+
+
+def _muchii_pentru(arg: tuple[str, str, str | None, int | None, str | None]):
+    """Extract one act's edges in a worker. Reads its own text rather than being handed it.
+
+    The text is the expensive thing to move — a quarter of a million acts averaging 14 kB would
+    be gigabytes through a pipe — and every worker already has the corpus open read-only, so it
+    costs one indexed lookup instead. Dates cross as ISO strings because that is cheaper to
+    pickle than a `date` and the writer needs the string anyway.
+    """
+    id_act, tip, numar, an, publicat_iso = arg
+    act = Act(tip, numar, an)
+    text = "\n".join(
+        r[0]
+        for r in _CORP_LUCRATOR.execute(
+            "SELECT text FROM provizii WHERE act_id = ? ORDER BY ord", (id_act,)
+        )
+    )
+    publicat = date.fromisoformat(publicat_iso) if publicat_iso else None
+    return id_act, [
+        (
+            m.din_act,
+            m.catre_act,
+            m.locator,
+            m.fel,
+            m.incredere,
+            m.de_la.isoformat() if m.de_la else None,
+        )
+        for m in _muchii_din_act(act, text, publicat)
+    ]
+
+
 def construieste(
-    corpus_db: str = "corpus.db", graf_db: str = "graf.db", *, limita: int | None = None, log=print
+    corpus_db: str = "corpus.db",
+    graf_db: str = "graf.db",
+    *,
+    limita: int | None = None,
+    lucratori: int = 1,
+    log=print,
 ) -> int:
     """Read the corpus, extract every edge, write them to the graph database. Returns edge count.
 
     Idempotent per act: an act's edges are deleted and rewritten, so a rebuild after the corpus
     grows replaces cleanly rather than doubling.
+
+    **Extraction is the whole cost and it parallelises.** Profiled over the finished corpus:
+    0.08 ms reading an act, 2.7 ms normalising it, and 25 ms pulling references out of it — so
+    93% of the work is regex over text, pure CPU, with no shared state between acts. One process
+    took 63 minutes over 152 079 acts on a machine with eight cores idle. Workers extract; the
+    parent stays the only writer, because SQLite wants one writer and the network of edges has
+    to be committed in one place anyway.
     """
+    if lucratori > 1:
+        return _construieste_paralel(
+            corpus_db, graf_db, limita=limita, lucratori=lucratori, log=log
+        )
     scrise = 0
     # One read connection for the whole build. The first version reopened the corpus per act — a
     # fresh connection for every one of a quarter-million rows — which turned a minutes job into
@@ -158,6 +213,45 @@ def construieste(
             graf.commit()
         finally:
             graf.close()
+    return scrise
+
+
+def _construieste_paralel(
+    corpus_db: str, graf_db: str, *, limita: int | None, lucratori: int, log=print
+) -> int:
+    """The same build, with extraction fanned out and writing kept in one place."""
+    from concurrent.futures import ProcessPoolExecutor
+
+    with depozit.deschide(corpus_db, readonly=True) as corp:
+        q = "SELECT id, tip, numar, an, publicat FROM acte ORDER BY an DESC, numar"
+        if limita:
+            q += f" LIMIT {int(limita)}"
+        acte = [(r["id"], r["tip"], r["numar"], r["an"], r["publicat"]) for r in corp.execute(q)]
+
+    scrise = 0
+    graf = _deschide_graf(graf_db)
+    try:
+        with ProcessPoolExecutor(
+            max_workers=lucratori, initializer=_porneste_lucrator, initargs=(corpus_db,)
+        ) as ex:
+            # `chunksize` matters more than worker count here: an act is ~25 ms of work, so
+            # handing them over one at a time spends more on IPC than on extraction.
+            for i, (id_act, muchii) in enumerate(
+                ex.map(_muchii_pentru, acte, chunksize=64), start=1
+            ):
+                graf.execute("DELETE FROM muchii WHERE din_act = ?", (id_act,))
+                graf.executemany(
+                    "INSERT OR REPLACE INTO muchii (din_act, catre_act, locator, fel,"
+                    " incredere, de_la) VALUES (?,?,?,?,?,?)",
+                    muchii,
+                )
+                scrise += len(muchii)
+                if i % 2000 == 0:
+                    graf.commit()
+                    log(f"  {i}/{len(acte)} acte · {scrise} muchii")
+        graf.commit()
+    finally:
+        graf.close()
     return scrise
 
 
@@ -208,13 +302,20 @@ def rezumat(graf: sqlite3.Connection) -> dict[str, int]:
 
 def _main() -> int:
     import argparse
+    import os
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--corpus", default="corpus.db")
     ap.add_argument("--graf", default="graf.db")
     ap.add_argument("--limita", type=int, default=None)
+    ap.add_argument(
+        "--lucratori",
+        type=int,
+        default=max(1, (os.cpu_count() or 2) // 2),
+        help="procese de extractie; 1 = secvential. Extractia e 93%% din cost si e pur CPU.",
+    )
     a = ap.parse_args()
-    n = construieste(a.corpus, a.graf, limita=a.limita)
+    n = construieste(a.corpus, a.graf, limita=a.limita, lucratori=a.lucratori)
     print(f"\ngata: {n} muchii")
     graf = _deschide_graf(a.graf)
     try:
