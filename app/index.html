@@ -772,6 +772,7 @@
               </div>
             </details>
             <div class="tree" id="r-tree"></div>
+            <div id="r-termeni-chips" class="termeni-chips" hidden></div>
             <div class="row" style="margin-top:.5rem">
               <button class="ghost" id="r-add-art">+ articol</button>
               <span class="hint">adaugă articole; sub fiecare, alineate; sub alineat, litere</span>
@@ -943,10 +944,11 @@ function selectTab(which){
     $("#pane-"+p).hidden = p!==which;
   });
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
-  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",supraveghere:"#s-nr"}[which];
-  // Redactează has no #r-act, so this used to throw on every visit to that tab — and because the
-  // throw happened mid-function, the two loaders below it never ran. Look the element up, don't
-  // assume it exists.
+  // #r-nr, not #r-act: the only #r-act in the page is #r-act-info, a hint div. Redactează's first
+  // typed field is the number, the same as graf and supraveghere.
+  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",supraveghere:"#s-nr"}[which];
+  // Look the element up rather than assuming it exists: when this pointed at a missing id it threw
+  // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
   if(focusTarget) focusTarget.focus();
   if(which==="consolidat") loadConsAsezari();
@@ -1579,24 +1581,41 @@ $("#draft").addEventListener("keydown",e=>{ if(e.key==="Escape") hideSuggest(); 
 
 // ---- recognised terminology chips: the defined terms the draft actually uses, definition on hover.
 // The positive counterpart to the "talks around a defined term" warning — deterministic, local. ----
-const chipsBox=$("#termeni-chips");
-let chipsTimer, chipsFor="", chipsSeq=0;
-async function refreshChips(){
-  const text=$("#draft").value;
-  if(text.trim().length<4){ chipsBox.hidden=true; chipsBox.innerHTML=""; chipsFor=""; return; }
-  if(text===chipsFor) return; chipsFor=text;
-  const seq=++chipsSeq;
-  try{
-    const d=await (await fetch("/api/termeni",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
-    if(seq!==chipsSeq) return;   // a newer edit already superseded this request
-    const ts=(d&&d.termeni)||[];
-    if(!ts.length){ chipsBox.hidden=true; chipsBox.innerHTML=""; return; }
-    chipsBox.innerHTML=`<div class="tc-h">Termeni definiți recunoscuți · treci cu mouse-ul pentru definiție</div>`
-      +`<div class="tc-row">`+ts.map(t=>`<span class="term-chip" data-def="${esc(t.definitie)}">${esc(t.termen)}</span>`).join("")+`</div>`;
-    chipsBox.hidden=false;
-  }catch(e){ chipsBox.hidden=true; }
+// One implementation, two places that need it: the draft being checked in Verifică, and the act
+// being composed in Redactează. Each gets its own box, its own debounce and its own request
+// sequence, so a slow answer for one can never overwrite the other's chips.
+function creeazaChips(box, citesteText){
+  if(!box) return {programeaza(){}};
+  let ultimul="", seq=0, timer;
+  async function reimprospateaza(){
+    const text=citesteText();
+    if(text.trim().length<4){ box.hidden=true; box.innerHTML=""; ultimul=""; return; }
+    if(text===ultimul) return; ultimul=text;
+    const acesta=++seq;
+    try{
+      const d=await (await fetch("/api/termeni",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
+      if(acesta!==seq) return;   // a newer edit already superseded this request
+      const ts=(d&&d.termeni)||[];
+      if(!ts.length){ box.hidden=true; box.innerHTML=""; return; }
+      box.innerHTML=`<div class="tc-h">Termeni definiți recunoscuți · treci cu mouse-ul pentru definiție</div>`
+        +`<div class="tc-row">`+ts.map(t=>`<span class="term-chip" data-def="${esc(t.definitie)}">${esc(t.termen)}</span>`).join("")+`</div>`;
+      box.hidden=false;
+    }catch(e){ box.hidden=true; }
+  }
+  return { programeaza(){ clearTimeout(timer); timer=setTimeout(reimprospateaza,450); } };
 }
-$("#draft").addEventListener("input",()=>{ clearTimeout(chipsTimer); chipsTimer=setTimeout(refreshChips,450); });
+const chipsDraft=creeazaChips($("#termeni-chips"), ()=>$("#draft").value);
+$("#draft").addEventListener("input", chipsDraft.programeaza);
+// Redactează composes an act out of block textareas rather than one field, so the text to read is
+// every block's prose in tree order. Only the blocks that will actually be in the act: a .txt is
+// [hidden] until its node is given an operation, and citesteNod() likewise takes a block's text
+// only when one is set. A box left over from an operation the drafter backed out of holds words
+// that are not in the act, and chipping them would report terms the act does not use.
+const chipsRedactare=creeazaChips($("#r-termeni-chips"),
+  ()=>[...$("#r-tree").querySelectorAll(".txt:not([hidden]) > textarea")].map(t=>t.value).join("\n"));
+$("#r-tree").addEventListener("input", chipsRedactare.programeaza);
+// picking or clearing an operation shows or hides a block, which changes what the act contains
+$("#r-tree").addEventListener("change", chipsRedactare.programeaza);
 
 // ---- term autocomplete: a caret-word dropdown of defined terms, in the draft and every block
 // textarea. The dictionary (public law only) is fetched once, lazily, on first use. ----
