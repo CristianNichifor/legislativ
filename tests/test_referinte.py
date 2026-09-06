@@ -221,3 +221,82 @@ def test_a_full_stop_between_them_still_does_not_bind():
     """Widening the joiner must not start binding across sentences."""
     refs = referinte("art. 5 se modifică. Legea nr. 50/1991 se abrogă")
     assert ("lege-50-1991", "") in [(r.act.id if r.act else None, r.locator.id) for r in refs]
+
+
+# --- article enumerations: `la articolele 7 și 8` names two articles ---------------------------
+#
+# `ref-10` in the gold set. The locator pattern stops at the first number because there is no
+# `art`/`alin` keyword in front of the second, so everything after it used to be dropped and an
+# amendment to two articles was recorded against one.
+
+
+def test_an_article_enumeration_is_expanded():
+    assert [r.locator.id for r in referinte("La articolele 7 și 8 se fac completări.")] == [
+        "art7",
+        "art8",
+    ]
+
+
+def test_a_longer_enumeration_is_expanded_to_its_last_conjunction():
+    assert [r.locator.id for r in referinte("art. 7, 8 și 9 se abrogă")] == [
+        "art7",
+        "art8",
+        "art9",
+    ]
+
+
+def test_the_enumeration_extends_the_innermost_unit_named():
+    """`art. 5 alin. (1), (2) și (3)` lists paragraphs of article 5, not articles."""
+    assert [r.locator.id for r in referinte("art. 5 alin. (1), (2) și (3)")] == [
+        "art5.alin1",
+        "art5.alin2",
+        "art5.alin3",
+    ]
+
+
+def test_every_member_of_an_enumeration_binds_to_the_act():
+    """A sibling that came back unbound while its own first half was bound would read as a
+    citation of a paragraph of nothing."""
+    refs = referinte("art. II alin. (1) și (3) din Legea nr. 249/2006")
+    assert [(r.act.id if r.act else None, r.locator.id) for r in refs] == [
+        ("lege-249-2006", "artII.alin1"),
+        ("lege-249-2006", "artII.alin3"),
+    ]
+
+
+def test_superscript_articles_enumerate():
+    assert [r.locator.id for r in referinte("art. 7^1 și 8^2 se abrogă")] == ["art7^1", "art8^2"]
+
+
+# The reason the conjunction is required. Each of these has a number after a comma that is not an
+# article, and reading it as one invents a citation — the failure this package exists against.
+def test_a_deadline_after_a_comma_is_not_an_enumeration():
+    assert [r.locator.id for r in referinte("art. 5, 30 de zile de la publicare")] == ["art5"]
+
+
+def test_a_year_after_a_comma_is_not_an_enumeration():
+    assert [r.locator.id for r in referinte("art. 7, 2024 a fost anul")] == ["art7"]
+
+
+def test_a_percentage_after_a_comma_is_not_an_enumeration():
+    assert [r.locator.id for r in referinte("art. 5, 10% din valoare")] == ["art5"]
+
+
+def test_a_comma_only_run_is_left_unread_rather_than_guessed():
+    """`art. 7, 8, 9` is almost certainly an enumeration, but nothing distinguishes it from
+    `art. 5, 30 de zile`. Missing one is a gap; inventing one is a false citation."""
+    assert [r.locator.id for r in referinte("art. 7, 8, 9 se abrogă")] == ["art7"]
+
+
+def test_the_run_stops_at_its_last_conjunction():
+    """In `art. 7, 8 și 9, 10 zile` the list is 7, 8, 9 — the 10 belongs to the sentence."""
+    assert [r.locator.id for r in referinte("art. 7, 8 și 9, 10 zile mai târziu")] == [
+        "art7",
+        "art8",
+        "art9",
+    ]
+
+
+def test_letter_enumerations_stay_unexpanded():
+    """The tail read here is numeric; writing a digit into `litera` would invent a position."""
+    assert [r.locator.id for r in referinte("lit. a) și b) ale articolului 7")] == ["lita", "art7"]

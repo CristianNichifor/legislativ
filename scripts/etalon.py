@@ -10,12 +10,17 @@ So the deterministic layer ships with a number. `raporteaza()` prints precision 
 extractor over `data/etalon.json`, and prints the misses by case id, because an aggregate that
 does not say *which* cases fail cannot be acted on.
 
-**The gold set keeps its failures.** Two cases are marked `cunoscut_ratat` — article enumerations
-(`la articolele 7 și 8`) which are not expanded, and the vacatio legis sentence which is read as
-an obligation with no instrument. Removing them would raise the printed score and lower the
-information in it to zero. A linter that reports 100% on a set curated to make it report 100% is
-the failure mode this whole repository is built against, and it is worse here than elsewhere
-because the number is what a research team would use to decide how far to trust the tool.
+**The gold set keeps its failures — but a fixed case is not a failure.** `cunoscut_ratat` marks a
+case the extractors are known to miss, so the printed score stays honest instead of being raised
+by quietly deleting the case. No case currently carries the mark: `ref-10` (`la articolele 7 și
+8`) was the standing one and the locators now expand enumerations, so it passes and stays in the
+set as a green case. The mark and its `(cunoscut-ratat)` suffix remain for the next real miss.
+
+**So the set reads 100%, and that is the number to distrust most.** It says the extractors do not
+fail on 36 sentences written to exercise them — not that they cover the corpus. A linter reporting
+100% on a set curated to make it report 100% is the failure mode this whole repository is built
+against; the guard against it is that cases are never removed (`test_etalon.py` puts a floor on
+the count), and that the real figure only arrives with sentences sampled from actual acts.
 
 Run it directly: `python -m scripts.etalon`.
 """
