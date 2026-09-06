@@ -40,3 +40,23 @@ def test_folding_does_not_erase_the_difference_between_locator_forms():
     """`alin. (2)` and `alin 2` differ by punctuation the parser depends on, so the comparison
     key keeps it rather than tolerating what would really be a parse error."""
     assert cheie("alin. (2)") != cheie("alin 2")
+
+
+def test_a_byte_order_mark_is_removed():
+    """The service puts one at the head of a document and it survives everything else here: U+FEFF
+    is not whitespace to Python, so `.strip()` walks up to it and stops. 91 650 of 152 079 stored
+    titles begin with one followed by a space, which is why they sort ahead of every clean title
+    and render indented."""
+    assert normalizeaza("﻿ LEGE nr. 98/2016") == "LEGE nr. 98/2016"
+    assert normalizeaza("art. 5﻿ alin. (1)") == "art. 5 alin. (1)"
+
+
+def test_zero_width_characters_are_removed():
+    """A zero-width space inside a citation makes it a different string to every matcher while
+    looking identical on screen."""
+    assert normalizeaza("art.​ 5") == "art. 5"
+
+
+def test_removing_invisibles_is_stable_under_a_second_application():
+    o = normalizeaza("﻿ LEGE nr. 98/2016")
+    assert normalizeaza(o) == o

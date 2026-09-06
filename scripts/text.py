@@ -62,6 +62,11 @@ _EXPONENT_DUPA_CIFRA = re.compile(r"(?<=\d)([¹²³⁴-⁹]+)")
 _INDICE_SCRIS = re.compile(r"(?<=\d)\s*(?:ind\.|indice)\s*(\d+)", re.IGNORECASE)
 _SPATII = re.compile(r"[ \t   ]+")
 _LINII_GOALE = re.compile(r"\n{3,}")
+# Byte-order marks and zero-width joiners, which the service puts at the head of a document and
+# which survive every other step here: U+FEFF is not whitespace to Python, so `.strip()` walks up
+# to it and stops. Measured on the finished corpus, 91 650 of 152 079 titles — 60% — begin with
+# one followed by a space, which is why they sort ahead of every clean title and render indented.
+_INVIZIBILE = re.compile("[\ufeff\u200b\u200c\u200d\u2060]")
 
 _FARA_DIACRITICE: Final[dict[int, str]] = {
     ord("ă"): "a",
@@ -105,6 +110,7 @@ def normalizeaza(text: str) -> str:
     freshly-read text.
     """
     text = unicodedata.normalize("NFC", text)
+    text = _INVIZIBILE.sub("", text)
     text = text.translate(str.maketrans(CEDILA))
     text = _INDICE_SCRIS.sub(lambda m: f"^{m.group(1)}", text)
     text = _EXPONENT_DUPA_CIFRA.sub(lambda m: "^" + "".join(EXPONENT[c] for c in m.group(1)), text)

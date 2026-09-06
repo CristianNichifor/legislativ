@@ -25,7 +25,7 @@ from pathlib import Path
 from scripts import depozit
 from scripts.api import Inregistrare
 from scripts.colector import act_din_inregistrare
-from scripts.curatare import separatoare
+from scripts.curatare import separatoare, titluri
 from scripts.text import fara_separatoare
 
 MURDAR = (
@@ -143,3 +143,86 @@ def test_provisions_parsed_from_html_are_not_rewritten(tmp_path: Path):
     finally:
         cx.close()
     assert "\n+\n" in t, "rewrote a provision the service never touched"
+
+
+# --- titluri: marca de ordine a octeților și entitățile HTML -----------------------------------
+
+
+def _rec_titlu(titlu: str) -> Inregistrare:
+    return Inregistrare(
+        titlu=titlu,
+        tip_act="LEGE",
+        numar="7",
+        an=1995,
+        data_vigoare=date(1995, 1, 1),
+        emitent="PARLAMENTUL",
+        publicatie="MO",
+        link_html="http://legislatie.just.ro/Public/DetaliiDocument/7",
+        text="Articolul UNIC Se aprobă.",
+    )
+
+
+def test_the_service_record_yields_a_title_without_its_byte_order_mark():
+    """The ingest half, at the boundary that actually normalises: `_inregistrare` runs the title
+    through `normalizeaza`, which now drops U+FEFF. Nothing collected from here on needs the
+    migration below — the 91 650 dirty titles were written while `normalizeaza` let the mark
+    through.
+    """
+    from scripts.api import _inregistrare
+
+    rec = (
+        "<a:Titlu>\ufeff &#9675;LEGE nr. 7 din 1995 privind ceva</a:Titlu>"
+        "<a:TipAct>LEGE</a:TipAct><a:Numar>7</a:Numar><a:An>1995</a:An>"
+    )
+    assert _inregistrare(rec).titlu == "○LEGE nr. 7 din 1995 privind ceva"
+
+
+def test_the_migration_cleans_titles_already_written(tmp_path: Path):
+    """The corpus half: 91 650 titles were written before the ingest fix existed. Written straight
+    past `scrie_inregistrare` so the row is dirty the way the stored ones are."""
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995")
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+        con.execute("UPDATE acte SET titlu = ?", ("﻿ &#9675;LEGE nr. 7 din 1995 privind ceva",))
+        con.commit()
+
+    raport = titluri(str(cale), log=lambda *_: None)
+    assert raport.schimbate == 1
+
+    cx = sqlite3.connect(str(cale))
+    try:
+        (titlu,) = cx.execute("SELECT titlu FROM acte").fetchone()
+    finally:
+        cx.close()
+    assert titlu == "○LEGE nr. 7 din 1995 privind ceva"
+
+
+def test_the_migration_leaves_a_clean_title_alone(tmp_path: Path):
+    """It must be safe to run twice — the count is what tells a person whether it did anything."""
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995 privind ceva")
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+    assert titluri(str(cale), log=lambda *_: None).schimbate == 0
+
+
+def test_an_ampersand_in_a_title_survives_one_decode(tmp_path: Path):
+    """`&amp;` becomes `&`, and running the migration again must not then eat the bare `&`. This is
+    why the decode lives here and not in `normalizeaza`, which is documented as safe to run twice
+    and is applied on the way in *and* on the way into a matcher."""
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995")
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+        con.execute("UPDATE acte SET titlu = ?", ("LEGE nr. 7 privind A &amp; B",))
+        con.commit()
+
+    titluri(str(cale), log=lambda *_: None)
+    titluri(str(cale), log=lambda *_: None)
+    cx = sqlite3.connect(str(cale))
+    try:
+        (titlu,) = cx.execute("SELECT titlu FROM acte").fetchone()
+    finally:
+        cx.close()
+    assert titlu == "LEGE nr. 7 privind A & B"
