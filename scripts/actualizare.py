@@ -44,6 +44,7 @@ class Rezultat:
     documente_noi: int
     acte_noi: int
     date_citite: int
+    lovituri: int
     acte_cu_muchii: int
     muchii: int
     secunde: float
@@ -52,6 +53,7 @@ class Rezultat:
         return (
             f"{self.pagini} pagini re-parcurse · {self.documente_noi} documente noi · "
             f"{self.acte_noi} acte noi · {self.date_citite} date de publicare · "
+            f"{self.lovituri} lovituri · "
             f"{self.acte_cu_muchii} acte re-legate ({self.muchii} muchii) · "
             f"{self.secunde:.0f}s"
         )
@@ -114,7 +116,12 @@ def actualizeaza(
     log("2/3 citesc datele de publicare pentru ce a intrat…")
     p = publicare.reciteste(corpus_db, log=log)
 
-    log("3/3 reconstruiesc muchiile doar pentru actele atinse…")
+    log("3/4 extrag loviturile din deciziile nou sosite…")
+    from scripts.lovituri import extrage
+
+    lov = extrage(corpus_db, log=log)
+
+    log("4/4 reconstruiesc muchiile doar pentru actele atinse…")
     atinse = _acte_atinse(corpus_db, inceput)
     muchii = (
         construieste(corpus_db, graf_db, doar=atinse, lucratori=lucratori, log=log) if atinse else 0
@@ -125,6 +132,7 @@ def actualizeaza(
         documente_noi=doc1 - doc0,
         acte_noi=acte1 - acte0,
         date_citite=p["citite"],
+        lovituri=lov["lovituri"],
         acte_cu_muchii=len(atinse),
         muchii=muchii,
         secunde=time.monotonic() - t0,
