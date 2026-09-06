@@ -87,12 +87,20 @@ def test_the_result_reports_what_it_changed(tmp_path):
         documente_noi=12,
         acte_noi=9,
         date_citite=11,
+        lovituri=2,
         acte_cu_muchii=9,
         muchii=140,
         secunde=42.0,
     )
     text = str(r)
-    for asteptat in ("3 pagini", "12 documente noi", "9 acte noi", "140 muchii", "42s"):
+    for asteptat in (
+        "3 pagini",
+        "12 documente noi",
+        "9 acte noi",
+        "2 lovituri",
+        "140 muchii",
+        "42s",
+    ):
         assert asteptat in text, text
 
 

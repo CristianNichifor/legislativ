@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Final
 
-from scripts.decizii import Proviziune, citeste
+from scripts.decizii import Proviziune
 
 # Article 147 (1) of the Constitution, and article 145 (1) before the 2003 revision.
 ZILE_SUSPENDARE: Final[int] = 45
@@ -343,19 +343,23 @@ def din_baze(corpus: str, graf: str) -> tuple[list[Lovitura], list[Muchie], dict
     # is what article 147 (1) counts its 45 days from; `acte.publicat` was a copy of the in-force
     # date. For the Court the two coincide, because article 147 (4) makes a decision binding on
     # publication — but coinciding by luck is not the same as being right.
-    decizii = cx.execute(
-        """select cheie_act, publicat, vigoare, text from documente
-           where emitent like 'Curtea Constitu%' and tip = 'decizie' order by cheie_act"""
-    ).fetchall()
-    lovituri: list[Lovitura] = []
-    for cheie_act, publicat, vigoare, text in decizii:
-        dec = citeste(cheie_act, text)
-        for prov in dec.neconstitutionale:
-            # `vigoare` is the fallback and only that: for a decision the two are the same event,
-            # so it costs nothing when the line is unreadable and never invents a date.
-            lovituri.append(
-                Lovitura(cheie_act, _data(publicat) or _data(vigoare), prov, dec.definitiva)
-            )
+    # Strikes are read, not re-derived. Extracting them costs 177 seconds over 20 006 decisions
+    # and the text does not change once collected, so `lovituri.extrage` does it once and this
+    # reads the answer. A corpus that has never been extracted falls back to parsing, so the
+    # register keeps working on a fresh collection — slowly, and saying so.
+    from scripts.lovituri import extrage, incarca
+
+    lovituri = incarca(corpus)
+    if not lovituri:
+        neexaminate = cx.execute(
+            "select count(*) from documente where lovituri_extrase is null"
+            " and emitent like 'Curtea Constitu%' and tip = 'decizie'"
+        ).fetchone()[0]
+        if neexaminate:
+            cx.close()
+            extrage(corpus)
+            cx = sqlite3.connect(f"file:{corpus}?mode=ro", uri=True)
+            lovituri = incarca(corpus)
     cx.close()
 
     gx = sqlite3.connect(f"file:{graf}?mode=ro", uri=True)

@@ -142,6 +142,31 @@ CREATE TABLE IF NOT EXISTS cache (
     adus_la   TEXT NOT NULL
 );
 
+-- What a Curtea Constituțională decision put out of force, extracted once and kept.
+--
+-- Reading it is not cheap: the register spent 177 of its 178 seconds re-parsing all 20 006
+-- decisions to find the ~530 that strike anything, on every single run. The text does not change
+-- once collected, so the answer does not either — and a tool an MP waits three minutes for is a
+-- tool nobody opens twice.
+--
+-- Keyed by the document's own portal id rather than by the citation key, for the same reason
+-- `documente` is: `decizie-5-1996` names a Court decision no better than an agency's, and a
+-- collision there would attribute a strike to the wrong issuer. `ord` keeps two strikes by one
+-- decision apart, exactly as it does in `provizii`.
+CREATE TABLE IF NOT EXISTS lovituri (
+    id_portal   TEXT NOT NULL,
+    ord         INTEGER NOT NULL,
+    cheie_act   TEXT NOT NULL,      -- the deciding act, as a citation key
+    publicat    TEXT,               -- when the decision was published; the art. 147 clock
+    definitiva  INTEGER,            -- 1 final, 0 open to recourse, NULL unstated
+    act         TEXT,               -- the struck act, NULL when it could not be keyed
+    locator     TEXT NOT NULL,
+    fel         TEXT NOT NULL,      -- neconstitutional | abrogat_constitutional
+    text        TEXT NOT NULL,      -- the span it was read from, so a finding can quote it
+    PRIMARY KEY (id_portal, ord)
+);
+CREATE INDEX IF NOT EXISTS idx_lovituri_act ON lovituri(act);
+
 -- Collection progress, so an interrupted run resumes instead of restarting. One row per page
 -- of the API's unfiltered enumeration, marked done once its acts are written. A 90-minute job
 -- that cannot resume is a job that never finishes, because something always interrupts it.
@@ -318,6 +343,10 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
             # true of 22% of documents — so a resumable pass re-reads them for ever. One bit
             # ends that: a daily refresh then costs only the documents that arrived that day.
             ("publicare_incercata", "INTEGER"),
+            # Whether this document has been read for strikes, as opposed to having any. 97% of
+            # decisions strike nothing, so "has no rows in `lovituri`" is the normal case and
+            # cannot mean "not yet examined" without re-reading the whole corpus every time.
+            ("lovituri_extrase", "INTEGER"),
         ],
     }
     for tabel, coloane in noi.items():
