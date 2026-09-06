@@ -96,7 +96,7 @@ async function boot(){
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json"]) {
+  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
@@ -233,7 +233,7 @@ const CACHE = "legislativ-" + VERSIUNE;
 const NUCLEU = [
   "./", "./index.html", "./worker.js", "./bundle.zip",
   "./data/graf.db", "./data/initiative.db",
-  "./data/index.json", "./data/termeni.json", "./data/manifest.json"
+  "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 self.addEventListener("install", (e)=>{
@@ -384,6 +384,16 @@ def _finalizeaza_db() -> None:
                 sidecar.unlink()
 
 
+def _vid_json() -> None:
+    """The unmet-obligations report, precomputed over the sliced corpus + its graph and shipped as
+    `data/vid.json`. Built here (with full corpus access) so the browser never scans for it."""
+    from scripts import servicii
+
+    vids = servicii.construieste_vid(str(DATA / "corpus.db"), str(DATA / "graf.db"))
+    (DATA / "vid.json").write_text(json.dumps(vids, ensure_ascii=False), encoding="utf-8")
+    print(f"  vid → {DATA / 'vid.json'} ({len(vids)} obligații fără implementare găsită)")
+
+
 def _bundle() -> None:
     tinta = WEB / "bundle.zip"
     with zipfile.ZipFile(tinta, "w", zipfile.ZIP_DEFLATED) as z:
@@ -461,6 +471,7 @@ def main(sursa: str) -> None:
             _date_din_corpus()
         _finalizeaza_db()
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
+        _vid_json()
     _bundle()
     _worker()
     _pagina()
