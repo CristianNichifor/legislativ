@@ -45,6 +45,8 @@ class Rezultat:
     acte_noi: int
     date_citite: int
     lovituri: int
+    pagini_aduse: int
+    acte_structurate: int
     acte_cu_muchii: int
     muchii: int
     secunde: float
@@ -54,6 +56,7 @@ class Rezultat:
             f"{self.pagini} pagini re-parcurse · {self.documente_noi} documente noi · "
             f"{self.acte_noi} acte noi · {self.date_citite} date de publicare · "
             f"{self.lovituri} lovituri · "
+            f"{self.pagini_aduse} pagini-sursă aduse ({self.acte_structurate} acte structurate) · "
             f"{self.acte_cu_muchii} acte re-legate ({self.muchii} muchii) · "
             f"{self.secunde:.0f}s"
         )
@@ -96,6 +99,7 @@ def actualizeaza(
     *,
     lucratori: int = 4,
     pauza: float = 0.2,
+    surse_limita: int | None = 40,
     log=print,
 ) -> Rezultat:
     """Collect the tail, date what arrived, and place its edges. Returns what changed."""
@@ -116,12 +120,23 @@ def actualizeaza(
     log("2/3 citesc datele de publicare pentru ce a intrat…")
     p = publicare.reciteste(corpus_db, log=log)
 
-    log("3/4 extrag loviturile din deciziile nou sosite…")
+    log("3/5 extrag loviturile din deciziile nou sosite…")
     from scripts.lovituri import extrage
 
     lov = extrage(corpus_db, log=log)
 
-    log("4/4 reconstruiesc muchiile doar pentru actele atinse…")
+    # Only for acts a decision has now struck, and only the ones never asked for. On an ordinary
+    # day that is nothing: the Court strikes a handful of provisions a year, so the work list is
+    # empty and the stage costs one query. It is bounded anyway, because the first run after this
+    # ships has a backlog to work through and a daily job whose duration depends on how long it
+    # has been since the last one is a daily job that eventually gets killed.
+    log("4/5 aduc paginile documentelor lovite care lipsesc…")
+    from scripts.surse import descarca, imbogateste
+
+    d = descarca(corpus_db, limita=surse_limita, log=log)
+    imb = imbogateste(corpus_db, log=log) if d.reusite else {"imbunatatite": 0}
+
+    log("5/5 reconstruiesc muchiile doar pentru actele atinse…")
     atinse = _acte_atinse(corpus_db, inceput)
     muchii = (
         construieste(corpus_db, graf_db, doar=atinse, lucratori=lucratori, log=log) if atinse else 0
@@ -133,6 +148,8 @@ def actualizeaza(
         acte_noi=acte1 - acte0,
         date_citite=p["citite"],
         lovituri=lov["lovituri"],
+        pagini_aduse=d.reusite,
+        acte_structurate=imb["imbunatatite"],
         acte_cu_muchii=len(atinse),
         muchii=muchii,
         secunde=time.monotonic() - t0,
@@ -156,8 +173,17 @@ def _main() -> int:
         help="secunde între paginile colectate. Colectarea cozii e secvențială; 0,2 s a dat "
         "230 pagini/min fără 503-uri.",
     )
+    ap.add_argument(
+        "--surse-limita",
+        type=int,
+        default=40,
+        help="câte pagini-sursă să aducă într-o rulare. Zilnic lista e goală; plafonul e pentru "
+        "prima rulare, ca durata jobului să nu depindă de cât a trecut de la ultima.",
+    )
     a = ap.parse_args()
-    r = actualizeaza(a.db, a.graf, lucratori=a.lucratori, pauza=a.pauza)
+    r = actualizeaza(
+        a.db, a.graf, lucratori=a.lucratori, pauza=a.pauza, surse_limita=a.surse_limita
+    )
     print(f"\ngata: {r}")
     return 0
 

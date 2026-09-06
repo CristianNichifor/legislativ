@@ -53,6 +53,18 @@ coada (ultima pagină, adesea parțială, plus paginile noi), apoi reconstruieș
 uv run python -m scripts.colector --db corpus.db --actualizeaza --graf graf.db
 ```
 
+Serviciul SOAP întoarce textul deja aplatizat — fără titluri de articol în care să te încrezi și
+fără alineate — așa că pagina HTML a documentului se aduce separat, **o singură dată per document**,
+și se păstrează în corpus. De acolo `parsare.py` citește arborele real de articole:
+
+```bash
+uv run python -m scripts.surse --db corpus.db                 # aduce ce lipsește
+uv run python -m scripts.surse --db corpus.db --imbogateste   # structurează ce s-a adus
+```
+
+`scripts.actualizare` face ambele ca parte din rularea zilnică, plafonat, ca durata jobului să nu
+depindă de cât a trecut de la ultima rulare.
+
 Graful de amendamente se construiește singur din corpus la prima pornire. Cine întreține proiectul
 împachetează corpusul pentru echipă cu `python -m scripts.impacheteaza` și îl atașează la un release.
 
@@ -351,6 +363,9 @@ endpoint and a recorded fixture are the same shape.
 | `supraveghere.sh` | Keeps a collection moving: restarts the collector if it stops committing pages, at a measured concurrency that does not draw 503s. |
 | `decizii.py` | What a Curtea Constituțională decision decided, read from its dispozitiv: solution per point, provisions struck, the referral's object, and whether the Court ranged beyond it. |
 | `neconstitutional.py` | Struck provisions the corpus cannot show were ever brought into line — the art. 147 (1) register. |
+| `coliziune.py` | A draft against that register: does the article you are touching sit on a provision the Court struck and nobody repaired. Graded by reach; only a direct hit the corpus can vouch for is allowed to block. |
+| `prevedere.py` | The text of a struck provision, recovered from the containing act — codes resolved to the version in force when they were struck. Falls back to the article, labelled, and never guesses an alineat the source flattened away. |
+| `surse.py` | The portal's own document pages, fetched once and kept, so the article tree is read from `S_ART`/`S_ALN`/`S_LIT` instead of from flattened text. Asked-for-once, like every other pass. |
 | `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
 | `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
 | `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |
