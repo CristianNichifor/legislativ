@@ -1129,8 +1129,13 @@ function renderLint(d){
         // Why an exact hit on a struck provision can still come back amber. Without this the
         // demotion looks like the tool being unsure of itself rather than the corpus being honest.
         c.sustinut===false?"⚠ nu blochează: corpusul nu poate susține absența unei reparații":"",
+        // What was struck matters more than which words the decision used to name it. When the
+        // quotation is the containing article rather than the paragraph, say so on the row —
+        // a broader quotation honestly labelled is useful, a precise-looking wrong one is not.
+        c.norma&&c.norma_granularitate==="articol"?"citat: articolul care conține prevederea lovită":"",
+        c.norma_nota?"⚠ "+esc(c.norma_nota):"",
         ...(c.limitari||[]).map(l=>"⚠ "+esc(l)) ].filter(Boolean),
-      c.citat, c.incredere)).join(""));
+      c.norma||c.citat, c.incredere)).join(""));
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
   if(ca.length) h += sec("Prevederi cu statut special", ca.length,

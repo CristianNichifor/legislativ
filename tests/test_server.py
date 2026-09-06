@@ -92,7 +92,19 @@ def _cu_lovitura(tmp_path: Path) -> tuple[str, str]:
             emitent="PARLAMENTUL",
             publicatie="MO",
             link_html="http://legislatie.just.ro/Public/DetaliiDocument/591993",
-            text="Art. 5. - (7) Cererea se soluționează fără citarea părților.",
+            # Alineate run 1..7 because `parsare_text` only takes a marker that is the next one
+            # expected — that sequence rule is what stops a cited `alin. (2)` in running text from
+            # reading as a heading, and a fixture that skipped to (7) would parse to nothing.
+            text=(
+                "Articolul 5\n"
+                "(1) Cererea se depune la instanța competentă.\n"
+                "(2) Cererea se timbrează.\n"
+                "(3) Cererea se comunică părților.\n"
+                "(4) Termenul este de 15 zile.\n"
+                "(5) Ședința este publică.\n"
+                "(6) Hotărârea se motivează.\n"
+                "(7) Cererea se soluționează fără citarea părților.\n"
+            ),
         ),
         Inregistrare(
             titlu="DECIZIE nr. 9/1994",
@@ -173,6 +185,32 @@ def test_a_corpus_that_claims_nothing_complete_warns_instead_of_blocking(tmp_pat
     assert c["severitate"] == "material", "an unbacked register row blocked a draft"
     assert c["sustinut"] is False
     assert c["limitari"], "demoted without saying why"
+
+
+def test_the_struck_text_itself_reaches_the_drafter(tmp_path, monkeypatch):
+    """`lovituri.text` is the citation the decision used — a median of 24 characters, which names
+    the provision and shows nobody what was struck. The words come from `prevedere.py`, recovered
+    at build time so the browser can show them without holding the corpus they were cut out of."""
+    from scripts.servicii import construieste_neconstitutional
+
+    corpus, graf = _cu_lovitura(tmp_path)
+    randuri = construieste_neconstitutional(corpus, graf, complet_pentru=frozenset({"lege"}))
+    assert randuri[0]["norma"].strip() == "Cererea se soluționează fără citarea părților."
+    assert randuri[0]["norma_granularitate"] == "exact"
+    assert randuri[0]["norma_nota"] == "", "an exact recovery needs no caveat"
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "neconstitutional.json").write_text(
+        json.dumps(randuri, ensure_ascii=False), encoding="utf-8"
+    )
+    initiative = tmp_path / "i.db"
+    with depozit.deschide(initiative):
+        pass
+    stare = Stare(corpus, str(initiative), graf)
+
+    (c,) = _lint(DRAFT_PE_LOVITURA, stare)["neconstitutional"]
+    assert c["norma"].strip() == "Cererea se soluționează fără citarea părților."
+    assert c["citat"] == "art. 5 alin. (7) din Legea nr. 59/1993", "the citation still travels too"
 
 
 def test_lint_is_silent_about_constitutionality_with_no_register_shipped(tmp_path, monkeypatch):
