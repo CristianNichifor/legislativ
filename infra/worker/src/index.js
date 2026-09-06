@@ -12,9 +12,10 @@
 //  4. A soft daily cap (CAP_ZILNIC) on NEW generations, tracked in KV, as a hard ceiling on spend.
 //  5. Origin allowlist (ORIGINI, comma-separated): only calls from the app's own pages are served.
 //     Spoofable in theory, but it stops casual scripted abuse for free.
-//  6. Belt-and-braces you set outside the code: a monthly spend cap on the Mistral account, and —
-//     optionally — AI Gateway in front (free caching + rate limiting + cost analytics) by pointing
-//     MISTRAL_URL at the gateway; the Batch API is ~half price for bulk pre-generation.
+//  6. Runs on Cloudflare Workers AI — Cloudflare's own hosted models, free within the daily Neuron
+//     allocation, no external account or key. Calls go through the AI binding routed to the AI
+//     Gateway (env.AIG_ID), which adds free caching + analytics; if the gateway does not exist yet
+//     the call falls back to Workers AI directly, so it works before the gateway is created.
 //
 // GET  /rescrie?act=<id>&loc=<locator>       → cached rewrite, or 404 if not generated yet
 // POST /rescrie {act, loc, text}             → cached rewrite, or generate + cache
@@ -22,8 +23,11 @@
 const MAX_CHARS = 4000; // a single provision; longer inputs are abuse, not law
 // client may pick the drafting norm; each maps to a system prompt and a cache-key namespace
 const STILURI = { nou: "danez-v1", actual: "juridic-v1" };
-// only these models may be requested from the client; anything else falls back to the env default
-const MODELE_PERMISE = ["mistral-small-latest", "mistral-large-latest"];
+// only these Workers AI models may be requested from the client; anything else uses the env default
+const MODELE_PERMISE = [
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/meta/llama-3.1-8b-instruct",
+];
 
 function corsFor(request, env) {
   const origin = request.headers.get("Origin") || "";
@@ -79,41 +83,36 @@ async function subCap(env) {
 }
 
 async function genereaza(text, env, stil, model) {
-  if (!env.MISTRAL_API_KEY) {
-    return { rescriere:
-      "Rescrierea nu este încă activată (lipsește cheia AI). " +
-      "Textul original rămâne singurul autoritativ.", model: "stub" };
+  if (!env.AI) {
+    return { rescriere: null, model: "eroare", eroare: "Workers AI indisponibil (lipsește bindingul AI)" };
   }
   const sistem = SISTEM[stil] || SISTEM.nou;
   // honor a client-requested model only if it's on the allowlist; otherwise the env default
-  const mdl = MODELE_PERMISE.includes(model) ? model : (env.MISTRAL_MODEL || "mistral-small-latest");
-  const corp = JSON.stringify({
-    model: mdl,
-    temperature: 0.2,
+  const mdl = MODELE_PERMISE.includes(model)
+    ? model
+    : (env.WAI_MODEL || "@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+  const intrare = {
     messages: [ { role: "system", content: sistem }, { role: "user", content: text } ],
-  });
-  // Try the AI Gateway first (free caching + analytics + a safety rate limit), then fall back to
-  // Mistral directly. So MISTRAL_URL can point at the gateway even before it exists — a gateway
-  // outage or a not-yet-created gateway degrades to a direct call instead of failing the rewrite.
-  const DIRECT = "https://api.mistral.ai/v1/chat/completions";
-  const tinte = env.MISTRAL_URL && env.MISTRAL_URL !== DIRECT ? [env.MISTRAL_URL, DIRECT] : [DIRECT];
-  let ultima = "generare eșuată";
-  for (const url of tinte) {
-    let r;
-    try {
-      r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.MISTRAL_API_KEY}` },
-        body: corp,
-      });
-    } catch (e) { ultima = `rețea ${url}`; continue; }
-    if (r.ok) {
-      const d = await r.json();
-      return { rescriere: (d.choices?.[0]?.message?.content || "").trim(), model: d.model || mdl };
+    temperature: 0.2,
+    max_tokens: 2048,
+  };
+  // Route through the AI Gateway (env.AIG_ID) for free caching + analytics; if that gateway does not
+  // exist yet, retry against Workers AI directly so the rewrite still works before it is created.
+  const optiuni = env.AIG_ID ? { gateway: { id: env.AIG_ID } } : {};
+  try {
+    const r = await env.AI.run(mdl, intrare, optiuni);
+    return { rescriere: (r.response || "").trim(), model: mdl };
+  } catch (e) {
+    if (env.AIG_ID) {
+      try {
+        const r = await env.AI.run(mdl, intrare);
+        return { rescriere: (r.response || "").trim(), model: mdl };
+      } catch (e2) {
+        return { rescriere: null, model: "eroare", eroare: String(e2?.message || e2).slice(0, 160) };
+      }
     }
-    ultima = `mistral ${r.status}`;   // gateway said no → fall through to the direct endpoint
+    return { rescriere: null, model: "eroare", eroare: String(e?.message || e).slice(0, 160) };
   }
-  return { rescriere: null, model: "eroare", eroare: ultima };
 }
 
 export default {

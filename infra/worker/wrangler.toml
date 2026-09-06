@@ -7,6 +7,11 @@ compatibility_date = "2025-01-01"
 binding = "RESCRIERI"
 id = "8a788c5315bf4c61a72c23d3ef5f46d9"
 
+# Workers AI — Cloudflare's own hosted models. Free within the daily Neuron allocation, no external
+# key. The Worker calls it through this binding.
+[ai]
+binding = "AI"
+
 # Per-IP rate limit (native binding — no KV writes). Tune limit/period to taste.
 [[unsafe.bindings]]
 name = "RL"
@@ -15,22 +20,18 @@ namespace_id = "1001"
 simple = { limit = 20, period = 60 }
 
 [vars]
-MISTRAL_MODEL = "mistral-small-latest"
 # Comma-separated allowed Origins for the browser app. Set to your Pages origin to block casual abuse.
 ORIGINI = "https://cristiannichifor.github.io"
-# Hard ceiling on NEW rewrites per day (a spend cap). Leave unset to disable.
+# Hard ceiling on NEW rewrites per day (a spend cap, in KV). Leave unset to disable.
 CAP_ZILNIC = "1500"
-# AI Gateway (free): caching + analytics + a safety rate limit in front of Mistral. Account
-# 432316a05c0d6000c6e196fe32e47dd7 (CN Webify), gateway "legislativ". The Worker falls back to
-# api.mistral.ai automatically if the gateway is unreachable or not yet created, so this is safe to
-# leave on. Create the gateway once (see infra/README.md) to light up the caching + dashboard.
-MISTRAL_URL = "https://gateway.ai.cloudflare.com/v1/432316a05c0d6000c6e196fe32e47dd7/legislativ/mistral/v1/chat/completions"
+# The AI Gateway to route Workers AI calls through, for free caching + analytics. Create a gateway
+# with this id in the dashboard (Account 432316a05c0d6000c6e196fe32e47dd7 / CN Webify). Until it
+# exists the Worker falls back to Workers AI directly, so this is safe to leave set. Unset to skip
+# the gateway entirely.
+AIG_ID = "legislativ"
+# Default Workers AI model; the client may request another from the allowlist in src/index.js.
+WAI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
-# MISTRAL_API_KEY is a secret, not a var — never commit it. Set it with:
-#   wrangler secret put MISTRAL_API_KEY
-# Until it is set, the Worker returns a clearly-labelled stub and caches nothing, so the whole
-# pipeline (app → Worker → KV) works end to end before any AI is wired in.
-#
-# Ultimate backstop: set a monthly spend limit on the Mistral account in its dashboard. With that +
-# the per-IP rate limit + the daily cap + cache-first + the small-input rule, a bot cannot run up
-# the bill.
+# No provider key needed: Workers AI runs on Cloudflare, billed in Neurons (free daily allocation).
+# Defences against a runaway bill: the per-IP rate limit, the daily cap, cache-first, the small-input
+# rule, the origin allowlist, and the gateway's own rate limit once it exists.

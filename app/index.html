@@ -500,7 +500,7 @@
             <select id="ai-model" class="ai-model" title="Modelul local" style="display:none"></select>
             <select id="ai-model-online" class="ai-model" title="Modelul online" style="display:none"></select>
             <input id="ai-endpoint" class="ai-endpoint" type="text" placeholder="https://…workers.dev/rescrie"
-              title="Adresa serviciului tău de rescriere — un Cloudflare Worker pe care îl publici tu (vezi infra/worker). Aici ajunge textul PUBLIC de rescris; Workerul îl trimite la Mistral (UE) și păstrează rezultatul în cache. Ex.: https://legislativ-rescrieri.NUME.workers.dev/rescrie"
+              title="Adresa serviciului tău de rescriere — un Cloudflare Worker pe care îl publici tu (vezi infra/worker). Aici ajunge textul PUBLIC de rescris; Workerul îl trimite la Workers AI (pe Cloudflare) și păstrează rezultatul în cache. Ex.: https://legislativ-rescrieri.NUME.workers.dev/rescrie"
               aria-label="Adresa serviciului de rescriere (Cloudflare Worker)" style="display:none">
             <span class="hint" id="ai-sug" style="display:none"></span>
             <span class="hint" id="ai-nota"></span>
@@ -675,7 +675,7 @@ $("#draft-clar-btn").onclick = async ()=>{
   if(!draft){ body.innerHTML=`<span class="hint">Scrie sau lipește un text mai întâi.</span>`; return; }
   if(!aiOn()){ body.innerHTML=empty("Activează AI (local sau online) din setările de sub fila «Consolidat»."); return; }
   const hh=$("#draft-clar-h"); if(hh) hh.textContent="Limbaj clar — sugestie, nu textul legii · "
-    +(aiMode()==="online"?"prin API (Mistral, UE)":"pe dispozitiv (privat)");
+    +(aiMode()==="online"?"prin API (Workers AI, pe Cloudflare)":"pe dispozitiv (privat)");
   const btn=$("#draft-clar-btn"); btn.disabled=true; btn.innerHTML=`<span class="spin"></span> …`;
   try{
     const prog=(r)=>{ body.innerHTML=`<span class="hint"><span class="spin"></span> ${esc(r&&r.text?r.text:"se încarcă modelul AI…")}</span>`; };
@@ -1042,8 +1042,8 @@ const LLM={
   rescrie(text,prog){ return this.rescrieCu(text, SIS_CLAR, prog); }
 };
 const MODELE_ONLINE=[
-  {id:"mistral-small-latest", et:"Mistral Small (UE)"},
-  {id:"mistral-large-latest", et:"Mistral Large (UE)"},
+  {id:"@cf/meta/llama-3.3-70b-instruct-fp8-fast", et:"Llama 3.3 70B (Cloudflare)"},
+  {id:"@cf/meta/llama-3.1-8b-instruct", et:"Llama 3.1 8B (rapid)"},
 ];
 // mode: oprit | local | online. Migrate the old on/off flag to "local".
 function aiMode(){ try{ const m=localStorage.getItem("ai_mode"); if(m) return m;
@@ -1059,7 +1059,7 @@ let _onlineOk=false;
 function okOnlinePrivat(){
   if(_onlineOk) return true;
   try{ if(localStorage.getItem("ai_online_ok")==="1"){ _onlineOk=true; return true; } }catch(e){}
-  const da=confirm("Modul online trimite acest text la serviciul API (Cloudflare Worker → Mistral, UE). "
+  const da=confirm("Modul online trimite acest text la serviciul API (Cloudflare Worker → Workers AI, pe Cloudflare). "
     +"Pentru textul tău propriu (proiect / redactare) asta înseamnă că iese din browser. Continui?");
   if(da){ _onlineOk=true; try{ localStorage.setItem("ai_online_ok","1"); }catch(e){} }
   return da;
@@ -1122,7 +1122,7 @@ async function sugereazaModel(){
     ep.onchange=()=>{ try{ localStorage.setItem("ai_endpoint",ep.value.trim()); }catch(e){} }; }
   mode.value=aiMode();
   const NOTE={ oprit:"", local:"rulează în browser · textul nu pleacă nicăieri",
-    online:"trece prin API (Cloudflare Worker → Mistral, UE) · textul iese din browser" };
+    online:"trece prin API (Cloudflare Worker → Workers AI, pe Cloudflare) · textul iese din browser" };
   const arata=()=>{ const m=mode.value;
     if(sel){ sel.style.display=m==="local"?"":"none"; }
     if(sug){ sug.style.display=m==="local"?"":"none"; }

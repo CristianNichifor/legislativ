@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deploy the plain-language rewrite service to Cloudflare (free tier).
 #
-# Steps 1–2 are automated; step 3 (the Mistral secret) is interactive and optional — until it is set
-# the Worker returns a labelled stub and costs nothing. Run from anywhere in the repo.
+# It runs on Workers AI — no provider key needed. The optional AI Gateway (step 1) gives free caching
+# + analytics; the Worker falls back to Workers AI directly without it. Run from anywhere in the repo.
 #
-#   CLOUDFLARE_API_TOKEN=<write-scoped token>  ./infra/deploy.sh
-#   # or, if you use `wrangler login` for deploy, the token is only needed for the AI Gateway step.
+#   CLOUDFLARE_API_TOKEN=<token with AI Gateway Edit>  ./infra/deploy.sh   # creates the gateway too
+#   ./infra/deploy.sh                                                      # deploy only (wrangler login)
 set -euo pipefail
 
 ACCOUNT="432316a05c0d6000c6e196fe32e47dd7"   # CN Webify
@@ -27,11 +27,10 @@ else
   echo "    The Worker falls back to Mistral directly, so this is optional."
 fi
 
-echo "==> 2/3  wrangler deploy"
+echo "==> 2/2  wrangler deploy"
 npx wrangler deploy
 
-echo "==> 3/3  Mistral key (optional; stub until set)"
-echo "    Run when ready:  npx wrangler secret put MISTRAL_API_KEY"
 echo
-echo "Done. Endpoint: https://legislativ-rescrieri.cn-webify.workers.dev/rescrie"
+echo "Done — runs on Workers AI, no key needed."
+echo "Endpoint: https://legislativ-rescrieri.cn-webify.workers.dev/rescrie"
 echo "The app already targets it — pick 'online (prin API)' in the AI settings."
