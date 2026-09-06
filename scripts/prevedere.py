@@ -31,12 +31,16 @@ labelled is useful; a precise-looking wrong one is not.
 
 Coverage today, over the 300 distinct struck provisions that carry both an act and a locator:
 
-     82  exact           — the cited unit itself
-    116  articol         — the article around it; the alineat is not recoverable
-     45  articol-negăsit — the act resolved, the article did not (renumbering, republication)
+    106  exact           — the cited unit itself
+     98  articol         — the article around it; the alineat is not recoverable
+     39  articol-negăsit — the act resolved, the article did not (renumbering, republication)
      57  act-negăsit     — no version of the act is in the corpus
     ---
-    198  citable, of 300 (66%). Without the dated alias it is 47 (16%).
+    204  citable, of 300 (68%). Without the dated alias it is 47 (16%).
+
+Exactness, not coverage, is what `surse.py` bought: storing the portal's own pages for the struck
+acts moved 24 provisions from `articol` to `exact` while total coverage rose by six. A quotation of
+the right paragraph is a different thing from a quotation of the article around it.
 
 `acoperire()` recomputes this against whatever corpus it is given, because the numbers move as the
 collection grows and a figure quoted from a docstring is a figure nobody rechecked.
@@ -194,6 +198,64 @@ def _text_complet(nod: dict) -> str:
     return "\n".join(p for p in parti if p)
 
 
+def _intregul(randuri: list[str]) -> str:
+    """The whole unit, where several rows carry its locator.
+
+    `parsare.py` files an `S_ART` and each of its `S_ALN` children under the same locator, so
+    `art3` arrives as three rows: alineat (1), alineat (2), and the article containing both. The
+    longest is the one that contains the others — and picking the *first* instead, as this did
+    before it was measured, returns alineat (1)'s words under the article's name, which is the one
+    thing this module exists not to do.
+    """
+    return max(randuri, key=len)
+
+
+def _alineatul(randuri: list[str], coada: str) -> str | None:
+    """The row that is the cited alineat, identified by the `(N)` marker it opens with."""
+    m = re.fullmatch(r"alin(\d+)", coada)
+    if not m:
+        return None
+    inceput = re.compile(rf"^\s*\(\s*{re.escape(m.group(1))}\s*\)")
+    potrivite = [r for r in randuri if inceput.match(r)]
+    # Exactly one row may claim it. Two would mean the article repeats a paragraph number, which
+    # is a parse fault, and choosing between them would be a guess.
+    return potrivite[0] if len(potrivite) == 1 else None
+
+
+def _descinde(noduri: list[dict], parti: list[tuple[str, str]]) -> tuple[str | None, list[str]]:
+    """Walk as far down a node list as the locator's parts actually go."""
+    text, atins = None, []
+    for nivel, numar in parti:
+        gasit = next(
+            (n for n in noduri if n["nivel"] == nivel and n["numar"].lower() == numar.lower()),
+            None,
+        )
+        if gasit is None:
+            break
+        text, noduri = _text_complet(gasit), gasit["copii"]
+        atins.append(f"{nivel}{numar}")
+    return text, atins
+
+
+def _mai_adanc(text: str, parti: list[tuple[str, str]]) -> str | None:
+    """Cut deeper inside a unit's own text, when the structured tree stops above it.
+
+    The two sources fail in opposite places. The portal's markup marks articles for acts whose
+    alineate it does not mark; the flattened SOAP text lost the articles but kept the `(2)` a
+    drafter typed. So an article that came from `S_ART` with no `S_ALN` children can still yield
+    its alineat by reading its own words — which is exactly what `parsare_text` is for. Without
+    this, structuring an act would trade an exact quotation for a broader one, and an upgrade that
+    loses precision on any provision is not an upgrade.
+    """
+    arbore = parseaza_text(text)
+    # `parseaza_text` wraps a headingless body in one unnamed article; the units are its children.
+    for radacina in (arbore["noduri"], *(n["copii"] for n in arbore["noduri"])):
+        sub, atins = _descinde(radacina, parti)
+        if sub and len(atins) == len(parti):
+            return sub
+    return None
+
+
 def taie(arbore: dict, locator: str) -> tuple[str | None, str, str]:
     """Cut a locator out of a parsed act. Returns (text, locator reached, granularity).
 
@@ -238,11 +300,54 @@ def textul(
     if gasit is None:
         return Neregasita(act, locator, "act-negasit")
 
+    # An act whose page was stored (`surse.py`) has its real tree in `provizii`, read from the
+    # portal's own `S_ART`/`S_ALN`/`S_LIT` markers. Ask for the unit directly: one indexed lookup
+    # instead of parsing a megabyte of flattened text, and right rather than recovered. Acts still
+    # on the SOAP text fall through to the parse below.
+    randuri = [
+        r[0]
+        for r in con.execute(
+            "SELECT text FROM provizii WHERE act_id = ? AND locator = ? ORDER BY ord",
+            (gasit, locator),
+        )
+        if (r[0] or "").strip()
+    ]
+    if randuri:
+        return Prevedere(act, gasit, locator, locator, _intregul(randuri), cum, "exact")
+
     rand = con.execute(
         "SELECT text FROM provizii WHERE act_id = ? AND locator = 'text' LIMIT 1", (gasit,)
     ).fetchone()
     if rand is None or not (rand[0] or "").strip():
-        return Neregasita(act, locator, "act-fara-text")
+        # Structured but without this unit: the act has an article tree and the cited locator is
+        # not in it. Widening to the containing article is still honest and still useful.
+        parinte = locator.rsplit(".", 1)[0] if "." in locator else ""
+        if parinte:
+            sus = [
+                r[0]
+                for r in con.execute(
+                    "SELECT text FROM provizii WHERE act_id = ? AND locator = ? ORDER BY ord",
+                    (gasit, parinte),
+                )
+                if (r[0] or "").strip()
+            ]
+            if sus:
+                coada = locator[len(parinte) + 1 :]
+                # The alineate are present, just not separately addressed: `parsare.py` files each
+                # `S_ALN` under its article's locator, so `art3` holds alineat (1), alineat (2) and
+                # the whole article as three rows. The `(N)` a drafter typed is on the front of the
+                # right one, which makes the exact unit recoverable rather than approximated.
+                exact = _alineatul(sus, coada) or _mai_adanc(_intregul(sus), _parti(coada) or [])
+                if exact:
+                    return Prevedere(act, gasit, locator, locator, exact, cum, "exact")
+                return Prevedere(act, gasit, locator, parinte, _intregul(sus), cum, "articol")
+        # No flattened row means the act was structured from its page, so its tree is authoritative:
+        # a locator missing from it is a missing article, not a missing act. Only an act carrying no
+        # provisions at all has no text.
+        are_ceva = con.execute(
+            "SELECT 1 FROM provizii WHERE act_id = ? LIMIT 1", (gasit,)
+        ).fetchone()
+        return Neregasita(act, locator, "articol-negasit" if are_ceva else "act-fara-text")
 
     text, atins, granularitate = taie(parseaza_text(rand[0]), locator)
     if text is None:

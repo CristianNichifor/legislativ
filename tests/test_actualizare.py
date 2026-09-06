@@ -88,6 +88,8 @@ def test_the_result_reports_what_it_changed(tmp_path):
         acte_noi=9,
         date_citite=11,
         lovituri=2,
+        pagini_aduse=5,
+        acte_structurate=4,
         acte_cu_muchii=9,
         muchii=140,
         secunde=42.0,
@@ -98,6 +100,8 @@ def test_the_result_reports_what_it_changed(tmp_path):
         "12 documente noi",
         "9 acte noi",
         "2 lovituri",
+        "5 pagini-sursă aduse",
+        "4 acte structurate",
         "140 muchii",
         "42s",
     ):

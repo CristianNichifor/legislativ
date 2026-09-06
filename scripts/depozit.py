@@ -167,6 +167,32 @@ CREATE TABLE IF NOT EXISTS lovituri (
 );
 CREATE INDEX IF NOT EXISTS idx_lovituri_act ON lovituri(act);
 
+-- The document as the portal serves it, kept so it is fetched once and never again.
+--
+-- The SOAP service returns an act's text already flattened: no article headings a parser can
+-- trust, and paragraph breaks gone, so `provizii` holds one row per document (`locator = 'text'`)
+-- and nothing is addressable below the act. The HTML detail page carries the structure the
+-- package is built on — `S_ART` / `S_ALN` / `S_LIT` — and `parsare.py` has always known how to
+-- read it. What was missing was somewhere to put it.
+--
+-- Stored gzipped because that is how it arrives and how it stays: 1 023 KB of markup for the
+-- Penal Code becomes 142 KB, and the corpus is already 9 GB. It is therefore fetched for the acts
+-- that need addressing, not for all 152 079.
+--
+-- `incercat_la` is the load-bearing column, and the same discipline as `publicare_incercata` and
+-- `lovituri_extrase`: it records that a document was *asked for*, whatever came back. Resuming on
+-- "has no html" would re-ask the service for every act it has already refused, every run —
+-- politely hammering somebody else's server for an answer that will not change.
+CREATE TABLE IF NOT EXISTS surse (
+    id_portal   TEXT PRIMARY KEY,
+    url         TEXT NOT NULL,
+    html        BLOB,               -- gzipped; NULL when the fetch failed
+    octeti      INTEGER,            -- uncompressed size, so a report needs no decompression
+    stare       TEXT NOT NULL,      -- ok | http-<cod> | retea | gol
+    incercat_la TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_surse_stare ON surse(stare);
+
 -- Collection progress, so an interrupted run resumes instead of restarting. One row per page
 -- of the API's unfiltered enumeration, marked done once its acts are written. A 90-minute job
 -- that cannot resume is a job that never finishes, because something always interrupts it.
@@ -405,6 +431,38 @@ def _scrie_fts(con: sqlite3.Connection, rowid: int, act_id: str, locator: str, t
         "INSERT INTO provizii_fts(rowid, text, act_id, locator) VALUES (?,?,?,?)",
         (rowid, text, act_id, locator),
     )
+
+
+def scrie_provizii(con: sqlite3.Connection, act_id: str, provizii) -> int:
+    """Replace one act's provisions, leaving everything else about the act alone.
+
+    `scrie_act` replaces the act wholesale, which is right when a document is (re)collected and
+    wrong here: upgrading an act from one flattened `locator = 'text'` row to its real article
+    tree must not also overwrite `acte.publicat`, which was reconciled once already against the
+    document's own Monitorul Oficial line and is better than what a page parse guesses.
+
+    Same withdrawal order as everywhere else — the index hands back the original values *before*
+    the rows go, because `content='provizii'` keeps no copy of its own.
+    """
+    _sterge_fts(con, act_id)
+    con.execute("DELETE FROM provizii WHERE act_id = ?", (act_id,))
+    scrise = 0
+    for ord_, p in enumerate(provizii, start=1):
+        cur = con.execute(
+            "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
+            " VALUES (?,?,?,?,?,?)",
+            (
+                act_id,
+                p.locator_id,
+                ord_,
+                p.text,
+                _iso(p.in_vigoare_de_la),
+                _iso(p.in_vigoare_pana_la),
+            ),
+        )
+        _scrie_fts(con, cur.lastrowid, act_id, p.locator_id, p.text)
+        scrise += 1
+    return scrise
 
 
 def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:

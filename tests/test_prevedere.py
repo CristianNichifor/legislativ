@@ -149,6 +149,69 @@ def test_the_returned_text_is_never_from_a_different_unit(con):
     assert articol.granularitate == "exact", "art5 itself is an exact hit, not a fallback"
 
 
+@pytest.fixture
+def structurat(tmp_path: Path):
+    """An act as `surse.imbogateste` leaves it: several rows sharing one locator.
+
+    `parsare.py` files an `S_ART` and each of its `S_ALN` children under the *same* locator, so
+    `art3` arrives as three rows — alineat (1), alineat (2), and the article containing both. This
+    is the real shape on disk, not a contrivance; it is what `lege-58-1992` looks like after its
+    page was stored.
+    """
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as c:
+        c.execute(
+            "INSERT INTO acte (id, tip, numar, an, titlu, citit_la)"
+            " VALUES ('lege-58-1992','lege','58',1992,'x','1992-01-01T00:00:00+00:00')"
+        )
+        for ord_, text in enumerate(
+            [
+                "(1) Salariile de baza pentru persoanele încadrate prin cumul.",
+                "(2) Salariile realizate prin cumul se impozitează separat.",
+                "Articolul 3 (1) Salariile de baza pentru persoanele încadrate prin cumul. "
+                "(2) Salariile realizate prin cumul se impozitează separat.",
+            ],
+            start=1,
+        ):
+            c.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?,?,?,?)",
+                ("lege-58-1992", "art3", ord_, text),
+            )
+    cx = sqlite3.connect(f"file:{cale}?mode=ro", uri=True)
+    yield cx
+    cx.close()
+
+
+def test_the_article_is_the_row_containing_the_others_not_the_first(structurat):
+    """The bug this test exists for: taking the first row returned alineat (1)'s words under the
+    article's name — text from a different unit than the one being named, which is the single
+    thing this module must never do."""
+    r = textul(structurat, "lege-58-1992", "art3", 1994)
+    assert isinstance(r, Prevedere)
+    assert r.text.startswith("Articolul 3"), r.text[:60]
+    assert "(2)" in r.text, "returned only the first paragraph as the whole article"
+
+
+def test_an_alineat_filed_under_its_article_is_recovered_by_its_marker(structurat):
+    """The alineate are present, just not separately addressed. The `(N)` a drafter typed is on
+    the front of the right row, so the exact unit is recoverable rather than approximated."""
+    r = textul(structurat, "lege-58-1992", "art3.alin2", 1994)
+    assert isinstance(r, Prevedere)
+    assert r.granularitate == "exact"
+    assert r.locator_gasit == "art3.alin2"
+    assert r.text.startswith("(2)")
+    assert "impozitează separat" in r.text
+
+
+def test_an_alineat_that_no_row_claims_widens_to_the_article(structurat):
+    """No `(9)` marker anywhere, so the article comes back — labelled, never invented."""
+    r = textul(structurat, "lege-58-1992", "art3.alin9", 1994)
+    assert isinstance(r, Prevedere)
+    assert r.granularitate == "articol"
+    assert r.locator_gasit == "art3"
+    assert "art3.alin9" in r.nota
+
+
 def test_an_act_outside_the_corpus_is_reported_not_guessed(con):
     r = textul(con, "lege-999-1899", "art1", 1994)
     assert isinstance(r, Neregasita)
