@@ -39,6 +39,7 @@ from scripts.servicii import (
     _compune,
     _consolidat,
     _lint,
+    _parseaza,
     _redacteaza,
     _sugereaza,
     _vecini,
@@ -95,7 +96,7 @@ def face_handler(stare: Stare):
 
         def do_POST(self) -> None:  # noqa: N802
             ruta = urlparse(self.path).path
-            if ruta not in ("/api/lint", "/api/compune"):
+            if ruta not in ("/api/lint", "/api/compune", "/api/parseaza"):
                 self._json({"error": "not found"}, 404)
                 return
             lung = int(self.headers.get("Content-Length", 0))
@@ -106,6 +107,9 @@ def face_handler(stare: Stare):
                 return
             if ruta == "/api/compune":
                 self._json(_compune(cerere.get("interventii", [])))
+                return
+            if ruta == "/api/parseaza":
+                self._json(_parseaza(str(cerere.get("text", "")).strip()))
                 return
             draft = str(cerere.get("draft", "")).strip()
             if not draft:

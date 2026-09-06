@@ -348,6 +348,14 @@ def _act(qs: dict, stare: Stare) -> dict:
     return {"act_id": act_id, "cunoscut": stare.cunoscut(act_id), "titlu": stare.titlu(act_id)}
 
 
+def _parseaza(text: str) -> dict:
+    """Recover the Articol ▸ Alineat ▸ Literă tree from the pasted plain text of an act, so the
+    editor can load an existing law as blocks to redact. Deterministic, no model."""
+    from scripts.parsare_text import parseaza_text
+
+    return parseaza_text(text or "")
+
+
 def _compune(interventii: list[dict]) -> dict:
     """Compile a list of structured changes into a whole amending act, verified by re-reading it.
 

@@ -361,6 +361,19 @@
     color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);font-size:.9rem;line-height:1;padding:.12rem .42rem}
   .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
   .node-add{font-size:.7rem;padding:.2rem .6rem;margin-top:.45rem;border-style:dashed}
+  /* the current text of an imported provision, kept as a muted reference under the block */
+  .node-orig{font-family:var(--mono);font-size:.74rem;color:var(--ink-mute);background:var(--sunk);
+    border-radius:var(--r1);padding:.35rem .55rem;margin:.35rem 0 0;white-space:pre-wrap;
+    word-break:break-word;max-height:8rem;overflow:auto}
+  /* import an existing act → block tree */
+  .import-panel{border:1px solid var(--rule-soft);border-radius:var(--r2);background:var(--surface);
+    padding:.5rem .7rem;margin-bottom:.7rem}
+  .import-panel>summary{font-family:var(--sans);font-size:.8rem;font-weight:600;color:var(--accent);
+    cursor:pointer;list-style:none}
+  .import-panel>summary::-webkit-details-marker{display:none}
+  .import-panel>summary::before{content:"▸ "}
+  .import-panel[open]>summary::before{content:"▾ "}
+  #r-import-text{min-height:8rem;font-size:.82rem}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
@@ -445,6 +458,15 @@
         </div>
         <div class="redact-body">
           <div class="redact-left">
+            <details class="import-panel">
+              <summary>Importă un act existent</summary>
+              <p class="hint" style="margin:.4rem 0">Lipește textul unui act; structura (articol · alineat · literă) e recunoscută din numerotare și încărcată în arbore. Textul curent al fiecărei prevederi rămâne ca referință; alege operația și îl editezi.</p>
+              <textarea id="r-import-text" placeholder="Articolul 7&#10;(1) Primul alineat…&#10;(2) Al doilea alineat:&#10;a) …;&#10;b) …"></textarea>
+              <div class="row" style="margin-top:.5rem">
+                <button class="go" id="r-import-btn">Parsează în arbore</button>
+                <span class="hint" id="r-import-stat">deterministic · fără model · rulează local</span>
+              </div>
+            </details>
             <div class="tree" id="r-tree"></div>
             <div class="row" style="margin-top:.5rem">
               <button class="ghost" id="r-add-art">+ articol</button>
@@ -790,13 +812,17 @@ function creeazaNod(nivel){
         <button type="button" class="ghost mini revino" hidden title="Revino la textul dinainte">↶ revino</button>
         <span class="txt-stat"></span>
       </div></div>
+    <div class="node-orig" hidden></div>
     <div class="kids"></div>`;
   const op=wrap.querySelector(":scope > .node-hd > .op");
   const txt=wrap.querySelector(":scope > .txt");
   const ta=txt.querySelector("textarea");
   const artnou=wrap.querySelector(":scope > .node-hd > .artnou");
-  op.onchange=()=>{ const v=op.value; txt.hidden=!(v==="modifica"||v==="completeaza"||v==="introduce");
-    artnou.style.display=(v==="introduce")?"":"none"; };
+  op.onchange=()=>{ const v=op.value; const show=(v==="modifica"||v==="completeaza"||v==="introduce");
+    txt.hidden=!show; artnou.style.display=(v==="introduce")?"":"none";
+    // redacting an imported provision: seed the box with its current text so the drafter edits it
+    if((v==="modifica"||v==="completeaza") && !ta.value.trim() && ta.dataset.orig){ ta.value=ta.dataset.orig; }
+    programeazaLive(); };
   wrap.querySelector(":scope > .node-hd > .node-x").onclick=()=>{ wrap.remove(); programeazaLive(); };
   // per-textarea tools: deterministic Format, and an AI rewrite by chosen norm (mode: local or online)
   const tools=txt.querySelector(".txt-tools"), revino=tools.querySelector(".revino"), stat=tools.querySelector(".txt-stat");
@@ -855,6 +881,42 @@ async function rescrieTextNod(ta, norma, btn, revino, stat){
 }
 $("#r-add-art").onclick=()=>{ $("#r-tree").append(creeazaNod("art")); programeazaLive(); };
 $("#r-goleste").onclick=()=>{ $("#r-tree").innerHTML=""; $("#r-tree").append(creeazaNod("art")); $("#r-compus").innerHTML=""; $("#r-out").innerHTML=""; };
+// ---- import an existing act: parse its plain text into the block tree ----
+function nodDinImport(n){
+  const wrap=creeazaNod(n.nivel);
+  const num=wrap.querySelector(":scope > .node-hd > .num:not(.artnou)");
+  if(num) num.value=n.numar||"";
+  const ta=wrap.querySelector(":scope > .txt > textarea");
+  const orig=(n.text||"").trim();
+  if(ta && orig){ ta.dataset.orig=orig;                 // kept as reference; seeded on „modifică”
+    const ref=wrap.querySelector(":scope > .node-orig");
+    if(ref){ ref.textContent="text curent: "+orig; ref.hidden=false; } }
+  const kids=wrap.querySelector(":scope > .kids");
+  (n.copii||[]).forEach(c=>kids.append(nodDinImport(c)));
+  return wrap;
+}
+function importaArbore(struct){
+  const tree=$("#r-tree"), noduri=(struct&&struct.noduri)||[];
+  tree.innerHTML="";
+  noduri.forEach(n=>tree.append(nodDinImport(n)));
+  if(!tree.children.length) tree.append(creeazaNod("art"));
+  programeazaLive();
+  return noduri.length;
+}
+$("#r-import-btn").onclick=async ()=>{
+  const text=$("#r-import-text").value.trim(), stat=$("#r-import-stat");
+  if(!text){ stat.textContent="lipește întâi textul unui act"; return; }
+  const btn=$("#r-import-btn"); btn.disabled=true; const et=btn.textContent;
+  btn.innerHTML=`<span class="spin"></span> se parsează…`;
+  try{
+    const d=await (await fetch("/api/parseaza",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
+    if(d.error){ stat.textContent="eroare: "+esc(d.error); return; }
+    const n=importaArbore(d);
+    stat.textContent = n ? (n+" "+(n===1?"articol":"articole")+" în arbore — alege operațiile") : "n-am recunoscut articole; verifică formatul";
+    if(n){ const p=$(".import-panel"); if(p) p.open=false; }
+  }catch(e){ stat.textContent="eroare: "+(e.message||e); }
+  finally{ btn.disabled=false; btn.textContent=et||"Parsează în arbore"; }
+};
 // live preview: recompose (debounced) on any edit, so the right column tracks the tree in real time
 let liveSeq=0, liveTimer=null;
 function programeazaLive(){ clearTimeout(liveTimer); liveTimer=setTimeout(()=>compune(true), 500); }
