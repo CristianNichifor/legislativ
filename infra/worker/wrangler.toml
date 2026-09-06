@@ -21,7 +21,18 @@ simple = { limit = 20, period = 60 }
 
 [vars]
 # Comma-separated allowed Origins for the browser app. Set to your Pages origin to block casual abuse.
-ORIGINI = "https://cristiannichifor.github.io"
+#
+# localhost is here so the rewrite can be exercised while developing — `construieste_web.py` tells
+# you to serve the build on :8080, and without these two entries that page's calls are blocked and
+# the feature can only ever be tried on a Pages deploy.
+#
+# It widens very little. A browser sets `Origin` itself, so a page on evil.com cannot claim to be
+# localhost; this admits only pages actually served *from* localhost:8080, which means the
+# developer's own machine or someone persuaded to run a local server — a far narrower path than a
+# drive-by. Anything outside a browser could forge the header in one line of curl regardless, so
+# this list was never the control that matters. Those are the per-IP rate limit and CAP_ZILNIC
+# below, both unaffected, and the fact that only PUBLIC law text is ever sent here.
+ORIGINI = "https://cristiannichifor.github.io,http://localhost:8080,http://127.0.0.1:8080"
 # Hard ceiling on NEW rewrites per day (a spend cap, in KV). Leave unset to disable.
 CAP_ZILNIC = "1500"
 # The AI Gateway to route Workers AI calls through, for free caching + analytics (Account
