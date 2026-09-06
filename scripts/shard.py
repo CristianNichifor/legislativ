@@ -41,7 +41,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
 
     with depozit.deschide(corpus_db, readonly=True) as con:
         acte = con.execute(
-            "SELECT id, tip, numar, an, titlu, sursa_url, id_act_portal FROM acte "
+            "SELECT id, tip, numar, an, titlu, sursa_url, id_act_portal, republicat_din FROM acte "
             "ORDER BY an DESC, numar"
         ).fetchall()
         index = [
@@ -52,6 +52,10 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
                 "an": r["an"],
                 "titlu": r["titlu"] or "",
                 "url": depozit.url_document(r["sursa_url"], r["id_act_portal"]),
+                # only for the few acts that carry one — `vigoare.py` needs it in the browser to
+                # know whether a locator-level repeal predates a renumbering, and omitting the key
+                # everywhere else keeps the index compact
+                **({"republicat_din": r["republicat_din"]} if r["republicat_din"] else {}),
             }
             for r in acte
         ]
