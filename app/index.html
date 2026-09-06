@@ -113,6 +113,9 @@
     letter-spacing:-.015em;margin:0;line-height:1.04}
   .stat{font-family:var(--sans);font-size:.78rem;color:var(--ink-mute);margin-left:auto}
   .stat b{color:var(--ink-mid);font-variant-numeric:tabular-nums}
+  /* the structured share, amber while most of the corpus is still flattened — a coverage figure,
+     not an error, so it is material rather than blocking */
+  .stat .stat-slab,.stat .stat-slab b{color:var(--material)}
 
   .app{display:flex;gap:1.5rem;align-items:stretch;flex:1;min-height:0}
   .main{flex:1;min-width:0}
@@ -943,7 +946,17 @@ function textLizibil(t){
 }
 
 fetch("/api/rezumat").then(r=>r.json()).then(d=>{
-  $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · <b>${nf(d.provizii)}</b> prevederi`;
+  // How much of the corpus is actually structured, not just how much of it there is. An unenriched
+  // act holds one flattened row, so a corpus of those reports as many "prevederi" as it has acte —
+  // a number that looks healthy and means the opposite. Stated as a share so the gap is legible.
+  const structurate = d.acte_structurate || 0;
+  const proc = d.acte ? (structurate * 100 / d.acte) : 0;
+  const cls = proc < 50 ? "stat-slab" : "";
+  $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · `
+    + `<b>${nf(d.provizii)}</b> prevederi · `
+    + `<span class="${cls}" title="Acte cu arborele de articole parsat. Restul au textul aplatizat`
+    + ` într-o singură prevedere, așa că alineatele și literele nu pot fi citate separat.">`
+    + `<b>${nf(structurate)}</b> cu articole (${proc < 1 && structurate ? "<1" : Math.round(proc)}%)</span>`;
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----

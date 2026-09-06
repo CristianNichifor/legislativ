@@ -665,6 +665,13 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
             "  SELECT count(*) AS n FROM documente GROUP BY cheie_act HAVING n > 1)"
         ),
         "provizii": n("SELECT count(*) FROM provizii"),
+        # How many acts are actually structured. The SOAP service returns flattened text, so an
+        # unenriched act holds one row with `locator = 'text'` — and a corpus of those reports a
+        # provision count equal to its act count, which reads as healthy and means the opposite.
+        # Without this number the header says "152 079 prevederi" over 132 real article trees.
+        "acte_structurate": n(
+            "SELECT count(DISTINCT act_id) FROM provizii WHERE locator <> 'text'"
+        ),
         "referinte_marcate": n("SELECT count(*) FROM referinte_marcate"),
         "relatii": n("SELECT count(*) FROM relatii"),
         "pagini_in_cache": n("SELECT count(*) FROM cache"),

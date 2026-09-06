@@ -197,7 +197,12 @@ def rezumat(stare: Stare) -> dict:
     if stare.pe_shard:
         cale = stare.date_dir / "manifest.json"
         m = json.loads(cale.read_text(encoding="utf-8")) if cale.is_file() else {}
-        r = {"acte": m.get("acte", 0), "provizii": m.get("provizii", 0)}
+        r = {
+            "acte": m.get("acte", 0),
+            "provizii": m.get("provizii", 0),
+            # Counted at build time by `shard.py`; free to read here, where the corpus is absent.
+            "acte_structurate": m.get("acte_structurate", 0),
+        }
     else:
         with depozit.deschide(stare.corpus, readonly=True) as con:
             r = depozit.rezumat(con)
