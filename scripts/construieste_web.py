@@ -96,7 +96,7 @@ async function boot(){
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json"]) {
+  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
@@ -253,7 +253,7 @@ const NUCLEU = [
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
-  "./data/neconstitutional.json"
+  "./data/neconstitutional.json", "./data/norme_lovite.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 // Fonts join the big data on the cache-first path, not the network-first shell path: they are
@@ -448,6 +448,13 @@ def _neconstitutional_json() -> None:
         f"  neconstituțional → {DATA / 'neconstitutional.json'} "
         f"({len(randuri)} prevederi lovite fără reparație în corpus)"
     )
+
+    # Every strike whose wording the corpus can quote — not only the unrepaired ones, because
+    # art. 147 (4) catches a re-enactment through the original decision regardless of what
+    # happened to the original text afterwards.
+    norme = servicii.construieste_norme_lovite(str(corpus))
+    (DATA / "norme_lovite.json").write_text(json.dumps(norme, ensure_ascii=False), encoding="utf-8")
+    print(f"  norme lovite → {DATA / 'norme_lovite.json'} ({len(norme)} prevederi cu text)")
 
 
 def _bundle() -> None:
