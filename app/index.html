@@ -170,7 +170,9 @@
      does not fit inside 2.1rem, so the option label was being sliced off at the top. */
   .cauta-filtre select,.cauta-filtre .f-an{font-size:.82rem;padding-block:.4rem;line-height:1.4}
   .cauta-filtre select{width:11rem}
-  .cauta-filtre .f-an{width:6.5rem}
+  /* wider than the old number inputs were: a select spends 2.4rem of its width on the chevron, so
+     6.5rem left "an de la" clipped against it */
+  .cauta-filtre .f-an{width:8.5rem}
   .cauta-total{margin:.6rem 0 .4rem}
   #cauta-more{margin-top:.6rem}
 
@@ -504,9 +506,13 @@
   .cons-attrib b{color:var(--ink-mid)}
   .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
   .clar-box{border:1px solid var(--rule-soft);border-left:3px solid var(--note);background:var(--surface);
-    padding:.5rem .7rem;margin:.45rem 0;font-family:var(--sans);font-size:.85rem;white-space:pre-wrap;
-    word-break:break-word}
+    padding:.5rem .7rem;margin:.45rem 0}
   .clar-box .suggest-h{margin-bottom:.3rem}
+  /* Same face and size as .cons-text above it. The rewrite is read *against* the provision, and
+     two fonts make that comparison about the typography instead of about the words. */
+  .clar-text{font-family:var(--mono);font-size:.82rem;line-height:1.6;white-space:pre-wrap;
+    word-break:break-word;color:var(--ink)}
+  .clar-act{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.5rem}
   /* override the global field-label styling this <label> would otherwise inherit (uppercase, a
      bottom margin that pushed it out of line with the button beside it) */
   .ai-toggle{margin:0;text-transform:none;letter-spacing:normal;font-weight:400;
@@ -835,8 +841,10 @@
             <option value="decizie">decizie</option>
             <option value="decret">decret</option>
           </select>
-          <input type="number" id="f-an-min" class="f-an" placeholder="an de la" min="1800" max="2100">
-          <input type="number" id="f-an-max" class="f-an" placeholder="până la" min="1800" max="2100">
+          <select id="f-an-min" class="f-an ani" title="Filtrează de la anul"
+            data-gol="an de la"></select>
+          <select id="f-an-max" class="f-an ani" title="Filtrează până la anul"
+            data-gol="până la"></select>
           <span class="hint">Enter pentru a căuta · în toate prevederile din corpus</span>
         </div>
         <div id="cauta-out"></div>
@@ -854,8 +862,9 @@
             <option value="decizie">decizie</option>
             <option value="decret">decret</option>
           </select>
-          <input type="text" id="g-nr" class="g-nr" placeholder="număr (ex.: 98)">
-          <input type="number" id="g-an" class="g-an" placeholder="an (ex.: 2016)" min="1800" max="2100">
+          <input type="text" id="g-nr" class="g-nr" inputmode="numeric" placeholder="număr — 98"
+            title="Numărul actului, ex.: 98 sau 1.802">
+          <select id="g-an" class="g-an ani" title="Anul actului"></select>
           <button class="go" id="g-go">Arată graful</button>
           <button class="ghost" id="g-cron">Cronologie</button>
           <span class="hint" id="g-stat"></span>
@@ -875,8 +884,9 @@
             <option value="decizie">decizie</option>
             <option value="decret">decret</option>
           </select>
-          <input type="text" id="s-nr" class="g-nr" placeholder="număr (ex.: 98)">
-          <input type="number" id="s-an" class="g-an" placeholder="an (ex.: 2016)" min="1800" max="2100">
+          <input type="text" id="s-nr" class="g-nr" inputmode="numeric" placeholder="număr — 98"
+            title="Numărul actului, ex.: 98 sau 1.802">
+          <select id="s-an" class="g-an ani" title="Anul actului"></select>
           <button class="go" id="s-add">Adaugă la supraveghere</button>
           <span class="hint" id="s-stat"></span>
         </div>
@@ -1626,6 +1636,39 @@ $("#r-tree").addEventListener("change", programeazaLive);
 ["r-tip","r-nr","r-an","r-desc"].forEach(id=>{ const el=$("#"+id);
   if(el){ el.addEventListener("input",programeazaLive); el.addEventListener("change",programeazaLive); } });
 
+// ---- years are chosen, not typed ----------------------------------------------------------
+// A year is a closed set, so a free-text box only offers ways to be wrong: 201, 20166, a typo the
+// lookup then reports as "not in corpus". Every `.ani` select is filled from one place, newest
+// first because a drafter is almost always looking at recent law. 1864 is the earliest act the
+// corpus carries (the 1864 codes); the range is generous rather than guessed tight.
+const AN_MIN = 1864;
+function umpleAni(){
+  const acum = new Date().getFullYear();
+  for(const sel of document.querySelectorAll("select.ani")){
+    if(sel.options.length) continue;                       // filled once
+    const gol = sel.dataset.gol || "an";                   // filters say "an de la", pickers "an"
+    let h = `<option value="">${esc(gol)}</option>`;
+    for(let a = acum; a >= AN_MIN; a--) h += `<option value="${a}">${a}</option>`;
+    sel.innerHTML = h;
+  }
+}
+umpleAni();
+
+// Act numbers are digits, optionally with the thousands dot Romanian law uses (1.802/2014). The
+// field says so on submit rather than letting the lookup come back "not in corpus" for what was
+// really a typo — the two failures look identical to a reader, and only one is about the corpus.
+const NUMAR_ACT = /^\d{1,3}(?:\.\d{3})+$|^\d{1,5}$/;
+function numarValid(camp){
+  const v = (camp.value || "").trim();
+  const ok = v !== "" && NUMAR_ACT.test(v);
+  if(ok) camp.removeAttribute("aria-invalid"); else camp.setAttribute("aria-invalid","true");
+  return ok;
+}
+for(const id of ["g-nr","s-nr"]){
+  const el = $("#"+id);
+  if(el) el.addEventListener("input", ()=>el.removeAttribute("aria-invalid"));
+}
+
 // ---- outline / table of contents: a live map of the block tree, click an entry to jump to it ----
 const tocList=$("#r-toc-list");
 let tocTimer=null, tocRef=[];
@@ -2008,7 +2051,25 @@ function renderCons(d){
 }
 function clarBox(text, nota){
   return `<div class="clar-box"><div class="suggest-h">Limbaj clar — sugestie, nu textul legii`
-    +(nota?` · ${esc(nota)}`:``)+`</div>${esc(text||"")}</div>`;
+    +(nota?` · ${esc(nota)}`:``)+`</div><div class="clar-text">${esc(text||"")}</div>`
+    // A suggestion that cannot be dismissed is a suggestion that has taken the screen. These three
+    // are the whole set of things to do with it: take it somewhere, keep it, or be rid of it.
+    +`<div class="clar-act">`
+    +`<button type="button" class="ghost mini clar-insert" title="Pune textul în „Verifică proiect”">`
+    +`Trimite la „Verifică”</button>`
+    +`<button type="button" class="ghost mini clar-copy">Copiază</button>`
+    +`<button type="button" class="ghost mini clar-x" title="Ascunde sugestia">Închide</button>`
+    +`</div></div>`;
+}
+// Wired against the string itself, not re-read from the DOM: the rewrite is the model's output and
+// round-tripping it through an attribute is one more place for it to come back subtly different.
+function legaClar(box, text){
+  if(!box) return;
+  const q=(s)=>box.querySelector(s);
+  q(".clar-x").onclick=()=>box.remove();
+  q(".clar-copy").onclick=()=>{ navigator.clipboard?.writeText(text);
+    q(".clar-copy").textContent="Copiat"; };
+  q(".clar-insert").onclick=()=>{ $("#draft").value=text; selectTab("lint"); };
 }
 async function rescrie(btn, p, act){
   const out=$(`.cons-clar-out[data-out="${btn.dataset.i}"]`);
@@ -2019,6 +2080,7 @@ async function rescrie(btn, p, act){
       +esc(r&&r.text?r.text:"se încarcă modelul AI…")+`</span>`; };
     const {text, nota}=await aiRescrie(p.text, {norma:"nou", act, loc:p.locator, prog});
     out.innerHTML=clarBox(text, nota);
+    legaClar(out.querySelector(".clar-box"), text || "");
   }catch(e){ out.innerHTML=empty("Eroare: "+esc(e.message||e)); }
   finally{ btn.disabled=false; }
 }
@@ -2333,12 +2395,17 @@ function watchAdd(a){ const l=watchList(); if(!l.includes(a)){ l.push(a); watchS
 function watchRemove(a){ watchSave(watchList().filter(x=>x!==a)); }
 async function sAdd(){
   const tip=$("#s-tip").value||"lege", nr=$("#s-nr").value.trim(), an=$("#s-an").value.trim(), stat=$("#s-stat");
-  if(!nr||!an){ stat.textContent="completează numărul și anul"; return; }
+  if(!an){ stat.textContent="alege anul"; return; }
+  if(!numarValid($("#s-nr"))){ stat.textContent="numărul actului e format din cifre (ex.: 98 sau 1.802)"; return; }
   stat.textContent="…";
   try{
     const d=await (await fetch(`/api/act?tip=${encodeURIComponent(tip)}&nr=${encodeURIComponent(nr)}&an=${encodeURIComponent(an)}`)).json();
     if(!d.act_id){ stat.textContent="număr sau an invalid"; return; }
-    if(!d.cunoscut){ stat.textContent=`${d.act_id} nu este în corpus`; return; }
+    // "Not collected yet" and "does not exist" are different answers and the corpus can only give
+    // the first. Saying how far it reaches is the difference between a limit and a verdict.
+    if(!d.cunoscut){ stat.innerHTML=`<b>${esc(d.act_id)}</b> nu se află în corpusul local`
+      +` <span class="hint">— corpusul este parțial, deci asta nu înseamnă că actul nu există.`
+      +` Poate fi necolectat încă.</span>`; return; }
     watchAdd(d.act_id); $("#s-nr").value=""; $("#s-an").value=""; stat.textContent="";
     renderSupraveghere();
   }catch(e){ stat.textContent="eroare"; }
