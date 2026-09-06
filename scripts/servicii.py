@@ -74,6 +74,7 @@ class Stare:
         self._urls: dict[str, str] | None = None
         self._republicari: dict[str, str] | None = None
         self._ids: set[str] | None = None
+        self._alias: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
@@ -201,6 +202,23 @@ class Stare:
                     self._ids = set()
         return self._ids
 
+    def _alias_an(self) -> dict[str, str]:
+        """Acts filed under the year they were republished rather than the year they were passed.
+
+        Built once, and only when a lookup has already missed — it is a scan of `documente`, which
+        the shard backing does not have at all, and most sessions never need it.
+        """
+        if self._alias is None:
+            if self.pe_shard:
+                self._alias = {}
+            else:
+                try:
+                    with depozit.deschide(self.corpus, readonly=True) as con:
+                        self._alias = nomenclator.alias_an(con)
+                except Exception:
+                    self._alias = {}
+        return self._alias
+
     def rezolva_nume(self, act_id: str, la_data: date | None = None) -> str:
         """A named act (`constitutie`, `cod-penal`) mapped onto the version the corpus stores.
 
@@ -208,9 +226,13 @@ class Stare:
         different ids for the same law and a quarter of everything the corpus cites looked absent.
         Anything that is not a name is returned unchanged, so callers can apply this blindly.
         """
-        if not nomenclator.este_nume(act_id):
+        if nomenclator.este_nume(act_id):
+            return nomenclator.rezolva(act_id, self._toate_id(), la_data) or act_id
+        # Only after a miss: an id the corpus really holds is never looked up in the alias map, so
+        # the scan behind it stays unpaid for every citation that already resolves.
+        if act_id in self._toate_id():
             return act_id
-        return nomenclator.rezolva(act_id, self._toate_id(), la_data) or act_id
+        return self._alias_an().get(act_id, act_id)
 
     def cunoscut(self, act_id: str) -> bool:
         """Whether the corpus carries this act at all — the honest 'in corpus' signal."""
