@@ -110,6 +110,15 @@ _FEREASTRA_ABROGARE: Final[int] = 300
 _DEFINITIVA_NERECURATA: Final[re.Pattern[str]] = re.compile(
     r"Definitiv[aă]\s+prin\s+nerecurare", re.IGNORECASE
 )
+# How 84% of the case law states finality — 16 999 of 20 006 decisions. Matching only the 1990s
+# `prin nerecurare` form (1%) left the rest marked "finality unknown", and the register then
+# warned on every one of them that a recourse might have reversed the strike. There is no
+# recourse to search: article 147 (4) makes a decision generally binding from publication, and
+# the appeal to the plenum went with the 2003 revision. Matched against the diacritic-folded
+# copy, where `și` is already `si`.
+_DEFINITIVA_GENERALA: Final[re.Pattern[str]] = re.compile(
+    r"Definitiv[aă]\s+(?:si|și)\s+general\s+obligatorie", re.IGNORECASE
+)
 _CU_RECURS: Final[re.Pattern[str]] = re.compile(r"Cu\s+recurs\s+(?:î|i)n\s+termen", re.IGNORECASE)
 _ESTE_RECURS: Final[re.Pattern[str]] = re.compile(r"\brecursu(?:l|lui)\b", re.IGNORECASE)
 
@@ -446,8 +455,8 @@ def citeste(id_act: str, text: str) -> Decizie:
         )
 
     pliat = fara_diacritice(text)
-    nerecurata = bool(_DEFINITIVA_NERECURATA.search(pliat))
-    definitiva = True if nerecurata else (False if _CU_RECURS.search(pliat) else None)
+    finala = bool(_DEFINITIVA_NERECURATA.search(pliat) or _DEFINITIVA_GENERALA.search(pliat))
+    definitiva = True if finala else (False if _CU_RECURS.search(pliat) else None)
     este_recurs = bool(_ESTE_RECURS.search(fara_diacritice(disp)))
 
     if definitiva is False and tinta:
