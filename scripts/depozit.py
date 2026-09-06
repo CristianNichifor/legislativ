@@ -41,6 +41,7 @@ from pathlib import Path
 
 from scripts.api import Inregistrare
 from scripts.parsare import ActParsat
+from scripts.publicare import publicare
 from scripts.referinte import Act
 
 SCHEMA = """
@@ -85,6 +86,9 @@ CREATE TABLE IF NOT EXISTS documente (
     titlu       TEXT NOT NULL,
     emitent     TEXT,
     vigoare     TEXT,
+    publicat    TEXT,               -- ISO date, read from the act's own Monitorul Oficial line
+    monitor     INTEGER,            -- the MO issue number, so a finding can be checked
+    republicare INTEGER,            -- 1 when that line is a republication, not first publication
     sursa_url   TEXT,
     text        TEXT NOT NULL,
     adus_la     TEXT NOT NULL
@@ -287,6 +291,7 @@ def deschide(
     con.execute("PRAGMA busy_timeout = 30000")
     try:
         con.executescript(SCHEMA)
+        _adauga_coloane(con)
         _umple_harta_fts(con)
         yield con
         con.commit()
@@ -295,6 +300,28 @@ def deschide(
         raise
     finally:
         con.close()
+
+
+def _adauga_coloane(con: sqlite3.Connection) -> None:
+    """Add columns a corpus collected under an older schema does not have.
+
+    `CREATE TABLE IF NOT EXISTS` is a no-op on a table that already exists, columns and all, so a
+    new field never reaches a corpus that took hours to collect. Each one is added on its own,
+    guarded by what `table_info` actually reports, so this stays safe to run on every open and on
+    a file at any schema age.
+    """
+    noi = {
+        "documente": [
+            ("publicat", "TEXT"),
+            ("monitor", "INTEGER"),
+            ("republicare", "INTEGER"),
+        ],
+    }
+    for tabel, coloane in noi.items():
+        existente = {r[1] for r in con.execute(f"PRAGMA table_info({tabel})")}
+        for nume, tip in coloane:
+            if nume not in existente:
+                con.execute(f"ALTER TABLE {tabel} ADD COLUMN {nume} {tip}")
 
 
 def _umple_harta_fts(con: sqlite3.Connection) -> None:
@@ -593,9 +620,15 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
     # The document first, under its own identity, so that a citation-key collision costs the
     # `acte` row and nothing else. Keyed on the portal id and replaced in place, so re-collecting
     # a page updates a document rather than duplicating it.
+    # The publication date is read from the act's own Monitorul Oficial line, because the service
+    # does not carry it: its `Publicatie` field is the literal string "Monitorul Oficial". Where
+    # the line cannot be read the columns stay NULL — a missing publication date has to look
+    # missing, which is precisely what went wrong when `publicat` was filled with `vigoare`.
+    pub = publicare(rec.text)
     con.execute(
         "INSERT OR REPLACE INTO documente (id_portal, cheie_act, tip, numar, an, titlu,"
-        " emitent, vigoare, sursa_url, text, adus_la) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        " emitent, vigoare, publicat, monitor, republicare, sursa_url, text, adus_la)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             rec.id_portal,
             act.id,
@@ -605,6 +638,9 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             rec.titlu,
             rec.emitent,
             _iso(rec.data_vigoare),
+            _iso(pub.data) if pub else None,
+            pub.monitor if pub else None,
+            int(pub.republicare) if pub else None,
             rec.link_html,
             rec.text,
             datetime.now(UTC).isoformat(timespec="seconds"),
@@ -622,7 +658,10 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             act.an,
             rec.titlu,
             rec.emitent,
-            _iso(rec.data_vigoare),
+            # publicat: the real thing or nothing. It used to be a second copy of the in-force
+            # date, identical in all 63 933 rows, which made every art. 147 / art. 78 deadline
+            # anchor on the wrong event without anything saying so.
+            _iso(pub.data) if pub else None,
             _iso(rec.data_vigoare),
             None,
             rec.id_portal,
