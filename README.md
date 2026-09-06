@@ -356,3 +356,12 @@ endpoint and a recorded fixture are the same shape.
 | `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |
 | `shard.py` | Turns a corpus into fetch-on-demand search shards: a compact act index, a prefix-sharded inverted index, one provisions file per act. |
 | `cauta_web.py` | The browser's search: fold-identical to the shard builder, it fetches only the shards a query's tokens need — coverage of the corpus, download of the query. |
+
+## The documents
+
+| | |
+| --- | --- |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | The design system: USR's palette and typeface, where each token came from, and the two brand values that are deliberately not used as published because they fail WCAG AA as text. Read this before changing a colour. |
+| [`docs/STIL_DANEZ.md`](docs/STIL_DANEZ.md) | The style the plain-language rewrite targets, taken from Denmark's law-drafting quality guide — and the honesty rail: a rewrite may not add, drop or shift meaning, and is never shown as the law. |
+| [`docs/CONSOLIDARE.md`](docs/CONSOLIDARE.md) | How a provision's text as of a date is spliced, and what makes `consolidare.py` refuse rather than guess. |
+| [`docs/DISCLOSURE.md`](docs/DISCLOSURE.md) | A responsible-disclosure draft for defects found incidentally in `legislatie.just.ro` while reading public law through it. **Unsent** — it is addressed to the portal's technical contact and is for the maintainer to send, from an address they control. |

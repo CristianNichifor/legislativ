@@ -13,8 +13,18 @@ dependencies = []
 
 # jsonschema and referencing are here and not in `dependencies` on purpose: a document is
 # validated when it is written, not every time it is read, so the runtime footprint stays at zero.
+# fonttools and brotli are here for the same reason: they only subset the webfonts, in
+# `scripts/fonturi.py`, and the resulting .woff2 files are committed — so nothing the app runs,
+# locally or in the browser, ever needs either.
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.6", "jsonschema>=4.23", "referencing>=0.37.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "jsonschema>=4.23",
+    "referencing>=0.37.0",
+    "fonttools>=4.64.0",
+    "brotli>=1.2.0",
+]
 
 [tool.ruff]
 line-length = 100

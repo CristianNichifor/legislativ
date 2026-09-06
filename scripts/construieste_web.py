@@ -250,10 +250,15 @@ const VERSIUNE = "__VERSION__";
 const CACHE = "legislativ-" + VERSIUNE;
 const NUCLEU = [
   "./", "./index.html", "./worker.js", "./bundle.zip",
+  __FONTURI__,
   "./data/graf.db", "./data/initiative.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
+// Fonts join the big data on the cache-first path, not the network-first shell path: they are
+// immutable within a build (a new build means a new cache name), and a network-first font is a
+// font that arrives after the text does — the page flashes in Georgia on every visit.
+const eFont = (p) => p.includes("/fonts/");
 self.addEventListener("install", (e)=>{
   e.waitUntil(
     caches.open(CACHE).then(c=>c.addAll(NUCLEU)).catch(()=>{}).then(()=>self.skipWaiting())
@@ -271,7 +276,7 @@ self.addEventListener("fetch", (e)=>{
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;  // Pyodide CDN and the like go straight to network
-  if (eBig(url.pathname)) {
+  if (eBig(url.pathname) || eFont(url.pathname)) {
     e.respondWith(caches.open(CACHE).then(async (c)=>{
       const hit = await c.match(req);
       if (hit) return hit;
@@ -444,13 +449,34 @@ def _versiune_si_sw() -> str:
             h.update(p.read_bytes())
     versiune = h.hexdigest()[:12]
 
-    (WEB / "sw.js").write_text(SW.replace("__VERSION__", versiune), encoding="utf-8")
+    # Precache exactly the fonts that were copied, rather than a list kept in sync by hand.
+    fonturi = sorted(p.name for p in (WEB / "fonts").glob("*.woff2"))
+    lista = ", ".join(f'"./fonts/{n}"' for n in fonturi)
+    sw = SW.replace("__VERSION__", versiune).replace("__FONTURI__", lista)
+    (WEB / "sw.js").write_text(sw, encoding="utf-8")
     manifest = DATA / "manifest.json"
     date = json.loads(manifest.read_text()) if manifest.is_file() else {}
     date["versiune"] = versiune
     manifest.write_text(json.dumps(date, ensure_ascii=False), encoding="utf-8")
     print(f"  sw + versiune → {versiune}")
     return versiune
+
+
+def _fonturi() -> None:
+    """Copy `app/fonts/` next to the built page.
+
+    The page's `font-src 'self'` leaves no other option: a webfont must be served from this origin
+    or it does not load. The files are committed, vendored by `scripts/fonturi.py`; this step only
+    moves them, so a checkout with no network still builds a correctly-typeset page.
+    """
+    sursa = ROOT / "app" / "fonts"
+    if not sursa.is_dir():
+        raise SystemExit("app/fonts lipsește — rulează `uv run python -m scripts.fonturi`")
+    tinta = WEB / "fonts"
+    shutil.rmtree(tinta, ignore_errors=True)
+    shutil.copytree(sursa, tinta)
+    kb = sum(f.stat().st_size for f in tinta.glob("*.woff2")) / 1024
+    print(f"  fonturi ({len(list(tinta.glob('*.woff2')))} fișiere, {kb:.0f} KB) → {tinta}")
 
 
 def _pagina() -> None:
@@ -492,6 +518,7 @@ def main(sursa: str) -> None:
         _vid_json()
     _bundle()
     _worker()
+    _fonturi()
     _pagina()
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")

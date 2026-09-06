@@ -45,6 +45,8 @@ web/bundle.zip
 web/index.html
 web/worker.js
 web/sw.js
+# copied here from app/fonts/ by the build; app/fonts/ is the committed source
+web/fonts/
 
 # jurnalul colectării supravegheate
 colector-supravegheat.log

@@ -4,32 +4,84 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Linter legislativ</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
+  /* Self-hosted, and not as an optimisation: the built page runs under `font-src 'self'`, which
+     blocks fonts.gstatic.com outright. While these came from Google the app rendered in Georgia
+     and the system sans and nobody could see why. Built by `scripts/fonturi.py`, licences in
+     app/fonts/LICENTE.md. `swap` so the text is readable from the first paint. */
+  @font-face{font-family:Aileron;font-style:normal;font-weight:400;font-display:swap;
+    src:url(fonts/aileron-400.woff2) format("woff2")}
+  @font-face{font-family:Aileron;font-style:italic;font-weight:400;font-display:swap;
+    src:url(fonts/aileron-400i.woff2) format("woff2")}
+  @font-face{font-family:Aileron;font-style:normal;font-weight:600;font-display:swap;
+    src:url(fonts/aileron-600.woff2) format("woff2")}
+  @font-face{font-family:Aileron;font-style:normal;font-weight:700;font-display:swap;
+    src:url(fonts/aileron-700.woff2) format("woff2")}
+  @font-face{font-family:Spectral;font-style:normal;font-weight:400;font-display:swap;
+    src:url(fonts/spectral-400.woff2) format("woff2")}
+  @font-face{font-family:Spectral;font-style:italic;font-weight:400;font-display:swap;
+    src:url(fonts/spectral-400i.woff2) format("woff2")}
+  @font-face{font-family:Spectral;font-style:normal;font-weight:600;font-display:swap;
+    src:url(fonts/spectral-600.woff2) format("woff2")}
+  @font-face{font-family:Spectral;font-style:normal;font-weight:700;font-display:swap;
+    src:url(fonts/spectral-700.woff2) format("woff2")}
+  @font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;font-display:swap;
+    src:url(fonts/plex-mono-400.woff2) format("woff2")}
+  @font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:600;font-display:swap;
+    src:url(fonts/plex-mono-600.woff2) format("woff2")}
+
+  /* The palette is USR's, read off usr.ro rather than eyeballed: --blue #002a59, --red #ff0021,
+     and the blue-grey ramp #f0f2f5 · #e5e9ee · #b2bfcd · #7f94ac · #4c698a. Three rules hold it
+     together:
+
+       · brand navy is structure — ink, headings, the deep end of the ramp;
+       · brand blue is interaction — links, focus, the active tab, the primary button;
+       · brand red is severity, and only the blocking level of it.
+
+     Two values are deliberately not USR's, because USR's fail WCAG AA as text and this page is
+     read by people checking whether a law does what it says:
+
+       · #7f94ac is 3.1:1 on white. It is used dark-mode only (5.9:1), where it passes;
+       · #ff0021 is 4.0:1 on white. Text and 1px borders use --blocking (#c00019, 6.5:1); the pure
+         brand red survives as --brand-red for marks that carry no text — dots, 2px rules, fills.
+
+     Every text token here clears 4.5:1 against all three of its backgrounds (surface, paper and
+     sunk) in both themes. docs/DESIGN.md has the table. */
   :root{
-    --paper:#f2f3f5; --surface:#fff; --sunk:#eceef1; --ink:#14171c; --ink-mid:#464d59;
-    --ink-mute:#6b7280; --rule:#d7dae0; --rule-soft:#e6e8ec; --accent:#8a2b2e;
-    --accent-wash:#f4e6e5; --blocking:#8a2b2e; --material:#8a5c14; --note:#3f6478; --good:#2f6b43;
+    --paper:#f0f2f5; --surface:#fff; --sunk:#e5e9ee; --ink:#0a1f38; --ink-mid:#365170;
+    --ink-mute:#526984; --rule:#b2bfcd; --rule-soft:#e5e9ee; --accent:#00458c;
+    --accent-wash:#e3ecf7; --brand-red:#ff0021; --on-accent:#fff;
+    --blocking:#c00019; --material:#8a5c14; --note:#0f5f78; --good:#2f6b43;
+    /* The dropdown chevron and the date field's picker glyph are images, so they cannot read a
+       colour token — the whole asset has to be swapped per theme. Both used to be theme-blind: a
+       hardcoded #888 chevron, and an invert(.6) on the picker that was written for the dark
+       surface but ran in light mode too, bleaching the glyph against white. */
+    --select-chevron:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%23526984" stroke-width="1.4"/></svg>');
+    --picker-filter:none;
     --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
-    --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-    --serif:"Spectral","Iowan Old Style",Georgia,serif;
+    --sans:Aileron,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    --serif:Spectral,"Iowan Old Style",Georgia,serif;
     /* one radius + elevation scale, used everywhere so controls read as a set */
     --r1:6px; --r2:9px; --r3:14px;
-    --e1:0 1px 2px rgba(20,23,28,.06),0 1px 1px rgba(20,23,28,.04);
-    --e2:0 8px 24px rgba(20,23,28,.10);
+    --e1:0 1px 2px rgba(10,31,56,.07),0 1px 1px rgba(10,31,56,.05);
+    --e2:0 8px 24px rgba(10,31,56,.12);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --paper:#0f1218; --surface:#171b22; --sunk:#1d222b; --ink:#e5e8ee; --ink-mid:#b0b7c3;
-    --ink-mute:#8d95a3; --rule:#2b313c; --rule-soft:#232833; --accent:#dd918c;
-    --accent-wash:#2c2022; --blocking:#dd918c; --material:#d7ab6b; --note:#8fb5c8; --good:#7fb98f;
+    --paper:#0a1420; --surface:#111d2c; --sunk:#16232f; --ink:#e5e9ee; --ink-mid:#b2bfcd;
+    --ink-mute:#7f94ac; --rule:#24374e; --rule-soft:#1a2a3c; --accent:#6ea8e8;
+    --accent-wash:#12283f; --brand-red:#ff0021; --on-accent:#0a1420;
+    --blocking:#ff5c70; --material:#d7ab6b; --note:#6fb3cc; --good:#7fb98f;
+    --select-chevron:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%237f94ac" stroke-width="1.4"/></svg>');
+    --picker-filter:invert(.75);
     --e1:0 1px 2px rgba(0,0,0,.45); --e2:0 10px 28px rgba(0,0,0,.55);
   }}
   :root[data-theme="dark"]{
-    --paper:#0f1218; --surface:#171b22; --sunk:#1d222b; --ink:#e5e8ee; --ink-mid:#b0b7c3;
-    --ink-mute:#8d95a3; --rule:#2b313c; --rule-soft:#232833; --accent:#dd918c;
-    --accent-wash:#2c2022; --blocking:#dd918c; --material:#d7ab6b; --note:#8fb5c8; --good:#7fb98f;
+    --paper:#0a1420; --surface:#111d2c; --sunk:#16232f; --ink:#e5e9ee; --ink-mid:#b2bfcd;
+    --ink-mute:#7f94ac; --rule:#24374e; --rule-soft:#1a2a3c; --accent:#6ea8e8;
+    --accent-wash:#12283f; --brand-red:#ff0021; --on-accent:#0a1420;
+    --blocking:#ff5c70; --material:#d7ab6b; --note:#6fb3cc; --good:#7fb98f;
+    --select-chevron:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%237f94ac" stroke-width="1.4"/></svg>');
+    --picker-filter:invert(.75);
     --e1:0 1px 2px rgba(0,0,0,.45); --e2:0 10px 28px rgba(0,0,0,.55);
   }
   *{box-sizing:border-box}
@@ -87,7 +139,8 @@
   aside.canvas.collapsed .canvas-body{display:none}
   .canvas-toggle{margin-left:auto;background:transparent;border:1px solid var(--rule);
     color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.9rem;line-height:1;
-    padding:.15rem .45rem}
+    padding:.15rem .45rem;min-width:1.5rem;min-height:1.5rem}
+  .canvas-toggle:hover{color:var(--ink);border-color:var(--ink-mute)}
   aside.canvas.collapsed .canvas-toggle{margin:0}
   .canvas-body{padding:.5rem;flex:1;overflow:auto;display:flex;flex-direction:column}
   #graf-wrap{flex:1;display:flex;flex-direction:column}
@@ -111,7 +164,12 @@
 
   /* search filters: a compact row of act-type + year-range controls under the query box */
   .cauta-filtre{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .2rem}
-  .cauta-filtre select,.cauta-filtre .f-an{height:2.1rem;font-size:.82rem}
+  /* Two things this row needs and did not have. A width on the select: without one it inherits
+     select{width:100%} and, being a flex item, claims the whole line and wraps every field after
+     it onto the next. And padding rather than a fixed height: .75rem of inherited block padding
+     does not fit inside 2.1rem, so the option label was being sliced off at the top. */
+  .cauta-filtre select,.cauta-filtre .f-an{font-size:.82rem;padding-block:.4rem;line-height:1.4}
+  .cauta-filtre select{width:11rem}
   .cauta-filtre .f-an{width:6.5rem}
   .cauta-total{margin:.6rem 0 .4rem}
   #cauta-more{margin-top:.6rem}
@@ -128,8 +186,10 @@
     letter-spacing:.04em;color:var(--ink-mute);margin:.4rem 0 .2rem}
   .impact-tinta,.impact-termen,.impact-obl{font-size:.82rem;margin:.18rem 0;line-height:1.4}
   .impact-termen code{font-family:var(--mono)}
-  .impact-obl.elim{border-left:2px solid var(--blocking);padding-left:.5rem;
-    background:color-mix(in srgb,var(--blocking) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
+  /* the rail is a mark, not a label, so it takes the undiluted brand red; the words beside it stay
+     on --blocking, which is the same red darkened until it passes AA as text */
+  .impact-obl.elim{border-left:2px solid var(--brand-red);padding-left:.5rem;
+    background:color-mix(in srgb,var(--brand-red) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
   .impact-xray{margin:.2rem 0;padding-left:1.3rem;font-size:.84rem;line-height:1.5}
   .impact-xray li{margin:.2rem 0}
   .impact-xray li.fel-abroga{color:var(--blocking)}
@@ -160,7 +220,12 @@
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
-  .graf-cauta select,.graf-cauta .g-nr,.graf-cauta .g-an{height:2.15rem;font-size:.85rem}
+  /* same pair of fixes as .cauta-filtre above: an explicit width so the type dropdown stays inline
+     instead of taking the row to itself, and padding instead of a fixed height so "lege" is not
+     clipped */
+  .graf-cauta select,.graf-cauta .g-nr,.graf-cauta .g-an{font-size:.85rem;padding-block:.4rem;
+    line-height:1.4}
+  .graf-cauta select{width:9rem}
   .graf-cauta .g-nr{width:9rem}
   .graf-cauta .g-an{width:8rem}
   .graf-tab-wrap{min-height:26rem;display:flex;flex-direction:column;
@@ -194,24 +259,70 @@
 
   label{display:block;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.1em;
     text-transform:uppercase;color:var(--ink-mute);margin:0 0 .5rem}
-  textarea,input[type=search],input[type=text],input[type=date],select{width:100%;background:var(--surface);
+  /* `input[type=number]` belongs in this list: the year fields (an de la / până la, and the act
+     year in the graph and watch rows) are number inputs, and while they were missing here they
+     rendered as raw browser widgets — 1px padding, square corners, system font, and a white box
+     that stayed white in dark mode. */
+  textarea,input[type=search],input[type=text],input[type=date],input[type=number],
+  select{width:100%;background:var(--surface);
     color:var(--ink);border:1px solid var(--rule);border-radius:var(--r1);padding:.75rem 1rem;
     font-family:var(--mono);font-size:.9rem;line-height:1.6}
   textarea:hover,input:hover,select:hover{border-color:var(--ink-mute)}
-  /* the native picker's calendar glyph is near-invisible on the dark surface; lift it */
-  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6);cursor:pointer}
+  /* the native picker's calendar glyph needs lifting on the dark surface and leaving alone on the
+     light one — hence a token rather than an unconditional invert */
+  input[type=date]::-webkit-calendar-picker-indicator{filter:var(--picker-filter);cursor:pointer;
+    width:1rem;height:1rem;padding:0;margin:0}
+  /* The date field's internal editor carries its own padding and line box, which made the control
+     2px taller than the select beside it in the same grid row — visible as a step between two
+     fields that are meant to read as one pair. Pin the editor to the same line box as the text. */
+  input[type=date]::-webkit-datetime-edit{padding:0;line-height:1.6}
+  input[type=date]::-webkit-datetime-edit-fields-wrapper{padding:0}
+
+  /* Romanian date entry.
+
+     `input[type=date]` renders its segments in the *browser's* locale, never the document's, and
+     `lang="ro"` does not reach it — so on an en-US browser this Romanian page was asking for a date
+     as mm/dd/yyyy. For a tool about Romanian law that is not cosmetic: 07.12.2022 and 12.07.2022 are
+     both plausible readings of the same act, and the field gave no clue which it wanted.
+
+     So the field a person reads and types is a plain text input in zz.ll.aaaa, the order Romanian
+     actually uses. The native control is kept — a calendar is genuinely nicer than typing — but
+     demoted to a button beside the field. It stays in the layout (1px, transparent) rather than
+     display:none because showPicker() refuses to open on an element that is not rendered.
+
+     ISO is still what goes on the wire; dataRoLaIso() is the single place that conversion happens. */
+  .data-ro{position:relative;display:flex;align-items:center}
+  .data-ro>input[type=text]{padding-right:2.8rem}
+  .data-cal{position:absolute;right:.45rem;display:flex;align-items:center;justify-content:center;
+    width:1.75rem;height:1.75rem;padding:0;border:1px solid transparent;border-radius:var(--r1);
+    background:transparent;color:var(--ink-mute);cursor:pointer}
+  .data-cal:hover{color:var(--accent);border-color:var(--rule)}
+  .data-cal svg{width:1.05rem;height:1.05rem;display:block}
+  .data-native{position:absolute;right:.45rem;width:1px;height:1px;min-height:0;padding:0;margin:0;
+    border:0;opacity:0;pointer-events:none}
+  /* a year is four digits typed, not nudged: the spinners only add clutter and a hover target that
+     does nothing useful at this size */
+  input[type=number]{-moz-appearance:textfield;appearance:textfield}
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   /* custom dropdown chevron with the same 1rem inset as the text on the left, instead of the
      native arrow jammed against the edge */
   select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;
-    background-image:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" fill="none" stroke="%23888" stroke-width="1.4"/></svg>');
+    background-image:var(--select-chevron);
     background-repeat:no-repeat;background-position:right 1rem center;background-size:.7rem}
+  /* The bare attribute selector is (0,1,0) and the base control rule above is (0,1,1), so for every
+     element that actually gets this attribute — the year/number fields in Redactează, the date in
+     Consolidat — the grey border won and the invalid state has never once been visible. Naming the
+     element types puts it at (0,2,1), ahead of the rule it is meant to override. */
+  input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"],
   [aria-invalid="true"]{border-color:var(--blocking)}
   .req{color:var(--blocking)}
   .opt{color:var(--ink-mute);font-weight:400;text-transform:none;letter-spacing:0}
   /* a clear (×) button pinned in the corner of a text field, added by JS */
   .clr-wrap{position:relative;display:block}
   /* right offset clears the textarea's ~11px scrollbar so the × never sits on top of it */
-  .clr-btn{position:absolute;top:.5rem;right:1rem;width:1.4rem;height:1.4rem;border:1px solid var(--rule);
+  /* 1.5rem = 24px, the smallest target WCAG 2.2 accepts; it was 1.4rem and just under */
+  .clr-btn{position:absolute;top:.5rem;right:1rem;width:1.5rem;height:1.5rem;border:1px solid var(--rule);
     background:var(--surface);color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);line-height:1;
     font-size:1rem;display:none;align-items:center;justify-content:center;padding:0;opacity:.75}
   .clr-wrap.has-val .clr-btn{display:flex}
@@ -219,7 +330,9 @@
   /* grid cells: bottom-align the field so a label that wraps to two lines does not shove its box
      down out of line with the others in the row */
   .grid>div{display:flex;flex-direction:column}
-  .grid>div>input,.grid>div>select{margin-top:auto}
+  /* .data-ro is in this list because the date field now sits inside a wrapper — without it that
+     cell stopped bottom-aligning and the date box floated above the select beside it */
+  .grid>div>input,.grid>div>select,.grid>div>.data-ro{margin-top:auto}
   /* resize is capped so the box stays within the viewport — the reserve (22rem) leaves room for
      the header and tabs above AND the button row plus a gap below, so the buttons never sit on the
      bottom edge. Text beyond the cap scrolls inside instead of pushing the page open. */
@@ -231,9 +344,12 @@
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
   button.go{font-family:var(--sans);font-size:.85rem;font-weight:600;background:var(--accent);
-    color:#fff;border:0;border-radius:var(--r1);padding:.6rem 1.4rem;cursor:pointer;box-shadow:var(--e1)}
-  button.go:hover{background:color-mix(in srgb,var(--accent) 88%,#000)}
-  button.go:active{background:color-mix(in srgb,var(--accent) 78%,#000)}
+    color:var(--on-accent);border:0;border-radius:var(--r1);padding:.6rem 1.4rem;cursor:pointer;
+    box-shadow:var(--e1)}
+  /* mixing toward --ink rather than #000 so the press states darken on light and lighten on dark;
+     against black, the dark theme's pale accent went muddy and lost its label */
+  button.go:hover{background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
+  button.go:active{background:color-mix(in srgb,var(--accent) 78%,var(--ink))}
   button.go:disabled{opacity:.5;cursor:wait;box-shadow:none}
   button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);
     border-radius:var(--r1);font-family:var(--sans);font-size:.82rem;font-weight:600;
@@ -251,7 +367,7 @@
   .chip[disabled]{cursor:default}
   .chip.off{color:var(--ink-mute)}   /* readable in both themes; was inheriting a too-dark colour */
   .chip .n{font-variant-numeric:tabular-nums;font-size:1rem}
-  .chip.on.blocking{border-left-color:var(--blocking);color:var(--blocking)}
+  .chip.on.blocking{border-left-color:var(--brand-red);color:var(--blocking)}
   .chip.on.material{border-left-color:var(--material);color:var(--material)}
   .chip.on.note{border-left-color:var(--note);color:var(--note)}
   .chip.off .n{color:var(--good)}
@@ -289,7 +405,7 @@
     text-transform:uppercase;color:var(--ink-mute);margin-left:auto}
   .card{background:var(--surface);border:1px solid var(--rule-soft);padding:.8rem 1rem;
     margin-bottom:.6rem;border-left:3px solid var(--rule);border-radius:var(--r1);box-shadow:var(--e1)}
-  .card.blocking{border-left-color:var(--blocking)}
+  .card.blocking{border-left-color:var(--brand-red)}
   .card.material{border-left-color:var(--material)}
   .card.note{border-left-color:var(--note)}
   .card .lead{font-size:1rem;margin:0 0 .3rem}
@@ -370,8 +486,14 @@
   .cons-prov{border:1px solid var(--rule-soft);border-left:3px solid var(--note);
     background:var(--surface);padding:.6rem .8rem;margin:.5rem 0}
   .cons-prov.refuzat{border-left-color:var(--material)}
-  .cons-prov.abrogat{border-left-color:var(--blocking)}
+  .cons-prov.abrogat{border-left-color:var(--brand-red)}
   .cons-loc{font-family:var(--mono);font-size:.82rem;color:var(--accent)}
+  /* the locator, the status flag and the rewrite button on one baseline; the button is pushed to
+     the right by the auto margin rather than floated out of flow */
+  .cons-hd{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+  /* was styled inline from the render function at .1rem/.68rem, which made an 18px-tall button —
+     below the 24px minimum and visibly a different species from every other ghost button */
+  .cons-clar{font-size:.72rem;padding:.25rem .6rem;margin-left:auto;flex:none;min-height:1.5rem}
   .cons-flag{font-family:var(--sans);font-size:.62rem;font-weight:600;text-transform:uppercase;
     letter-spacing:.03em;margin-left:.5rem;border:1px solid currentColor;border-radius:999px;
     padding:.05rem .5rem;vertical-align:.05em}
@@ -400,7 +522,11 @@
   .ai-set .ai-model,.ai-set .ai-endpoint{height:2.15rem;font-size:.74rem;box-sizing:border-box}
   .ai-set .ai-model{padding:.35rem 2rem .35rem .6rem}
   .ai-endpoint{flex:1 1 18rem;min-width:14rem;max-width:34rem;padding:.35rem .7rem}
-  .ai-nota{flex-basis:100%}   /* the privacy note drops to its own line, left-aligned under the row */
+  /* Both notes drop to their own line, left-aligned under the row. This was written as `.ai-nota`,
+     but the elements carry those names as ids and class="hint" — so the rule matched nothing, the
+     notes stayed inline, and they squeezed the endpoint field until its URL was cut off mid-host.
+     That field decides where the text gets sent; it has to be readable in full. */
+  #ai-nota,#ai-sug{flex-basis:100%}
   /* Conexiuni belongs to Verifică (the graph); hide it elsewhere so the working area gets the width */
   .app:not([data-pane="lint"]) aside.canvas{display:none}
   /* Redactează: act picker pinned to the top of the scroll, tree + composed output side by side */
@@ -431,7 +557,7 @@
   .toc-dot.none{background:transparent;border:1px solid var(--rule)}
   .toc-dot.modifica{background:var(--material)}
   .toc-dot.completeaza{background:var(--good)}
-  .toc-dot.abroga{background:var(--blocking)}
+  .toc-dot.abroga{background:var(--brand-red)}
   .toc-dot.introduce{background:var(--note)}
   .toc-empty{font-family:var(--sans);font-size:.76rem;color:var(--ink-mute);padding:.3rem;list-style:none}
   @keyframes nodeflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 45%,transparent)}
@@ -527,7 +653,8 @@
   .node .kids:empty{display:none}
   /* pinned to the block's own top-right, so it never wraps onto its own line */
   .node-x{position:absolute;top:.45rem;right:.45rem;border:1px solid var(--rule);background:var(--surface);
-    color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);font-size:.9rem;line-height:1;padding:.12rem .42rem}
+    color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);font-size:.9rem;line-height:1;
+    padding:.12rem .42rem;min-width:1.5rem;min-height:1.5rem}
   .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
   .node-add{font-size:.7rem;padding:.2rem .6rem;margin-top:.45rem;border-style:dashed}
   /* the current text of an imported provision, kept as a muted reference under the block */
@@ -538,7 +665,8 @@
   .import-panel{border:1px solid var(--rule-soft);border-radius:var(--r2);background:var(--surface);
     padding:.5rem .7rem;margin-bottom:.7rem}
   .import-panel>summary{font-family:var(--sans);font-size:.8rem;font-weight:600;color:var(--accent);
-    cursor:pointer;list-style:none}
+    cursor:pointer;list-style:none;padding:.25rem 0;min-height:1.5rem}
+  .import-panel>summary:hover{color:var(--ink)}
   .import-panel>summary::-webkit-details-marker{display:none}
   .import-panel>summary::before{content:"▸ "}
   .import-panel[open]>summary::before{content:"▾ "}
@@ -662,8 +790,16 @@
         <div class="grid">
           <div><label for="c-act">Actul</label>
             <select id="c-act"><option value="">se încarcă…</option></select></div>
-          <div><label for="c-data">La data (opțional)</label>
-            <input type="date" id="c-data" onclick="this.showPicker&&this.showPicker()" onfocus="this.showPicker&&this.showPicker()"></div>
+          <div><label for="c-data">La data <span class="opt">(opțional · zz.ll.aaaa)</span></label>
+            <div class="data-ro">
+              <input type="text" id="c-data" inputmode="numeric" autocomplete="off" maxlength="10"
+                placeholder="zz.ll.aaaa">
+              <button type="button" class="data-cal" id="c-data-cal" aria-label="Alege din calendar"
+                title="Alege din calendar"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.8" width="13" height="11.7"
+                rx="1.6"/><path d="M1.5 6.2h13M4.8 1.5v2.6M11.2 1.5v2.6"/></svg></button>
+              <input type="date" id="c-data-native" class="data-native" tabindex="-1" aria-hidden="true">
+            </div></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
           <span class="ai-set">
@@ -755,8 +891,8 @@
         <div id="graf-wrap"><p class="graf-empty">Verifică un proiect ca să vezi legăturile lui cu legislația.</p></div>
         <div class="legend" id="legend" hidden>
           <span><i style="background:var(--accent)"></i>proiect</span>
-          <span><i style="background:#5a8f3c"></i>fiecare culoare = un act</span>
-          <span><i style="background:transparent;border:2px solid var(--blocking)"></i>inel: abrogat / mult amendat</span>
+          <span><i style="background:#228455"></i>fiecare culoare = un act</span>
+          <span><i style="background:transparent;border:2px solid var(--brand-red)"></i>inel: abrogat / mult amendat</span>
           <span><i style="background:transparent;border:2px solid var(--material)"></i>inel: amendat</span>
           <span class="hint">clic pe punct → deschide actul · clic pe etichetă → vecinii</span>
         </div>
@@ -808,7 +944,11 @@ function selectTab(which){
   });
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",supraveghere:"#s-nr"}[which];
-  if(focusEl) $(focusEl).focus();
+  // Redactează has no #r-act, so this used to throw on every visit to that tab — and because the
+  // throw happened mid-function, the two loaders below it never ran. Look the element up, don't
+  // assume it exists.
+  const focusTarget = focusEl && $(focusEl);
+  if(focusTarget) focusTarget.focus();
   if(which==="consolidat") loadConsAsezari();
   if(which==="supraveghere") renderSupraveghere();
 }
@@ -975,7 +1115,7 @@ function renderLint(d){
     on.map(o=>card(o.severitate==="blocking"?"blocking":"material",
       `<span class="plx">${esc(o.act_id)}${o.locator?" "+esc(locRo(o.locator)):""}</span>`
         +(o.instrument?` — normă de tip <b>${esc(o.instrument)}</b> pe care corpusul nu o găsește emisă`:" — obligație pe care corpusul nu o găsește îndeplinită"),
-      [ o.scadenta?`scadent: <b>${esc(o.scadenta)}</b>`:"scadență necunoscută",
+      [ o.scadenta?`scadent: <b>${esc(isoLaDataRo(o.scadenta)||o.scadenta)}</b>`:"scadență necunoscută",
         o.zile_intarziere!=null?`întârziere: <b>${o.zile_intarziere}</b> zile`:"",
         o.candidati&&o.candidati.length?`candidați apropiați: ${o.candidati.map(esc).join(", ")}`:"",
         ...(o.limitari||[]).map(l=>"⚠ "+esc(l)) ].filter(Boolean), o.text, "derived")).join(""));
@@ -1680,7 +1820,8 @@ let ultimaCons=null;   // last consolidation, so a mode change can re-render but
 function renderCons(d){
   ultimaCons=d;
   const r=d.rezumat||{};
-  let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(d.la_data)}</b> · `
+  // dates come off the wire in ISO and are shown the way the field above asks for them
+  let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(isoLaDataRo(d.la_data)||d.la_data)}</b> · `
     +`<b>${r.atinse||0}</b> prevederi atinse · <b>${r.consolidate||0}</b> consolidate · `
     +`<b>${r.refuzate||0}</b> neconsolidate</span></div>`;
   const clar = aiOn();
@@ -1690,12 +1831,12 @@ function renderCons(d){
     if(p.abrogat) flag=`<span class="cons-flag" style="color:var(--blocking)">abrogat</span>`;
     else if(!p.complet) flag=`<span class="cons-flag" style="color:var(--material)">neconsolidat</span>`;
     else flag=`<span class="cons-flag consolidat">consolidat</span>`;
-    let body=`<div><span class="cons-loc">${esc(locRo(p.locator))}</span>${flag}`
-      +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}" style="font-size:.68rem;padding:.1rem .5rem;float:right">Limbaj clar</button>`:"")+`</div>`;
+    let body=`<div class="cons-hd"><span class="cons-loc">${esc(locRo(p.locator))}</span>${flag}`
+      +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}">Limbaj clar</button>`:"")+`</div>`;
     if(!p.abrogat) body+=`<div class="cons-text">${textLizibil(p.text)}</div>`;
     body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
-      +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(s.data):""})`).join(", ")+`</div>`;
+      +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(isoLaDataRo(s.data)||s.data):""})`).join(", ")+`</div>`;
     if(p.limitari&&p.limitari.length) body+=p.limitari.map(l=>`<p class="cons-refuz">⚠ ${esc(l)}</p>`).join("");
     return `<div class="cons-prov ${cls}">${body}</div>`;
   }).join("") || empty("Nicio prevedere atinsă."));
@@ -1720,10 +1861,68 @@ async function rescrie(btn, p, act){
   }catch(e){ out.innerHTML=empty("Eroare: "+esc(e.message||e)); }
   finally{ btn.disabled=false; }
 }
+// ---- data în format românesc (zz.ll.aaaa) ----
+// The visible field is Romanian; the API takes ISO (date.fromisoformat). These two functions are
+// the whole boundary between the two, so there is exactly one place to look when a date is wrong.
+const RO_DATA=/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/;
+const ISO_DATA=/^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+// "" for an empty field (the date is optional), an ISO string when it parses, null when it does not.
+// A round-trip through Date is what rejects 31.02: the calendar, not a regex, decides what exists.
+function dataRoLaIso(brut){
+  const s=(brut||"").trim();
+  if(!s) return "";
+  let z,l,a;
+  const ro=s.match(RO_DATA), iso=s.match(ISO_DATA);   // ISO too, so a pasted 2022-07-12 still works
+  if(ro) [,z,l,a]=ro; else if(iso) [,a,l,z]=iso; else return null;
+  [z,l,a]=[+z,+l,+a];
+  const d=new Date(Date.UTC(a,l-1,z));
+  if(d.getUTCFullYear()!==a||d.getUTCMonth()!==l-1||d.getUTCDate()!==z) return null;
+  return `${a}-${String(l).padStart(2,"0")}-${String(z).padStart(2,"0")}`;
+}
+function isoLaDataRo(iso){
+  const m=(iso||"").match(ISO_DATA);
+  return m ? `${m[3].padStart(2,"0")}.${m[2].padStart(2,"0")}.${m[1]}` : "";
+}
+(function(){
+  const camp=$("#c-data"), nativ=$("#c-data-native"), buton=$("#c-data-cal");
+  if(!camp) return;
+  // type the digits, get the dots — so nobody has to reach for punctuation mid-number
+  camp.addEventListener("input",()=>{
+    const cifre=camp.value.replace(/\D/g,"").slice(0,8);
+    if(camp.value.replace(/[.\/-]/g,"")!==cifre) return;   // editing in the middle: leave it alone
+    let v=cifre;
+    if(cifre.length>4) v=`${cifre.slice(0,2)}.${cifre.slice(2,4)}.${cifre.slice(4)}`;
+    else if(cifre.length>2) v=`${cifre.slice(0,2)}.${cifre.slice(2)}`;
+    if(v!==camp.value) camp.value=v;
+    camp.removeAttribute("aria-invalid");
+  });
+  // flag a date that cannot exist as soon as the field is left, not at submit time. The value has
+  // to be the string "true": ARIA reads it as an enum, and the stylesheet matches on
+  // [aria-invalid="true"] — toggleAttribute would set it to "" and neither would fire.
+  camp.addEventListener("blur",()=>{
+    const iso=dataRoLaIso(camp.value);
+    if(iso===null) camp.setAttribute("aria-invalid","true"); else camp.removeAttribute("aria-invalid");
+    if(iso) nativ.value=iso;
+  });
+  buton.onclick=()=>{
+    nativ.value=dataRoLaIso(camp.value)||"";
+    if(nativ.showPicker) nativ.showPicker(); else nativ.focus();
+  };
+  nativ.addEventListener("change",()=>{
+    camp.value=isoLaDataRo(nativ.value);
+    camp.removeAttribute("aria-invalid");
+  });
+})();
+
 $("#c-go").onclick=async ()=>{
   const act=$("#c-act").value;
   if(!act){ $("#cons-out").innerHTML=empty("Alege un act."); return; }
-  const data=$("#c-data").value.trim();
+  const data=dataRoLaIso($("#c-data").value);
+  if(data===null){
+    $("#c-data").setAttribute("aria-invalid","true");
+    $("#cons-out").innerHTML=empty("Data nu este validă. Scrie-o ca zz.ll.aaaa — ex.: 12.07.2022.");
+    return;
+  }
   $("#c-go").disabled=true; $("#c-go").innerHTML=`<span class="spin"></span> se consolidează…`;
   try{
     const q="/api/consolidat?act="+encodeURIComponent(act)+(data?"&la_data="+encodeURIComponent(data):"");
@@ -1738,15 +1937,22 @@ $("#c-go").onclick=async ()=>{
 const SVGNS="http://www.w3.org/2000/svg";
 function svgEl(tag,attrs){ const e=document.createElementNS(SVGNS,tag);
   for(const k in attrs) e.setAttribute(k,attrs[k]); return e; }
-const color = sev=>({blocking:"var(--blocking)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)");
-const felColor = fel=>({abroga:"var(--blocking)",modifica:"var(--material)",completeaza:"var(--material)",
+// severity as a ring/edge, never as text — so blocking gets the undiluted brand red here, matching
+// the rails in the findings list and the "inel: abrogat" swatch in the legend
+const color = sev=>({blocking:"var(--brand-red)",material:"var(--material)",note:"var(--note)"}[sev]||"var(--note)");
+const felColor = fel=>({abroga:"var(--brand-red)",modifica:"var(--material)",completeaza:"var(--material)",
   deroga:"var(--material)",refera:"var(--rule)"}[fel]||"var(--rule)");
 const FEL_RO={abroga:"abrogă",modifica:"modifică",completeaza:"completează",deroga:"derogă",
   introduce:"introduce",proroga:"prorogă",suspenda:"suspendă",inlocuieste:"înlocuiește",refera:"citează"};
 // a distinct, stable colour per act, so every dot in the graph reads as its own node (severity is
-// then carried by the ring around it, not the fill). Mid-tone hues chosen to read on light + dark.
-const PALETA=["#b0413e","#2f6f8f","#5a8f3c","#9a6a2f","#6a4c93","#2f8f78","#a23e77","#3f5f9f",
-  "#8a6d1f","#2f7f7f","#7a3fa0","#4f7a2f"];
+// then carried by the ring around it, not the fill). Twelve hues on the OKLCH wheel at one
+// lightness (L .545, C .115), spread across the 308° that remain once a wedge around the brand red
+// is cut out: a red ring means "abrogat", so no act's own colour is allowed to imitate one. The
+// nearest swatch sits 26° off the brand red and reads as ochre.
+// Uniform lightness is the other half of the point — no act looks more important than another —
+// and every swatch clears 3:1 against both the light and the dark background.
+const PALETA=["#a25b24","#926700","#797405","#567e31","#228455","#008577",
+  "#008194","#0079a9","#476fb3","#6b64b0","#865ba1","#9a5488"];
 function paletaAct(id){ let h=0; const s=id||""; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))>>>0; return PALETA[h%PALETA.length]; }
 // open an act's document on the public portal in a new tab, if we have a URL for it
 function deschideAct(url){ if(url) window.open(url,"_blank","noopener"); }
@@ -1801,7 +2007,7 @@ function renderGraph(d){
   const R=Math.min(cx,cy)-42;
   const pos=nodes.map((n,i)=>{ const a=-Math.PI/2+i*2*Math.PI/nodes.length; return {x:cx+R*Math.cos(a),y:cy+R*Math.sin(a)}; });
   pos.forEach((p,i)=>vp.appendChild(svgEl("line",{x1:cx,y1:cy,x2:p.x,y2:p.y,
-    stroke:nodes[i].repealed?"var(--blocking)":"var(--rule)","stroke-width":nodes[i].repealed?2:1.2,"stroke-dasharray":nodes[i].dup?"4 3":""})));
+    stroke:nodes[i].repealed?"var(--brand-red)":"var(--rule)","stroke-width":nodes[i].repealed?2:1.2,"stroke-dasharray":nodes[i].dup?"4 3":""})));
   nodes.forEach((n,i)=>{ const p=pos[i],g=svgEl("g",{});
     // distinct fill per act; the ring carries severity (thicker/red = repealed or heavily amended)
     const fill=n.dup?"var(--note)":paletaAct(n.id);
@@ -1812,7 +2018,7 @@ function renderGraph(d){
       circ.addEventListener("click",()=> n.url?deschideAct(n.url):focusAct(n.id));
       const t=svgEl("title",{}); t.textContent=n.label+(n.sub?" — "+n.sub:"")+(n.url?" · clic: deschide documentul":" · clic: vecini"); circ.appendChild(t); }
     g.appendChild(circ);
-    if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",stroke:"var(--blocking)","stroke-width":1.5}));
+    if(n.repealed) g.appendChild(svgEl("circle",{cx:p.x,cy:p.y,r:n.r+3,fill:"none",stroke:"var(--brand-red)","stroke-width":1.5}));
     const lbl=svgEl("text",{x:p.x,y:p.y+n.r+13,"text-anchor":"middle","font-family":"var(--mono)","font-size":"10",fill:"var(--ink)"});
     lbl.textContent=n.label.length>18?n.label.slice(0,17)+"…":n.label;
     if(!n.dup){ lbl.setAttribute("style","cursor:pointer;text-decoration:underline dotted");
@@ -1823,7 +2029,7 @@ function renderGraph(d){
     vp.appendChild(g);
   });
   vp.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
-  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--sans)","font-size":"10","font-weight":"600",fill:"#fff"});
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--sans)","font-size":"10","font-weight":"600",fill:"var(--on-accent)"});
   c.textContent="PROIECT"; vp.appendChild(c);
   wrap.innerHTML=""; wrap.appendChild(mountGraph(svg,vp));
 }
@@ -1856,7 +2062,7 @@ function drawFocus(actId,d,wrap,back){
     g.appendChild(lbl); vp.appendChild(g);
   });
   vp.appendChild(svgEl("circle",{cx,cy,r:20,fill:"var(--accent)"}));
-  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--mono)","font-size":"8.5","font-weight":"600",fill:"#fff"});
+  const c=svgEl("text",{x:cx,y:cy+4,"text-anchor":"middle","font-family":"var(--mono)","font-size":"8.5","font-weight":"600",fill:"var(--on-accent)"});
   c.textContent=actId.length>14?actId.slice(0,13)+"…":actId; vp.appendChild(c);
   wrap.innerHTML="";
   const bar=document.createElement("div");
@@ -1944,7 +2150,7 @@ async function cronologieTab(){
     let h=`<div class="cron"><div class="cron-h">Cronologia modificărilor · <b>${ev.length}</b> intervenții datate</div>`;
     for(const an of Object.keys(ani).sort()){
       h+=`<div class="cron-an"><div class="cron-an-h">${esc(an)} <span class="hint">(${ani[an].length})</span></div>`
-        +ani[an].map(e=>`<div class="cron-ev fel-${esc(e.fel)}"><span class="cron-data">${esc(e.de_la)}</span> `
+        +ani[an].map(e=>`<div class="cron-ev fel-${esc(e.fel)}"><span class="cron-data">${esc(isoLaDataRo(e.de_la)||e.de_la)}</span> `
           +`<b>${esc(felRo[e.fel]||e.fel)}</b> prin <a class="plx cron-link" data-act="${esc(e.act_id)}">${esc(e.act_id)}</a>`
           +(e.titlu?` <span class="hint">— ${esc(e.titlu).slice(0,70)}</span>`:``)+`</div>`).join("")+`</div>`;
     }
