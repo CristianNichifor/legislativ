@@ -297,6 +297,64 @@ def test_the_run_stops_at_its_last_conjunction():
     ]
 
 
-def test_letter_enumerations_stay_unexpanded():
-    """The tail read here is numeric; writing a digit into `litera` would invent a position."""
-    assert [r.locator.id for r in referinte("lit. a) și b) ale articolului 7")] == ["lita", "art7"]
+def test_letter_enumerations_are_expanded():
+    """Was unexpanded while the only enumeration tail was numeric — writing a digit into `litera`
+    would have invented a position. Letters get their own pattern, so `b)` is now read."""
+    assert [r.locator.id for r in referinte("lit. a) și b) ale articolului 7")] == [
+        "lita",
+        "litb",
+        "art7",
+    ]
+
+
+def test_a_letter_range_is_expanded():
+    """`lit. a)-c)` names its ends and implies the middle — that is what a range means."""
+    assert [r.locator.id for r in referinte("prevăzute la lit. a)-c), în cazul garanției")] == [
+        "lita",
+        "litb",
+        "litc",
+    ]
+
+
+def test_a_range_under_an_article_keeps_the_article():
+    assert [r.locator.id for r in referinte("art. 7 lit. a)-c)")] == [
+        "art7.lita",
+        "art7.litb",
+        "art7.litc",
+    ]
+
+
+def test_numeric_ranges_expand_at_every_level():
+    assert [r.locator.id for r in referinte("art. 7-9 se abrogă")] == ["art7", "art8", "art9"]
+    assert [r.locator.id for r in referinte("art. 5 alin. (1)-(3)")] == [
+        "art5.alin1",
+        "art5.alin2",
+        "art5.alin3",
+    ]
+
+
+def test_a_descending_range_is_refused():
+    """`art. 9-7` is not a range. Expanding it either way is a guess about what was meant."""
+    assert [r.locator.id for r in referinte("art. 9-7 inversat")] == ["art9"]
+
+
+def test_an_implausibly_long_range_is_refused():
+    """A dash between two distant numbers is far more often a misread than a five-hundred-article
+    citation, and expanding it would invent five hundred provisions."""
+    assert [r.locator.id for r in referinte("art. 1-500 din lege")] == ["art1"]
+
+
+def test_expansion_runs_after_the_genitive_merge():
+    """`lit. a)-c) ale art. 7`: the article is not known until `uneste` has run, so expanding
+    first left every member but the last one orphaned. Consistent now — none is half-merged."""
+    assert [r.locator.id for r in referinte("lit. a)-c) ale art. 7")] == [
+        "lita",
+        "litb",
+        "litc",
+        "art7",
+    ]
+
+
+def test_a_range_end_that_is_not_a_locator_is_ignored():
+    """`art. 7 - 30 de zile` is a dash between an article and a duration, not a range."""
+    assert [r.locator.id for r in referinte("art. 7 - 30 de zile de la comunicare")] == ["art7"]
