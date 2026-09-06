@@ -65,6 +65,50 @@ def test_missing_corpus_leaves_the_usage_count_null_not_zero():
     assert all(t["utilizari"] is None for t in r["termeni_redefiniti"])
 
 
+_ORIGINAL_CU_RAPORT = (
+    "Autoritatea publică anunțul de participare. "
+    "Autoritatea transmite raportul în termen de 30 de zile de la încheiere."
+)
+
+
+def test_a_modification_that_drops_an_obligation_flags_it_removed():
+    # the new text keeps the publishing sentence but silently drops the reporting duty
+    d = (
+        "La articolul 5 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «Autoritatea publică anunțul de participare.»"
+    )
+    r = raza_de_impact(
+        d,
+        citari_fn=_citari({}),
+        text_original=lambda act, loc: _ORIGINAL_CU_RAPORT,
+    )
+    assert any(o["termen_zile"] == 30 for o in r["obligatii_eliminate"])
+    # a removed accountability duty pushes the reach up
+    assert r["scor"]["raza"] >= 5
+
+
+def test_a_repeal_removes_every_obligation_the_provision_held():
+    d = "Articolul 5 din Legea nr. 98/2016 se abrogă."
+    r = raza_de_impact(d, citari_fn=_citari({}), text_original=lambda act, loc: _ORIGINAL_CU_RAPORT)
+    assert any(o["termen_zile"] == 30 for o in r["obligatii_eliminate"])
+
+
+def test_a_kept_obligation_is_not_reported_removed():
+    # the new text carries the reporting duty forward verbatim — nothing was dropped
+    d = (
+        "La articolul 5 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «Autoritatea transmite raportul în termen de 30 de zile de la încheiere.»"
+    )
+    r = raza_de_impact(d, citari_fn=_citari({}), text_original=lambda act, loc: _ORIGINAL_CU_RAPORT)
+    assert r["obligatii_eliminate"] == []
+
+
+def test_without_the_original_text_no_removals_are_claimed():
+    d = "Articolul 5 din Legea nr. 98/2016 se abrogă."
+    r = raza_de_impact(d, citari_fn=_citari({}))
+    assert r["obligatii_eliminate"] == []
+
+
 def test_new_obligations_in_the_payload_are_listed():
     d = (
         "La articolul 5 din Legea nr. 98/2016, se introduce alineatul (3) cu următorul cuprins: "

@@ -254,7 +254,20 @@ def _impact(draft: str, stare: Stare) -> dict:
                 except Exception:
                     return None
 
-            return raza_de_impact(draft or "", citari_fn=citari, numara_termen=numara)
+            def text_orig(act_id: str, locator: str) -> str | None:
+                try:
+                    r = con.execute(
+                        "SELECT text FROM provizii WHERE act_id = ? AND locator = ? "
+                        "ORDER BY ord LIMIT 1",
+                        (act_id, locator),
+                    ).fetchone()
+                    return r["text"] if r else None
+                except Exception:
+                    return None
+
+            return raza_de_impact(
+                draft or "", citari_fn=citari, numara_termen=numara, text_original=text_orig
+            )
     finally:
         graf.close()
 

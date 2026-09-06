@@ -128,6 +128,8 @@
     letter-spacing:.04em;color:var(--ink-mute);margin:.4rem 0 .2rem}
   .impact-tinta,.impact-termen,.impact-obl{font-size:.82rem;margin:.18rem 0;line-height:1.4}
   .impact-termen code{font-family:var(--mono)}
+  .impact-obl.elim{border-left:2px solid var(--blocking);padding-left:.5rem;
+    background:color-mix(in srgb,var(--blocking) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
@@ -886,6 +888,10 @@ function renderImpact(im){
   if((im.termeni_redefiniti||[]).length) h+=`<div class="impact-block"><div class="impact-h">Termeni redefiniți (propagare)</div>`
     +im.termeni_redefiniti.map(t=>`<div class="impact-termen"><code>${esc(t.termen)}</code>`
       +(t.utilizari!=null?` — folosit în <b>${t.utilizari}</b> prevederi din corpus`:` <span class="hint">(numărul de utilizări nu e disponibil în browser)</span>`)+`</div>`).join("")+`</div>`;
+  if((im.obligatii_eliminate||[]).length) h+=`<div class="impact-block"><div class="impact-h">⚠ Obligații eliminate (posibil rollback)</div>`
+    +im.obligatii_eliminate.map(o=>`<div class="impact-obl elim"><span class="plx">${esc(o.act_id)}</span> ${esc(locRo(o.locator))} — `
+      +(o.instrument?`<b>${esc(o.instrument.replace(/-/g," "))}</b> · `:``)+(o.termen_zile?`în ${o.termen_zile} zile`:``)
+      +`<span class="hint"> — ${esc(o.text.slice(0,120))}</span></div>`).join("")+`</div>`;
   if((im.obligatii_noi||[]).length) h+=`<div class="impact-block"><div class="impact-h">Obligații noi introduse</div>`
     +im.obligatii_noi.map(o=>`<div class="impact-obl">`+(o.instrument?`<b>${esc(o.instrument.replace(/-/g," "))}</b> · `:``)
       +(o.termen_zile?`în ${o.termen_zile} zile`:``)+`<span class="hint"> — ${esc(o.text.slice(0,120))}</span></div>`).join("")+`</div>`;
