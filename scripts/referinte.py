@@ -174,6 +174,21 @@ _COADA_NUMAR: Final[re.Pattern[str]] = re.compile(
     r"\s*(?P<sep>,|și|si|ori|sau)\s*\(?(?P<numar>\d+(?:\^\d+)?)\)?", re.IGNORECASE
 )
 _CONJUNCTIE: Final[frozenset[str]] = frozenset({"și", "si", "ori", "sau"})
+
+# `lit. a) și b)` — the same enumeration one level down, in letters rather than digits. Left
+# unexpanded when the numeric tail was written, because writing a digit into `litera` would have
+# invented a position; read here with its own pattern instead.
+_COADA_LITERA: Final[re.Pattern[str]] = re.compile(
+    r"\s*(?P<sep>,|și|si|ori|sau)\s*(?P<litera>[a-zș](?:\^\d+)?)\s*\)", re.IGNORECASE
+)
+
+# `lit. a)-c)`, `art. 7-9`: a range names its ends and leaves the middle implied. Only the plain
+# ascii letters expand — `ș` and a superscripted `a^1` are left alone rather than guessed a place
+# for in a sequence this does not know. Bounded because a long run is more likely a misread than
+# a citation: no real provision enumerates thirty articles by dash.
+_INTERVAL_NUMAR: Final[re.Pattern[str]] = re.compile(r"\s*[-–—]\s*\(?(?P<pana>\d+)\)?")
+_INTERVAL_LITERA: Final[re.Pattern[str]] = re.compile(r"\s*[-–—]\s*(?P<pana>[a-z])\s*\)")
+_MAX_INTERVAL: Final[int] = 20
 _MAX_ENUMERARE: Final[int] = 10
 # Deepest first: the enumeration extends the innermost unit named, because that is the one being
 # listed. `art. 5 alin. (2) și (3)` lists paragraphs of article 5, not articles.
@@ -189,7 +204,35 @@ def _extinde(loc: Locator, numar: str) -> Locator | None:
     """
     for camp in _ADANCIME:
         if getattr(loc, camp):
-            return None if camp == "litera" else replace(loc, **{camp: numar})
+            return replace(loc, **{camp: numar})
+    return None
+
+
+def _adancimea(loc: Locator) -> str | None:
+    """Which unit an enumeration or range would extend — the innermost one named."""
+    for camp in _ADANCIME:
+        if getattr(loc, camp):
+            return camp
+    return None
+
+
+def _sirul(de_la: str, pana_la: str) -> list[str] | None:
+    """The values a range covers, ends included, or None when it cannot be read confidently.
+
+    Refused rather than guessed when the ends are not the same kind, when the range descends, and
+    when it is longer than `_MAX_INTERVAL` — a citation does not span thirty articles by dash, so
+    a long run is a misread and expanding it would invent that many provisions.
+    """
+    if de_la.isdigit() and pana_la.isdigit():
+        a, b = int(de_la), int(pana_la)
+        if not 0 < b - a < _MAX_INTERVAL:
+            return None
+        return [str(n) for n in range(a, b + 1)]
+    if len(de_la) == 1 and len(pana_la) == 1 and de_la.isascii() and pana_la.isascii():
+        a, b = ord(de_la), ord(pana_la)
+        if not 0 < b - a < _MAX_INTERVAL:
+            return None
+        return [chr(n) for n in range(a, b + 1)]
     return None
 
 
@@ -355,34 +398,7 @@ def locatori(text: str) -> list[tuple[Locator, int, int]]:
             # `articolele 7 și 8`: keep reading numbers off the tail, each one a sibling of the
             # locator just matched. Collected first and accepted after, because whether this is an
             # enumeration at all is only known once the run ends — see `_COADA_NUMAR`.
-            candidati: list[tuple[Locator, int, int, bool]] = []
-            capat = m.end()
-            for _ in range(_MAX_ENUMERARE):
-                coada = _COADA_NUMAR.match(text, capat)
-                if coada is None:
-                    break
-                frate = _extinde(loc, coada.group("numar"))
-                if frate is None:
-                    break
-                # Span runs from the number to the end of the tail match, so a closing `)` is
-                # inside it. Ending at the digit would leave `) din Legea …` as the gap to the
-                # act, which `_LEGATURA` rejects — and the sibling would come back unbound while
-                # its own first half was bound, which is worse than not reading it at all.
-                candidati.append(
-                    (
-                        frate,
-                        coada.start("numar"),
-                        coada.end(),
-                        coada.group("sep").lower() in _CONJUNCTIE,
-                    )
-                )
-                capat = coada.end()
-            # Keep the run only as far as its last conjunction: in `art. 7, 8 și 9, 10 zile` the
-            # enumeration is 7, 8, 9 and the 10 belongs to the sentence, not to the list.
-            ultima = max((i for i, c in enumerate(candidati) if c[3]), default=-1)
-            for frate, f_start, f_end, _conj in candidati[: ultima + 1]:
-                gasite.append((frate, f_start, f_end))
-            pozitie = candidati[ultima][2] if ultima >= 0 else m.end()
+            pozitie = m.end()
             continue
         pozitie = m.end()
     return gasite
@@ -426,6 +442,66 @@ def uneste(locuri: list[tuple[Locator, int, int]], text: str) -> list[tuple[Loca
     return unite
 
 
+def extinde_serii(
+    locuri: list[tuple[Locator, int, int]], text: str
+) -> list[tuple[Locator, int, int]]:
+    """Expand `lit. a)-c)` and `art. 7, 8 și 9` into one locator per member.
+
+    Runs **after** `uneste`, and that ordering is the whole point. Romanian hangs the shallower
+    unit off the deeper one in the genitive — `lit. a)-c) ale art. 7` — so the article is not known
+    until the merge has happened. Expanding first gave `lita`, `litb`, `art7.litc`: only the member
+    adjacent to `ale art. 7` picked up the article and the rest were orphaned, which is a worse
+    answer than not expanding at all.
+
+    Two shapes, both closed rather than open-ended:
+
+    - a **range**, `a)-c)` or `7-9`, which names its ends and implies the middle. Refused when the
+      ends are not the same kind, when it descends, or when it is longer than `_MAX_INTERVAL` — no
+      citation spans thirty articles by dash, so a long run is a misread.
+    - an **enumeration**, kept only as far as its last `și`/`sau`/`ori`. A comma alone does not
+      make one: `art. 5, 30 de zile de la publicare` is a deadline, and reading the 30 as an
+      article invents `art. 30`.
+    """
+    iesire: list[tuple[Locator, int, int]] = []
+    for loc, start, end in locuri:
+        iesire.append((loc, start, end))
+        camp = _adancimea(loc)
+        if camp is None:
+            continue
+        interval = _INTERVAL_LITERA if camp == "litera" else _INTERVAL_NUMAR
+        coada = _COADA_LITERA if camp == "litera" else _COADA_NUMAR
+        marca = "litera" if camp == "litera" else "numar"
+
+        capat = end
+        gama = interval.match(text, capat)
+        if gama is not None:
+            sir = _sirul(getattr(loc, camp), gama.group("pana"))
+            if sir:
+                for val in sir[1:]:
+                    frate = _extinde(loc, val)
+                    if frate is not None:
+                        iesire.append((frate, gama.start("pana"), gama.end()))
+                capat = gama.end()
+
+        candidati: list[tuple[Locator, int, int, bool]] = []
+        for _ in range(_MAX_ENUMERARE):
+            pas = coada.match(text, capat)
+            if pas is None:
+                break
+            frate = _extinde(loc, pas.group(marca))
+            if frate is None:
+                break
+            # Span runs to the end of the tail match so a closing `)` is inside it: ending at the
+            # marker would leave `) din Legea …` as the gap to the act, which `_LEGATURA` rejects.
+            candidati.append(
+                (frate, pas.start(marca), pas.end(), pas.group("sep").lower() in _CONJUNCTIE)
+            )
+            capat = pas.end()
+        ultima = max((i for i, c in enumerate(candidati) if c[3]), default=-1)
+        iesire.extend((f, a, b) for f, a, b, _ in candidati[: ultima + 1])
+    return iesire
+
+
 def referinte(text: str) -> list[Referinta]:
     """Acts and positions, with each position bound to its act where the sentence binds them.
 
@@ -438,7 +514,7 @@ def referinte(text: str) -> list[Referinta]:
     rezultat: list[Referinta] = []
     consumate: set[int] = set()
 
-    for loc, start, end in uneste(locatori(text), text):
+    for loc, start, end in extinde_serii(uneste(locatori(text), text), text):
         legat = None
         for i, ref in enumerate(gasite_acte):
             if ref.start < end:
