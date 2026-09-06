@@ -19,8 +19,11 @@
 // GET  /rescrie?act=<id>&loc=<locator>       → cached rewrite, or 404 if not generated yet
 // POST /rescrie {act, loc, text}             → cached rewrite, or generate + cache
 
-const STIL = "danez-v1";
 const MAX_CHARS = 4000; // a single provision; longer inputs are abuse, not law
+// client may pick the drafting norm; each maps to a system prompt and a cache-key namespace
+const STILURI = { nou: "danez-v1", actual: "juridic-v1" };
+// only these models may be requested from the client; anything else falls back to the env default
+const MODELE_PERMISE = ["mistral-small-latest", "mistral-large-latest"];
 
 function corsFor(request, env) {
   const origin = request.headers.get("Origin") || "";
@@ -34,7 +37,7 @@ function corsFor(request, env) {
   };
 }
 
-const SISTEM =
+const SISTEM_NOU =
   "Ești un asistent care rescrie prevederi legale românești în limbaj clar, în stilul danez de " +
   "redactare (Vejledning om lovkvalitet): propoziții scurte, o idee pe propoziție; enunțul " +
   "principal la început (cine face ce), apoi condițiile; diateza activă, cu actorul numit; " +
@@ -42,6 +45,13 @@ const SISTEM =
   "NU schimba sensul, nu adăuga și nu omite nimic; păstrează exact termenii definiți. Dacă o " +
   "reformulare fidelă nu e posibilă, rămâi aproape de textul original. Răspunde DOAR cu textul " +
   "rescris, fără explicații.";
+const SISTEM_ACTUAL =
+  "Ești un asistent care rescrie textul în registrul juridic român actual, conform normelor de " +
+  "tehnică legislativă (Legea nr. 24/2000): limbaj normativ formal, terminologie juridică " +
+  "consacrată și unitară, construcții precise și impersonale acolo unde e uzual. NU schimba " +
+  "sensul, nu adăuga și nu omite nimic; păstrează exact termenii definiți. Răspunde DOAR cu " +
+  "textul rescris, fără explicații.";
+const SISTEM = { nou: SISTEM_NOU, actual: SISTEM_ACTUAL };
 
 function json(obj, cors, status = 200) {
   return new Response(JSON.stringify(obj), {
@@ -50,7 +60,7 @@ function json(obj, cors, status = 200) {
   });
 }
 
-const cheie = (act, loc) => `${STIL}/${act}/${loc || "act"}`;
+const cheie = (act, loc, stil) => `${STILURI[stil] || STILURI.nou}/${act}/${loc || "act"}`;
 
 function originPermis(request, env) {
   const lista = (env.ORIGINI || "*").split(",").map((s) => s.trim());
@@ -68,24 +78,27 @@ async function subCap(env) {
   return true;
 }
 
-async function genereaza(text, env) {
+async function genereaza(text, env, stil, model) {
   if (!env.MISTRAL_API_KEY) {
     return { rescriere:
-      "Rescrierea în limbaj clar nu este încă activată (lipsește cheia AI). " +
+      "Rescrierea nu este încă activată (lipsește cheia AI). " +
       "Textul original rămâne singurul autoritativ.", model: "stub" };
   }
+  const sistem = SISTEM[stil] || SISTEM.nou;
+  // honor a client-requested model only if it's on the allowlist; otherwise the env default
+  const mdl = MODELE_PERMISE.includes(model) ? model : (env.MISTRAL_MODEL || "mistral-small-latest");
   const r = await fetch((env.MISTRAL_URL || "https://api.mistral.ai/v1/chat/completions"), {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.MISTRAL_API_KEY}` },
     body: JSON.stringify({
-      model: env.MISTRAL_MODEL || "mistral-small-latest",
+      model: mdl,
       temperature: 0.2,
-      messages: [ { role: "system", content: SISTEM }, { role: "user", content: text } ],
+      messages: [ { role: "system", content: sistem }, { role: "user", content: text } ],
     }),
   });
   if (!r.ok) return { rescriere: null, model: "eroare", eroare: `mistral ${r.status}` };
   const d = await r.json();
-  return { rescriere: (d.choices?.[0]?.message?.content || "").trim(), model: d.model || "mistral" };
+  return { rescriere: (d.choices?.[0]?.message?.content || "").trim(), model: d.model || mdl };
 }
 
 export default {
@@ -103,26 +116,39 @@ export default {
       if (!success) return json({ error: "prea multe cereri, încearcă mai târziu" }, cors, 429);
     }
 
-    let act, loc, text;
+    let act, loc, text, stil = "nou", reqModel;
     if (request.method === "GET") {
       act = url.searchParams.get("act"); loc = url.searchParams.get("loc");
+      stil = url.searchParams.get("stil") || "nou";
     } else if (request.method === "POST") {
-      const b = await request.json().catch(() => ({})); act = b.act; loc = b.loc; text = b.text;
+      const b = await request.json().catch(() => ({}));
+      act = b.act; loc = b.loc; text = b.text; stil = b.stil || "nou"; reqModel = b.model;
     } else return json({ error: "method not allowed" }, cors, 405);
-    if (!act) return json({ error: "lipsește 'act'" }, cors, 400);
+    if (!STILURI[stil]) stil = "nou";
 
-    const k = cheie(act, loc);
-    const cache = await env.RESCRIERI.get(k);
-    if (cache) return json({ rescriere: cache, cached: true, stil: STIL }, cors);
-    if (request.method === "GET") return json({ error: "negenerat", cached: false }, cors, 404);
+    // 'act' names a PUBLIC provision → cache it, rewritten once per (stil, act, loc), served to all.
+    // Without 'act' (a general rewrite of the caller's own text) there is nothing safe to cache by,
+    // so that path always generates fresh and stores nothing.
+    if (act) {
+      const k = cheie(act, loc, stil);
+      const cache = await env.RESCRIERI.get(k);
+      if (cache) return json({ rescriere: cache, cached: true, stil }, cors);
+      if (request.method === "GET") return json({ error: "negenerat", cached: false }, cors, 404);
+      if (!text) return json({ error: "lipsește 'text'" }, cors, 400);
+      if (text.length > MAX_CHARS) return json({ error: "text prea lung pentru o prevedere" }, cors, 413);
+      if (!(await subCap(env))) return json({ error: "plafon zilnic atins; reîncearcă mâine" }, cors, 429);
+      const { rescriere, model, eroare } = await genereaza(text, env, stil, reqModel);
+      if (eroare || !rescriere) return json({ error: eroare || "generare eșuată" }, cors, 502);
+      if (model !== "stub") await env.RESCRIERI.put(k, rescriere);
+      return json({ rescriere, cached: false, model, stil }, cors);
+    }
 
+    if (request.method === "GET") return json({ error: "lipsește 'act'" }, cors, 400);
     if (!text) return json({ error: "lipsește 'text'" }, cors, 400);
-    if (text.length > MAX_CHARS) return json({ error: "text prea lung pentru o prevedere" }, cors, 413);
+    if (text.length > MAX_CHARS) return json({ error: "text prea lung pentru o rescriere" }, cors, 413);
     if (!(await subCap(env))) return json({ error: "plafon zilnic atins; reîncearcă mâine" }, cors, 429);
-
-    const { rescriere, model, eroare } = await genereaza(text, env);
-    if (eroare || !rescriere) return json({ error: eroare || "generare eșuată" }, cors, 502);
-    if (model !== "stub") await env.RESCRIERI.put(k, rescriere);
-    return json({ rescriere, cached: false, model, stil: STIL }, cors);
+    const g = await genereaza(text, env, stil, reqModel);
+    if (g.eroare || !g.rescriere) return json({ error: g.eroare || "generare eșuată" }, cors, 502);
+    return json({ rescriere: g.rescriere, cached: false, model: g.model, stil }, cors);
   },
 };

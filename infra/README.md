@@ -27,10 +27,19 @@ the feature stays hidden, so the site works with or without the Worker.
 
 ## Contract
 
-- `POST /rescrie {act, loc, text}` → `{rescriere, cached, model, stil}`; generates on a cache miss,
-  stores the result, returns it. Real generations are cached; the stub is not (so it's replaced the
-  moment a key is added).
-- `GET /rescrie?act=&loc=` → cached rewrite or `404 negenerat`.
+- `POST /rescrie {act, loc, text, stil?, model?}` → `{rescriere, cached, model, stil}`; generates on
+  a cache miss, stores the result, returns it. Real generations are cached; the stub is not (so it's
+  replaced the moment a key is added).
+- `GET /rescrie?act=&loc=&stil=` → cached rewrite or `404 negenerat`.
+- `stil` picks the drafting norm: `nou` (plain-language / Danish, the default) or `actual` (current
+  legal register, Legea 24/2000). It also namespaces the cache, so the two norms never collide.
+- `model` may request one of an allowlist (`mistral-small-latest`, `mistral-large-latest`); anything
+  else falls back to the `MISTRAL_MODEL` env default. This is what the app's online **model** picker
+  sends.
+- `POST {text, stil?, model?}` **without `act`** is a general rewrite of the caller's OWN text. It is
+  never cached (there is no public key to cache it under) and still passes the rate limit, size limit
+  and daily cap. The app uses this for the Redactează block text and the draft "Limbaj clar"; because
+  that text is the user's own, the app asks for confirmation before sending it in online mode.
 - The app's CSP already allows `https://*.workers.dev`.
 
 ## Protecting the AI bill against bots
