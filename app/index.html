@@ -1097,8 +1097,13 @@ function renderImpact(im){
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
         tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[],
-        cf=d.conflicte||[], ca=d.calificate||[];
+        cf=d.conflicte||[], ca=d.calificate||[], nc=d.neconstitutional||[];
+  // The chip carries the worst severity actually present, never the severity of the topic. With
+  // nothing declared exhaustively collected every row comes back `material`, and a red chip over
+  // amber cards would promise a verdict the register explicitly refuses to give.
+  const ncSev = nc.some(c=>c.severitate==="blocking") ? "blocking" : "material";
   let h = `<div class="strip">`
+    +chip("neconstituțional",nc.length,ncSev,"Prevederi neconstituționale nereparate")
     +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
     +chip("statut special",ca.length,"material","Prevederi suspendate, derogate sau prorogate")
     +chip("neindeplinite",on.length,"blocking","Obligații neîndeplinite ale actelor vizate")
@@ -1109,6 +1114,23 @@ function renderLint(d){
     +chip("termene",dl.length,"material","Termene de implementare")
     +chip("terminologie",tm.length,"material","Terminologie")
     +chip("duplicate",du.length,"note","Inițiative care s-ar putea suprapune")+`</div>`;
+  // Ahead of the repealed-citation section on purpose. A repealed provision is law that ended,
+  // which is orderly; a struck and unrepaired one is text still printed in the official version
+  // that has had no legal effect since — often — a date in the 1990s.
+  const potrivireRo={exact:"",sub:"textul citat se află înăuntrul prevederii lovite",
+    peste:"o parte din ce citezi este lovită",tot_actul:"întregul act",
+    act:"actul conține o prevedere lovită"};
+  if(nc.length) h += sec("Prevederi neconstituționale nereparate", nc.length,
+    nc.map(c=>card(c.severitate,
+      `<span class="plx">${esc(c.act_id)}${c.locator_lovit?" "+esc(locRo(c.locator_lovit)):""}</span>`
+        +(potrivireRo[c.potrivire]?` <span class="hint">${esc(potrivireRo[c.potrivire])}</span>`:""),
+      [ esc(c.motiv),
+        c.decizii&&c.decizii.length>1?`decizii: ${c.decizii.map(esc).join(", ")}`:"",
+        // Why an exact hit on a struck provision can still come back amber. Without this the
+        // demotion looks like the tool being unsure of itself rather than the corpus being honest.
+        c.sustinut===false?"⚠ nu blochează: corpusul nu poate susține absența unei reparații":"",
+        ...(c.limitari||[]).map(l=>"⚠ "+esc(l)) ].filter(Boolean),
+      c.citat, c.incredere)).join(""));
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
   if(ca.length) h += sec("Prevederi cu statut special", ca.length,

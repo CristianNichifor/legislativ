@@ -96,7 +96,7 @@ async function boot(){
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json"]) {
+  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
@@ -252,7 +252,8 @@ const NUCLEU = [
   "./", "./index.html", "./worker.js", "./bundle.zip",
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db",
-  "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json"
+  "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
+  "./data/neconstitutional.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 // Fonts join the big data on the cache-first path, not the network-first shell path: they are
@@ -417,6 +418,38 @@ def _vid_json() -> None:
     print(f"  vid → {DATA / 'vid.json'} ({len(vids)} obligații fără implementare găsită)")
 
 
+def _neconstitutional_json() -> None:
+    """The struck-but-unrepaired register, shipped whole as `data/neconstitutional.json`.
+
+    **Built from the full corpus when there is one, not from the demo slice** — the same call the
+    build already makes for `graf.db`, and for the same reason. 183 rows over the whole national
+    corpus is 97 KB; the slice holds a few hundred acts and almost no Curtea Constituțională
+    decisions, so building from it would ship an empty register and quietly turn the
+    constitutionality check into a feature that never fires. The register is small *because the
+    Court struck few things*, not because the corpus is small, so slicing buys nothing and costs
+    the whole answer.
+
+    Falls back to the slice where no collected corpus exists (CI, a fresh clone), which yields an
+    honestly empty register rather than a fabricated one.
+    """
+    from scripts import servicii
+
+    plin, graf_plin = ROOT / "corpus.db", ROOT / "graf.db"
+    intreg = plin.is_file() and graf_plin.is_file()
+    corpus, graf = (plin, graf_plin) if intreg else (DATA / "corpus.db", DATA / "graf.db")
+    if not intreg:
+        print("  neconstituțional: fără corpus colectat, folosesc felia (registru gol e corect)")
+
+    randuri = servicii.construieste_neconstitutional(str(corpus), str(graf))
+    (DATA / "neconstitutional.json").write_text(
+        json.dumps(randuri, ensure_ascii=False), encoding="utf-8"
+    )
+    print(
+        f"  neconstituțional → {DATA / 'neconstitutional.json'} "
+        f"({len(randuri)} prevederi lovite fără reparație în corpus)"
+    )
+
+
 def _bundle() -> None:
     tinta = WEB / "bundle.zip"
     with zipfile.ZipFile(tinta, "w", zipfile.ZIP_DEFLATED) as z:
@@ -516,6 +549,7 @@ def main(sursa: str) -> None:
         _finalizeaza_db()
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
         _vid_json()
+        _neconstitutional_json()
     _bundle()
     _worker()
     _fonturi()
