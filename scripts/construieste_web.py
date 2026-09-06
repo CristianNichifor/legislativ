@@ -139,9 +139,20 @@ _raspunde
   // Search is async (it fetches index/act shards on demand), so it is a separate coroutine.
   cautaJson = pyodide.runPython(`
 import json as _json
+from urllib.parse import parse_qs
 from scripts.cauta_web import cauta as _cauta_shard
-async def _cauta_json(q):
-    return _json.dumps(await _cauta_shard(q, 'data'), ensure_ascii=False)
+def _int(qs, k):
+    v = qs.get(k, [''])[0]
+    try: return int(v) if v not in ('', None) else None
+    except ValueError: return None
+async def _cauta_json(query):
+    qs = parse_qs(query or '')
+    q = qs.get('q', [''])[0]
+    r = await _cauta_shard(q, 'data',
+        limita=_int(qs, 'limita') or 25, offset=_int(qs, 'offset') or 0,
+        tip=(qs.get('tip', [''])[0] or None),
+        an_min=_int(qs, 'an_min'), an_max=_int(qs, 'an_max'))
+    return _json.dumps(r, ensure_ascii=False)
 _cauta_json
   `);
 }
@@ -152,7 +163,7 @@ onmessage = async (e) => {
   try {
     await gata;
     const res = (path === "/api/cauta")
-      ? await cautaJson(new URLSearchParams(query).get("q") || "")
+      ? await cautaJson(query || "")
       : raspunde(path, query, body);
     postMessage({id, ok:true, result:res});
   } catch(err){

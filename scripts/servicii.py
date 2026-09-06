@@ -618,12 +618,29 @@ def _consolidat(qs: dict) -> dict:
     }
 
 
-def _cauta(q: str, stare: Stare) -> dict:
+def _cauta(
+    q: str,
+    stare: Stare,
+    *,
+    tip: str | None = None,
+    an_min: int | None = None,
+    an_max: int | None = None,
+    limita: int = 25,
+    offset: int = 0,
+) -> dict:
+    """Full-text search, filtered by act type/year and paged. `total` lets the UI say how many hits
+    there are behind the page it shows, instead of silently truncating at a fixed cap."""
     if not q.strip():
-        return {"results": []}
+        return {"results": [], "total": 0, "offset": 0, "limita": limita}
     with depozit.deschide(stare.corpus, readonly=True) as con:
-        rows = depozit.cauta(con, q, 25)
-    return {"results": [dict(r) for r in rows]}
+        rows = depozit.cauta(con, q, limita, offset=offset, tip=tip, an_min=an_min, an_max=an_max)
+        total = depozit.cauta_numar(con, q, tip=tip, an_min=an_min, an_max=an_max)
+    return {
+        "results": [dict(r) for r in rows],
+        "total": total,
+        "offset": offset,
+        "limita": limita,
+    }
 
 
 def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
