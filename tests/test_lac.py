@@ -64,6 +64,33 @@ def test_numar_cu_separatori():
     assert r.conditie.val.numar == 5000000
 
 
+def test_numar_zecimal_cu_punct():
+    # a bare 1-2 digit fraction is a decimal, not thousands — must not become 25
+    r = parseaza("DACĂ rata >= 2.5 ATUNCI se aplică")
+    assert r.conditie.val.numar == 2.5
+
+
+def test_numar_zecimal_cu_virgula():
+    r = parseaza("DACĂ rata >= 2,5 ATUNCI se aplică")
+    assert r.conditie.val.numar == 2.5
+
+
+def test_numar_nu_fuzioneaza_peste_spatiu():
+    # "12. 5" must not fuse into 125 (only the 12 is the number)
+    r = parseaza("DACĂ termen >= 12. 5 zile ATUNCI se aplică")
+    assert r.conditie.val.numar == 12
+
+
+def test_unitate_procent():
+    r = parseaza("DACĂ tva >= 19 % ATUNCI se aplică")
+    assert r.conditie.val.unitate == "%"
+
+
+def test_unitate_compusa_zile_lucratoare():
+    r = parseaza("DACĂ termen >= 5 zile lucratoare ATUNCI se aplică")
+    assert r.conditie.val.unitate == "zile lucratoare"
+
+
 def test_regula_neconditionala():
     r = parseaza("Autoritatea publică anunțul în 30 de zile")
     assert r.conditie is None
@@ -165,3 +192,83 @@ def test_constructie_directa_ast():
     # the AST is usable without the parser (for compunere/round-trip callers)
     r = Regula(conditie=Si((Comparatie("a", ">=", Valoare(numar=1)),)), atunci="ok.")
     assert variabile(r) == ["a"]
+
+
+# --- enum / string variables -------------------------------------------------------------------
+
+
+def test_valoare_text_intre_ghilimele():
+    r = parseaza('DACĂ procedura = "deschisă" ATUNCI se publică ALTFEL nu')
+    assert r.conditie.op == "="
+    assert r.conditie.val.text == "deschisă"
+
+
+def test_enum_contradictoriu():
+    r = parseaza('DACĂ tip = "A" ȘI tip = "B" ATUNCI se aplică')
+    assert any("imposibil" in p for p in verifica(r))
+
+
+def test_enum_cazuri_acopera_ambele_ramuri():
+    r = parseaza('DACĂ procedura = "deschisă" ATUNCI se publică ALTFEL se restrânge')
+    rows = cazuri(r)
+    rezultate = {row["adevarat"] for row in rows}
+    assert True in rezultate and False in rezultate
+
+
+# --- serialization + round-trip ----------------------------------------------------------------
+
+
+def test_roundtrip_regula_numerica():
+    r = parseaza("DACĂ valoare >= 5000000 lei ATUNCI A ALTFEL B")
+    from scripts.lac import roundtrip, serializeaza
+
+    assert "DACĂ" in serializeaza(r) and "ATUNCI" in serializeaza(r)
+    assert roundtrip(r) is True
+
+
+def test_roundtrip_cu_si_sau():
+    r = parseaza("DACĂ a >= 1 ȘI b < 2 SAU NU c = 3 ATUNCI ok")
+    from scripts.lac import roundtrip
+
+    assert roundtrip(r) is True
+
+
+# --- cross-rule checks -------------------------------------------------------------------------
+
+
+def test_reguli_multiple_parsate():
+    from scripts.lac import parseaza_multe
+
+    reguli = parseaza_multe("DACĂ v < 100 ATUNCI mic DACĂ v >= 100 ATUNCI mare")
+    assert len(reguli) == 2
+
+
+def test_reguli_suprapuse_semnalate():
+    from scripts.lac import parseaza_multe, verifica_set
+
+    reguli = parseaza_multe("DACĂ v >= 50 ATUNCI A DACĂ v >= 100 ATUNCI B")
+    assert any("suprapuse" in p for p in verifica_set(reguli))
+
+
+def test_reguli_cu_gol_semnalate():
+    from scripts.lac import parseaza_multe, verifica_set
+
+    # < 50 and >= 100 leave [50, 100) unhandled
+    reguli = parseaza_multe("DACĂ v < 50 ATUNCI A DACĂ v >= 100 ATUNCI B")
+    probleme = verifica_set(reguli)
+    assert any("neacoperit" in p for p in probleme)
+
+
+def test_reguli_acoperire_completa_fara_probleme():
+    from scripts.lac import parseaza_multe, verifica_set
+
+    # < 100 and >= 100 partition the line with no overlap and no gap
+    reguli = parseaza_multe("DACĂ v < 100 ATUNCI A DACĂ v >= 100 ATUNCI B")
+    assert verifica_set(reguli) == []
+
+
+def test_analizeaza_multi_regula():
+    d = analizeaza("DACĂ v >= 50 ATUNCI A DACĂ v >= 100 ATUNCI B")
+    assert d["ok"] is True and d.get("multi") is True
+    assert len(d["reguli"]) == 2
+    assert any("suprapuse" in p for p in d["probleme_set"])
