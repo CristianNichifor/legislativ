@@ -184,9 +184,7 @@ def face_handler(stare: Stare):
                 # A reply the caller already obtained (the browser path) is validated as-is;
                 # otherwise a model on this machine is asked, if one is configured.
                 brut = cerere.get("brut")
-                self._json(
-                    _opinie(draft, stare, model=None if brut else model_local(), brut=brut)
-                )
+                self._json(_opinie(draft, stare, model=None if brut else model_local(), brut=brut))
                 return
             self._json(_lint(draft, stare))
 

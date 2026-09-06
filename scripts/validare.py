@@ -33,7 +33,6 @@ and the report says so.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -97,6 +96,39 @@ class Rezultat:
         return "\n".join(linii)
 
 
+_DESCHIS = "<think>"
+_INCHIS = "</think>"
+
+
+def _fara_ganduri(brut: str) -> str:
+    """Strip `<think>…</think>` blocks, scanning rather than matching.
+
+    Written with `str.find` on purpose. The obvious version — `re.sub(r"<think>.*?</think>", …)` —
+    backtracks quadratically on input with many unclosed `<think>` markers: for every opening tag
+    the engine rescans forward looking for a close that is not there. CodeQL flagged it as
+    `py/polynomial-redos` and was right to. On the browser path this string arrives straight from a
+    client POST, so a reply of a few hundred kilobytes of `<think>` would hold the localhost server
+    in one regex.
+
+    The scan is linear: the cursor only ever moves forward. An unclosed block swallows the rest of
+    the reply, which is correct — a model that ran out of tokens mid-thought never reached its JSON.
+    """
+    jos = brut.lower()
+    bucati: list[str] = []
+    i = 0
+    while True:
+        d = jos.find(_DESCHIS, i)
+        if d < 0:
+            bucati.append(brut[i:])
+            break
+        bucati.append(brut[i:d])
+        inchis = jos.find(_INCHIS, d + len(_DESCHIS))
+        if inchis < 0:
+            break  # unclosed: everything after it is thought, and none of it is an answer
+        i = inchis + len(_INCHIS)
+    return " ".join(b for b in bucati if b.strip())
+
+
 def _json_din(brut: str) -> Any | None:
     """The JSON a small model buried in whatever else it wanted to say.
 
@@ -108,9 +140,7 @@ def _json_din(brut: str) -> Any | None:
     Returns `None` when there is no JSON to find, which the caller must report rather than treat as
     an empty answer: a model whose output could not be read has not told you there are no findings.
     """
-    text = re.sub(r"<think>.*?</think>", " ", brut, flags=re.DOTALL | re.IGNORECASE).strip()
-    # An unclosed think block — the model ran out of tokens mid-thought — leaves no JSON at all.
-    text = re.sub(r"<think>.*\Z", " ", text, flags=re.DOTALL | re.IGNORECASE).strip()
+    text = _fara_ganduri(brut).strip()
     if text.startswith("```"):
         text = text.split("```")[1] if "```" in text[3:] else text[3:]
         text = text.removeprefix("json").strip()

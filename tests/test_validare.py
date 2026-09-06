@@ -93,7 +93,7 @@ def test_a_reasoning_model_that_thinks_out_loud_is_still_read():
     """Qwen3 and the DeepSeek-R1 distills emit `<think>…</think>` before the answer by default.
     Every reply from them parsed as nothing at all, which read as a clean draft."""
     constatari, respinse = citeste(
-        '<think>Trebuie să compar textele.</think>\n'
+        "<think>Trebuie să compar textele.</think>\n"
         '[{"tip":"acelasi-viciu","provizie":"d-1","citat":"un citat destul de lung","motiv":"m"}]'
     )
     assert respinse == []
@@ -133,3 +133,29 @@ def test_the_rejection_rate_is_reported_because_it_is_the_number_that_matters():
         CONTEXT,
     )
     assert rezultat.rata_de_respingere == 0.5
+
+
+def test_a_flood_of_unclosed_thinking_tags_does_not_hang_the_parser():
+    """`py/polynomial-redos`, and a real one: on the browser path this string arrives straight from
+    a client POST. The obvious `re.sub(r"<think>.*?</think>", …)` rescans forward from every opening
+    tag looking for a close that is not there, so a few hundred kilobytes of `<think>` would hold
+    the localhost server inside one regex. The scan that replaced it only moves forward.
+
+    The bound is deliberately generous — this is not a performance measurement, it is a trap for
+    catastrophic backtracking, which misses it by orders of magnitude.
+    """
+    import time
+
+    patologic = "<think>" * 40_000
+    t0 = time.monotonic()
+    _, respinse = citeste(patologic)
+    assert time.monotonic() - t0 < 2.0, "quadratic backtracking is back"
+    assert [r.motiv_respingerii for r in respinse] == ["raspuns-neparsabil"]
+
+
+def test_several_thinking_blocks_are_all_removed():
+    constatari, _ = citeste(
+        "<think>întâi</think> ceva text <THINK>și a doua oară</THINK>\n"
+        '[{"tip":"t","provizie":"d-1","citat":"un citat destul de lung","motiv":"m"}]'
+    )
+    assert [c.provizie for c in constatari] == ["d-1"]
