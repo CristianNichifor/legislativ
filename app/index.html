@@ -378,7 +378,7 @@
             <div id="suggest" class="suggest" hidden aria-live="polite"></div>
           </div>
           <div id="draft-clar" class="draft-clar" hidden>
-            <div class="suggest-h">Limbaj clar — sugestie, nu textul legii · pe dispozitiv (privat)</div>
+            <div class="suggest-h" id="draft-clar-h">Limbaj clar — sugestie, nu textul legii</div>
             <div id="draft-clar-body" class="draft-clar-body"><span class="hint">Apasă „Limbaj clar” pentru o rescriere în limbaj simplu.</span></div>
           </div>
         </div>
@@ -386,7 +386,7 @@
           <button class="go" id="go">Verifică</button>
           <button class="ghost" id="sample">Exemplu</button>
           <button class="ghost" id="draft-clar-btn">Limbaj clar</button>
-          <span class="hint">Rulează local · textul nu părăsește această mașină</span>
+          <span class="hint">Verificarea rulează local · textul proiectului nu părăsește browserul. „Limbaj clar” folosește modul AI ales.</span>
         </div>
         <div id="lint-out"></div>
       </div>
@@ -599,6 +599,8 @@ $("#draft-clar-btn").onclick = async ()=>{
   panel.hidden=false;
   if(!draft){ body.innerHTML=`<span class="hint">Scrie sau lipește un text mai întâi.</span>`; return; }
   if(!aiOn()){ body.innerHTML=empty("Activează AI (local sau online) din setările de sub fila «Consolidat»."); return; }
+  const hh=$("#draft-clar-h"); if(hh) hh.textContent="Limbaj clar — sugestie, nu textul legii · "
+    +(aiMode()==="online"?"prin API (Mistral, UE)":"pe dispozitiv (privat)");
   const btn=$("#draft-clar-btn"); btn.disabled=true; btn.innerHTML=`<span class="spin"></span> …`;
   try{
     const prog=(r)=>{ body.innerHTML=`<span class="hint"><span class="spin"></span> ${esc(r&&r.text?r.text:"se încarcă modelul AI…")}</span>`; };
@@ -731,7 +733,7 @@ function creeazaNod(nivel){
           <option value="nou">norme noi (limbaj natural)</option>
           <option value="actual">norme actuale (juridic)</option>
         </select>
-        <button type="button" class="ghost mini nlg" title="Rescrie cu AI local — textul rămâne pe dispozitiv">Rescrie AI</button>
+        <button type="button" class="ghost mini nlg" title="Rescrie cu AI, după modul ales (local privat sau online prin API)">Rescrie AI</button>
         <button type="button" class="ghost mini revino" hidden title="Revino la textul dinainte">↶ revino</button>
         <span class="txt-stat"></span>
       </div></div>
@@ -743,7 +745,7 @@ function creeazaNod(nivel){
   op.onchange=()=>{ const v=op.value; txt.hidden=!(v==="modifica"||v==="completeaza"||v==="introduce");
     artnou.style.display=(v==="introduce")?"":"none"; };
   wrap.querySelector(":scope > .node-hd > .node-x").onclick=()=>{ wrap.remove(); programeazaLive(); };
-  // per-textarea tools: deterministic Format, and a local-AI rewrite by chosen norm (private)
+  // per-textarea tools: deterministic Format, and an AI rewrite by chosen norm (mode: local or online)
   const tools=txt.querySelector(".txt-tools"), revino=tools.querySelector(".revino"), stat=tools.querySelector(".txt-stat");
   tools.querySelector(".fmt").onclick=()=>{ if(!ta.value.trim()){ stat.textContent="scrie întâi un text"; return; }
     ta.dataset.prev=ta.value; ta.value=formateazaText(ta.value); revino.hidden=false; stat.textContent="formatat"; programeazaLive(); };
