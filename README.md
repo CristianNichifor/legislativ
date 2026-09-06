@@ -75,6 +75,15 @@ LEGISLATIV_MODEL=llama3.1 ./ruleaza.sh     # cu Ollama pornit local
 
 Fără variabilă, pasul raportează că nu a rulat — nu că nu a găsit nimic.
 
+Cine e offline nu re-descarcă releaseul ca să afle ce s-a publicat ieri. Copia își știe poziția,
+iar pachetul e doar ce s-a scris de atunci încoace (386 de acte ≈ 2,8 MB comprimat, față de 742 MB):
+
+```bash
+uv run python -m scripts.delta versiune --db copie.db                    # unde e copia
+uv run python -m scripts.delta construieste --de-la <poziție> --tinta delta.db
+uv run python -m scripts.delta aplica --db copie.db --pachet delta.db --graf graf.db
+```
+
 Graful de amendamente se construiește singur din corpus la prima pornire. Cine întreține proiectul
 împachetează corpusul pentru echipă cu `python -m scripts.impacheteaza` și îl atașează la un release.
 
@@ -387,6 +396,7 @@ endpoint and a recorded fixture are the same shape.
 | `temeiuri.py` | On what constitutional ground a provision was struck, read from the Court's own reasoning. Separates a violation the Court stated from an article merely argued about, excludes the Court's own competence articles, and names articles under the numbering in force when the decision was given — the 2003 revision moved property from art. 41 to 44. |
 | `reluare.py` | Does the draft *re-enact* struck wording — the art. 147 (4) question, which a citation check cannot see because a draft can repass a struck rule while citing nothing. Character 5-grams, containment plus a size guard, calibrated against the noise floor of legistic boilerplate. Never blocking. |
 | `prevedere.py` | The text of a struck provision, recovered from the containing act — codes resolved to the version in force when they were struck. Falls back to the article, labelled, and never guesses an alineat the source flattened away. |
+| `delta.py` | The increment an offline copy needs: acts written since its stated position, with their provisions, relations, strikes and graph edges. A day's law is a couple of megabytes against a 742 MB release. Replaces act by act, never deletes, and applying twice changes nothing. |
 | `surse.py` | The portal's own document pages, fetched once and kept, so the article tree is read from `S_ART`/`S_ALN`/`S_LIT` instead of from flattened text. Asked-for-once, like every other pass. |
 | `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
 | `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
