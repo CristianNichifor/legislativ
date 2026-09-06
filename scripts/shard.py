@@ -85,6 +85,11 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
                 postari.setdefault(t, set()).add(n)
 
         n_provizii = con.execute("SELECT count(*) FROM provizii").fetchone()[0]
+        # Acts with a real article tree, as opposed to the single flattened `locator = 'text'` row
+        # an unenriched act carries. Counted here so the browser gets it for nothing.
+        n_structurate = con.execute(
+            "SELECT count(DISTINCT act_id) FROM provizii WHERE locator <> 'text'"
+        ).fetchone()[0]
         # The terminology dictionary, prebuilt here so the browser needs no corpus.db to run the
         # terminology check — the same bounded (recent-N) dictionary the localhost server computes
         # at startup, serialised. `jargon` matches on the term itself, so term + definition is all
@@ -113,6 +118,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
     manifest = {
         "acte": n_acte,
         "provizii": n_provizii,
+        "acte_structurate": n_structurate,
         "termeni": len(termeni),
         "tokeni": len(pastrate),
         "tokeni_scosi": len(postari) - len(pastrate),

@@ -147,3 +147,29 @@ def test_both_backings_report_the_same_republication_date(tmp_path):
     assert pe_disc == pe_shard == {act_id: date(2015, 3, 11)}
     # an act nobody asked about is not queried, and an empty request costs no read
     assert Stare(corpus).republicari(set()) == {}
+
+
+def test_the_manifest_counts_acts_that_are_actually_structured(tmp_path):
+    """A flattened act holds one `locator='text'` row, so provision count alone cannot tell a
+    corpus of article trees from a corpus of blobs — the two report the same shape."""
+    corpus = _corpus(tmp_path)
+    with deschide(corpus) as con:
+        structurat = con.execute("SELECT id FROM acte LIMIT 1").fetchone()[0]
+        # a second, deliberately unenriched act: provizii has a foreign key into acte
+        con.execute(
+            "INSERT INTO acte (id, tip, titlu, citit_la)"
+            " VALUES ('lege-1-2000','lege','X','2020-01-01')"
+        )
+        con.execute("DELETE FROM provizii")
+        con.executemany(
+            "INSERT INTO provizii (act_id, locator, text, ord) VALUES (?,?,?,?)",
+            [
+                (structurat, "art1", "x", 1),
+                (structurat, "art2", "y", 2),
+                ("lege-1-2000", "text", "z", 1),  # flattened: the whole act in one row
+            ],
+        )
+        con.commit()
+    manifest = construieste(corpus, str(tmp_path / "web"), log=lambda *a, **k: None)
+    assert manifest["provizii"] == 3
+    assert manifest["acte_structurate"] == 1  # not 2: the flattened act does not count
