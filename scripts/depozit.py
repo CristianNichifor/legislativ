@@ -252,6 +252,64 @@ CREATE VIRTUAL TABLE IF NOT EXISTS initiative_fts USING fts5(
     titlu, obiect, plx_id UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
 );
 
+-- How a bill moved, from the same Fișa `initiative` is read from. `initiative.stadiu` is one
+-- string saying where a bill *is*; these four say how it got there, which is the political
+-- question rather than the legistic one.
+--
+-- Rewritten wholesale per initiative rather than merged: a Fișa is the authority on its own
+-- passage, so a refetch replaces what the last one said instead of accumulating two readings of
+-- the same step. `ord` keeps the page's order, which is the order things happened and is not
+-- recoverable from the dates — several steps share a date and some carry none at all.
+CREATE TABLE IF NOT EXISTS initiativa_etapa (
+    plx_id   TEXT NOT NULL,
+    ord      INTEGER NOT NULL,
+    data     TEXT,                  -- ISO, or NULL where the Fișa leaves the cell empty
+    camera   TEXT,                  -- 'Camera Deputaților' | 'Senat' | 'Parlament'
+    actiune  TEXT NOT NULL,
+    comisii  TEXT,                  -- the committees named in the step, newline-separated
+    PRIMARY KEY (plx_id, ord)
+);
+
+-- One row per opinion asked for or received. `sens` is NULL where the page does not say, which is
+-- most of the time for a committee: an unanswered request and an approval must not look alike.
+CREATE TABLE IF NOT EXISTS initiativa_aviz (
+    plx_id   TEXT NOT NULL,
+    de_la    TEXT NOT NULL,         -- 'Consiliul Legislativ', 'Guvern', or the committee
+    data     TEXT,
+    sens     TEXT,                  -- 'favorabil' | 'negativ' | 'respingere' | 'adoptare' | NULL
+    numar    TEXT,
+    primit   INTEGER NOT NULL DEFAULT 0,   -- 0 = requested, 1 = received
+    PRIMARY KEY (plx_id, de_la, data, primit)
+);
+
+-- A recorded division. `intrebare` is what was actually put to the room: 296 votes *pentru
+-- respingere* is 296 against the bill, and a tally stored without its question reads as the
+-- opposite of what happened.
+CREATE TABLE IF NOT EXISTS initiativa_vot (
+    plx_id    TEXT NOT NULL,
+    data      TEXT,
+    camera    TEXT,
+    intrebare TEXT,
+    pentru    INTEGER NOT NULL,
+    contra    INTEGER NOT NULL,
+    abtineri  INTEGER NOT NULL,
+    rezultat  TEXT,                  -- 'adoptat' | 'respins', as the step's own sentence puts it
+    absenti   INTEGER,               -- `nu au votat=2`, where the Fișa records it
+    PRIMARY KEY (plx_id, data, camera, intrebare)
+);
+
+-- Who signed it. `idm` is the Chamber's own id for the person: names collide and are spelled
+-- inconsistently, so "everything this deputy has signed" is only answerable through the id.
+CREATE TABLE IF NOT EXISTS initiativa_initiator (
+    plx_id   TEXT NOT NULL,
+    idm      TEXT,
+    nume     TEXT NOT NULL,
+    grup     TEXT,                  -- parliamentary group as the Fișa listed it
+    camera   TEXT,
+    PRIMARY KEY (plx_id, nume, grup)
+);
+CREATE INDEX IF NOT EXISTS idx_initiativa_initiator_idm ON initiativa_initiator(idm);
+
 -- The authority's own list of implementing norms that were mandated and never issued
 -- (Consiliul Legislativ / SGG: *Situația normelor neîndeplinite*). This is ground truth for the
 -- gap report: `vid.py` derives the same claim from the corpus, and comparing the two turns a
@@ -766,6 +824,55 @@ def scrie_initiativa(con: sqlite3.Connection, ini) -> None:
         "INSERT INTO initiative_fts (titlu, obiect, plx_id) VALUES (?,?,?)",
         (ini.titlu, ini.obiect or "", ini.plx_id),
     )
+
+
+def scrie_parcurs(con: sqlite3.Connection, p) -> None:
+    """Replace everything stored about one bill's passage with this reading of its Fișa.
+
+    Wholesale, not merged. The Fișa is the authority on its own passage, so a refetch supersedes
+    the last reading rather than adding a second copy of every step — and a step has no stable
+    identity of its own to merge on: several share a date, some carry none, and the page's order is
+    the only thing that distinguishes them.
+
+    `INSERT OR REPLACE` on the child rows because a Fișa can name the same committee twice on one
+    day — asked and answered — and the primary keys already separate those by `primit`.
+    """
+    for tabel in ("initiativa_etapa", "initiativa_aviz", "initiativa_vot", "initiativa_initiator"):
+        con.execute(f"DELETE FROM {tabel} WHERE plx_id = ?", (p.plx_id,))
+    for i, e in enumerate(p.etape):
+        con.execute(
+            "INSERT OR REPLACE INTO initiativa_etapa (plx_id, ord, data, camera, actiune, comisii)"
+            " VALUES (?,?,?,?,?,?)",
+            (p.plx_id, i, e.data, e.camera, e.actiune, "\n".join(e.comisii) or None),
+        )
+    for a in p.avize:
+        con.execute(
+            "INSERT OR REPLACE INTO initiativa_aviz (plx_id, de_la, data, sens, numar, primit)"
+            " VALUES (?,?,?,?,?,?)",
+            (p.plx_id, a.de_la, a.data, a.sens, a.numar, int(a.primit)),
+        )
+    for v in p.voturi:
+        con.execute(
+            "INSERT OR REPLACE INTO initiativa_vot (plx_id, data, camera, intrebare, pentru,"
+            " contra, abtineri, rezultat, absenti) VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                p.plx_id,
+                v.data,
+                v.camera,
+                v.intrebare,
+                v.pentru,
+                v.contra,
+                v.abtineri,
+                v.rezultat,
+                v.absenti,
+            ),
+        )
+    for it in p.initiatori:
+        con.execute(
+            "INSERT OR REPLACE INTO initiativa_initiator (plx_id, idm, nume, grup, camera)"
+            " VALUES (?,?,?,?,?)",
+            (p.plx_id, it.idm, it.nume, it.grup, it.camera),
+        )
 
 
 def initiative_vazute(con: sqlite3.Connection) -> set[str]:
