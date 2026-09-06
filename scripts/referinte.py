@@ -52,7 +52,10 @@ TIPURI: Final[dict[str, str]] = {
 # Codes and the Constitution are cited by name and never by number, so they need their own
 # pass. `Codul fiscal` is an act like any other in the graph; it simply has no nr./year.
 _NUMITE: Final[list[tuple[str, str]]] = [
-    ("constitutie", r"Constituți(?:a|ei)(?:\s+Rom(?:â|a)niei)?"),
+    # `Constituție` — the dictionary form — was missing, so `din Constituție` matched nothing at
+    # all while `din Constituția` matched. It is the commonest way the word is written after a
+    # preposition, which is the commonest way an act cites it.
+    ("constitutie", r"Constituți(?:a|ei|e)(?:\s+Rom(?:â|a)niei)?"),
     ("cod-procedura-civila", r"Codul(?:ui)?\s+de\s+procedur(?:ă|a)\s+civil(?:ă|a)"),
     ("cod-procedura-penala", r"Codul(?:ui)?\s+de\s+procedur(?:ă|a)\s+penal(?:ă|a)"),
     ("cod-fiscal", r"Codul(?:ui)?\s+fiscal"),

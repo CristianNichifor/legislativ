@@ -487,3 +487,39 @@ def test_redacteaza_generates_mandated_form():
     assert out["text"].startswith("La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică")
     assert "va avea următorul cuprins" in out["text"]
     assert out["titlu"] == "Lege pentru modificarea art. 7 din Legea nr. 98/2016"
+
+
+def test_a_citation_to_the_constitution_finds_it(tmp_path):
+    """It is stored as `constitutie-0-1991`, cited as `constitutie`, and before the resolver the
+    two never met — 95 768 citations pointing at an act the corpus held and could not reach."""
+    from scripts.servicii import Stare
+
+    corpus = tmp_path / "corpus.db"
+    with depozit.deschide(corpus) as con:
+        con.executemany(
+            "INSERT INTO acte (id, tip, titlu, citit_la) VALUES (?,?,?,'2020-01-01')",
+            [
+                ("constitutie-0-1991", "constitutie", "CONSTITUȚIA ROMÂNIEI"),
+                ("constitutie-0-2003", "constitutie", "CONSTITUȚIA ROMÂNIEI republicată"),
+                ("lege-98-2016", "lege", "Legea achizițiilor"),
+            ],
+        )
+        con.commit()
+    st = Stare(str(corpus), str(tmp_path / "i.db"))
+
+    assert st.cunoscut("constitutie")  # was False
+    assert st.rezolva_nume("constitutie") == "constitutie-0-2003"
+    assert "CONSTITU" in st.titlu("constitutie").upper()  # was ""
+    # an ordinary act is untouched, so callers can apply the resolver blindly
+    assert st.rezolva_nume("lege-98-2016") == "lege-98-2016"
+    assert not st.cunoscut("lege-1-1900")
+
+
+def test_the_word_constitutie_is_recognised_after_a_preposition():
+    """`din Constituție` — the commonest way an act cites it — matched nothing at all, because the
+    pattern took only `Constituția`/`Constituției`."""
+    from scripts.referinte import referinte
+
+    assert [r.act.id for r in referinte("potrivit art. 1 din Constituție") if r.act] == [
+        "constitutie"
+    ]
