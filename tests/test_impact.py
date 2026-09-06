@@ -81,6 +81,29 @@ def test_the_xray_restates_a_repeal_in_plain_words():
     assert any(x["text"].startswith("Abrogă (elimină) articolul 12") for x in r["rezumat"])
 
 
+def test_a_parallel_category_alarm_is_surfaced():
+    d = (
+        "La articolul 3 din Legea nr. 98/2016, litera a) se modifică și va avea următorul cuprins: "
+        "«a) autoritate contractuală - orice entitate;»"
+    )
+    r = raza_de_impact(
+        d,
+        citari_fn=_citari({}),
+        categorii_fn=lambda t: (
+            [
+                {
+                    "fragment": "autoritate contractuală",
+                    "termen": "autoritate contractantă",
+                    "explicatie": "categorie paralelă",
+                }
+            ]
+            if "contractuală" in t
+            else []
+        ),
+    )
+    assert r["categorii_paralele"] and "contractuală" in r["categorii_paralele"][0]["fragment"]
+
+
 _ORIGINAL_CU_RAPORT = (
     "Autoritatea publică anunțul de participare. "
     "Autoritatea transmite raportul în termen de 30 de zile de la încheiere."
