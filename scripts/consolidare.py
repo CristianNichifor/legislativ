@@ -15,13 +15,14 @@ could not be applied, the original text is returned untouched with a `blocking` 
 the act whose change was not applied. Never splice partial: a provision four-of-five consolidated,
 presented as consolidated, is a lie about the fifth.
 
-**Scope is deliberately narrow** (see `docs/CONSOLIDARE.md`). This slice applies `modifica` (replace
-the provision's text with the payload) and `abroga` (mark it repealed as of the date). Every other
-operation — `completeaza` that appends, `introduce` with renumbering, global phrase substitution —
-is refused with a `blocking` limitation, so a case this slice does not handle is visible as a
-refusal, never a silent pass. The engine works on plain provision/operation structures; wiring the
-HTML article tree (`parsare.py`) in as the provision source, and measuring against the portal's own
-consolidated view, is the next slice.
+**Scope** (see `docs/CONSOLIDARE.md`). This applies, per provision: `modifica` (replace the text
+with the payload), `abroga` (mark it repealed as of the date), and `completeaza` (append the payload
+to the text). `introduce` inserts a *new* provision after an anchor — it does not change the
+anchor's own text, so it neither applies to it nor refuses it; `consolideaza_in` materialises the
+provision as its own result. Still refused, visibly: an unrecognised verb, a text-supplying change
+with no quoted text, an operation with no date, and — for `introduce` — renumbering of the
+provisions that follow (the inserted article is shown, but the shift of later numbers is not
+applied). A case not handled is a `blocking` refusal, never a silent pass.
 
 Standard library only. The consolidated text is `derived` — it is the result of applying
 operations, not a string that appears in any single source document; the payloads it splices are
@@ -40,7 +41,10 @@ from scripts.text import cheie
 if TYPE_CHECKING:
     from scripts.parsare import ActParsat, Provizie
 
-_ACCEPTATE = frozenset({"modifica", "abroga"})
+# Operations that change a provision's own text or state, applied in date order below.
+_TEXT = frozenset({"modifica", "abroga", "completeaza"})
+# Operations that need a quoted payload to apply (abroga does not; it just marks the state).
+_CU_PAYLOAD = frozenset({"modifica", "completeaza"})
 
 
 @dataclass(frozen=True)
@@ -107,19 +111,23 @@ def consolideaza(
 
     limitari: list[str] = []
     for op in nedatate:
+        if op.fel == "introduce":
+            continue  # an insertion never changes this provision, so its date does not gate it
         limitari.append(
             f"amendamentul din {op.act} nu are dată și nu poate fi plasat în timp; "
             "textul nu a fost consolidat."
         )
     for op in aplicabile:
-        if op.fel not in _ACCEPTATE:
+        if op.fel == "introduce":
+            continue  # handled at the document level (consolideaza_in), not on this provision
+        if op.fel not in _TEXT:
             limitari.append(
                 f"operația «{op.fel}» din {op.act} nu este aplicată automat în această versiune; "
                 "citește actul modificator."
             )
-        elif op.fel == "modifica" and not op.continut_nou:
+        elif op.fel in _CU_PAYLOAD and not op.continut_nou:
             limitari.append(
-                f"modificarea din {op.act} nu citează textul nou; "
+                f"{op.fel} din {op.act} nu citează textul nou; "
                 "nu poate fi aplicată fără a inventa text."
             )
 
@@ -137,11 +145,13 @@ def consolideaza(
     text = text_original
     abrogat = False
     schimbari: list[Schimbare] = []
-    for op in sorted(aplicabile, key=lambda o: o.data):
+    for op in sorted((o for o in aplicabile if o.fel != "introduce"), key=lambda o: o.data):
         if op.fel == "abroga":
             abrogat = True
         elif op.fel == "modifica":
             text = op.continut_nou or text
+        elif op.fel == "completeaza":
+            text = f"{text.rstrip()}\n{op.continut_nou}"
         schimbari.append(Schimbare(op.fel, op.act, op.data))
 
     return Rezultat(
@@ -170,16 +180,21 @@ def consolideaza_in(
     rather than silently dropped, because a change that cannot be located is exactly the kind of
     gap that must stay visible.
     """
+    la = la_data or date.today()
     dupa_loc = {p.locator_id: p.text for p in act.provizii}
     rezultate: dict[str, Rezultat] = {}
-    for locator in dict.fromkeys(op.locator for op in operatii):
+
+    # existing provisions the operations change: modifica / abroga / completeaza target a locator
+    # that must already be there. An `introduce`'s locator is an *anchor*, not a provision this
+    # touches, so it does not drive a per-provision consolidation.
+    for locator in dict.fromkeys(op.locator for op in operatii if op.fel != "introduce"):
         original = dupa_loc.get(locator)
         if original is None:
             rezultate[locator] = Rezultat(
                 locator=locator,
                 text="",
                 abrogat=False,
-                la_data=la_data or date.today(),
+                la_data=la,
                 limitari=(
                     f"locatorul «{locator}» nu există în {act.act.id}; "
                     "amendamentul nu poate fi aplicat unui text care nu a fost găsit.",
@@ -188,6 +203,35 @@ def consolideaza_in(
             )
             continue
         rezultate[locator] = consolideaza(locator, original, operatii, la_data)
+
+    # inserted provisions: an `introduce` adds a new provision after its anchor. Its text is the
+    # payload; the shift it implies for later article numbers is not applied — the result says so.
+    for n, op in enumerate((o for o in operatii if o.fel == "introduce"), start=1):
+        if op.data is not None and op.data > la:
+            continue  # a future insertion is not in force as of this date
+        cheie_noua = f"{op.locator}~nou{n}" if op.locator else f"nou{n}"
+        if not op.continut_nou:
+            rezultate[cheie_noua] = Rezultat(
+                locator=cheie_noua,
+                text="",
+                abrogat=False,
+                la_data=la,
+                limitari=(f"introducerea din {op.act} nu citează textul noii prevederi.",),
+                complet=False,
+            )
+            continue
+        rezultate[cheie_noua] = Rezultat(
+            locator=cheie_noua,
+            text=op.continut_nou,
+            abrogat=False,
+            la_data=la,
+            schimbari=(Schimbare("introduce", op.act, op.data),),
+            limitari=(
+                f"prevedere nouă introdusă după «{op.locator}» prin {op.act}; renumerotarea "
+                "articolelor care urmează nu este aplicată.",
+            ),
+            complet=True,
+        )
     return rezultate
 
 

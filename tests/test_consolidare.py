@@ -83,11 +83,11 @@ def test_an_unsupported_operation_refuses_the_whole_provision():
     """Even mixed with a clean change: partial consolidation is not allowed."""
     ops = [
         Operatie("modifica", "art7", date(2020, 1, 1), "lege-1-2020", "text nou"),
-        Operatie("completeaza", "art7", date(2021, 1, 1), "lege-2-2021", "un adaos"),
+        Operatie("suspenda", "art7", date(2021, 1, 1), "lege-2-2021", None),
     ]
     r = consolideaza("art7", "original", ops, la_data=date(2022, 1, 1))
     assert not r.complet and r.text == "original"
-    assert any("completeaza" in lim and "lege-2-2021" in lim for lim in r.limitari)
+    assert any("suspenda" in lim and "lege-2-2021" in lim for lim in r.limitari)
 
 
 def test_an_undated_change_cannot_be_placed_and_refuses():
@@ -105,3 +105,54 @@ def test_a_provision_with_no_operations_is_itself_consolidated():
     r = consolideaza("art7", "Art. 7. - Neatins.", [], la_data=date(2022, 1, 1))
     assert isinstance(r, Rezultat)
     assert r.complet and r.text == "Art. 7. - Neatins." and not r.abrogat and r.schimbari == ()
+
+
+def test_completeaza_appends_the_payload():
+    r = consolideaza(
+        "art7",
+        "Art. 7. - Textul original.",
+        [Operatie("completeaza", "art7", date(2020, 1, 1), "lege-2-2020", "Se adaugă o teză.")],
+        la_data=date(2022, 1, 1),
+    )
+    assert r.complet
+    assert r.text == "Art. 7. - Textul original.\nSe adaugă o teză."
+    assert r.schimbari[0].fel == "completeaza"
+
+
+def test_completeaza_without_a_payload_refuses():
+    r = consolideaza(
+        "art7",
+        "original",
+        [Operatie("completeaza", "art7", date(2020, 1, 1), "lege-2-2020", None)],
+        la_data=date(2022, 1, 1),
+    )
+    assert not r.complet and any("nu citează textul nou" in lim for lim in r.limitari)
+
+
+def test_introduce_does_not_refuse_the_anchor():
+    # an insertion after art. 7 leaves art. 7 itself untouched — it must not block its consolidation
+    r = consolideaza(
+        "art7",
+        "Art. 7. - Ancora.",
+        [Operatie("introduce", "art7", date(2020, 1, 1), "lege-3-2020", "Art. 7^1. - Nou.")],
+        la_data=date(2022, 1, 1),
+    )
+    assert r.complet and r.text == "Art. 7. - Ancora." and r.schimbari == ()
+
+
+def test_consolideaza_in_materialises_an_inserted_provision():
+    from scripts.consolidare import consolideaza_in
+    from scripts.parsare import ActParsat, Provizie
+    from scripts.referinte import Act
+
+    act = ActParsat(
+        act=Act("lege", "98", 2016),
+        titlu="L",
+        provizii=(Provizie("art7", "Art. 7. - Ancora."),),
+    )
+    ops = [Operatie("introduce", "art7", date(2020, 1, 1), "lege-3-2020", "Art. 7^1. - Nou.")]
+    rez = consolideaza_in(act, ops, la_data=date(2022, 1, 1))
+    inserate = [r for r in rez.values() if r.schimbari and r.schimbari[0].fel == "introduce"]
+    assert len(inserate) == 1
+    assert inserate[0].text == "Art. 7^1. - Nou." and inserate[0].complet
+    assert any("renumerotarea" in lim for lim in inserate[0].limitari)
