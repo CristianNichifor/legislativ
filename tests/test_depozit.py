@@ -415,3 +415,35 @@ def test_an_older_corpus_has_its_index_rebuilt(db, lege):
         tabele = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "provizii_fts_content" not in tabele
         assert depozit.cauta(con, "achizitie publica", 5)
+
+
+def test_the_normative_types_do_not_drift_from_the_collector():
+    """`depozit` keeps its own copy because `colector` imports it, so this is the seam that could
+    silently disagree — and the coverage figure in the header is computed from it."""
+    from scripts.colector import TIP_NORMATIV
+    from scripts.depozit import TIPURI_NORMATIVE
+
+    assert set(TIPURI_NORMATIVE) == set(TIP_NORMATIV)
+
+
+def test_a_court_decision_is_not_counted_as_an_unstructured_act(tmp_path):
+    """The corpus is two collections in one. A decision has no article tree to parse, so it must
+    not sit in the denominator of "acts with articles" — that would report it as missing
+    something it never had."""
+    from scripts.depozit import deschide, rezumat
+
+    cale = tmp_path / "c.db"
+    with deschide(str(cale)) as con:
+        con.executemany(
+            "INSERT INTO acte (id, tip, titlu, citit_la) VALUES (?,?,?,'2020-01-01')",
+            [("lege-1-2000", "lege", "L"), ("decizie-9-1994", "decizie", "D")],
+        )
+        con.executemany(
+            "INSERT INTO provizii (act_id, locator, text, ord) VALUES (?,?,?,?)",
+            [("lege-1-2000", "art1", "x", 1), ("decizie-9-1994", "text", "y", 1)],
+        )
+        con.commit()
+        r = rezumat(con)
+    assert r["acte"] == 2
+    assert r["acte_normative"] == 1  # the decision is not one
+    assert r["acte_structurate"] == 1

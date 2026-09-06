@@ -202,6 +202,7 @@ def rezumat(stare: Stare) -> dict:
             "provizii": m.get("provizii", 0),
             # Counted at build time by `shard.py`; free to read here, where the corpus is absent.
             "acte_structurate": m.get("acte_structurate", 0),
+            "acte_normative": m.get("acte_normative", 0),
         }
     else:
         with depozit.deschide(stare.corpus, readonly=True) as con:

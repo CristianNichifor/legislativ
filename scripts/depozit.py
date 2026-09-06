@@ -642,6 +642,37 @@ def acte(con: sqlite3.Connection) -> list[Act]:
     ]
 
 
+# The act types that have an article tree to parse. Kept here rather than imported from
+# `colector.TIP_NORMATIV` because `colector` imports this module; `tests/test_depozit.py` asserts
+# the two never drift apart, which is cheaper than the cycle.
+TIPURI_NORMATIVE: tuple[str, ...] = ("lege", "oug", "og", "hg", "ordin", "decret")
+_MARCAJE_NORMATIV = ",".join(f"'{t}'" for t in TIPURI_NORMATIVE)
+
+
+def _structurate_normative(con: sqlite3.Connection) -> int:
+    """Normative acts holding a real article tree, not a single flattened row.
+
+    Two steps on purpose. Asking it as one correlated `EXISTS` over `acte` measured 385 ms on the
+    finished corpus; taking the handful of act ids that have a tree and then checking their type
+    measured 130 ms for the same answer, and this runs on every page load.
+    """
+    try:
+        ids = [
+            r[0]
+            for r in con.execute("SELECT DISTINCT act_id FROM provizii WHERE locator <> 'text'")
+        ]
+    except sqlite3.OperationalError:
+        return 0
+    if not ids:
+        return 0
+    marcaje = ",".join("?" * len(ids))
+    q = f"SELECT count(*) FROM acte WHERE id IN ({marcaje}) AND tip IN ({_MARCAJE_NORMATIV})"
+    try:
+        return con.execute(q, ids).fetchone()[0]
+    except sqlite3.OperationalError:
+        return 0
+
+
 def rezumat(con: sqlite3.Connection) -> dict[str, int]:
     """What the corpus actually holds, for a report that states its own coverage."""
 
@@ -665,13 +696,19 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
             "  SELECT count(*) AS n FROM documente GROUP BY cheie_act HAVING n > 1)"
         ),
         "provizii": n("SELECT count(*) FROM provizii"),
-        # How many acts are actually structured. The SOAP service returns flattened text, so an
-        # unenriched act holds one row with `locator = 'text'` — and a corpus of those reports a
-        # provision count equal to its act count, which reads as healthy and means the opposite.
-        # Without this number the header says "152 079 prevederi" over 132 real article trees.
-        "acte_structurate": n(
-            "SELECT count(DISTINCT act_id) FROM provizii WHERE locator <> 'text'"
-        ),
+        # How many acts are actually structured, and out of how many it is fair to ask.
+        #
+        # The SOAP service returns flattened text, so an unenriched act holds one row with
+        # `locator = 'text'` — and a corpus of those reports a provision count equal to its act
+        # count, which reads as healthy and means the opposite.
+        #
+        # The denominator is the normative acts, not every act. This corpus is two collections in
+        # one: 118 119 acts that have articles, and 33 960 documents that do not — 22 082 Curtea
+        # Constituțională decisions above all, which are read by `decizii.py`/`lovituri.py` for
+        # their dispozitiv, plus rapoarte, rectificări, comunicate. A decision has no article tree
+        # to parse, so counting one as unstructured says it is missing something it never had.
+        "acte_normative": n(f"SELECT count(*) FROM acte WHERE tip IN ({_MARCAJE_NORMATIV})"),
+        "acte_structurate": _structurate_normative(con),
         "referinte_marcate": n("SELECT count(*) FROM referinte_marcate"),
         "relatii": n("SELECT count(*) FROM relatii"),
         "pagini_in_cache": n("SELECT count(*) FROM cache"),

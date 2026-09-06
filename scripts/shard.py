@@ -85,10 +85,12 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
                 postari.setdefault(t, set()).add(n)
 
         n_provizii = con.execute("SELECT count(*) FROM provizii").fetchone()[0]
-        # Acts with a real article tree, as opposed to the single flattened `locator = 'text'` row
-        # an unenriched act carries. Counted here so the browser gets it for nothing.
-        n_structurate = con.execute(
-            "SELECT count(DISTINCT act_id) FROM provizii WHERE locator <> 'text'"
+        # Acts with a real article tree, and the normative acts it is fair to measure them against
+        # — a Curtea Constituțională decision has no articles to parse. Both counted here so the
+        # browser reads them out of the manifest for nothing. See `depozit.rezumat`.
+        n_structurate = depozit._structurate_normative(con)
+        n_normative = con.execute(
+            f"SELECT count(*) FROM acte WHERE tip IN ({depozit._MARCAJE_NORMATIV})"
         ).fetchone()[0]
         # The terminology dictionary, prebuilt here so the browser needs no corpus.db to run the
         # terminology check — the same bounded (recent-N) dictionary the localhost server computes
@@ -119,6 +121,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
         "acte": n_acte,
         "provizii": n_provizii,
         "acte_structurate": n_structurate,
+        "acte_normative": n_normative,
         "termeni": len(termeni),
         "tokeni": len(pastrate),
         "tokeni_scosi": len(postari) - len(pastrate),
