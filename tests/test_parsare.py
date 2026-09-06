@@ -93,6 +93,37 @@ def test_the_hover_duplicate_is_not_counted_twice(lege):
     assert len(litere) == len({(p.locator_id, p.text) for p in litere})
 
 
+def test_a_first_publication_page_has_no_republication_date(lege):
+    """The committed fixture is a first publication, not a republication — the field stays empty
+    rather than being filled from the ordinary publication line."""
+    assert lege.republicat_din is None
+
+
+def test_a_republished_header_fills_the_republication_date():
+    """When the header says the act is republished, the date on its publication line is the
+    republication in Monitorul Oficial — read into `republicat_din` so consolidation can refuse to
+    apply pre-republication amendments to the renumbered tree."""
+    from scripts.parsare import parseaza
+
+    html = (
+        '<span class="S_DEN">LEGE nr. 99 din 1 martie 2021</span>'
+        '<span class="S_PUB_BDY">Republicat în MONITORUL OFICIAL nr. 500 din 15 aprilie 2021</span>'
+    )
+    a = parseaza(html)
+    assert a.republicat_din == date(2021, 4, 15)
+
+
+def test_the_word_alone_without_a_date_does_not_invent_a_republication():
+    from scripts.parsare import parseaza
+
+    html = (
+        '<span class="S_DEN">LEGE nr. 99 din 1 martie 2021</span>'
+        '<span class="S_PUB_BDY">Text republicat, fără nicio dată de publicare.</span>'
+    )
+    a = parseaza(html)
+    assert a.republicat_din is None  # no date to pin it to → no claim
+
+
 def test_all_four_relation_flags_are_read(lege):
     assert lege.relatii == {"ActiuniInduse", "Actiunisuferite", "Referape", "Referitde"}
 
