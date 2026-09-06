@@ -8,6 +8,7 @@ the two databases at once, and that search reaches the corpus FTS.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -67,6 +68,120 @@ def test_lint_returns_all_three_sections_from_both_databases(tmp_path):
     assert any(t["regula"] == "categorie-paralela" for t in out["terminology"])  # achiziții de stat
     assert out["duplicates"] and out["duplicates"][0]["plx_id"] == "plx-1-2024"
     assert out["duplicates"][0]["senat_id"] == "L5/2024"
+
+
+DECIZIE_CARE_LOVESTE = (
+    "DECIZIE nr. 9 din 25 noiembrie 1994 EMITENT CURTEA CONSTITUȚIONALĂ "
+    "Publicat în MONITORUL OFICIAL nr. 326 din 25 noiembrie 1994 "
+    "CURTEA În numele legii DECIDE: "
+    "Admite excepția și constată că art. 5 alin. (7) din Legea nr. 59/1993 este "
+    "neconstituțional. Definitivă și general obligatorie."
+)
+
+
+def _cu_lovitura(tmp_path: Path) -> tuple[str, str]:
+    """A corpus holding the struck law and the decision that struck it, plus its graph."""
+    corpus, graf = tmp_path / "c.db", tmp_path / "g.db"
+    acte = [
+        Inregistrare(
+            titlu="LEGE nr. 59/1993",
+            tip_act="LEGE",
+            numar="59",
+            an=1993,
+            data_vigoare=date(1993, 7, 1),
+            emitent="PARLAMENTUL",
+            publicatie="MO",
+            link_html="http://legislatie.just.ro/Public/DetaliiDocument/591993",
+            text="Art. 5. - (7) Cererea se soluționează fără citarea părților.",
+        ),
+        Inregistrare(
+            titlu="DECIZIE nr. 9/1994",
+            tip_act="DECIZIE",
+            numar="9",
+            an=1994,
+            data_vigoare=date(1994, 11, 25),
+            emitent="Curtea Constituțională",
+            publicatie="MO",
+            link_html="http://legislatie.just.ro/Public/DetaliiDocument/91994",
+            text=DECIZIE_CARE_LOVESTE,
+        ),
+    ]
+    with depozit.deschide(corpus) as con:
+        for r in acte:
+            depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+    construieste(str(corpus), str(graf), log=lambda *_: None)
+    return str(corpus), str(graf)
+
+
+DRAFT_PE_LOVITURA = "Art. I. — Se modifică art. 5 alin. (7) din Legea nr. 59/1993."
+
+
+def test_a_draft_on_a_struck_provision_is_flagged_end_to_end(tmp_path, monkeypatch):
+    """Decision → strike → register → shipped JSON → a finding on a pasted draft.
+
+    Everything between the Court's words and the drafter's screen, with nothing stubbed. The
+    corpus declares `lege` collected exhaustively, which is what earns the finding the right to
+    block: see the next test for what happens when it cannot.
+    """
+    from scripts.servicii import construieste_neconstitutional
+
+    corpus, graf = _cu_lovitura(tmp_path)
+    randuri = construieste_neconstitutional(corpus, graf, complet_pentru=frozenset({"lege"}))
+    assert randuri, "the register came back empty — the chain broke before the linter"
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "neconstitutional.json").write_text(
+        json.dumps(randuri, ensure_ascii=False), encoding="utf-8"
+    )
+    initiative = tmp_path / "i.db"
+    with depozit.deschide(initiative):
+        pass
+    stare = Stare(corpus, str(initiative), graf)
+
+    out = _lint(DRAFT_PE_LOVITURA, stare)
+    (c,) = out["neconstitutional"]
+    assert c["act_id"] == "lege-59-1993"
+    assert c["locator"] == "art5.alin7"
+    assert c["potrivire"] == "exact"
+    assert c["severitate"] == "blocking"
+    assert c["decizie"] == "decizie-9-1994"
+    # The quoted span is the provision as the decision names it — what makes the row checkable
+    # against the Monitorul Oficial text without leaving the screen.
+    assert c["citat"] == "art. 5 alin. (7) din Legea nr. 59/1993"
+
+
+def test_a_corpus_that_claims_nothing_complete_warns_instead_of_blocking(tmp_path, monkeypatch):
+    """The default, and the honest one. With no act type declared exhaustively collected, the
+    register cannot tell an unrepaired provision from a repair it never collected — so the same
+    draft, on the same strike, gets a warning rather than a verdict, and says why."""
+    from scripts.servicii import construieste_neconstitutional
+
+    corpus, graf = _cu_lovitura(tmp_path)
+    randuri = construieste_neconstitutional(corpus, graf)  # complet_pentru empty by default
+    assert all(r["severitate"] == "blocking" for r in randuri), "evidential severity was not set"
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "neconstitutional.json").write_text(
+        json.dumps(randuri, ensure_ascii=False), encoding="utf-8"
+    )
+    initiative = tmp_path / "i.db"
+    with depozit.deschide(initiative):
+        pass
+    stare = Stare(corpus, str(initiative), graf)
+
+    (c,) = _lint(DRAFT_PE_LOVITURA, stare)["neconstitutional"]
+    assert c["severitate"] == "material", "an unbacked register row blocked a draft"
+    assert c["sustinut"] is False
+    assert c["limitari"], "demoted without saying why"
+
+
+def test_lint_is_silent_about_constitutionality_with_no_register_shipped(tmp_path, monkeypatch):
+    """A localhost that was never built has no register. Silence, not a clean bill of health —
+    and not a crash."""
+    monkeypatch.chdir(tmp_path)
+    stare = _build(tmp_path)
+    assert stare.neconstitutional == []
+    assert _lint(DRAFT_PE_LOVITURA, stare)["neconstitutional"] == []
 
 
 def test_search_reaches_the_corpus_fts(tmp_path):

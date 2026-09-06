@@ -19,6 +19,7 @@ would read the whole corpus on every keystroke.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from scripts import depozit
@@ -57,7 +58,8 @@ class Stare:
         self._titluri: dict[str, str] | None = None
         self._urls: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
-        self.vid: list[dict] = self._incarca_vid()
+        self.vid: list[dict] = self._incarca_raport("vid.json")
+        self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
 
     @property
     def pe_shard(self) -> bool:
@@ -85,16 +87,13 @@ class Stare:
         except Exception:
             return []
 
-    # The unmet-obligations report (`vid.py`) is precomputed at build time — a scan of the whole
-    # corpus is far too slow per request — and shipped as `vid.json`, exactly like the dictionary.
+    # Two corpus-wide reports are precomputed at build time — a scan of the whole corpus is far
+    # too slow per request — and shipped as JSON, exactly like the dictionary: the unmet
+    # obligations (`vid.py`) and the struck-but-unrepaired register (`neconstitutional.py`).
     # Absent (a localhost that has not been built) → the pass is silently empty, like every other
-    # data-gated pass. The linter filters it to the acts the current draft touches.
-    def _incarca_vid(self) -> list[dict]:
-        cai = (
-            [self.date_dir / "vid.json"]
-            if self.pe_shard
-            else [Path("web/data/vid.json"), Path("vid.json")]
-        )
+    # data-gated pass. The linter filters each to what the current draft touches.
+    def _incarca_raport(self, nume: str) -> list[dict]:
+        cai = [self.date_dir / nume] if self.pe_shard else [Path("web/data") / nume, Path(nume)]
         for cale in cai:
             if cale.is_file():
                 try:
@@ -205,6 +204,10 @@ def _lint(draft: str, stare: Stare) -> dict:
         "terminology": termen_hits,
         "duplicates": dup,
         "targets": _targets(draft, stare),
+        # Ahead of `repealed` deliberately: a repealed provision is law that ended, which is
+        # orderly; a struck and unrepaired one is text still printed in the official version that
+        # has had no legal effect since a date in the 1990s. Building on the second is worse.
+        "neconstitutional": _neconstitutional(draft, stare),
         "repealed": _repealed(draft, stare),
         "calificate": _calificate(draft, stare),
         "drafting": drafting,
@@ -408,6 +411,92 @@ def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) ->
     nota = re.compile(r"^\(la \d{2}-\d{2}-\d{4}")
     vids = raport_vid(corpus_db, graf_db, complet_pentru=frozenset(), limita=limita)
     return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
+
+
+def _nereparat_dict(n) -> dict:
+    """One `neconstitutional.Nereparat` row as a plain dict for the shipped register.
+
+    `severitate` travels as the register means it — *evidential*: `blocking` says the corpus
+    cannot tell an unrepaired provision from a repair it never collected. `coliziune.py` reads it
+    that way and refuses to let such a row block a bill. It is not the linter's severity and must
+    not be rendered as one.
+    """
+    p = n.lovitura.proviziune
+    return {
+        "act_id": p.act or "",
+        "locator": p.locator or "",
+        "fel": p.fel,
+        "text": p.text[:300],
+        "decizie": n.lovitura.decizie,
+        "publicat": n.lovitura.publicat.isoformat() if n.lovitura.publicat else None,
+        "definitiva": n.lovitura.definitiva,
+        "termen": n.termen.isoformat() if n.termen else None,
+        "zile_de_la_termen": n.zile_de_la_termen,
+        "severitate": n.severitate,
+        "limitari": list(n.limitari),
+    }
+
+
+def construieste_neconstitutional(
+    corpus_db: str,
+    graf_db: str,
+    *,
+    complet_pentru: frozenset[str] = frozenset(),
+    la_data: date | None = None,
+) -> list[dict]:
+    """Build the shipped struck-but-unrepaired register from a corpus + its graph.
+
+    `complet_pentru` is empty by default for the same reason it is in `construieste_vid`: a
+    shipped slice cannot vouch that any act type was collected exhaustively, so every row comes
+    back evidentially `blocking` and says so on its face. That default is deliberately expensive —
+    with nothing declared complete, no finding this feeds can ever block a draft, only warn. It is
+    a dial an operator turns by declaring what they actually finished collecting, not a default
+    that flatters the data.
+    """
+    from scripts.neconstitutional import din_baze, registru
+
+    lovituri, muchii, tipuri = din_baze(corpus_db, graf_db)
+    randuri = registru(
+        lovituri,
+        muchii,
+        tipuri,
+        la_data=la_data or date.today(),
+        complet_pentru=complet_pentru,
+    )
+    return [_nereparat_dict(n) for n in randuri]
+
+
+def _neconstitutional(draft: str, stare: Stare) -> list[dict]:
+    """Where the draft cites a provision the Court struck and nobody ever repaired.
+
+    The severest thing this package can say to a drafter, and the cheapest to say: an intersection
+    between the prebuilt register and the draft's own citations, no model and no network. Silent
+    where no register is shipped — an empty pass and a pass that never ran are different facts, and
+    `rezumat` is where a surface learns which one it has.
+    """
+    from scripts.coliziune import coliziuni
+
+    return [
+        {
+            "text": c.text[:300],
+            "act_id": c.act_id,
+            "locator": c.locator,
+            "locator_lovit": c.locator_lovit,
+            "fel": c.fel,
+            "decizie": c.decizie,
+            "decizii": list(c.decizii),
+            "publicat": c.publicat.isoformat() if c.publicat else None,
+            "zile_de_la_termen": c.zile_de_la_termen,
+            "potrivire": c.potrivire,
+            "severitate": c.severitate,
+            "sustinut": c.sustinut,
+            "motiv": c.motiv,
+            "citat": c.citat,
+            "limitari": list(c.limitari),
+            "incredere": c.increderea,
+        }
+        for c in coliziuni(draft, stare.neconstitutional)
+    ]
 
 
 def _consolidare_semnale(draft: str) -> list[dict]:
