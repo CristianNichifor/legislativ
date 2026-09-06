@@ -35,7 +35,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from scripts import depozit
-from scripts.api import Client, Inregistrare
+from scripts.api import Client, Inregistrare, RaspunsLent
 from scripts.text import cheie
 
 # The API returns a type as a display string; the linter keys acts by a slug. The six normative
@@ -120,27 +120,9 @@ def act_din_inregistrare(rec: Inregistrare):
     return Act(slug_tip(rec.tip_act), numar, an)
 
 
-class _Trickle(Exception):
-    """The server accepted the connection and then withheld the response past the deadline."""
-
-
-def _cu_termen(fn, secunde: float):
-    """Run `fn` under a hard wall-clock deadline. A socket timeout is not enough here: this
-    server trickles a byte at a time, and a per-recv timeout never fires while bytes dribble in,
-    so a worker blocks forever in the read. A one-shot executor gives a deadline the trickle
-    cannot reset; if it lapses the underlying socket is abandoned (a rare leak, cheap against a
-    quarter-million pages) and the page is retried."""
-    from concurrent.futures import ThreadPoolExecutor
-    from concurrent.futures import TimeoutError as FTimeout
-
-    ex = ThreadPoolExecutor(max_workers=1)
-    fut = ex.submit(fn)
-    try:
-        return fut.result(timeout=secunde)
-    except FTimeout as e:
-        raise _Trickle from e
-    finally:
-        ex.shutdown(wait=False)
+# Why each retry happened, counted for the run. Read by the caller to report whether the service
+# was asking for room (429/503) or the client was at fault, rather than guessing from a rate.
+RETRAGERI: dict[str, int] = {}
 
 
 def _pagina(
@@ -148,19 +130,41 @@ def _pagina(
 ) -> list[Inregistrare]:
     """One page, under a hard deadline, retried with exponential backoff.
 
-    Backoff covers both the service asking for room (503/429) and the trickle-hang, because both
+    Backoff covers both the service asking for room (503/429) and a withheld body, because both
     are the same event from the collector's side — the page did not arrive, wait and ask again.
+
+    **The deadline is enforced inside the read, not around it.** An earlier version ran each
+    request in a throwaway `ThreadPoolExecutor` and, on timeout, abandoned the worker — which
+    left the socket open and the thread alive. Two full runs died of it: the collector took
+    roughly a hundred pages, then sat at zero throughput with hundreds of fds in `CLOSE-WAIT`
+    while a fresh process got an answer from the same service in half a second. Nothing about
+    that failure looks like a failure — the process is up, the log is quiet, and the corpus
+    simply stops growing. `api.RaspunsLent` replaces it: the body read carries its own deadline
+    and closes the response before raising, so a slow page costs one page and not the run.
     """
     astept = 2.0
     for incercare in range(incercari):
+        motiv = ""
         try:
-            return _cu_termen(lambda: client.search(pagina=pagina, pe_pagina=10), deadline)
+            return client.search(pagina=pagina, pe_pagina=10, termen_corp=deadline)
         except urllib.error.HTTPError as e:
             if e.code not in (429, 500, 502, 503, 504) or incercare == incercari - 1:
                 raise
-        except (urllib.error.URLError, TimeoutError, _Trickle):
+            motiv = f"HTTP {e.code}"
+        except (urllib.error.URLError, TimeoutError, RaspunsLent) as e:
             if incercare == incercari - 1:
                 raise
+            motiv = type(e).__name__
+        # Retries used to be silent, which is how a run could spend hours backing off against a
+        # token the service had discarded while the log stayed empty and the process looked
+        # healthy. A 429 or a 503 is the service asking for room and is the one signal that says
+        # concurrency is too high — it has to be visible to be acted on.
+        RETRAGERI[motiv] = RETRAGERI.get(motiv, 0) + 1
+        print(
+            f"  ! pagina {pagina}: {motiv}, reîncerc peste {astept:.0f}s "
+            f"(încercarea {incercare + 2}/{incercari})",
+            flush=True,
+        )
         time.sleep(astept)
         astept = min(astept * 2, 20.0)
     return []
@@ -218,7 +222,14 @@ def colecteaza(
                 pe_pagina += 1
             depozit.pagina_terminata(con, pagina, pe_pagina)
             ultima = max(ultima, pagina)
-            if i % 100 == 0:
+            # Every 20 pages, not every 100. The commit interval is not a performance knob, it is
+            # how much work a kill throws away and how long a watcher waits before it can tell a
+            # working collector from a stuck one. Re-collecting over an existing corpus is several
+            # times slower than filling an empty one — each act is deleted, cascaded and
+            # re-indexed rather than simply inserted — and at 100 pages a run could spend minutes
+            # doing real work with nothing durable to show for it, look stalled, get restarted,
+            # and lose the lot. Twenty pages is roughly half a minute of work at any observed rate.
+            if i % 20 == 0:
                 con.commit()
                 log(f"  {i}/{len(de_facut)} pagini · {scrise} acte scrise · {sarite} sărite")
             if pauza:

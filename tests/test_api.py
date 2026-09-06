@@ -11,11 +11,21 @@ token is not retried into a loop.
 from __future__ import annotations
 
 import io
+import time
+import urllib.error
 from pathlib import Path
 
 import pytest
 
-from scripts.api import ApiError, Client, TokenExpired, get_token, search
+from scripts.api import (
+    ENDPOINT,
+    ApiError,
+    Client,
+    RaspunsLent,
+    TokenExpired,
+    get_token,
+    search,
+)
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -43,6 +53,149 @@ def _opener_din(*fisiere: str):
 
     opener.apeluri = apeluri
     return opener
+
+
+class _RaspunsLent(io.RawIOBase):
+    """A service that accepts the connection and then dribbles the body out forever.
+
+    This is the shape that wedged the collector: bytes keep arriving, so no per-recv socket
+    timeout ever fires, and a reader with no total deadline blocks until the heat death of the
+    run. `read1` hands back one byte per call, which is what the real service was doing.
+    """
+
+    headers: dict = {}
+
+    def __init__(self, intarziere: float = 0.005) -> None:
+        super().__init__()
+        self.intarziere = intarziere
+        self.inchis = False
+
+    def read1(self, _n: int = -1) -> bytes:
+        time.sleep(self.intarziere)
+        return b"x"
+
+    def read(self, _n: int = -1) -> bytes:  # pragma: no cover - the deadline path uses read1
+        return self.read1(_n)
+
+    def close(self) -> None:
+        self.inchis = True
+        super().close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.close()
+        return False
+
+
+def test_a_trickled_body_raises_instead_of_blocking_forever():
+    # The defect this replaces abandoned a thread per attempt and leaked its socket; two real
+    # runs wedged after ~100 pages with hundreds of sockets in CLOSE-WAIT while the service
+    # itself answered a fresh process in 0.5s.
+    raspuns = _RaspunsLent()
+
+    def opener(cerere, timeout=60):
+        return raspuns
+
+    t0 = time.monotonic()
+    with pytest.raises(RaspunsLent):
+        search("t", opener=opener, termen_corp=0.15)
+    assert time.monotonic() - t0 < 5, "the read did not honour the deadline"
+
+
+def test_a_trickled_body_closes_its_socket_before_giving_up():
+    # The leak, not the hang, is what made the old failure unrecoverable: every abandoned
+    # attempt held its fd until the process died.
+    raspuns = _RaspunsLent()
+
+    def opener(cerere, timeout=60):
+        return raspuns
+
+    with pytest.raises(RaspunsLent):
+        search("t", opener=opener, termen_corp=0.15)
+    assert raspuns.inchis, "the response was abandoned instead of closed"
+
+
+def test_a_body_that_arrives_in_chunks_is_read_whole():
+    # The deadline must not truncate an answer that is merely large.
+    corp = (FIXTURES / "api_search.xml").read_bytes()
+
+    class _PeBucati(io.BytesIO):
+        headers: dict = {}
+
+        def read1(self, n=-1):
+            return super().read(64)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    recs = search("t", opener=lambda cerere, timeout=60: _PeBucati(corp), termen_corp=10.0)
+    assert recs, "a chunked body came back empty"
+
+
+def test_an_expired_token_reported_as_http_500_is_refreshed():
+    """The service ends a token's life with a 500, not with a fault.
+
+    Measured against the live endpoint: 114 searches at ~0.5s, then `HTTP Error 500` on every
+    subsequent call with that token, and an immediate 0.6s answer with a fresh one. `TokenExpired`
+    is raised from a fault *body*, so it never fires here — urllib raises before there is a body
+    to read. Without this the collector backs off and retries a dead token forever, which is
+    exactly how two runs sat at zero throughput while looking alive.
+    """
+    apeluri: list[str] = []
+
+    def opener(cerere, timeout=60):
+        actiune = cerere.headers.get("Soapaction", "")
+        apeluri.append(actiune)
+        if "GetToken" in actiune:
+            return _Raspuns((FIXTURES / "api_token.xml").read_bytes())
+        # The first search burns the token; every later one succeeds on the refreshed token.
+        if sum(1 for a in apeluri if "Search" in a) == 1:
+            raise urllib.error.HTTPError(ENDPOINT, 500, "Internal Server Error", {}, None)
+        return _Raspuns((FIXTURES / "api_search.xml").read_bytes())
+
+    recs = Client(opener=opener).search(pagina=1)
+    assert recs, "the client gave up instead of refreshing its token"
+    assert [a for a in apeluri if "GetToken" in a], "no token was fetched"
+    assert sum(1 for a in apeluri if "GetToken" in a) == 2, "the token was not refreshed once"
+
+
+def test_a_500_is_not_retried_into_a_loop():
+    """A service that is genuinely broken must not become an infinite refresh loop."""
+    apeluri: list[str] = []
+
+    def opener(cerere, timeout=60):
+        actiune = cerere.headers.get("Soapaction", "")
+        apeluri.append(actiune)
+        if "GetToken" in actiune:
+            return _Raspuns((FIXTURES / "api_token.xml").read_bytes())
+        raise urllib.error.HTTPError(ENDPOINT, 500, "Internal Server Error", {}, None)
+
+    with pytest.raises(urllib.error.HTTPError):
+        Client(opener=opener).search(pagina=1)
+    assert sum(1 for a in apeluri if "GetToken" in a) == 2, "refreshed more than once"
+
+
+def test_the_token_is_refreshed_before_the_service_kills_it():
+    """Reactive refresh costs one failed request per token; this avoids paying it at all."""
+    apeluri: list[str] = []
+
+    def opener(cerere, timeout=60):
+        actiune = cerere.headers.get("Soapaction", "")
+        apeluri.append(actiune)
+        if "GetToken" in actiune:
+            return _Raspuns((FIXTURES / "api_token.xml").read_bytes())
+        return _Raspuns((FIXTURES / "api_search.xml").read_bytes())
+
+    client = Client(opener=opener, cereri_per_token=10)
+    for _ in range(25):
+        client.search(pagina=1)
+    # 25 searches, a fresh token every 10 — measured limit is ~114, so the default leaves room.
+    assert sum(1 for a in apeluri if "GetToken" in a) == 3
 
 
 def _opener_fault(mesaj: str):
