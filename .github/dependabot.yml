@@ -1,0 +1,22 @@
+# Dependabot — free dependency update PRs. Two ecosystems matter here:
+#  · github-actions — keep the actions pinned in .github/workflows/ current (the main attack surface
+#    for a repo whose runtime deps are stdlib-only);
+#  · pip — the dev toolchain (ruff, pytest, jsonschema) declared in pyproject.toml / uv.lock.
+# Grouped so a week's minor/patch bumps arrive as one PR each, not a flood.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python-dev:
+        patterns: ["*"]

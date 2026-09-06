@@ -1,0 +1,46 @@
+# CodeQL — GitHub's static analysis, free for public repositories. It scans both the Python engines
+# and the JavaScript embedded in app/index.html, and reports findings in the repo's Security tab.
+# Neither language is compiled, so build-mode is `none` (CodeQL reads the source directly).
+name: "CodeQL"
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, so a new CodeQL rule catches something even when the code has not changed.
+    - cron: "27 4 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # `security-and-quality` adds maintainability queries on top of the security ones.
+          queries: security-and-quality
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
