@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ACCOUNT="432316a05c0d6000c6e196fe32e47dd7"   # CN Webify
-GATEWAY="legislativ"
+GATEWAY="law-legislation-project-gateway"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/worker" && pwd)"
 cd "$here"
 
@@ -21,10 +21,10 @@ if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
     -d '{"id":"'"$GATEWAY"'","cache_ttl":86400,"cache_invalidate_on_update":false,"collect_logs":true,"rate_limiting_interval":60,"rate_limiting_limit":100,"rate_limiting_technique":"fixed"}') || true
   if [ "$code" = "200" ]; then echo "    created."
   elif grep -q "already exists\|duplicate" /tmp/gw.json 2>/dev/null; then echo "    already exists — ok."
-  else echo "    skipped (HTTP $code): $(cat /tmp/gw.json 2>/dev/null)"; echo "    the Worker falls back to api.mistral.ai, so deploy continues."; fi
+  else echo "    skipped (HTTP $code): $(cat /tmp/gw.json 2>/dev/null)"; echo "    the Worker falls back to Workers AI directly, so deploy continues."; fi
 else
   echo "    CLOUDFLARE_API_TOKEN not set — skipping (create it in the dashboard, or set the token)."
-  echo "    The Worker falls back to Mistral directly, so this is optional."
+  echo "    The Worker falls back to Workers AI directly, so this is optional."
 fi
 
 echo "==> 2/2  wrangler deploy"

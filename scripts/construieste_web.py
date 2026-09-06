@@ -105,7 +105,8 @@ import sys, json
 if '.' not in sys.path: sys.path.insert(0, '.')
 from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
-                              _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza)
+                              _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
+                              _norma, _termeni, _dictionar)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -121,6 +122,11 @@ def _raspunde(path, query, body):
         out = _compune(json.loads(body or '{}').get('interventii', []))
     elif path == '/api/parseaza':
         out = _parseaza((json.loads(body or '{}').get('text') or '').strip())
+    elif path == '/api/norma':
+        out = _norma((json.loads(body or '{}').get('text') or '').strip())
+    elif path == '/api/termeni':
+        out = _termeni((json.loads(body or '{}').get('text') or '').strip(), _stare)
+    elif path == '/api/dictionar': out = _dictionar(_stare)
     elif path == '/api/lint':
         draft = (json.loads(body or '{}').get('draft') or '').strip()
         out = _lint(draft, _stare) if draft else {'error':'draft gol'}
