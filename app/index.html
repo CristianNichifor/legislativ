@@ -505,6 +505,38 @@
   .cons-flag.consolidat{color:var(--good)}
   .cons-text{font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;word-break:break-word;
     margin:.45rem 0;color:var(--ink);line-height:1.6}
+  /* a citation inside a provision, drawn over the words that carry it. Underline rather than a
+     filled pill: a provision is mostly citations, and a paragraph of filled pills stops reading as
+     a sentence. The chip has to stay inside the pre-wrap flow, so no display change and no padding
+     that would open gaps in the mono line. */
+  .ref-chip{color:var(--accent);text-decoration:underline;text-decoration-style:dotted;
+    text-underline-offset:.18em;cursor:pointer;border-radius:2px}
+  .ref-chip:hover,.ref-chip:focus-visible{background:var(--accent-wash);text-decoration-style:solid;
+    outline:none}
+  .ref-chip:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+  /* a chip whose target is not in this act cannot be scrolled to, so it does not pretend it can */
+  .ref-chip.extern,.ref-chip.inert{color:var(--ink-mid);cursor:default}
+  .ref-chip.extern:hover,.ref-chip.inert:hover{background:var(--sunk)}
+  /* the provision a hovered chip points at. Left border rather than a background wash: the row
+     already uses its left border for status, and doubling that channel is what makes the
+     highlight readable at a glance without repainting the text underneath it. */
+  .cons-prov.tinta{box-shadow:inset 3px 0 0 var(--accent),var(--e1);background:var(--accent-wash)}
+  /* the cited provision's own text, for a target this view does not list. Anchored to the chip,
+     which is inline inside a pre-wrap block — hence absolute positioning and an explicit
+     `white-space`, or it would inherit the mono pre-wrap of the provision around it. */
+  .ref-chip{position:relative}
+  .ref-fisa{position:absolute;left:0;top:calc(100% + .35rem);z-index:20;width:min(34rem,80vw);
+    display:block;white-space:normal;background:var(--surface);color:var(--ink);
+    border:1px solid var(--rule);border-radius:var(--r1);box-shadow:var(--e2);
+    padding:.5rem .65rem;font-family:var(--sans);font-size:.78rem;line-height:1.5;
+    text-decoration:none;cursor:auto}
+  .ref-fisa b{display:block;font-family:var(--mono);font-size:.72rem;color:var(--accent);
+    margin-bottom:.25rem}
+  .ref-fisa-gol{color:var(--ink-mute);font-style:italic}
+  /* Kept on screen by `fisaAncora`, which measures and shifts it, not by a media query. The card
+     is anchored to the chip, and a chip can sit anywhere on the line — a rule like `right:0` below
+     some width pushes it off the *left* edge whenever the chip is near the start of the row, which
+     is what it did at 380px. Only measurement knows which edge is the problem. */
   .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
   .cons-attrib b{color:var(--ink-mid)}
   .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
@@ -937,6 +969,116 @@ function locRo(id){ if(!id) return ""; return String(id).split(".").map(s=>{ let
 // break a provision's run-on text onto readable lines at its enumerators, without splitting the
 // inline references (which start lowercase or with punctuation, not a capital):
 //   (1)/(3) alineate → new line only when followed by a capital;  a) b)… and (i)(ii)… after . ; :
+// A provision's text with its citations drawn as chips.
+//
+// The offsets come from `scripts/ancore.py` and are measured against the *normalised* text, which
+// is what the service sends — so this must slice `t` and never re-derive positions here. Anchors
+// arrive in reading order and never overlap, so one pass over them is enough.
+//
+// Line-breaking is applied to the slices *between* chips rather than to the whole string, because
+// `textLizibil` inserts and removes characters and would move every offset after the first edit.
+function textCuAncore(t, ancore){
+  if(!t) return "";
+  if(!ancore || !ancore.length) return textLizibil(t);
+  let out="", pos=0;
+  for(const a of ancore){
+    if(a.start>pos) out+=textLizibil(t.slice(pos, a.start));
+    const tinte=(a.tinte||[]);
+    // A chip that points outside this act has nothing on screen to highlight. Marked as such
+    // rather than left looking clickable and doing nothing.
+    const extern=tinte.every(x=>x.act_id);
+    const eticheta=tinte.map(x=>locRo(x.locator)+(x.act_id?" · "+x.act_id:"")).join(", ");
+    out+=`<span class="ref-chip${extern?" extern":""}" tabindex="0"`
+      +` data-tinte="${esc(tinte.map(x=>x.locator).join(" "))}"`
+      +` title="${esc(eticheta)}">${esc(a.text)}</span>`;
+    pos=a.end;
+  }
+  return out+(pos<t.length?textLizibil(t.slice(pos)):"");
+}
+// Which provisions on screen a chip means. `art. 7` covers `art. 7 alin. (1)` — citing an article
+// cites what is inside it — so a prefix match on the locator, cut at a dot so `art7` does not also
+// claim `art70`.
+function tinteVizibile(root, locatori){
+  const cerute=String(locatori||"").split(" ").filter(Boolean);
+  return Array.from(root.querySelectorAll(".cons-prov[data-loc]")).filter(el=>{
+    const loc=el.dataset.loc;
+    return cerute.some(c=>loc===c||loc.startsWith(c+"."));
+  });
+}
+// The provision behind a chip that is not on screen, fetched once and kept. The consolidation view
+// lists only the provisions an amendment touched, so most citations inside it point at articles of
+// the same act that are simply not rendered — highlighting alone answered almost nothing.
+const _prevCache=new Map();
+async function prevedereTinta(act, loc){
+  const cheie=act+"|"+loc;
+  if(!_prevCache.has(cheie)){
+    _prevCache.set(cheie, fetch(`/api/prevedere?act=${encodeURIComponent(act)}&loc=${encodeURIComponent(loc)}`)
+      .then(r=>r.json()).catch(()=>({gasit:false})));
+  }
+  return _prevCache.get(cheie);
+}
+function fisaAncora(chip, d, loc){
+  const veche=chip.querySelector(".ref-fisa");
+  if(veche) veche.remove();
+  const f=document.createElement("span");
+  f.className="ref-fisa";
+  // Two different silences, and conflating them blames the corpus for a citation's shape. A bare
+  // `alin. (3)` names no article — it continues a sentence that named one earlier, and there is
+  // no such standalone provision to hold. An `art. 187` that comes back empty is the other case:
+  // the act really is stored as one flattened row and the article tree was never recovered.
+  const fragment=!/^art/.test(loc);
+  f.innerHTML=`<b>${esc(locRo(loc))}</b>`
+    +(d && d.gasit ? `<span>${esc(String(d.text).slice(0,600))}${String(d.text).length>600?"…":""}</span>`
+      : `<span class="ref-fisa-gol">${fragment
+          ? "Trimitere fără articol — se referă la articolul din fraza de mai sus."
+          : "Corpusul nu are textul acestei prevederi."}</span>`);
+  chip.appendChild(f);
+  // Keep it on screen. Measured after it is in the document, because its width depends on the text
+  // it just received; shifted along its own axis rather than re-anchored, so it still reads as
+  // belonging to the chip it came from.
+  const marja=8, r=f.getBoundingClientRect();
+  let dx=0;
+  if(r.right>innerWidth-marja) dx=(innerWidth-marja)-r.right;
+  if(r.left+dx<marja) dx=marja-r.left;
+  if(dx) f.style.left=Math.round(dx)+"px";
+}
+function legaAncore(root, actCurent){
+  root.querySelectorAll(".ref-chip:not(.extern)").forEach(chip=>{
+    const locuri=String(chip.dataset.tinte||"").split(" ").filter(Boolean);
+    if(!tinteVizibile(root, chip.dataset.tinte).length){
+      // Not on screen, but the corpus may still hold it. The chip shows the text instead of
+      // scrolling to it — and only marks itself inert once the corpus has actually said no.
+      if(!actCurent||!locuri.length){ chip.classList.add("inert"); chip.removeAttribute("tabindex"); return; }
+      const arata=async()=>{
+        const d=await prevedereTinta(actCurent, locuri[0]);
+        if(!d.gasit && locuri.length===1) chip.classList.add("inert");
+        fisaAncora(chip, d, locuri[0]);
+      };
+      chip.addEventListener("mouseenter",arata);
+      chip.addEventListener("focus",arata);
+      const ascunde=()=>{ const f=chip.querySelector(".ref-fisa"); if(f) f.remove(); };
+      chip.addEventListener("mouseleave",ascunde);
+      chip.addEventListener("blur",ascunde);
+      return;
+    }
+    const aprinde=on=>tinteVizibile(root, chip.dataset.tinte)
+      .forEach(el=>el.classList.toggle("tinta", on));
+    chip.addEventListener("mouseenter",()=>aprinde(true));
+    chip.addEventListener("mouseleave",()=>aprinde(false));
+    chip.addEventListener("focus",()=>aprinde(true));
+    chip.addEventListener("blur",()=>aprinde(false));
+    // Hover shows where it is; the keyboard has no hover, so activating goes there. The highlight
+    // is left on after a jump — the reader has just arrived and needs to see what they landed on.
+    const du=()=>{
+      const [primul]=tinteVizibile(root, chip.dataset.tinte);
+      if(!primul) return;
+      primul.scrollIntoView({behavior:"smooth",block:"center"});
+      aprinde(true);
+    };
+    chip.addEventListener("click",du);
+    chip.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); du(); } });
+  });
+}
 function textLizibil(t){
   let s=esc(t);
   s=s.replace(/\s*(?=\((?:\d+(?:\^\d+)?)\)\s*[A-ZĂÂÎȘȚ])/g,"\n");            // (1) Text / (3)Text
@@ -2056,14 +2198,18 @@ function renderCons(d){
     else flag=`<span class="cons-flag consolidat">consolidat</span>`;
     let body=`<div class="cons-hd"><span class="cons-loc">${esc(locRo(p.locator))}</span>${flag}`
       +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}">Limbaj clar</button>`:"")+`</div>`;
-    if(!p.abrogat) body+=`<div class="cons-text">${textLizibil(p.text)}</div>`;
+    if(!p.abrogat) body+=`<div class="cons-text">${textCuAncore(p.text, p.ancore)}</div>`;
     body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
       +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(isoLaDataRo(s.data)||s.data):""})`).join(", ")+`</div>`;
     if(p.limitari&&p.limitari.length) body+=p.limitari.map(l=>`<p class="cons-refuz">⚠ ${esc(l)}</p>`).join("");
-    return `<div class="cons-prov ${cls}">${body}</div>`;
+    // `data-loc` carries the raw locator, not the `locRo` label shown in the header: a chip
+    // resolves against ids, and matching on the rendered label would break the moment the label
+    // changes shape.
+    return `<div class="cons-prov ${cls}" data-loc="${esc(p.locator)}">${body}</div>`;
   }).join("") || empty("Nicio prevedere atinsă."));
   $("#cons-out").innerHTML=h;
+  legaAncore($("#cons-out"), d.act_id);
   if(clar) $("#cons-out").querySelectorAll(".cons-clar").forEach(b=>{
     b.onclick=()=>rescrie(b, (d.provizii||[])[+b.dataset.i], d.act_id);
   });

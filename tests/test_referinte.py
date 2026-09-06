@@ -358,3 +358,25 @@ def test_expansion_runs_after_the_genitive_merge():
 def test_a_range_end_that_is_not_a_locator_is_ignored():
     """`art. 7 - 30 de zile` is a dash between an article and a duration, not a range."""
     assert [r.locator.id for r in referinte("art. 7 - 30 de zile de la comunicare")] == ["art7"]
+
+
+def test_every_member_of_a_range_binds_to_the_same_act():
+    """`art. 7-9 din Legea nr. 98/2016` is one citation and resolves to one act.
+
+    The head used to keep the narrow `art. 7` span, so the gap it offered the act was `-9 din `,
+    which is not a joining word: the head bound to nothing while the members it opened bound to
+    Legea 98/2016. An unbound locator reads as a reference to the act being drafted, so a single
+    citation produced provisions in two different acts — one of them the wrong one.
+    """
+    acte = {r.act.id if r.act else None for r in referinte("art. 7-9 din Legea nr. 98/2016")}
+    assert acte == {"lege-98-2016"}
+    acte = {
+        r.act.id if r.act else None for r in referinte("art. 5 alin. (1)-(3) din Legea nr. 98/2016")
+    }
+    assert acte == {"lege-98-2016"}
+
+
+def test_a_range_with_no_act_stays_internal():
+    """The fix extends the head's span, not its willingness to bind — with no act in the sentence
+    every member stays unbound, which is what an internal cross-reference is."""
+    assert {r.act for r in referinte("art. 7-9 se abrogă")} == {None}

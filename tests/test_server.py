@@ -22,6 +22,7 @@ from scripts.servicii import (
     _cauta,
     _lint,
     _norma,
+    _prevedere,
     _redacteaza,
     _repealed,
     _targets,
@@ -523,3 +524,32 @@ def test_the_word_constitutie_is_recognised_after_a_preposition():
     assert [r.act.id for r in referinte("potrivit art. 1 din Constituție") if r.act] == [
         "constitutie"
     ]
+
+
+def test_prevedere_returns_a_provisions_stored_text(tmp_path):
+    """What a citation chip shows when its target is not among the rows on screen. The
+    consolidation view lists only the provisions an amendment touched, so most citations inside it
+    point at articles of the same act that are simply not rendered."""
+    stare = _build(tmp_path)
+    d = _prevedere({"act": ["lege-98-2016"], "loc": ["text"]}, stare)
+    assert d["gasit"] and "achiziție publică" in d["text"]
+    assert d["act_id"] == "lege-98-2016" and d["locator"] == "text"
+
+
+def test_prevedere_says_so_for_an_act_with_no_article_tree(tmp_path):
+    """The fixture act is the flattened case — the SOAP text arrives as one row under `text`, with
+    nothing below the act addressable. Asking it for `art. 3` has to answer `gasit=False` even
+    though those words are in the corpus, because no provision carries that locator.
+
+    `gasit=False` rather than an empty string: a chip that quietly showed nothing would be
+    indistinguishable from a provision that says nothing.
+    """
+    stare = _build(tmp_path)
+    d = _prevedere({"act": ["lege-98-2016"], "loc": ["art3"]}, stare)
+    assert d["gasit"] is False and d["text"] == ""
+
+
+def test_prevedere_refuses_an_incomplete_request(tmp_path):
+    stare = _build(tmp_path)
+    assert _prevedere({"act": ["lege-98-2016"]}, stare)["gasit"] is False
+    assert _prevedere({"loc": ["art3"]}, stare)["gasit"] is False
