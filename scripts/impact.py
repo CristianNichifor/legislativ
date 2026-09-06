@@ -50,6 +50,61 @@ _MIC = (
 _CHAPEAU = "În sensul prezentei legi, termenii de mai jos au următoarele semnificații:\n"
 
 
+# Plain-language "X-ray": the same amendments, restated as what they plainly do, so a dense page of
+# cross-references reads as a numbered list of concrete effects. Deterministic — the structure comes
+# from `amendamente`, the wording is a template, no model.
+_TIP_RO = {
+    "lege": "Legea",
+    "oug": "OUG",
+    "og": "OG",
+    "hg": "HG",
+    "ordin": "Ordinul",
+    "decizie": "Decizia",
+    "decret": "Decretul",
+    "ordonanta": "Ordonanța",
+    "hotarare": "Hotărârea",
+}
+
+
+def _cita_act(act) -> str:
+    if act is None:
+        return "actul vizat"
+    baza = _TIP_RO.get(act.tip, act.tip.capitalize())
+    return f"{baza} nr. {act.numar}/{act.an}" if act.numar else baza
+
+
+def _loc_ro(loc) -> str:
+    if not loc:
+        return ""
+    parti = []
+    if loc.articol:
+        parti.append(f"articolul {loc.articol}")
+    if loc.alineat:
+        parti.append(f"alineatul ({loc.alineat})")
+    if loc.litera:
+        parti.append(f"litera {loc.litera})")
+    if loc.punct:
+        parti.append(f"punctul {loc.punct}")
+    return ", ".join(parti)
+
+
+def _explica_op(a) -> str:
+    """One amendment as a plain sentence: what it does, to what, in words a lay reader follows."""
+    tinta = _cita_act(a.act_tinta)
+    loc = _loc_ro(a.locator)
+    unde = f"{loc} din {tinta}" if loc else tinta
+    citat = f" — text nou: „{a.continut_nou[:120]}”" if a.continut_nou else ""
+    if a.fel == "modifica":
+        return f"Rescrie {unde}{citat}"
+    if a.fel == "abroga":
+        return f"Abrogă (elimină) {unde}"
+    if a.fel == "completeaza":
+        return f"Completează {unde}{citat}"
+    if a.fel == "introduce":
+        return f"Introduce o prevedere nouă după {unde}{citat}"
+    return f"Operația «{a.fel}» asupra {unde}"
+
+
 def _scor(dimensiune: int, raza: int) -> dict:
     """A categorical reach level plus the trojan flag (small payload, large reach). Heuristic."""
     if raza <= 0:
@@ -158,7 +213,9 @@ def raza_de_impact(
         + _GREUTATE_ABROGARE * abrogari_total
         + _GREUTATE_ELIMINARE * len(obligatii_eliminate)
     )
+    rezumat = [{"fel": a.fel, "text": _explica_op(a)} for a in ams if a.act_tinta is not None]
     return {
+        "rezumat": rezumat,
         "tinte": tinte,
         "termeni_redefiniti": termeni,
         "obligatii_noi": obligatii_noi,

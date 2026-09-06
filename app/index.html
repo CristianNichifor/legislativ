@@ -130,6 +130,10 @@
   .impact-termen code{font-family:var(--mono)}
   .impact-obl.elim{border-left:2px solid var(--blocking);padding-left:.5rem;
     background:color-mix(in srgb,var(--blocking) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
+  .impact-xray{margin:.2rem 0;padding-left:1.3rem;font-size:.84rem;line-height:1.5}
+  .impact-xray li{margin:.2rem 0}
+  .impact-xray li.fel-abroga{color:var(--blocking)}
+  .impact-xray li.fel-introduce{color:var(--note)}
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
@@ -877,6 +881,9 @@ function renderImpact(im){
   const et={ridicat:"ridicat",mediu:"mediu",scazut:"scăzut",neutru:"neutru"}[sc.nivel]||"neutru";
   let h=`<section id="sec-impact"><div class="sec-head"><h3>Raza de impact</h3>`
     +`<span class="hint">cât de departe ajunge de fapt modificarea</span></div>`;
+  // the plain-language X-ray: what the amendment actually does, before the reach metrics
+  if((im.rezumat||[]).length) h+=`<div class="impact-block"><div class="impact-h">Ce face de fapt acest text</div>`
+    +`<ol class="impact-xray">`+im.rezumat.map(x=>`<li class="fel-${esc(x.fel)}">${esc(x.text)}</li>`).join("")+`</ol></div>`;
   h+=`<div class="impact-scor ${cls}">`
     +(sc.troian?`<b>⚠ posibil „cal troian”</b> — modificare mică, rază mare. `:``)
     +`Nivel: <b>${et}</b> · rază <b>${sc.raza||0}</b>`
