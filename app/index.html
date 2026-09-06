@@ -116,6 +116,19 @@
   .cauta-total{margin:.6rem 0 .4rem}
   #cauta-more{margin-top:.6rem}
 
+  /* raza de impact: the amendment's true downstream reach, the trojan-horse headline of a check */
+  .impact-scor{padding:.55rem .8rem;border-radius:var(--r1);margin:.4rem 0;font-size:.85rem;
+    border:1px solid var(--rule);background:var(--surface)}
+  .impact-scor.blocking{background:color-mix(in srgb,var(--blocking) 10%,transparent);
+    border-color:color-mix(in srgb,var(--blocking) 45%,var(--rule))}
+  .impact-scor.material{background:color-mix(in srgb,var(--material) 10%,transparent);
+    border-color:color-mix(in srgb,var(--material) 40%,var(--rule))}
+  .impact-block{margin:.5rem 0}
+  .impact-h{font-family:var(--sans);font-size:.62rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin:.4rem 0 .2rem}
+  .impact-tinta,.impact-termen,.impact-obl{font-size:.82rem;margin:.18rem 0;line-height:1.4}
+  .impact-termen code{font-family:var(--mono)}
+
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
   .graf-cauta select,.graf-cauta .g-nr,.graf-cauta .g-an{height:2.15rem;font-size:.85rem}
@@ -853,6 +866,31 @@ $("#draft-clar-btn").onclick = async ()=>{
   finally{ btn.disabled=false; btn.textContent="Limbaj clar"; }
 };
 
+// Raza de impact: the headline of a check — how far the amendment actually reaches, so a small
+// change with a large effect (a "trojan horse") is visible whichever side you are reading it from.
+function renderImpact(im){
+  if(!im || im.error) return "";
+  const sc=im.scor||{};
+  const cls={ridicat:"blocking",mediu:"material",scazut:"note",neutru:"note"}[sc.nivel]||"note";
+  const et={ridicat:"ridicat",mediu:"mediu",scazut:"scăzut",neutru:"neutru"}[sc.nivel]||"neutru";
+  let h=`<section id="sec-impact"><div class="sec-head"><h3>Raza de impact</h3>`
+    +`<span class="hint">cât de departe ajunge de fapt modificarea</span></div>`;
+  h+=`<div class="impact-scor ${cls}">`
+    +(sc.troian?`<b>⚠ posibil „cal troian”</b> — modificare mică, rază mare. `:``)
+    +`Nivel: <b>${et}</b> · rază <b>${sc.raza||0}</b>`
+    +(im.dimensiune?` · text nou de ${im.dimensiune} caractere`:``)+`</div>`;
+  const tinte=(im.tinte||[]).filter(t=>t.citari||(t.abrogari&&t.abrogari.length));
+  if(tinte.length) h+=`<div class="impact-block"><div class="impact-h">Reach structural</div>`
+    +tinte.map(t=>`<div class="impact-tinta"><span class="plx">${esc(t.act_id)}</span> — <b>${t.citari}</b> acte îl citează`
+      +(t.abrogari&&t.abrogari.length?` · abrogă ${t.abrogari.map(x=>esc(locRo(x))).join(", ")}`:``)+`</div>`).join("")+`</div>`;
+  if((im.termeni_redefiniti||[]).length) h+=`<div class="impact-block"><div class="impact-h">Termeni redefiniți (propagare)</div>`
+    +im.termeni_redefiniti.map(t=>`<div class="impact-termen"><code>${esc(t.termen)}</code>`
+      +(t.utilizari!=null?` — folosit în <b>${t.utilizari}</b> prevederi din corpus`:` <span class="hint">(numărul de utilizări nu e disponibil în browser)</span>`)+`</div>`).join("")+`</div>`;
+  if((im.obligatii_noi||[]).length) h+=`<div class="impact-block"><div class="impact-h">Obligații noi introduse</div>`
+    +im.obligatii_noi.map(o=>`<div class="impact-obl">`+(o.instrument?`<b>${esc(o.instrument.replace(/-/g," "))}</b> · `:``)
+      +(o.termen_zile?`în ${o.termen_zile} zile`:``)+`<span class="hint"> — ${esc(o.text.slice(0,120))}</span></div>`).join("")+`</div>`;
+  return h+`</section>`;
+}
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
         tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[];
@@ -917,9 +955,14 @@ $("#go").onclick = async ()=>{
   $("#go").disabled=true; $("#go").innerHTML=`<span class="spin"></span> se verifică…`;
   const t0=performance.now();
   try{
-    const r = await fetch("/api/lint",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft})});
+    const opt={method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({draft})};
+    const r = await fetch("/api/lint",opt);
     if(!r.ok) throw new Error((await r.json()).error||r.statusText);
     renderLint(await r.json());
+    // impact (reach) loads on its own, so a slow corpus count never delays the lint results
+    fetch("/api/impact",opt).then(ri=>ri.ok?ri.json():null).then(im=>{
+      const html=im?renderImpact(im):""; if(html) $("#lint-out").insertAdjacentHTML("afterbegin", html);
+    }).catch(()=>{});
     const ms=performance.now()-t0;
     const s=document.createElement("p"); s.className="hint"; s.style.margin=".4rem 0 0";
     s.textContent="verificat în "+(ms<1000?Math.round(ms)+" ms":(ms/1000).toFixed(1)+" s");

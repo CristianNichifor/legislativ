@@ -223,6 +223,42 @@ def _obligatii_neindeplinite(draft: str, stare: Stare) -> list[dict]:
     return [v for v in stare.vid if v.get("act_id") in acte]
 
 
+def _impact(draft: str, stare: Stare) -> dict:
+    """The downstream reach of a draft's amendments — structural, definitional, obligational — so a
+    small change with a large effect is visible (see `scripts.impact`).
+
+    Structural reach comes from the graph (both surfaces ship it); the definitional usage count
+    needs the corpus and so is filled only on localhost, left `null` on the browser, not faked."""
+    from scripts.impact import raza_de_impact
+
+    if not stare.are_graf():
+        return raza_de_impact(draft or "")
+    from scripts.graf import _deschide_graf, inbound
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+
+    def citari(act_id: str) -> tuple[int, int]:
+        muchii = inbound(graf, act_id)
+        toate = {m.din_act for m in muchii}
+        amend = {m.din_act for m in muchii if m.fel != "refera"}
+        return len(toate), len(amend)
+
+    try:
+        if stare.pe_shard:
+            return raza_de_impact(draft or "", citari_fn=citari)
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+
+            def numara(termen: str) -> int | None:
+                try:
+                    return depozit.cauta_numar(con, f'"{termen}"')
+                except Exception:
+                    return None
+
+            return raza_de_impact(draft or "", citari_fn=citari, numara_termen=numara)
+    finally:
+        graf.close()
+
+
 def _vid_dict(v) -> dict:
     """One `vid.Vid` finding as a plain dict for the UI / the shipped report."""
     ob = v.obligatie
