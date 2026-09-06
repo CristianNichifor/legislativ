@@ -106,7 +106,8 @@ if '.' not in sys.path: sys.path.insert(0, '.')
 from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
-                              _norma, _termeni, _dictionar, _regula, _impact)
+                              _norma, _termeni, _dictionar, _regula, _impact,
+                              _cronologie, _citari)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -114,6 +115,8 @@ def _raspunde(path, query, body):
     elif path == '/api/cauta': out = _cauta(qs.get('q',[''])[0], _stare)
     elif path == '/api/vecini':
         a = qs.get('act',[''])[0]; out = _vecini(a, _stare) if a else {'error':'act lipsă'}
+    elif path == '/api/cronologie': out = _cronologie(qs.get('act',[''])[0], _stare)
+    elif path == '/api/citari': out = _citari(qs.get('act',[''])[0], _stare)
     elif path == '/api/redacteaza': out = _redacteaza(qs)
     elif path == '/api/sugereaza': out = _sugereaza(qs)
     elif path == '/api/consolidat': out = _consolidat(qs)

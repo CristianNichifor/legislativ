@@ -36,8 +36,10 @@ from scripts.servicii import (
     Stare,
     _act,
     _cauta,
+    _citari,
     _compune,
     _consolidat,
+    _cronologie,
     _dictionar,
     _impact,
     _lint,
@@ -104,6 +106,10 @@ def face_handler(stare: Stare):
             elif ruta.path == "/api/vecini":
                 act = parse_qs(ruta.query).get("act", [""])[0]
                 self._json(_vecini(act, stare) if act else {"error": "act lipsă"})
+            elif ruta.path == "/api/cronologie":
+                self._json(_cronologie(parse_qs(ruta.query).get("act", [""])[0], stare))
+            elif ruta.path == "/api/citari":
+                self._json(_citari(parse_qs(ruta.query).get("act", [""])[0], stare))
             elif ruta.path == "/api/redacteaza":
                 self._json(_redacteaza(parse_qs(ruta.query)))
             elif ruta.path == "/api/sugereaza":

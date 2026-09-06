@@ -124,6 +124,7 @@ def raza_de_impact(
     citari_fn: Callable[[str], tuple[int, int]] | None = None,
     numara_termen: Callable[[str], int | None] | None = None,
     text_original: Callable[[str, str], str | None] | None = None,
+    categorii_fn: Callable[[str], list[dict]] | None = None,
 ) -> dict:
     """The downstream reach of the amendments in `draft`.
 
@@ -213,11 +214,16 @@ def raza_de_impact(
         + _GREUTATE_ABROGARE * abrogari_total
         + _GREUTATE_ELIMINARE * len(obligatii_eliminate)
     )
+    # a term in the new text that is a near-miss of a defined one — how a bill quietly opens a
+    # second legal category beside the one the law already defines (see `definitii.jargon`)
+    categorii_paralele = categorii_fn(text_nou) if categorii_fn and text_nou else []
+
     rezumat = [{"fel": a.fel, "text": _explica_op(a)} for a in ams if a.act_tinta is not None]
     return {
         "rezumat": rezumat,
         "tinte": tinte,
         "termeni_redefiniti": termeni,
+        "categorii_paralele": categorii_paralele,
         "obligatii_noi": obligatii_noi,
         "obligatii_eliminate": obligatii_eliminate,
         "dimensiune": len(text_nou),

@@ -134,6 +134,17 @@
   .impact-xray li{margin:.2rem 0}
   .impact-xray li.fel-abroga{color:var(--blocking)}
   .impact-xray li.fel-introduce{color:var(--note)}
+  .landmine{color:var(--material);font-weight:600}
+
+  /* reform-trajectory: the amendment timeline, grouped by year, in the Conexiuni tab */
+  .cron{padding:.2rem}
+  .cron-h{font-family:var(--sans);font-size:.8rem;color:var(--ink-mid);margin:.2rem 0 .6rem}
+  .cron-an{margin:0 0 .6rem;border-left:2px solid var(--rule);padding-left:.7rem}
+  .cron-an-h{font-family:var(--sans);font-weight:700;font-size:.9rem;color:var(--accent);margin:.2rem 0}
+  .cron-ev{font-size:.82rem;margin:.2rem 0;line-height:1.4}
+  .cron-data{font-family:var(--mono);font-size:.74rem;color:var(--ink-mute)}
+  .cron-ev.fel-abroga b{color:var(--blocking)}
+  .cron-link{cursor:pointer;text-decoration:underline dotted}
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
@@ -696,6 +707,7 @@
           <input type="text" id="g-nr" class="g-nr" placeholder="număr (ex.: 98)">
           <input type="number" id="g-an" class="g-an" placeholder="an (ex.: 2016)" min="1800" max="2100">
           <button class="go" id="g-go">Arată graful</button>
+          <button class="ghost" id="g-cron">Cronologie</button>
           <span class="hint" id="g-stat"></span>
         </div>
         <div id="graf-tab-wrap" class="graf-tab-wrap"><p class="graf-empty">Caută un act ca să-i vezi conexiunile.</p></div>
@@ -888,6 +900,8 @@ function renderImpact(im){
     +(sc.troian?`<b>⚠ posibil „cal troian”</b> — modificare mică, rază mare. `:``)
     +`Nivel: <b>${et}</b> · rază <b>${sc.raza||0}</b>`
     +(im.dimensiune?` · text nou de ${im.dimensiune} caractere`:``)+`</div>`;
+  if((im.categorii_paralele||[]).length) h+=`<div class="impact-block"><div class="impact-h">⚠ Posibilă categorie juridică paralelă</div>`
+    +im.categorii_paralele.map(c=>`<div class="impact-obl elim">${esc(c.explicatie)}</div>`).join("")+`</div>`;
   const tinte=(im.tinte||[]).filter(t=>t.citari||(t.abrogari&&t.abrogari.length));
   if(tinte.length) h+=`<div class="impact-block"><div class="impact-h">Reach structural</div>`
     +tinte.map(t=>`<div class="impact-tinta"><span class="plx">${esc(t.act_id)}</span> — <b>${t.citari}</b> acte îl citează`
@@ -1013,6 +1027,12 @@ function resolveAct(){
       if(d&&d.act_id) info.innerHTML=`→ <span class="plx">${esc(d.act_id)}</span> `
         +(d.cunoscut? `· <span style="color:var(--good)">${esc((d.titlu||"").slice(0,70))}</span>`
                     : `· <span class="hint">încă neîn corpus</span>`);
+      // landmine: an act many others reference is high-leverage — a change here propagates widely
+      if(d&&d.act_id&&d.cunoscut){
+        try{ const c=await (await fetch("/api/citari?act="+encodeURIComponent(d.act_id))).json();
+          if(c&&c.citari>=5) info.innerHTML+=` · <span class="landmine">⚠ ${c.citari} acte îl citează — modificările se propagă</span>`;
+        }catch(e){}
+      }
     }catch(e){}
   },350);
 }
@@ -1852,21 +1872,46 @@ $("#q").addEventListener("input",()=>{ clearTimeout(searchTimer); searchTimer=se
 ["f-tip","f-an-min","f-an-max"].forEach(id=>$("#"+id).addEventListener("change",()=>runSearch()));
 
 // ---- Conexiuni tab: look up any act and explore its amendment neighbourhood ----
-async function grafTabCauta(){
+async function rezolvaActTab(){
   const tip=$("#g-tip").value||"lege", nr=$("#g-nr").value.trim(), an=$("#g-an").value.trim();
   const wrap=$("#graf-tab-wrap"), stat=$("#g-stat");
-  if(!nr||!an){ stat.textContent="completează numărul și anul"; return; }
+  if(!nr||!an){ stat.textContent="completează numărul și anul"; return null; }
   stat.textContent=""; wrap.innerHTML=`<p class="graf-empty"><span class="spin"></span> caut actul…</p>`;
-  try{
-    const d=await (await fetch(`/api/act?tip=${encodeURIComponent(tip)}&nr=${encodeURIComponent(nr)}&an=${encodeURIComponent(an)}`)).json();
-    if(!d.act_id){ wrap.innerHTML=`<p class="graf-empty">Număr sau an invalid.</p>`; return; }
-    if(!d.cunoscut){ wrap.innerHTML=`<p class="graf-empty"><b>${esc(d.act_id)}</b> nu este în corpus (încă necolectat).</p>`; return; }
-    stat.textContent=d.titlu||"";
+  const d=await (await fetch(`/api/act?tip=${encodeURIComponent(tip)}&nr=${encodeURIComponent(nr)}&an=${encodeURIComponent(an)}`)).json();
+  if(!d.act_id){ wrap.innerHTML=`<p class="graf-empty">Număr sau an invalid.</p>`; return null; }
+  if(!d.cunoscut){ wrap.innerHTML=`<p class="graf-empty"><b>${esc(d.act_id)}</b> nu este în corpus (încă necolectat).</p>`; return null; }
+  stat.textContent=d.titlu||""; return d;
+}
+async function grafTabCauta(){
+  const wrap=$("#graf-tab-wrap");
+  try{ const d=await rezolvaActTab(); if(!d) return;
     const back={label:"← altă căutare", fn:()=>{ wrap.innerHTML=`<p class="graf-empty">Caută un act ca să-i vezi conexiunile.</p>`; $("#g-nr").focus(); }};
     focusAct(d.act_id, wrap, back);
   }catch(e){ wrap.innerHTML=`<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
 }
+// reform-trajectory: the act's amendments in date order, grouped by year — the "slow push" view
+async function cronologieTab(){
+  const wrap=$("#graf-tab-wrap");
+  try{ const d=await rezolvaActTab(); if(!d) return;
+    const c=await (await fetch("/api/cronologie?act="+encodeURIComponent(d.act_id))).json();
+    const ev=(c.evenimente||[]).filter(e=>e.de_la);
+    if(!ev.length){ wrap.innerHTML=`<p class="graf-empty">Niciun amendament datat pentru acest act.</p>`; return; }
+    const ani={}; ev.forEach(e=>{ const an=e.de_la.slice(0,4); (ani[an]=ani[an]||[]).push(e); });
+    const felRo={modifica:"modifică",abroga:"abrogă",completeaza:"completează",introduce:"introduce",refera:"citează"};
+    let h=`<div class="cron"><div class="cron-h">Cronologia modificărilor · <b>${ev.length}</b> intervenții datate</div>`;
+    for(const an of Object.keys(ani).sort()){
+      h+=`<div class="cron-an"><div class="cron-an-h">${esc(an)} <span class="hint">(${ani[an].length})</span></div>`
+        +ani[an].map(e=>`<div class="cron-ev fel-${esc(e.fel)}"><span class="cron-data">${esc(e.de_la)}</span> `
+          +`<b>${esc(felRo[e.fel]||e.fel)}</b> prin <a class="plx cron-link" data-act="${esc(e.act_id)}">${esc(e.act_id)}</a>`
+          +(e.titlu?` <span class="hint">— ${esc(e.titlu).slice(0,70)}</span>`:``)+`</div>`).join("")+`</div>`;
+    }
+    wrap.innerHTML=h+`</div>`;
+    wrap.querySelectorAll(".cron-link").forEach(a=>a.onclick=()=>{ const back={label:"← cronologie",fn:cronologieTab};
+      focusAct(a.dataset.act, wrap, back); });
+  }catch(e){ wrap.innerHTML=`<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
+}
 $("#g-go").onclick=grafTabCauta;
+$("#g-cron").onclick=cronologieTab;
 ["g-nr","g-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") grafTabCauta(); }));
 </script>
 </body>

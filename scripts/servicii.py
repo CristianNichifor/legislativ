@@ -229,10 +229,18 @@ def _impact(draft: str, stare: Stare) -> dict:
 
     Structural reach comes from the graph (both surfaces ship it); the definitional usage count
     needs the corpus and so is filled only on localhost, left `null` on the browser, not faked."""
+    from scripts.definitii import jargon
     from scripts.impact import raza_de_impact
 
+    def categorii(text: str) -> list[dict]:
+        return [
+            {"fragment": a.fragment, "termen": a.termen.termen, "explicatie": a.explicatie}
+            for a in jargon(text, stare.termeni)
+            if a.regula == "categorie-paralela"
+        ]
+
     if not stare.are_graf():
-        return raza_de_impact(draft or "")
+        return raza_de_impact(draft or "", categorii_fn=categorii)
     from scripts.graf import _deschide_graf, inbound
 
     graf = _deschide_graf(stare.graf, readonly=True)
@@ -245,7 +253,7 @@ def _impact(draft: str, stare: Stare) -> dict:
 
     try:
         if stare.pe_shard:
-            return raza_de_impact(draft or "", citari_fn=citari)
+            return raza_de_impact(draft or "", citari_fn=citari, categorii_fn=categorii)
         with depozit.deschide(stare.corpus, readonly=True) as con:
 
             def numara(termen: str) -> int | None:
@@ -266,8 +274,58 @@ def _impact(draft: str, stare: Stare) -> dict:
                     return None
 
             return raza_de_impact(
-                draft or "", citari_fn=citari, numara_termen=numara, text_original=text_orig
+                draft or "",
+                citari_fn=citari,
+                numara_termen=numara,
+                text_original=text_orig,
+                categorii_fn=categorii,
             )
+    finally:
+        graf.close()
+
+
+def _cronologie(act_id: str, stare: Stare) -> dict:
+    """The amendment timeline of an act: every act that amended it, in date order, so an incremental
+    reform — a series of small edits pushed over years — shows its cumulative arc. From the graph's
+    inbound amendment edges (their `de_la` is the amending act's own entry into force)."""
+    if not stare.are_graf() or not act_id:
+        return {"act": act_id, "evenimente": []}
+    from scripts.graf import _deschide_graf, inbound
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        ev = [
+            {
+                "act_id": m.din_act,
+                "fel": m.fel,
+                "de_la": m.de_la.isoformat() if m.de_la else None,
+                "locator": m.locator,
+                "titlu": stare.titlu(m.din_act),
+            }
+            for m in inbound(graf, act_id, doar_amendamente=True)
+        ]
+    finally:
+        graf.close()
+    # newest last so the arc reads top-to-bottom; undated events sink to the end
+    ev.sort(key=lambda e: e["de_la"] or "9999")
+    return {"act": act_id, "evenimente": ev}
+
+
+def _citari(act_id: str, stare: Stare) -> dict:
+    """How many acts reference / amend `act_id` — the "landmine" signal while drafting: editing a
+    provision many acts depend on propagates widely."""
+    if not stare.are_graf() or not act_id:
+        return {"act_id": act_id, "citari": 0, "amendat": 0}
+    from scripts.graf import _deschide_graf, inbound
+
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        muchii = inbound(graf, act_id)
+        return {
+            "act_id": act_id,
+            "citari": len({m.din_act for m in muchii}),
+            "amendat": len({m.din_act for m in muchii if m.fel != "refera"}),
+        }
     finally:
         graf.close()
 
