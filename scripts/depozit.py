@@ -43,6 +43,7 @@ from scripts.api import Inregistrare
 from scripts.parsare import ActParsat
 from scripts.publicare import publicare
 from scripts.referinte import Act
+from scripts.text import fara_separatoare
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -772,12 +773,15 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
+    # `documente.text` above keeps what the service returned, verbatim. This copy is the one a
+    # reader is quoted and a model is shown, so the service's block markers come out of it.
+    curatat = fara_separatoare(rec.text)
     cur = con.execute(
         "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
         " VALUES (?,?,?,?,?,?)",
-        (act.id, "text", 1, rec.text, _iso(rec.data_vigoare), None),
+        (act.id, "text", 1, curatat, _iso(rec.data_vigoare), None),
     )
-    _scrie_fts(con, cur.lastrowid, act.id, "text", rec.text)
+    _scrie_fts(con, cur.lastrowid, act.id, "text", curatat)
 
 
 def pagina_terminata(con: sqlite3.Connection, pagina: int, acte: int) -> None:
