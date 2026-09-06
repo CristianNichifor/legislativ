@@ -65,6 +65,16 @@ uv run python -m scripts.surse --db corpus.db --imbogateste   # structurează ce
 `scripts.actualizare` face ambele ca parte din rularea zilnică, plafonat, ca durata jobului să nu
 depindă de cât a trecut de la ultima rulare.
 
+Verificarea de constituționalitate rulează **fără model** și offline. Pasul care cere un model —
+„are proiectul meu același viciu pentru care Curtea a lovit textul?" — rulează **doar pe mașina ta**,
+fiindcă proiectul e un text nepublicat și nu pleacă nicăieri:
+
+```bash
+LEGISLATIV_MODEL=llama3.1 ./ruleaza.sh     # cu Ollama pornit local
+```
+
+Fără variabilă, pasul raportează că nu a rulat — nu că nu a găsit nimic.
+
 Graful de amendamente se construiește singur din corpus la prima pornire. Cine întreține proiectul
 împachetează corpusul pentru echipă cu `python -m scripts.impacheteaza` și îl atașează la un release.
 
@@ -373,6 +383,7 @@ endpoint and a recorded fixture are the same shape.
 | `decizii.py` | What a Curtea Constituțională decision decided, read from its dispozitiv: solution per point, provisions struck, the referral's object, and whether the Court ranged beyond it. |
 | `neconstitutional.py` | Struck provisions the corpus cannot show were ever brought into line — the art. 147 (1) register. |
 | `coliziune.py` | A draft against that register: does the article you are touching sit on a provision the Court struck and nobody repaired. Graded by reach; only a direct hit the corpus can vouch for is allowed to block. |
+| `opinie.py` | The one pass that needs a model: does the draft have the defect the Court found. Retrieval is done by the deterministic layers, so the model reasons over a fixed dictionary and never searches; `validare.py` drops anything citing outside it. On-device or not at all, and a pass that did not run says so. |
 | `temeiuri.py` | On what constitutional ground a provision was struck, read from the Court's own reasoning. Separates a violation the Court stated from an article merely argued about, excludes the Court's own competence articles, and names articles under the numbering in force when the decision was given — the 2003 revision moved property from art. 41 to 44. |
 | `reluare.py` | Does the draft *re-enact* struck wording — the art. 147 (4) question, which a citation check cannot see because a draft can repass a struck rule while citing nothing. Character 5-grams, containment plus a size guard, calibrated against the noise floor of legistic boilerplate. Never blocking. |
 | `prevedere.py` | The text of a struck provision, recovered from the containing act — codes resolved to the version in force when they were struck. Falls back to the article, labelled, and never guesses an alineat the source flattened away. |

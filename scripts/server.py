@@ -44,6 +44,7 @@ from scripts.servicii import (
     _impact,
     _lint,
     _norma,
+    _opinie,
     _parseaza,
     _redacteaza,
     _regula,
@@ -132,6 +133,7 @@ def face_handler(stare: Stare):
             ruta = urlparse(self.path).path
             if ruta not in (
                 "/api/lint",
+                "/api/opinie",
                 "/api/compune",
                 "/api/parseaza",
                 "/api/norma",
@@ -168,6 +170,13 @@ def face_handler(stare: Stare):
                 return
             if ruta == "/api/impact":
                 self._json(_impact(draft, stare))
+                return
+            if ruta == "/api/opinie":
+                # On-device or not at all: `model_local` returns None unless a model is configured
+                # on this machine, and `_opinie` reports that as a pass that did not run.
+                from scripts.opinie import model_local
+
+                self._json(_opinie(draft, stare, model=model_local()))
                 return
             self._json(_lint(draft, stare))
 

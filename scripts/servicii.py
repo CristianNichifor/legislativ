@@ -19,6 +19,7 @@ would read the whole corpus on every keystroke.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -76,6 +77,9 @@ class Stare:
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
         self.norme_lovite: list[dict] = self._incarca_raport("norme_lovite.json")
+        # Lazy: only the model pass reads the reasoning, and that pass needs a model. Loading it
+        # eagerly would make every offline session pay for a feature it is not using.
+        self._considerente: dict[str, str] | None = None
 
     @property
     def pe_shard(self) -> bool:
@@ -117,6 +121,13 @@ class Stare:
                 except (OSError, ValueError):
                     return []
         return []
+
+    def considerente(self) -> dict[str, str]:
+        """Excerpts of the Court's reasoning, keyed by decision. Empty when none was shipped."""
+        if self._considerente is None:
+            brut = self._incarca_raport("considerente.json")
+            self._considerente = brut if isinstance(brut, dict) else {}
+        return self._considerente
 
     def _index(self) -> dict[str, str]:
         if self._titluri is None:
@@ -559,6 +570,61 @@ def _temeiuri_decizie(cx, id_portal: str, publicat: str | None) -> list[dict]:
     return iesire
 
 
+def construieste_considerente(corpus_db: str, *, fereastra: int = 2400) -> dict[str, str]:
+    """An excerpt of each striking decision's reasoning, keyed by decision.
+
+    Shipped **separately** from the register and the norms, because only the model pass reads it
+    and that pass needs a model. The offline bundle should not carry the cost of a feature that
+    does nothing without one.
+
+    Excerpted, not whole: the considerente run to 12 000 characters at the median and 898 000 at
+    the worst, and they open with the recital of procedure and the parties' submissions — so the
+    first N characters of a decision are reliably the least useful N characters in it. The window
+    is cut around the Court's own statement of violation, which `temeiuri.py` already located.
+    """
+    import sqlite3
+
+    from scripts.temeiuri import considerente as taie_considerente
+    from scripts.temeiuri import temeiuri as citeste_temeiuri
+
+    cx = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+    try:
+        randuri = cx.execute(
+            "SELECT DISTINCT l.cheie_act, l.id_portal, l.publicat FROM lovituri l"
+        ).fetchall()
+        iesire: dict[str, str] = {}
+        for cheie_act, id_portal, publicat in randuri:
+            if cheie_act in iesire:
+                continue
+            doc = cx.execute(
+                "SELECT text FROM documente WHERE id_portal = ?", (id_portal,)
+            ).fetchone()
+            if not doc or not doc[0]:
+                continue
+            cons = re.sub(r"\s+", " ", taie_considerente(doc[0])).strip()
+            la_data = _data(publicat)
+            grounds = citeste_temeiuri(doc[0], la_data)
+            incalcate = [t for t in grounds if t.fel == "incalcat"]
+            ancora = (incalcate or grounds or [None])[0]
+            pozitie = -1
+            if ancora is not None:
+                pozitie = cons.find(re.sub(r"\s+", " ", ancora.text).strip()[:60])
+            start = max(0, pozitie - fereastra // 3) if pozitie >= 0 else 0
+            # Snap to word boundaries: an excerpt that opens mid-word reads as corrupted text, and
+            # the model is being asked to quote from it verbatim.
+            if start:
+                spatiu = cons.find(" ", start)
+                start = spatiu + 1 if 0 <= spatiu < start + 40 else start
+            taiat = cons[start : start + fereastra]
+            if len(cons) > start + fereastra:
+                taiat = taiat[: taiat.rfind(" ")] if " " in taiat else taiat
+            if taiat:
+                iesire[cheie_act] = taiat
+        return iesire
+    finally:
+        cx.close()
+
+
 def construieste_norme_lovite(corpus_db: str) -> list[dict]:
     """The wording of every struck provision the corpus can quote — the Tier 2 comparison set.
 
@@ -624,6 +690,52 @@ def construieste_norme_lovite(corpus_db: str) -> list[dict]:
         return list(pe_unitate.values())
     finally:
         cx.close()
+
+
+def _opinie(draft: str, stare: Stare, model=None) -> dict:
+    """Whether the draft has the defect the Court found — the one pass that needs a model.
+
+    Retrieval is already done: the context is assembled from the deterministic findings, so the
+    model reasons over a fixed dictionary and never searches. `validare.valideaza` then drops
+    anything citing outside it.
+
+    Runs on-device or not at all. The draft is an unpublished bill and the page's CSP is written so
+    it cannot be sent anywhere; the existing cloud path carries public law text only. A local
+    endpoint or WebLLM in the tab is the whole of the supported surface, which is a real limit and
+    the right one.
+    """
+    from scripts.opinie import opinie
+
+    cons = stare.considerente()
+    gasiri: list[dict] = []
+    for g in [*_neconstitutional(draft, stare), *_reluare(draft, stare)["gasite"]]:
+        decizie = g.get("decizie") or ""
+        if decizie and cons.get(decizie):
+            gasiri.append({**g, "considerente": cons[decizie]})
+
+    o = opinie(draft, gasiri, model=model)
+    return {
+        "a_rulat": o.a_rulat,
+        "motiv": o.motiv,
+        "experimental": True,
+        "severitate": o.severitate,
+        "incredere": o.increderea,
+        "rata_de_respingere": round(o.rata_de_respingere, 3),
+        "decizii_trimise": sorted(o.context),
+        "acceptate": [
+            {
+                "decizie": c.provizie,
+                "citat": c.citat,
+                "motiv": c.motiv,
+                "fragment": c.fragment_proiect,
+            }
+            for c in o.acceptate
+        ],
+        "respinse": [
+            {"decizie": getattr(r.constatare, "provizie", "") or "", "motiv": r.explicatie}
+            for r in o.respinse
+        ],
+    }
 
 
 def _reluare(draft: str, stare: Stare) -> dict:
