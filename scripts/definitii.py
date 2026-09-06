@@ -47,8 +47,11 @@ _CHAPEAU_DEF = re.compile(
 # `a) achiziție publică - definiția;` and the `înseamnă` / `reprezintă` variants. The definition
 # runs to its semicolon or to the next lettered entry, not to the end of the line: definitions
 # wrap too, and stopping at the first newline truncates most of them.
+# A term char is any non-dash, OR a dash immediately followed by a non-space — an *internal* hyphen
+# like in `cost-beneficiu`. The separator dash, by contrast, is spaced (` - `), so it still ends the
+# term. Without this, `a) cost-beneficiu - …` stopped the term at the first hyphen and read `cost`.
 _INTRARE = re.compile(
-    r"^\s*(?P<litera>[a-zș][\^\d]*)\)\s*(?P<termen>[^\n\-–—]{2,80}?)\s*"
+    r"^\s*(?P<litera>[a-zș][\^\d]*)\)\s*(?P<termen>(?:[^\n\-–—]|[-–—](?=\S)){2,80}?)\s*"
     r"(?:-|–|—|înseamn(?:ă|a)|reprezint(?:ă|a)|este)\s+"
     r"(?P<definitie>.+?)(?=;|\n\s*[a-zș][\^\d]*\)|\Z)",
     re.MULTILINE | re.DOTALL,

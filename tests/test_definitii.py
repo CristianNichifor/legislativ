@@ -27,6 +27,18 @@ def test_a_definition_keeps_its_text_so_the_warning_can_show_it():
     assert achizitie.definitie.startswith("achiziția de lucrări")
 
 
+def test_a_hyphenated_term_is_not_truncated_at_the_hyphen():
+    # `cost-beneficiu` used to stop at the first hyphen and read `cost`; the spaced dash is the
+    # real separator, so the internal hyphen must stay part of the term.
+    lege = (
+        "Art. 2. - În sensul prezentei legi:\n"
+        "a) analiza cost-beneficiu - compararea costurilor cu beneficiile unui proiect;"
+    )
+    t = next(iter(definitii(lege)))
+    assert t.termen == "analiza cost-beneficiu"
+    assert t.definitie.startswith("compararea costurilor")
+
+
 def test_using_a_defined_term_correctly_is_silent():
     """In any inflection — plural, enclitic article, missing diacritics — and with an article or
     preposition in front of it, which is how it is normally written. Romanian inflection is not
