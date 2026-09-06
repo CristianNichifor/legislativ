@@ -19,9 +19,14 @@ vendored.
 
 - The endpoint is `.svc/SOAP`, a named binding. Posting to `.svc` or `?wsdl` returns 404, which
   is how an afternoon disappears; the address is in the WSDL's `soap:address`, nowhere else.
-- The token comes from `GetToken`, has a validity window, and is passed to every `Search`. When
-  it expires the service faults, and the fix is to call `GetToken` again — so this client fetches
-  a token lazily and refreshes once on an auth fault rather than tracking a clock it cannot see.
+- The token comes from `GetToken` and is passed to every `Search`. It dies after roughly **114
+  searches**, and — this is the part that cost two collection runs — it does *not* announce that
+  with a fault. It announces it with **`HTTP 500`**, which urllib raises before there is a body
+  to parse, so a client watching for an auth fault never sees it and a caller that treats 500 as
+  a transient server error retries a discarded token forever at zero throughput. Measured: 114
+  searches at ~0.5s, then 500 on every subsequent call, then 0.6s again on a fresh token. So the
+  client counts its own requests and rotates the token before the limit, and still treats a 500
+  as "refresh once and retry" for the case where the count is wrong.
 - `Search` takes a page number, a page size, and optional year / number / title / free-text. It
   has **no act-type filter**: a search for number 98 returns the DECRET, the HG, the DECIZIE and
   the ORDIN that also bear 98. Type scoping is the caller's job, done against `TipAct` on the way
@@ -37,6 +42,8 @@ where they can be seen.
 from __future__ import annotations
 
 import re
+import time
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import date
@@ -78,6 +85,16 @@ class TokenExpired(ApiError):
     """The token is stale. The caller may retry once after refreshing it."""
 
 
+class RaspunsLent(ApiError):
+    """The service accepted the connection and then withheld the body past the deadline.
+
+    Distinct from a socket timeout on purpose. Under sustained collection this service does not
+    stop answering — it dribbles the body out a byte at a time, so every individual `recv`
+    succeeds and a per-operation timeout never fires. Only a deadline over the whole read
+    notices, and only a caller that then *closes* the response gets its socket back.
+    """
+
+
 @dataclass(frozen=True)
 class Inregistrare:
     """One act as the API returns it. `text` is the full body, inline.
@@ -109,7 +126,41 @@ def _element(nume: str, valoare: object | None) -> str:
     return f"<d:{nume}>{valoare}</d:{nume}>"
 
 
-def _post(action: str, envelope: str, *, timeout: float, opener=urllib.request.urlopen) -> str:
+def _citeste(raspuns, termen_corp: float | None) -> bytes:
+    """The whole body, under a wall-clock deadline that a trickle cannot reset.
+
+    `read()` would block until the body is complete, which is precisely what a trickling server
+    never lets happen; `read1()` returns whatever has arrived, so the deadline is re-checked on
+    every chunk. When it lapses the response is closed here rather than left to a garbage
+    collector that may never run — an unclosed response is an fd in CLOSE-WAIT, and enough of
+    those is a collector that has stopped collecting while still looking alive.
+    """
+    if termen_corp is None:
+        return raspuns.read()
+    limita = time.monotonic() + termen_corp
+    bucati: list[bytes] = []
+    citeste = getattr(raspuns, "read1", None) or raspuns.read
+    while True:
+        if time.monotonic() > limita:
+            raspuns.close()
+            primite = sum(len(b) for b in bucati)
+            raise RaspunsLent(
+                f"corpul răspunsului nu s-a încheiat în {termen_corp:.0f}s ({primite} octeți)"
+            )
+        bucata = citeste(65536)
+        if not bucata:
+            return b"".join(bucati)
+        bucati.append(bucata)
+
+
+def _post(
+    action: str,
+    envelope: str,
+    *,
+    timeout: float,
+    opener=urllib.request.urlopen,
+    termen_corp: float | None = None,
+) -> str:
     cerere = urllib.request.Request(
         ENDPOINT,
         data=envelope.encode("utf-8"),
@@ -122,7 +173,7 @@ def _post(action: str, envelope: str, *, timeout: float, opener=urllib.request.u
         method="POST",
     )
     with opener(cerere, timeout=timeout) as raspuns:
-        brut = raspuns.read()
+        brut = _citeste(raspuns, termen_corp)
         if raspuns.headers.get("Content-Encoding") == "gzip":
             import gzip
 
@@ -137,8 +188,10 @@ def _post(action: str, envelope: str, *, timeout: float, opener=urllib.request.u
     return text
 
 
-def get_token(*, timeout: float = 30.0, opener=urllib.request.urlopen) -> str:
-    text = _post("GetToken", _TOKEN_ENV, timeout=timeout, opener=opener)
+def get_token(
+    *, timeout: float = 30.0, opener=urllib.request.urlopen, termen_corp: float | None = None
+) -> str:
+    text = _post("GetToken", _TOKEN_ENV, timeout=timeout, opener=opener, termen_corp=termen_corp)
     m = re.search(r"<GetTokenResult>([^<]+)</GetTokenResult>", text)
     if not m:
         raise ApiError("GetToken nu a întors un token")
@@ -185,6 +238,7 @@ def search(
     text: str | None = None,
     timeout: float = 60.0,
     opener=urllib.request.urlopen,
+    termen_corp: float | None = None,
 ) -> list[Inregistrare]:
     """One page of results. Empty list means the page is past the end, which is how paging stops.
 
@@ -202,7 +256,7 @@ def search(
         titlu=_element("SearchTitlu", titlu),
         token=token,
     )
-    raspuns = _post("Search", envelope, timeout=timeout, opener=opener)
+    raspuns = _post("Search", envelope, timeout=timeout, opener=opener, termen_corp=termen_corp)
     return [_inregistrare(r) for r in re.findall(r"<[ab]:Legi>(.*?)</[ab]:Legi>", raspuns, re.S)]
 
 
@@ -218,16 +272,39 @@ class Client:
 
     timeout: float = 60.0
     opener: object = field(default=urllib.request.urlopen)
+    termen_corp: float | None = None
+    cereri_per_token: int = 100
     _token: str | None = None
+    _cereri: int = 0
 
     def token(self) -> str:
-        if self._token is None:
-            self._token = get_token(timeout=self.timeout, opener=self.opener)
+        if self._token is None or self._cereri >= self.cereri_per_token:
+            self._token = get_token(
+                timeout=self.timeout, opener=self.opener, termen_corp=self.termen_corp
+            )
+            self._cereri = 0
         return self._token
 
+    def _cere(self, **kwargs) -> list[Inregistrare]:
+        tok = self.token()
+        self._cereri += 1
+        return search(tok, timeout=self.timeout, opener=self.opener, **kwargs)
+
     def search(self, **kwargs) -> list[Inregistrare]:
+        kwargs.setdefault("termen_corp", self.termen_corp)
         try:
-            return search(self.token(), timeout=self.timeout, opener=self.opener, **kwargs)
+            return self._cere(**kwargs)
         except TokenExpired:
             self._token = None
-            return search(self.token(), timeout=self.timeout, opener=self.opener, **kwargs)
+            return self._cere(**kwargs)
+        except urllib.error.HTTPError as e:
+            # A dead token is reported as `HTTP 500`, not as a fault. Measured against the live
+            # service: 114 searches at ~0.5s, then 500 on every call with that token, and 0.6s
+            # on a fresh one. urllib raises before there is a body, so `TokenExpired` — which is
+            # parsed out of a fault — never sees it. Retrying the 500 without refreshing is an
+            # infinite loop against a token the service has already discarded, and it is what
+            # made two collection runs sit at zero while still looking alive.
+            if e.code != 500:
+                raise
+            self._token = None
+            return self._cere(**kwargs)
