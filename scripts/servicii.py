@@ -56,6 +56,7 @@ class Stare:
         self.date_dir = Path(date_dir) if date_dir else None
         self._titluri: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
+        self.vid: list[dict] = self._incarca_vid()
 
     @property
     def pe_shard(self) -> bool:
@@ -82,6 +83,24 @@ class Stare:
                 return termeni_corpus(con, limita=limita)
         except Exception:
             return []
+
+    # The unmet-obligations report (`vid.py`) is precomputed at build time — a scan of the whole
+    # corpus is far too slow per request — and shipped as `vid.json`, exactly like the dictionary.
+    # Absent (a localhost that has not been built) → the pass is silently empty, like every other
+    # data-gated pass. The linter filters it to the acts the current draft touches.
+    def _incarca_vid(self) -> list[dict]:
+        cai = (
+            [self.date_dir / "vid.json"]
+            if self.pe_shard
+            else [Path("web/data/vid.json"), Path("vid.json")]
+        )
+        for cale in cai:
+            if cale.is_file():
+                try:
+                    return json.loads(cale.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    return []
+        return []
 
     def _index(self) -> dict[str, str]:
         if self._titluri is None:
@@ -171,7 +190,59 @@ def _lint(draft: str, stare: Stare) -> dict:
         "repealed": _repealed(draft, stare),
         "drafting": drafting,
         "consolidare": _consolidare_semnale(draft),
+        "obligatii_neindeplinite": _obligatii_neindeplinite(draft, stare),
     }
+
+
+def _obligatii_neindeplinite(draft: str, stare: Stare) -> list[dict]:
+    """From the prebuilt gap report, the unmet obligations of the acts this draft touches.
+
+    `vid.py` asks which obligations in the law have no implementing act in the corpus. That report
+    is corpus-wide and precomputed (`stare.vid`); here it is filtered to the acts the draft amends
+    or cites, so a drafter patching Legea 98/2016 is told which of its own delegated norms were
+    never issued. Silent when no report is shipped or the draft touches nothing in it."""
+    if not stare.vid:
+        return []
+    from scripts.dublura import tinte
+
+    acte = {t.split(" ")[0] for t in tinte(draft)}
+    return [v for v in stare.vid if v.get("act_id") in acte]
+
+
+def _vid_dict(v) -> dict:
+    """One `vid.Vid` finding as a plain dict for the UI / the shipped report."""
+    ob = v.obligatie
+    return {
+        "act_id": ob.act.id if ob.act else "",
+        "locator": ob.locator.id if ob.locator else "",
+        "text": ob.text[:300],
+        "instrument": ob.tip_asteptat,
+        "scadenta": v.scadenta.isoformat() if v.scadenta else None,
+        "zile_intarziere": v.zile_intarziere,
+        "severitate": v.severitate,
+        "cautat": v.cautat,
+        "candidati": list(v.candidati),
+        "limitari": list(v.limitari),
+    }
+
+
+def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) -> list[dict]:
+    """Build the shipped unmet-obligations report from a corpus + its graph.
+
+    `complet_pentru` is left empty on purpose: a shipped slice (or a still-collecting corpus) cannot
+    vouch that any instrument type was gathered exhaustively, so every finding is `blocking` and
+    says on its face it cannot tell a legislative gap from a gap in the collection. That is the
+    honest default until a finished collection earns a stronger claim (see `vid_corpus.py`)."""
+    import re
+
+    from scripts.vid_corpus import raport_vid
+
+    # Drop findings whose "obligation" is really a consolidation annotation the extractor caught
+    # from the amending-history block (`(la 13-07-2020, … a fost completat de …)`) — it is not a
+    # delegated norm, and showing it as an unmet obligation would be noise, not a finding.
+    nota = re.compile(r"^\(la \d{2}-\d{2}-\d{4}")
+    vids = raport_vid(corpus_db, graf_db, complet_pentru=frozenset(), limita=limita)
+    return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
 
 
 def _consolidare_semnale(draft: str) -> list[dict]:
