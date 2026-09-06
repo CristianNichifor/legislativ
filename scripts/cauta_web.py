@@ -69,16 +69,36 @@ async def _json(url: str):
     return await r.json()
 
 
-async def cauta(q: str, baza: str = "data", limita: int = 25) -> dict:
+def _trece_filtru(meta: dict, tip: str | None, an_min: int | None, an_max: int | None) -> bool:
+    """Whether an act passes the type/year filters, from its `index.json` record."""
+    if tip and meta.get("tip") != tip:
+        return False
+    an = meta.get("an")
+    if an_min is not None and (an is None or an < an_min):
+        return False
+    return not (an_max is not None and (an is None or an > an_max))
+
+
+async def cauta(
+    q: str,
+    baza: str = "data",
+    limita: int = 25,
+    *,
+    offset: int = 0,
+    tip: str | None = None,
+    an_min: int | None = None,
+    an_max: int | None = None,
+) -> dict:
     """Answer a query from the shards, fetching only what the query's own tokens require.
 
-    The result shape is the one the search UI already renders — `{results: [{act_id, locator,
-    fragment, titlu, sursa_url}]}` — so this drops in where the SQLite `_cauta` sat, with no change
-    above it.
+    Filtered by act type/year and paged, mirroring the localhost `_cauta`; `total` is the count of
+    matching acts behind the page, so the UI can say how much it is not yet showing. The result
+    shape is the one the search UI renders — `{results, total, offset, limita}`.
     """
+    empty = {"results": [], "total": 0, "offset": offset, "limita": limita}
     toks = _tokenuri(q)
     if not toks:
-        return {"results": []}
+        return empty
 
     scor: dict[int, int] = {}
     for t in toks:
@@ -86,15 +106,18 @@ async def cauta(q: str, baza: str = "data", limita: int = 25) -> dict:
         for n in (shard or {}).get(t, []):
             scor[n] = scor.get(n, 0) + 1
     if not scor:
-        return {"results": []}
+        return empty
 
     index = await _json(f"{baza}/index.json") or []
     # Most query-tokens matched wins; ties break on index order (builder writes it newest-first).
-    top = sorted(scor, key=lambda n: (-scor[n], n))[:limita]
+    ordonate = [
+        n
+        for n in sorted(scor, key=lambda n: (-scor[n], n))
+        if n < len(index) and _trece_filtru(index[n], tip, an_min, an_max)
+    ]
+    total = len(ordonate)
     rezultate = []
-    for n in top:
-        if n >= len(index):
-            continue
+    for n in ordonate[offset : offset + limita]:
         meta = index[n]
         act = await _json(f"{baza}/acte/{meta['id']}.json")
         frag = _fragment(act, toks) if act else {"locator": "", "fragment": ""}
@@ -105,6 +128,8 @@ async def cauta(q: str, baza: str = "data", limita: int = 25) -> dict:
                 "fragment": frag["fragment"],
                 "titlu": meta.get("titlu", ""),
                 "sursa_url": meta.get("url", ""),
+                "tip": meta.get("tip", ""),
+                "an": meta.get("an"),
             }
         )
-    return {"results": rezultate}
+    return {"results": rezultate, "total": total, "offset": offset, "limita": limita}

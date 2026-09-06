@@ -426,22 +426,67 @@ def din_cache(con: sqlite3.Connection, url: str) -> bytes | None:
     return r["corp"] if r else None
 
 
-def cauta(con: sqlite3.Connection, intrebare: str, limita: int = 20) -> list[sqlite3.Row]:
-    """Full-text search over every provision, diacritic-insensitive.
+def _filtre_cauta(
+    tip: str | None, an_min: int | None, an_max: int | None
+) -> tuple[str, list[object]]:
+    """The optional `AND a.tip = … AND a.an BETWEEN …` clause and its parameters, shared by the
+    search and its count so the two never drift."""
+    clauze, params = "", []
+    if tip:
+        clauze += " AND a.tip = ?"
+        params.append(tip)
+    if an_min is not None:
+        clauze += " AND a.an >= ?"
+        params.append(an_min)
+    if an_max is not None:
+        clauze += " AND a.an <= ?"
+        params.append(an_max)
+    return clauze, params
+
+
+def cauta(
+    con: sqlite3.Connection,
+    intrebare: str,
+    limita: int = 20,
+    *,
+    offset: int = 0,
+    tip: str | None = None,
+    an_min: int | None = None,
+    an_max: int | None = None,
+) -> list[sqlite3.Row]:
+    """Full-text search over every provision, diacritic-insensitive, one page at a time.
 
     `remove_diacritics 2` is what makes `hotarare` find `hotărâre`, which matters because half
-    the corpus was typed before the comma-below letters were reliably available.
+    the corpus was typed before the comma-below letters were reliably available. Optional filters
+    narrow by act type and year; `offset` pages through the ranked hits.
     """
-    # Joined to `acte` for the source URL and title, so a result links straight to the act on the
-    # portal rather than to a search-by-number that returns a list — the difference between "here
-    # it is" and "go find it".
+    # Joined to `acte` for the source URL, title and the filterable fields, so a result links
+    # straight to the act on the portal rather than to a search-by-number that returns a list.
+    clauze, params = _filtre_cauta(tip, an_min, an_max)
     return con.execute(
         "SELECT f.act_id, f.locator, snippet(provizii_fts, 0, '[', ']', '…', 12) AS fragment,"
-        " a.titlu, a.sursa_url"
+        " a.titlu, a.sursa_url, a.tip, a.an"
         " FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
-        " WHERE provizii_fts MATCH ? ORDER BY rank LIMIT ?",
-        (intrebare, limita),
+        f" WHERE provizii_fts MATCH ?{clauze} ORDER BY rank LIMIT ? OFFSET ?",
+        (intrebare, *params, limita, offset),
     ).fetchall()
+
+
+def cauta_numar(
+    con: sqlite3.Connection,
+    intrebare: str,
+    *,
+    tip: str | None = None,
+    an_min: int | None = None,
+    an_max: int | None = None,
+) -> int:
+    """How many provisions match the query and filters — the total behind a paged result."""
+    clauze, params = _filtre_cauta(tip, an_min, an_max)
+    return con.execute(
+        "SELECT count(*) FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
+        f" WHERE provizii_fts MATCH ?{clauze}",
+        (intrebare, *params),
+    ).fetchone()[0]
 
 
 def acte(con: sqlite3.Connection) -> list[Act]:

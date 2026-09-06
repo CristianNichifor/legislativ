@@ -108,6 +108,13 @@
     display:flex;flex-wrap:wrap;gap:.3rem .9rem}
   .legend span{display:flex;align-items:center;gap:.3rem}
   .legend i{width:.6rem;height:.6rem;border-radius:50%;display:inline-block}
+
+  /* search filters: a compact row of act-type + year-range controls under the query box */
+  .cauta-filtre{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .2rem}
+  .cauta-filtre select,.cauta-filtre .f-an{height:2.1rem;font-size:.82rem}
+  .cauta-filtre .f-an{width:6.5rem}
+  .cauta-total{margin:.6rem 0 .4rem}
+  #cauta-more{margin-top:.6rem}
   /* below 1200px the 28rem sidebar crams the working area, so stack it — and put Conexiuni at the
      BOTTOM (order:2), under the working area, not above it. */
   @media (max-width:1200px){
@@ -628,7 +635,21 @@
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
         <label for="q">Caută în text (fără diacritice contează la fel)</label>
         <input type="search" id="q" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
-        <div class="row"><span class="hint">Enter pentru a căuta · în toate prevederile din corpus</span></div>
+        <div class="cauta-filtre">
+          <select id="f-tip" title="Filtrează după tipul actului">
+            <option value="">toate tipurile</option>
+            <option value="lege">lege</option>
+            <option value="oug">ordonanță de urgență</option>
+            <option value="og">ordonanță</option>
+            <option value="hg">hotărâre de Guvern</option>
+            <option value="ordin">ordin</option>
+            <option value="decizie">decizie</option>
+            <option value="decret">decret</option>
+          </select>
+          <input type="number" id="f-an-min" class="f-an" placeholder="an de la" min="1800" max="2100">
+          <input type="number" id="f-an-max" class="f-an" placeholder="până la" min="1800" max="2100">
+          <span class="hint">Enter pentru a căuta · în toate prevederile din corpus</span>
+        </div>
         <div id="cauta-out"></div>
       </div>
     </div>
@@ -1696,26 +1717,52 @@ function drawFocus(actId,d){
   wrap.appendChild(bar); wrap.appendChild(mountGraph(svg,vp));
 }
 
-// ---- search ----
-let searchTimer;
-async function runSearch(){
+// ---- search: full-text over the corpus, filtered by type/year and paged ----
+let searchTimer, searchOffset=0, searchSeq=0;
+const CAUTA_PAG=25;
+function searchParams(offset){
+  const p=new URLSearchParams(); p.set("q",$("#q").value.trim());
+  const tip=$("#f-tip").value; if(tip) p.set("tip",tip);
+  const amin=$("#f-an-min").value.trim(); if(amin) p.set("an_min",amin);
+  const amax=$("#f-an-max").value.trim(); if(amax) p.set("an_max",amax);
+  p.set("limita",CAUTA_PAG); p.set("offset",offset); return p.toString();
+}
+function cardCauta(x){
+  const frag=s=>esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
+  const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
+  const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
+  return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
+}
+async function runSearch(append=false){
   const q=$("#q").value.trim();
-  if(!q){ $("#cauta-out").innerHTML=""; return; }
-  $("#cauta-out").innerHTML=`<p class="empty"><span class="spin"></span> caut…</p>`;
+  if(!q){ $("#cauta-out").innerHTML=""; searchOffset=0; return; }
+  const offset=append?searchOffset:0, seq=++searchSeq;
+  if(!append) $("#cauta-out").innerHTML=`<p class="empty"><span class="spin"></span> caut…</p>`;
+  else { const b=$("#cauta-more-btn"); if(b){ b.disabled=true; b.textContent="se încarcă…"; } }
   try{
-    const d=await (await fetch("/api/cauta?q="+encodeURIComponent(q))).json();
-    const res=d.results||[];
-    if(!res.length){ $("#cauta-out").innerHTML=empty("Niciun rezultat."); return; }
-    const frag=s=>esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
-    $("#cauta-out").innerHTML=`<div>`+sec("Rezultate",res.length,res.map(x=>{
-      const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
-      const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
-      return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
-    }).join(""))+`</div>`;
-  }catch(e){ $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
+    const d=await (await fetch("/api/cauta?"+searchParams(offset))).json();
+    if(seq!==searchSeq) return;   // a newer query/filter already superseded this one
+    const res=d.results||[], total=(d.total!=null?d.total:res.length);
+    searchOffset=offset+res.length;
+    if(!append){
+      if(!res.length){ $("#cauta-out").innerHTML=empty("Niciun rezultat pentru filtrele alese."); return; }
+      $("#cauta-out").innerHTML=`<div class="cauta-total hint"><b>${total}</b> rezultate</div>`
+        +`<div id="cauta-list">${res.map(cardCauta).join("")}</div><div id="cauta-more"></div>`;
+    } else {
+      $("#cauta-list").insertAdjacentHTML("beforeend", res.map(cardCauta).join(""));
+    }
+    const more=$("#cauta-more");
+    if(more){
+      more.innerHTML = (searchOffset<total)
+        ? `<button class="ghost" id="cauta-more-btn">Încarcă încă (${total-searchOffset} rămase)</button>`
+        : (total>CAUTA_PAG?`<p class="hint">Toate cele ${total} rezultate sunt afișate.</p>`:"");
+      const b=$("#cauta-more-btn"); if(b) b.onclick=()=>runSearch(true);
+    }
+  }catch(e){ if(!append) $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
 }
 $("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") runSearch(); });
-$("#q").addEventListener("input",()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(runSearch,400); });
+$("#q").addEventListener("input",()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(()=>runSearch(),400); });
+["f-tip","f-an-min","f-an-max"].forEach(id=>$("#"+id).addEventListener("change",()=>runSearch()));
 </script>
 </body>
 </html>

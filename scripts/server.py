@@ -80,8 +80,26 @@ def face_handler(stare: Stare):
             if ruta.path == "/":
                 self._fisier("index.html", "text/html; charset=utf-8")
             elif ruta.path == "/api/cauta":
-                q = parse_qs(ruta.query).get("q", [""])[0]
-                self._json(_cauta(q, stare))
+                qs = parse_qs(ruta.query)
+
+                def _int(k):
+                    v = qs.get(k, [""])[0]
+                    try:
+                        return int(v) if v else None
+                    except ValueError:
+                        return None
+
+                self._json(
+                    _cauta(
+                        qs.get("q", [""])[0],
+                        stare,
+                        tip=(qs.get("tip", [""])[0] or None),
+                        an_min=_int("an_min"),
+                        an_max=_int("an_max"),
+                        limita=_int("limita") or 25,
+                        offset=_int("offset") or 0,
+                    )
+                )
             elif ruta.path == "/api/vecini":
                 act = parse_qs(ruta.query).get("act", [""])[0]
                 self._json(_vecini(act, stare) if act else {"error": "act lipsă"})
