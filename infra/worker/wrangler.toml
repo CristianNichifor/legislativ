@@ -20,8 +20,11 @@ MISTRAL_MODEL = "mistral-small-latest"
 ORIGINI = "https://cristiannichifor.github.io"
 # Hard ceiling on NEW rewrites per day (a spend cap). Leave unset to disable.
 CAP_ZILNIC = "1500"
-# Optional: point at an AI Gateway URL instead of Mistral directly, for free caching + analytics.
-# MISTRAL_URL = "https://gateway.ai.cloudflare.com/v1/<acct>/<gw>/mistral/v1/chat/completions"
+# AI Gateway (free): caching + analytics + a safety rate limit in front of Mistral. Account
+# 432316a05c0d6000c6e196fe32e47dd7 (CN Webify), gateway "legislativ". The Worker falls back to
+# api.mistral.ai automatically if the gateway is unreachable or not yet created, so this is safe to
+# leave on. Create the gateway once (see infra/README.md) to light up the caching + dashboard.
+MISTRAL_URL = "https://gateway.ai.cloudflare.com/v1/432316a05c0d6000c6e196fe32e47dd7/legislativ/mistral/v1/chat/completions"
 
 # MISTRAL_API_KEY is a secret, not a var — never commit it. Set it with:
 #   wrangler secret put MISTRAL_API_KEY

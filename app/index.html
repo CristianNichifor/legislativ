@@ -1006,9 +1006,11 @@ async function loadConsAsezari(){
   }catch(e){ $("#c-act").innerHTML=`<option value="">eroare la încărcare</option>`; }
 }
 const FELV={modifica:"modifică",abroga:"abrogă",completeaza:"completează",introduce:"introduce"};
-// The plain-language rewrite service (a Cloudflare Worker). Empty until deployed — leave it "" and
-// the side-by-side feature simply does not appear. It receives PUBLIC law text only, never a draft.
-const RESCRIERE_ENDPOINT="";
+// The plain-language rewrite service (a Cloudflare Worker). This is the DEFAULT endpoint for online
+// mode; the user can override it in the AI settings. Until the Worker is deployed (infra/README.md),
+// online mode simply errors clearly — the deterministic core and local AI are unaffected. It only
+// ever receives PUBLIC law text, never a draft (drafts confirm before leaving the browser).
+const RESCRIERE_ENDPOINT="https://legislativ-rescrieri.cn-webify.workers.dev/rescrie";
 
 // ---- local, in-browser plain-language rewrite (WebLLM / WebGPU) — private, no backend, no key ----
 const SIS_CLAR="Rescrii prevederi legale românești în limbaj clar, stil danez (propoziții scurte, o "

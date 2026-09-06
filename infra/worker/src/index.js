@@ -87,18 +87,33 @@ async function genereaza(text, env, stil, model) {
   const sistem = SISTEM[stil] || SISTEM.nou;
   // honor a client-requested model only if it's on the allowlist; otherwise the env default
   const mdl = MODELE_PERMISE.includes(model) ? model : (env.MISTRAL_MODEL || "mistral-small-latest");
-  const r = await fetch((env.MISTRAL_URL || "https://api.mistral.ai/v1/chat/completions"), {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.MISTRAL_API_KEY}` },
-    body: JSON.stringify({
-      model: mdl,
-      temperature: 0.2,
-      messages: [ { role: "system", content: sistem }, { role: "user", content: text } ],
-    }),
+  const corp = JSON.stringify({
+    model: mdl,
+    temperature: 0.2,
+    messages: [ { role: "system", content: sistem }, { role: "user", content: text } ],
   });
-  if (!r.ok) return { rescriere: null, model: "eroare", eroare: `mistral ${r.status}` };
-  const d = await r.json();
-  return { rescriere: (d.choices?.[0]?.message?.content || "").trim(), model: d.model || mdl };
+  // Try the AI Gateway first (free caching + analytics + a safety rate limit), then fall back to
+  // Mistral directly. So MISTRAL_URL can point at the gateway even before it exists — a gateway
+  // outage or a not-yet-created gateway degrades to a direct call instead of failing the rewrite.
+  const DIRECT = "https://api.mistral.ai/v1/chat/completions";
+  const tinte = env.MISTRAL_URL && env.MISTRAL_URL !== DIRECT ? [env.MISTRAL_URL, DIRECT] : [DIRECT];
+  let ultima = "generare eșuată";
+  for (const url of tinte) {
+    let r;
+    try {
+      r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.MISTRAL_API_KEY}` },
+        body: corp,
+      });
+    } catch (e) { ultima = `rețea ${url}`; continue; }
+    if (r.ok) {
+      const d = await r.json();
+      return { rescriere: (d.choices?.[0]?.message?.content || "").trim(), model: d.model || mdl };
+    }
+    ultima = `mistral ${r.status}`;   // gateway said no → fall through to the direct endpoint
+  }
+  return { rescriere: null, model: "eroare", eroare: ultima };
 }
 
 export default {
