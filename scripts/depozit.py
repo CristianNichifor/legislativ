@@ -63,6 +63,35 @@ CREATE TABLE IF NOT EXISTS acte (
     citit_la        TEXT NOT NULL
 );
 
+-- Every document the service handed over, keyed by its own portal id rather than by what it
+-- calls itself. `acte.id` is a *citation* key — `lege-98-2016` is what a drafter writes and what
+-- `referinte.py` resolves — and a citation key is not unique over the real corpus: ministries
+-- number their ordine from 1 each year, and `decizie-5-1996` is as good a name for a Curtea
+-- Constituțională decision as for an agency's. Writing both into `acte` means the second erases
+-- the first, which is exactly the failure the `provizii` note below describes, one level up and
+-- three orders of magnitude worse: measured over the first 2 000 pages, 19 975 records written
+-- and 15 014 surviving — 4 961 documents, a quarter of the collection, deleted by a namesake.
+--
+-- So the two identities are separated. `documente` keeps every record, permanently; `acte`
+-- stays the citation view it always was, last writer winning, because that is what resolution
+-- needs and what the graph is built on. Nothing is lost, and a reader that wants all the
+-- decisions of one issuer asks `documente` instead of guessing from a collided id.
+CREATE TABLE IF NOT EXISTS documente (
+    id_portal   TEXT PRIMARY KEY,       -- the document's own identity, unique on the portal
+    cheie_act   TEXT NOT NULL,          -- the citation key it would claim: 'lege-98-2016'
+    tip         TEXT NOT NULL,
+    numar       TEXT,
+    an          INTEGER,
+    titlu       TEXT NOT NULL,
+    emitent     TEXT,
+    vigoare     TEXT,
+    sursa_url   TEXT,
+    text        TEXT NOT NULL,
+    adus_la     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_documente_cheie ON documente(cheie_act);
+CREATE INDEX IF NOT EXISTS idx_documente_emitent ON documente(emitent, tip);
+
 -- `ord` is in the key because a locator is not unique. An article whose body sits in an
 -- unnumbered block yields a row at `art7` and so does the block inside it, and the first
 -- version keyed on (act_id, locator) alone: Legea 98/2016 went in with 1 435 provisions and
@@ -181,6 +210,21 @@ CREATE INDEX IF NOT EXISTS idx_acte_tip_an   ON acte(tip, an);
 CREATE VIRTUAL TABLE IF NOT EXISTS provizii_fts USING fts5(
     text, act_id UNINDEXED, locator UNINDEXED, tokenize = 'unicode61 remove_diacritics 2'
 );
+
+-- Which fts5 rows belong to which act, so that replacing an act can delete its rows by rowid.
+-- `act_id` is UNINDEXED inside the fts5 table — that is what UNINDEXED means, and it is correct,
+-- since nobody wants to full-text-search an id. But it also means `DELETE FROM provizii_fts
+-- WHERE act_id = ?` has no index to use and degrades into `SCAN provizii_fts VIRTUAL TABLE`,
+-- once per record written. Measured mid-collection: 65 ms per scan at 17 990 rows, ten records
+-- to a page, so 0.65 s of every 1.0 s page was this one statement — and because the cost grows
+-- with the table, the projection at the full 251 460 documents was 9.1 s per page. A collection
+-- that starts at one second a page and ends at nine does not finish. This map turns the delete
+-- into an indexed lookup that does not care how large the corpus gets.
+CREATE TABLE IF NOT EXISTS provizii_fts_rand (
+    act_id TEXT NOT NULL,
+    rand   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_provizii_fts_rand ON provizii_fts_rand(act_id);
 """
 
 
@@ -196,6 +240,21 @@ class Randament:
 
 def _iso(v: date | None) -> str | None:
     return v.isoformat() if v else None
+
+
+# The portal renders every document at /Public/DetaliiDocument/<id>. The stored `sursa_url` is the
+# canonical link where we have one; where we only kept the portal's own document id (the common case
+# for acts parsed from a saved page), that id reconstructs the same URL.
+PORTAL_DOCUMENT = "https://legislatie.just.ro/Public/DetaliiDocument/"
+
+
+def url_document(sursa_url: str | None, id_act_portal: str | None) -> str:
+    """The public portal URL for an act: its stored source, or one built from its portal id."""
+    if sursa_url:
+        return sursa_url
+    if id_act_portal:
+        return f"{PORTAL_DOCUMENT}{id_act_portal}"
+    return ""
 
 
 @contextmanager
@@ -228,6 +287,7 @@ def deschide(
     con.execute("PRAGMA busy_timeout = 30000")
     try:
         con.executescript(SCHEMA)
+        _umple_harta_fts(con)
         yield con
         con.commit()
     except Exception:
@@ -235,6 +295,50 @@ def deschide(
         raise
     finally:
         con.close()
+
+
+def _umple_harta_fts(con: sqlite3.Connection) -> None:
+    """Backfill the rowid map for a corpus collected before it existed.
+
+    One scan, once, on the first write-open of an older file. Without it `_sterge_fts` would find
+    nothing to delete for every act already in the corpus, and re-collecting a page would leave
+    the old full-text rows behind — the same act matching a search twice, with stale text. Guarded
+    on the map being empty while the index is not, so a normal open costs one counted query.
+    """
+    randuri = con.execute("SELECT count(*) FROM provizii_fts_rand").fetchone()[0]
+    if randuri:
+        return
+    if not con.execute("SELECT count(*) FROM provizii_fts").fetchone()[0]:
+        return
+    con.execute(
+        "INSERT INTO provizii_fts_rand (act_id, rand) SELECT act_id, rowid FROM provizii_fts"
+    )
+
+
+def _sterge_fts(con: sqlite3.Connection, act_id: str) -> None:
+    """Drop an act's full-text rows by rowid, via the map, never by scanning.
+
+    The obvious `DELETE FROM provizii_fts WHERE act_id = ?` is a full scan of the fts5 table,
+    because `act_id` is UNINDEXED there. Called once per record written, it made collection cost
+    grow with the corpus it was building.
+    """
+    randuri = [
+        r[0] for r in con.execute("SELECT rand FROM provizii_fts_rand WHERE act_id = ?", (act_id,))
+    ]
+    if not randuri:
+        return
+    con.executemany("DELETE FROM provizii_fts WHERE rowid = ?", [(r,) for r in randuri])
+    con.execute("DELETE FROM provizii_fts_rand WHERE act_id = ?", (act_id,))
+
+
+def _scrie_fts(con: sqlite3.Connection, act_id: str, locator: str, text: str) -> None:
+    """One full-text row, remembering its rowid so it can be deleted without a scan."""
+    cur = con.execute(
+        "INSERT INTO provizii_fts (text, act_id, locator) VALUES (?,?,?)", (text, act_id, locator)
+    )
+    con.execute(
+        "INSERT INTO provizii_fts_rand (act_id, rand) VALUES (?,?)", (act_id, cur.lastrowid)
+    )
 
 
 def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
@@ -265,7 +369,7 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
-    con.execute("DELETE FROM provizii_fts WHERE act_id = ?", (act.id,))
+    _sterge_fts(con, act.id)
 
     marcate = 0
     for ord_, p in enumerate(parsat.provizii, start=1):
@@ -281,10 +385,7 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
                 _iso(p.in_vigoare_pana_la),
             ),
         )
-        con.execute(
-            "INSERT INTO provizii_fts (text, act_id, locator) VALUES (?,?,?)",
-            (p.text, act.id, p.locator_id),
-        )
+        _scrie_fts(con, act.id, p.locator_id, p.text)
         for ref in p.referinte_marcate:
             con.execute(
                 "INSERT INTO referinte_marcate (act_id, ord, locator, text) VALUES (?,?,?,?)",
@@ -364,6 +465,14 @@ def rezumat(con: sqlite3.Connection) -> dict[str, int]:
 
     return {
         "acte": n("SELECT count(*) FROM acte"),
+        "documente": n("SELECT count(*) FROM documente"),
+        # How many documents share a citation key with another. This is the number that spent a
+        # collection run at zero because nobody counted it: `acte` looked healthy while a quarter
+        # of what had been fetched was being deleted by namesakes. It belongs in every summary.
+        "documente_cu_cheie_partajata": n(
+            "SELECT coalesce(sum(n - 1), 0) FROM ("
+            "  SELECT count(*) AS n FROM documente GROUP BY cheie_act HAVING n > 1)"
+        ),
         "provizii": n("SELECT count(*) FROM provizii"),
         "referinte_marcate": n("SELECT count(*) FROM referinte_marcate"),
         "relatii": n("SELECT count(*) FROM relatii"),
@@ -436,6 +545,26 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
     `scrie_act`, which replaces this row wholesale — the two paths never half-merge. Relation
     flags are not written here because the API does not carry them; they come from the HTML.
     """
+    # The document first, under its own identity, so that a citation-key collision costs the
+    # `acte` row and nothing else. Keyed on the portal id and replaced in place, so re-collecting
+    # a page updates a document rather than duplicating it.
+    con.execute(
+        "INSERT OR REPLACE INTO documente (id_portal, cheie_act, tip, numar, an, titlu,"
+        " emitent, vigoare, sursa_url, text, adus_la) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (
+            rec.id_portal,
+            act.id,
+            act.tip,
+            act.numar,
+            act.an,
+            rec.titlu,
+            rec.emitent,
+            _iso(rec.data_vigoare),
+            rec.link_html,
+            rec.text,
+            datetime.now(UTC).isoformat(timespec="seconds"),
+        ),
+    )
     con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
     con.execute(
         "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
@@ -457,16 +586,13 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
-    con.execute("DELETE FROM provizii_fts WHERE act_id = ?", (act.id,))
+    _sterge_fts(con, act.id)
     con.execute(
         "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
         " VALUES (?,?,?,?,?,?)",
         (act.id, "text", 1, rec.text, _iso(rec.data_vigoare), None),
     )
-    con.execute(
-        "INSERT INTO provizii_fts (text, act_id, locator) VALUES (?,?,?)",
-        (rec.text, act.id, "text"),
-    )
+    _scrie_fts(con, act.id, "text", rec.text)
 
 
 def pagina_terminata(con: sqlite3.Connection, pagina: int, acte: int) -> None:

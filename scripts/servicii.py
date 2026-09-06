@@ -55,6 +55,7 @@ class Stare:
         self.graf = graf
         self.date_dir = Path(date_dir) if date_dir else None
         self._titluri: dict[str, str] | None = None
+        self._urls: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
         self.vid: list[dict] = self._incarca_vid()
 
@@ -108,9 +109,22 @@ class Stare:
             if cale and cale.is_file():
                 index = json.loads(cale.read_text(encoding="utf-8"))
                 self._titluri = {a["id"]: a.get("titlu", "") for a in index}
+                self._urls = {a["id"]: a.get("url", "") for a in index}
             else:
-                self._titluri = {}
+                self._titluri, self._urls = {}, {}
         return self._titluri
+
+    def sursa_url(self, act_id: str) -> str:
+        """The public portal URL for an act — from the shard index in the browser, or the corpus's
+        stored source / portal id on localhost. Empty when the act carries neither."""
+        if self.pe_shard:
+            self._index()
+            return (self._urls or {}).get(act_id, "")
+        with depozit.deschide(self.corpus, readonly=True) as con:
+            r = con.execute(
+                "SELECT sursa_url, id_act_portal FROM acte WHERE id = ?", (act_id,)
+            ).fetchone()
+            return depozit.url_document(r["sursa_url"], r["id_act_portal"]) if r else ""
 
     def titlu(self, act_id: str) -> str:
         """The act's title, from the shard index in the browser or `acte` on localhost."""
@@ -357,6 +371,7 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
                     {
                         "act_id": act_id,
                         "titlu": stare.titlu(act_id),
+                        "sursa_url": stare.sursa_url(act_id),
                         "in_corpus": stare.cunoscut(act_id),
                         "amendat_de": len(amend),
                         "ultima": max(
@@ -649,6 +664,7 @@ def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
                 "locator": m.locator,
                 "de_la": m.de_la.isoformat() if m.de_la else None,
                 "titlu": stare.titlu(other),
+                "sursa_url": stare.sursa_url(other),
             }
 
         inb = [shape(o, m) for o, m in list(intra.items())[:limita]]

@@ -41,7 +41,8 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
 
     with depozit.deschide(corpus_db, readonly=True) as con:
         acte = con.execute(
-            "SELECT id, tip, numar, an, titlu, sursa_url FROM acte ORDER BY an DESC, numar"
+            "SELECT id, tip, numar, an, titlu, sursa_url, id_act_portal FROM acte "
+            "ORDER BY an DESC, numar"
         ).fetchall()
         index = [
             {
@@ -50,7 +51,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
                 "numar": r["numar"],
                 "an": r["an"],
                 "titlu": r["titlu"] or "",
-                "url": r["sursa_url"] or "",
+                "url": depozit.url_document(r["sursa_url"], r["id_act_portal"]),
             }
             for r in acte
         ]
@@ -68,7 +69,7 @@ def construieste(corpus_db: str, out: str, *, log=print) -> dict:
                     {
                         "id": act_id,
                         "titlu": r["titlu"] or "",
-                        "url": r["sursa_url"] or "",
+                        "url": depozit.url_document(r["sursa_url"], r["id_act_portal"]),
                         "provizii": [{"loc": p["locator"], "text": p["text"]} for p in provizii],
                     },
                     ensure_ascii=False,
