@@ -1,0 +1,27 @@
+[Unit]
+Description=Legislativ — aduce corpusul la zi (colectare coadă, date, lovituri, muchii)
+Documentation=https://github.com/CristianNichifor/legislativ
+# Enumerarea serviciului se face prin rețea; fără asta prima rulare după boot eșuează
+# într-un mod care arată ca o defecțiune a serviciului, nu ca lipsă de rețea.
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Work/Dev/Repos/engineering/legislativ
+ExecStart=%h/.local/bin/uv run python -m scripts.actualizare --db corpus.db --graf graf.db
+
+# O rulare care nu se termină nu trebuie să se suprapună cu următoarea. Colectarea cozii e de
+# ordinul minutelor; o oră e de zece ori mai mult decât orice rulare observată.
+TimeoutStartSec=1h
+
+# Serverul e al unui minister. Dacă rulează în paralel cu altceva, cedează.
+Nice=10
+IOSchedulingClass=idle
+
+# Nu are nevoie de nimic din sistem în afară de directorul propriu.
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/Work/Dev/Repos/engineering/legislativ
+NoNewPrivileges=true
