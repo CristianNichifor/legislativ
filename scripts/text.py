@@ -77,6 +77,25 @@ _FARA_DIACRITICE: Final[dict[int, str]] = {
 }
 
 
+# The SOAP service marks a block boundary with a lone `+` on its own line — after the header,
+# before `Articolul UNIC`, after the enacting formula. 125 669 of the 151 947 documents carry at
+# least one, and it is the only single-character line the service emits. The HTML the portal serves
+# has none, which is what identified it as a transport artifact rather than part of the text.
+_SEPARATOR_SOAP = re.compile(r"\n[ \t]*\+[ \t]*(?=\n|\Z)")
+
+
+def fara_separatoare(text: str) -> str:
+    """Drop the service's block markers, keeping the break they stand for.
+
+    Applied to the *derived* copy in `provizii` — the one that gets quoted to a reader, searched,
+    and put in front of a model — and never to `documente.text`, which stays exactly as the service
+    returned it. That split is the archive's whole point: a marker removed from the archive could
+    not be recovered, and a `+` shown inside a quotation from the Monitorul Oficial reads as an
+    error in the law rather than an error in the pipe it came down.
+    """
+    return _SEPARATOR_SOAP.sub("", text)
+
+
 def normalizeaza(text: str) -> str:
     """One canonical spelling of a passage, safe to run twice.
 

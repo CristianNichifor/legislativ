@@ -27,6 +27,7 @@ confidently wrong, and it belongs behind the validator and a clear "experimental
 
 from __future__ import annotations
 
+import contextlib
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -57,6 +58,18 @@ from scripts.servicii import (
 )
 
 APP = Path(__file__).resolve().parent.parent / "app"
+
+
+def _incalzeste(stare: Stare) -> None:
+    """Pay the first request's cost before anyone makes one.
+
+    The passes import their engines lazily and SQLite has a 9 GB file to start reading, so the
+    first lint is 4 s and the rest are 285 ms. This is that first lint, on a sentence that finds
+    nothing, thrown away. Failures are ignored on purpose: a corpus too incomplete to warm up is
+    still a corpus the server should serve, and the passes each report their own gaps.
+    """
+    with contextlib.suppress(Exception):
+        _lint("Articolul 1 Prezenta lege intră în vigoare la 30 de zile de la publicare.", stare)
 
 
 def face_handler(stare: Stare):
@@ -205,6 +218,12 @@ def serveste(
     server = ThreadingHTTPServer(("127.0.0.1", port), face_handler(stare))
     grafic = "cu graf" if stare.are_graf() else "fără graf"
     url = f"http://127.0.0.1:{port}"
+
+    # One throwaway lint before announcing the port. Measured on the full corpus, the first request
+    # costs 4 s and every one after it 285 ms — the difference is module imports done lazily inside
+    # the passes and SQLite warming its page cache over a 9 GB file. Paid here it lands on a line
+    # that says it is starting; paid on the first request it lands on somebody's first question.
+    _incalzeste(stare)
     print(f"legislativ pe {url}  ({len(stare.termeni)} termeni în dicționar, {grafic})")
     print(
         "proiectul lipit nu părăsește această mașină."
