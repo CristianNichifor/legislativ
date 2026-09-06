@@ -90,12 +90,31 @@ _CU_MODIFICARI = re.compile(
 
 # `12^1` is one article number. `12` followed by a separate `1` is two.
 _NR_ART = r"\d+(?:\^\d+)?"
+
+# `art. I` / `art. II` / `art. III` is the skeleton of every Romanian amending law — the Roman
+# articles carry the amendments, the Arabic ones the substantive text, and both live in the same
+# act. Reading only the Arabic ones does not lose the citation, it degrades it: the locator comes
+# back empty and the reference reads as *the whole act*. Measured on the CCR register, that
+# produced 109 of 215 rows claiming an entire law had been struck when the Court had struck one
+# article, `Legea nr. 249/2006` among them.
+#
+# **`artII` is not `art2`.** They are different provisions of the same act and routinely coexist,
+# so the numeral is kept in the locator as written rather than converted — converting would merge
+# two unrelated texts under one id, which is the collision failure one level down.
+#
+# Two things make this safe to match. It is scoped **case-sensitive** inside an IGNORECASE
+# pattern, because legal Romanian writes numerals in capitals and a case-blind `V?I{1,3}` reads
+# the `vii` of `viitor` as article VII. And it requires a non-letter after it, so a numeral that
+# is really the start of a word cannot end a match. Covers I–XXXIX, which is past any real
+# article number.
+_NR_ART_ROMAN = r"(?-i:(?:X{0,3}(?:IX|IV|V?I{1,3}|V)|X{1,3}))(?![A-Za-zĂÂÎȘȚăâîșț])"
 # Genitive again, and it is where the first version of this module lost half its locators:
 # `alineatul (3) al articolului 8` declines the second noun, and a pattern written for
 # `articolul` matches `articol` + `ul` and then meets `ui`, fails, and returns a locator with
 # no article — an amendment to alineat 3 of nothing.
 _SUF = r"(?:ul(?:ui)?|e(?:le|lor)?)?"
-_ARTICOL = rf"(?:articol{_SUF}|art\.?)\s*(?P<articol>{_NR_ART})"
+# Arabic first, so a digit is never reached by the Roman branch.
+_ARTICOL = rf"(?:articol{_SUF}|art\.?)\s*(?P<articol>{_NR_ART}|{_NR_ART_ROMAN})"
 _ALINEAT = rf"(?:alineat{_SUF}|alin\.?)\s*\(?(?P<alineat>{_NR_ART})\)?"
 _LITERA = r"(?:liter(?:a|ei|ele|elor)|lit\.?)\s*(?P<litera>[a-zș][\^\d]*)\s*\)"
 _PUNCT = rf"(?:punct{_SUF}|pct\.?)\s*(?P<punct>{_NR_ART})"
@@ -110,8 +129,17 @@ _LOCATOR = re.compile(
 
 # What can stand between a locator and the act it belongs to: `art. 5 din Legea ...`,
 # `alin. (2) al art. 7 din ...`. Anything longer and the two are unrelated neighbours.
+# `art. II alin. (1) și (3) din Legea nr. 249/2006` — the enumeration sits between the locator
+# and the act it belongs to. Without allowing it here the locator never binds *and* the act comes
+# through with an empty locator, so a citation of one paragraph reads as the whole law. That was
+# the dominant source of the CCR register's whole-act rows.
+#
+# Bounded rather than open-ended: a real enumeration is a handful of numbers, and `*` here would
+# let an arbitrary run of digits and commas join a locator to an act it has nothing to do with.
+_ENUMERARE_COADA = r"(?:\s*(?:,|și|si|ori|sau)\s*\(?\d+(?:\^\d+)?\)?){0,10}"
 _LEGATURA = re.compile(
-    r"^\s*,?\s*(?:din|ale?|ai|dinaintea|prev(?:ă|a)zut[eă]?\s+(?:la|de|în|in))\s+$",
+    rf"^{_ENUMERARE_COADA}\s*,?\s*"
+    r"(?:din|ale?|ai|dinaintea|prev(?:ă|a)zut[eă]?\s+(?:la|de|în|in))\s+$",
     re.IGNORECASE,
 )
 # What can join two halves of one position: `alineatul (3) al articolului 8`, and the anchor
@@ -245,16 +273,28 @@ def acte(text: str) -> list[Referinta]:
 
 
 def locatori(text: str) -> list[tuple[Locator, int, int]]:
-    """Every internal position cited, with its span. Empty matches are discarded."""
+    """Every internal position cited, with its span. Empty matches are discarded.
+
+    **Driven off the keywords, not scanned character by character.** All four parts of
+    `_LOCATOR` are optional, which is right — `alin. (2)` with no article is a locator — but it
+    means the pattern also matches the *empty string*, at every position in the text. Searching
+    with it therefore never skips: the engine cannot use the literal prefixes `art`, `alin`,
+    `lit`, `pct` to jump ahead, so it evaluates a four-way IGNORECASE alternation once per
+    character. Measured at 0.95 µs per character — an act of average length cost 35 ms, of which
+    essentially all was this, and the graph over 152 079 acts cost 95 minutes.
+
+    Anchoring is exact rather than approximate: a non-empty match must begin with one of those
+    keywords, so the positions where one occurs are precisely the positions worth trying. The
+    leading `\\s*,?\\s*` a match could otherwise absorb was being trimmed off the span anyway.
+    """
     text = normalizeaza(text)
     gasite: list[tuple[Locator, int, int]] = []
     pozitie = 0
-    while pozitie < len(text):
-        m = _LOCATOR.search(text, pozitie)
-        if m is None:
-            break
-        if m.end() == m.start():
-            pozitie = m.start() + 1
+    for ancora in _ANCORA.finditer(text):
+        if ancora.start() < pozitie:
+            continue  # inside a locator already taken; `pozitie` is the end of the last one
+        m = _LOCATOR.match(text, ancora.start())
+        if m is None or m.end() == m.start():
             continue
         loc = Locator(
             articol=m.group("articol"),
@@ -270,6 +310,12 @@ def locatori(text: str) -> list[tuple[Locator, int, int]]:
             gasite.append((loc, start, m.end()))
         pozitie = m.end()
     return gasite
+
+
+# Where a locator can begin. Every non-empty `_LOCATOR` match starts with one of these four
+# keyword families, so these positions are exactly the ones worth trying — and `\b` keeps `art`
+# out of `parte` and `lit` out of `politica`.
+_ANCORA: Final[re.Pattern[str]] = re.compile(r"\b(?:art|alin|lit|punct|pct)", re.IGNORECASE)
 
 
 def uneste(locuri: list[tuple[Locator, int, int]], text: str) -> list[tuple[Locator, int, int]]:
