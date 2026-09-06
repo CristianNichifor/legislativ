@@ -146,6 +146,18 @@
   .cron-ev.fel-abroga b{color:var(--blocking)}
   .cron-link{cursor:pointer;text-decoration:underline dotted}
 
+  /* Supraveghere: one card per watched act — what is moving on it */
+  .watch-card{border:1px solid var(--rule);border-radius:var(--r1);box-shadow:var(--e1);
+    background:var(--surface);padding:.7rem .9rem;margin:.6rem 0}
+  .watch-head{display:flex;align-items:baseline;gap:.5rem;flex-wrap:wrap}
+  .watch-head .watch-x{margin-left:auto}
+  .watch-meta{font-size:.8rem;color:var(--ink-mid);margin:.35rem 0}
+  .watch-nou{color:var(--material);font-weight:600}
+  .watch-inits{margin-top:.4rem}
+  .watch-init{font-size:.8rem;margin:.2rem 0;padding-left:.5rem;border-left:2px solid var(--rule-soft)}
+  .watch-init.nou{border-left-color:var(--material);
+    background:color-mix(in srgb,var(--material) 6%,transparent);border-radius:0 var(--r1) var(--r1) 0}
+
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
   .graf-cauta select,.graf-cauta .g-nr,.graf-cauta .g-an{height:2.15rem;font-size:.85rem}
@@ -568,6 +580,7 @@
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
     <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
+    <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
 
@@ -712,6 +725,26 @@
         </div>
         <div id="graf-tab-wrap" class="graf-tab-wrap"><p class="graf-empty">Caută un act ca să-i vezi conexiunile.</p></div>
       </div>
+
+      <div id="pane-supraveghere" role="tabpanel" aria-labelledby="tab-supraveghere" hidden>
+        <label for="s-nr">Supraveghează acte — vezi ce se mișcă pe ele (inițiative în lucru, modificări recente)</label>
+        <div class="graf-cauta">
+          <select id="s-tip" title="Tipul actului">
+            <option value="lege">lege</option>
+            <option value="oug">ordonanță de urgență</option>
+            <option value="og">ordonanță</option>
+            <option value="hg">hotărâre de Guvern</option>
+            <option value="ordin">ordin</option>
+            <option value="decizie">decizie</option>
+            <option value="decret">decret</option>
+          </select>
+          <input type="text" id="s-nr" class="g-nr" placeholder="număr (ex.: 98)">
+          <input type="number" id="s-an" class="g-an" placeholder="an (ex.: 2016)" min="1800" max="2100">
+          <button class="go" id="s-add">Adaugă la supraveghere</button>
+          <span class="hint" id="s-stat"></span>
+        </div>
+        <div id="s-lista"></div>
+      </div>
     </div>
 
     <aside class="canvas" id="canvas">
@@ -767,16 +800,17 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
     $("#pane-"+p).hidden = p!==which;
   });
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
-  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q",graf:"#g-nr"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",supraveghere:"#s-nr"}[which];
   if(focusEl) $(focusEl).focus();
   if(which==="consolidat") loadConsAsezari();
+  if(which==="supraveghere") renderSupraveghere();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
 $(".app").dataset.pane = "lint";   // initial tab
@@ -1913,6 +1947,53 @@ async function cronologieTab(){
 $("#g-go").onclick=grafTabCauta;
 $("#g-cron").onclick=cronologieTab;
 ["g-nr","g-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") grafTabCauta(); }));
+
+// ---- Supraveghere: a client-side watchlist of acts; per act, what is moving on it ----
+const WATCH_KEY="legislativ-watch", SEEN_KEY="legislativ-watch-seen";
+function watchList(){ try{ return JSON.parse(localStorage.getItem(WATCH_KEY)||"[]"); }catch(e){ return []; } }
+function watchSave(l){ try{ localStorage.setItem(WATCH_KEY, JSON.stringify(l)); }catch(e){} }
+function seenMap(){ try{ return JSON.parse(localStorage.getItem(SEEN_KEY)||"{}"); }catch(e){ return {}; } }
+function watchAdd(a){ const l=watchList(); if(!l.includes(a)){ l.push(a); watchSave(l); } }
+function watchRemove(a){ watchSave(watchList().filter(x=>x!==a)); }
+async function sAdd(){
+  const tip=$("#s-tip").value||"lege", nr=$("#s-nr").value.trim(), an=$("#s-an").value.trim(), stat=$("#s-stat");
+  if(!nr||!an){ stat.textContent="completează numărul și anul"; return; }
+  stat.textContent="…";
+  try{
+    const d=await (await fetch(`/api/act?tip=${encodeURIComponent(tip)}&nr=${encodeURIComponent(nr)}&an=${encodeURIComponent(an)}`)).json();
+    if(!d.act_id){ stat.textContent="număr sau an invalid"; return; }
+    if(!d.cunoscut){ stat.textContent=`${d.act_id} nu este în corpus`; return; }
+    watchAdd(d.act_id); $("#s-nr").value=""; $("#s-an").value=""; stat.textContent="";
+    renderSupraveghere();
+  }catch(e){ stat.textContent="eroare"; }
+}
+async function renderSupraveghere(){
+  const box=$("#s-lista"), lista=watchList();
+  if(!lista.length){ box.innerHTML=empty("Niciun act supravegheat. Adaugă unul mai sus — apoi vezi inițiativele în lucru care îl ating și modificările lui recente."); return; }
+  box.innerHTML=`<p class="empty"><span class="spin"></span> încarc…</p>`;
+  const seen=seenMap();
+  const carduri=await Promise.all(lista.map(a=>fetch("/api/supraveghere?act="+encodeURIComponent(a)).then(r=>r.json()).catch(()=>({act_id:a,eroare:true}))));
+  box.innerHTML=carduri.map(d=>{
+    const inits=d.initiative||[]; const vazute=new Set(seen[d.act_id]||[]);
+    const noi=inits.filter(i=>!vazute.has(i.plx_id)).length;
+    seen[d.act_id]=inits.map(i=>i.plx_id);
+    let h=`<div class="watch-card"><div class="watch-head"><span class="plx">${esc(d.act_id)}</span> `
+      +`<span class="hint">${esc((d.titlu||"").slice(0,70))}</span>`
+      +`<button class="ghost mini watch-x" data-act="${esc(d.act_id)}" title="Nu mai supraveghea">★ scoate</button></div>`
+      +`<div class="watch-meta"><span><b>${d.citari||0}</b> acte îl citează</span> · <span>amendat de <b>${d.amendat||0}</b></span>`
+      +(d.ultima_modificare?` · <span>ultima modificare: <b>${esc(d.ultima_modificare)}</b></span>`:``)
+      +(noi?` · <span class="watch-nou">${noi} inițiative noi</span>`:``)+`</div>`;
+    if(inits.length) h+=`<div class="watch-inits"><div class="impact-h">Inițiative în lucru care îl ating (${inits.length})</div>`
+      +inits.map(i=>`<div class="watch-init${vazute.has(i.plx_id)?"":" nou"}"><span class="plx">${esc(i.plx_id)}</span>`
+        +(i.senat_id?` · Senat ${esc(i.senat_id)}`:``)+` — ${esc((i.titlu||"").slice(0,110))} <span class="hint">[${esc((i.stadiu||"").slice(0,40))}]</span></div>`).join("")+`</div>`;
+    else h+=`<div class="hint" style="margin:.3rem 0">Nicio inițiativă în lucru nu-l atinge.</div>`;
+    return h+`</div>`;
+  }).join("");
+  try{ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }catch(e){}
+  box.querySelectorAll(".watch-x").forEach(b=>b.onclick=()=>{ watchRemove(b.dataset.act); renderSupraveghere(); });
+}
+$("#s-add").onclick=sAdd;
+["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));
 </script>
 </body>
 </html>

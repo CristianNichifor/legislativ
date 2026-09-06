@@ -48,6 +48,7 @@ from scripts.servicii import (
     _redacteaza,
     _regula,
     _sugereaza,
+    _supraveghere,
     _termeni,
     _vecini,
     rezumat,
@@ -110,6 +111,8 @@ def face_handler(stare: Stare):
                 self._json(_cronologie(parse_qs(ruta.query).get("act", [""])[0], stare))
             elif ruta.path == "/api/citari":
                 self._json(_citari(parse_qs(ruta.query).get("act", [""])[0], stare))
+            elif ruta.path == "/api/supraveghere":
+                self._json(_supraveghere(parse_qs(ruta.query).get("act", [""])[0], stare))
             elif ruta.path == "/api/redacteaza":
                 self._json(_redacteaza(parse_qs(ruta.query)))
             elif ruta.path == "/api/sugereaza":

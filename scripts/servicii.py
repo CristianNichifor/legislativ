@@ -330,6 +330,44 @@ def _citari(act_id: str, stare: Stare) -> dict:
         graf.close()
 
 
+def _supraveghere(act_id: str, stare: Stare) -> dict:
+    """The watch-state of one act: the pending bills that touch it, its amendment activity, and how
+    heavily it is cited — everything a drafter tracking a law (their own or a rival's) needs in one
+    card. The client keeps the watchlist (offline, no account); this answers per act on demand."""
+    if not act_id:
+        return {"act_id": act_id, "cunoscut": False, "initiative": []}
+    out: dict = {
+        "act_id": act_id,
+        "titlu": stare.titlu(act_id),
+        "cunoscut": stare.cunoscut(act_id),
+        "citari": 0,
+        "amendat": 0,
+        "ultima_modificare": None,
+        "initiative": [],
+    }
+    if stare.are_graf():
+        from scripts.graf import _deschide_graf, inbound
+
+        graf = _deschide_graf(stare.graf, readonly=True)
+        try:
+            muchii = inbound(graf, act_id)
+            amend = [m for m in muchii if m.fel != "refera"]
+            out["citari"] = len({m.din_act for m in muchii})
+            out["amendat"] = len({m.din_act for m in amend})
+            date = [m.de_la.isoformat() for m in amend if m.de_la]
+            out["ultima_modificare"] = max(date) if date else None
+        finally:
+            graf.close()
+    try:
+        from scripts.imbogateste import initiative_pe_act
+
+        with depozit.deschide(stare.initiative, readonly=True) as ini:
+            out["initiative"] = initiative_pe_act(ini, act_id)
+    except Exception:
+        out["initiative"] = []
+    return out
+
+
 def _vid_dict(v) -> dict:
     """One `vid.Vid` finding as a plain dict for the UI / the shipped report."""
     ob = v.obligatie
