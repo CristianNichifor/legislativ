@@ -1115,7 +1115,7 @@ function renderLint(d){
     on.map(o=>card(o.severitate==="blocking"?"blocking":"material",
       `<span class="plx">${esc(o.act_id)}${o.locator?" "+esc(locRo(o.locator)):""}</span>`
         +(o.instrument?` — normă de tip <b>${esc(o.instrument)}</b> pe care corpusul nu o găsește emisă`:" — obligație pe care corpusul nu o găsește îndeplinită"),
-      [ o.scadenta?`scadent: <b>${esc(o.scadenta)}</b>`:"scadență necunoscută",
+      [ o.scadenta?`scadent: <b>${esc(isoLaDataRo(o.scadenta)||o.scadenta)}</b>`:"scadență necunoscută",
         o.zile_intarziere!=null?`întârziere: <b>${o.zile_intarziere}</b> zile`:"",
         o.candidati&&o.candidati.length?`candidați apropiați: ${o.candidati.map(esc).join(", ")}`:"",
         ...(o.limitari||[]).map(l=>"⚠ "+esc(l)) ].filter(Boolean), o.text, "derived")).join(""));
@@ -2150,7 +2150,7 @@ async function cronologieTab(){
     let h=`<div class="cron"><div class="cron-h">Cronologia modificărilor · <b>${ev.length}</b> intervenții datate</div>`;
     for(const an of Object.keys(ani).sort()){
       h+=`<div class="cron-an"><div class="cron-an-h">${esc(an)} <span class="hint">(${ani[an].length})</span></div>`
-        +ani[an].map(e=>`<div class="cron-ev fel-${esc(e.fel)}"><span class="cron-data">${esc(e.de_la)}</span> `
+        +ani[an].map(e=>`<div class="cron-ev fel-${esc(e.fel)}"><span class="cron-data">${esc(isoLaDataRo(e.de_la)||e.de_la)}</span> `
           +`<b>${esc(felRo[e.fel]||e.fel)}</b> prin <a class="plx cron-link" data-act="${esc(e.act_id)}">${esc(e.act_id)}</a>`
           +(e.titlu?` <span class="hint">— ${esc(e.titlu).slice(0,70)}</span>`:``)+`</div>`).join("")+`</div>`;
     }
