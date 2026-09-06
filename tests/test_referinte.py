@@ -98,3 +98,126 @@ def test_every_reference_carries_the_span_it_was_read_from():
     text = "Se aplică prevederile Legii nr. 98/2016 în continuare."
     ref = acte(text)[0]
     assert text[ref.start : ref.end] == ref.text
+
+
+# --- articole numerotate cu cifre romane -------------------------------------------------------
+#
+# `art. I` / `art. II` / `art. III` is the skeleton of every Romanian amending law: the Roman
+# articles carry the amendments, the Arabic ones the substantive text, and both live in the same
+# act. Reading only the Arabic ones cost the CCR register 109 of 215 rows, which came out claiming
+# whole laws had been struck when the Court had struck a single article.
+
+
+def test_a_roman_article_is_read():
+    (ref,) = [r for r in referinte("art. II din Legea nr. 249/2006") if r.act]
+    assert ref.act.id == "lege-249-2006"
+    assert ref.locator.id == "artII"
+
+
+def test_a_roman_article_is_not_the_arabic_one_of_the_same_value():
+    """The load-bearing case. `art. II` and `art. 2` are different provisions of the same act,
+    they routinely coexist, and collapsing them merges two unrelated texts into one locator —
+    the same class of error as a citation-key collision."""
+    (roman,) = locatori("art. II")
+    (arab,) = locatori("art. 2")
+    assert roman[0].id == "artII"
+    assert arab[0].id == "art2"
+    assert roman[0].id != arab[0].id
+
+
+def test_a_roman_article_carries_its_sub_locators():
+    (loc, _, _) = locatori("art. II alin. (1)")[0]
+    assert loc.id == "artII.alin1"
+
+
+@pytest.mark.parametrize(
+    ("text", "asteptat"),
+    [
+        ("art. I", "artI"),
+        ("art. IV", "artIV"),
+        ("art. V", "artV"),
+        ("art. VI", "artVI"),
+        ("art. VIII", "artVIII"),
+        ("art. IX", "artIX"),
+        ("art. X", "artX"),
+        ("art. XIV", "artXIV"),
+        ("articolul II", "artII"),
+    ],
+)
+def test_the_numerals_that_actually_appear(text, asteptat):
+    assert locatori(text)[0][0].id == asteptat
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "art. viitor",  # `vii` would read as VII
+        "articolul ivit",  # `iv` would read as IV
+        "art. ii",  # lowercase is not how legal Romanian writes a numeral
+    ],
+)
+def test_a_word_beginning_with_numeral_letters_is_not_an_article(text):
+    """`re.IGNORECASE` on the locator pattern makes this the real risk: without a case rule and
+    a trailing boundary, `art. viitor` becomes article VII."""
+    assert [loc.id for loc, _, _ in locatori(text)] == [] or all(
+        not loc.articol for loc, _, _ in locatori(text)
+    )
+
+
+def test_the_arabic_form_is_unaffected():
+    assert locatori("art. 175 alin. (1) lit. b)")[0][0].id == "art175.alin1.litb"
+    assert locatori("art. 12^1")[0][0].id == "art12^1"
+
+
+# --- locatorul nu se citește din interiorul unui cuvânt ----------------------------------------
+#
+# The locator pattern has four optional parts, so it also matches the empty string and a plain
+# `search` never skips — it evaluated the alternation once per character, which was both the
+# 95-minute graph build and a steady source of false positives from `art` inside other words.
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "EN 12953-7:2002, Shell boilers-Part 7: Requirements",  # `Part 7` -> art7
+        "Flanges and their joints-Bolting-Part 1: Classification",
+        "Gerhart I. Hutter, profesor, director adjunct",  # `Gerhart I.` -> art I
+        "conform standardului, compartimentul 3 se aplică",
+    ],
+)
+def test_a_locator_is_not_read_from_inside_a_word(text):
+    assert [loc.id for loc, _, _ in locatori(text)] == []
+
+
+def test_a_locator_after_a_newline_is_still_found():
+    """Real corpus text wraps mid-sentence; the position must not depend on the preceding space."""
+    assert [loc.id for loc, _, _ in locatori("pe destinațiile prevăzute la\npct. 1-8")] == ["pct1"]
+    assert [loc.id for loc, _, _ in locatori("imobilul transmis potrivit\nalin. (1)")] == ["alin1"]
+
+
+# --- enumerarea nu trebuie să rupă legarea locatorului de act ----------------------------------
+
+
+def test_an_enumeration_between_locator_and_act_does_not_orphan_it():
+    """`art. II alin. (1) și (3) din Legea nr. 249/2006` is one citation, not two halves.
+
+    With the enumeration in the way, the locator failed to bind and the act arrived with an
+    empty locator — so the register read it as *the whole law struck*. That single failure is
+    what produced most of the whole-act rows in the CCR list, `Legea nr. 249/2006` included.
+    """
+    refs = referinte("art. II alin. (1) și (3) din Legea nr. 249/2006")
+    legat = [(r.act.id if r.act else None, r.locator.id) for r in refs]
+    assert ("lege-249-2006", "artII.alin1") in legat
+    # the act must NOT also appear bare, which is what reads as "whole act"
+    assert ("lege-249-2006", "") not in legat
+
+
+def test_a_comma_enumeration_binds_too():
+    refs = referinte("art. 5, 6 din Legea nr. 98/2016")
+    assert ("lege-98-2016", "art5") in [(r.act.id if r.act else None, r.locator.id) for r in refs]
+
+
+def test_a_full_stop_between_them_still_does_not_bind():
+    """Widening the joiner must not start binding across sentences."""
+    refs = referinte("art. 5 se modifică. Legea nr. 50/1991 se abrogă")
+    assert ("lege-50-1991", "") in [(r.act.id if r.act else None, r.locator.id) for r in refs]
