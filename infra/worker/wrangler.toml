@@ -24,11 +24,10 @@ simple = { limit = 20, period = 60 }
 ORIGINI = "https://cristiannichifor.github.io"
 # Hard ceiling on NEW rewrites per day (a spend cap, in KV). Leave unset to disable.
 CAP_ZILNIC = "1500"
-# The AI Gateway to route Workers AI calls through, for free caching + analytics. Create a gateway
-# with this id in the dashboard (Account 432316a05c0d6000c6e196fe32e47dd7 / CN Webify). Until it
-# exists the Worker falls back to Workers AI directly, so this is safe to leave set. Unset to skip
-# the gateway entirely.
-AIG_ID = "legislativ"
+# The AI Gateway to route Workers AI calls through, for free caching + analytics (Account
+# 432316a05c0d6000c6e196fe32e47dd7 / CN Webify). If this gateway does not exist the Worker falls back
+# to Workers AI directly, so it is safe to leave set. Unset to skip the gateway entirely.
+AIG_ID = "law-legislation-project-gateway"
 # Default Workers AI model; the client may request another from the allowlist in src/index.js.
 WAI_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
 
