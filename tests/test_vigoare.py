@@ -173,6 +173,7 @@ def test_unqualified_living_law_is_not_flagged(tmp_path):
 # The acts in `_graf` are dated 2020-01-01, so every edge carries that date. Moving the
 # republication date either side of it is what puts a repeal before or after the boundary.
 
+
 def _dateaza(tmp_path: Path, cand: date) -> None:
     """Put a date on the repeal edges. `_graf`'s acts produce undated ones, and the after-the-
     boundary case needs a dated edge to be about anything."""
@@ -194,7 +195,7 @@ def test_a_repeal_older_than_the_republication_is_qualified_not_asserted(tmp_pat
     dead = citari_moarte(CITARE, graf, {"lege-98-2016": date(2021, 6, 1)})
     assert len(dead) == 1
     assert dead[0].peste_republicare == date(2021, 6, 1)
-    assert dead[0].severitate == "material"       # not blocking: the match may not hold
+    assert dead[0].severitate == "material"  # not blocking: the match may not hold
     assert "republicării" in dead[0].motiv and "01.06.2021" in dead[0].motiv
 
 
@@ -220,12 +221,12 @@ def test_the_boundary_rule_itself(tmp_path):
 
 def test_a_repeal_after_the_republication_is_asserted_normally(tmp_path):
     """Past the boundary the locator is already in current numbering, so nothing is qualified."""
-    _graf(tmp_path, [ABROGA_15]).close()   # builds corpus + graph
+    _graf(tmp_path, [ABROGA_15]).close()  # builds corpus + graph
     _dateaza(tmp_path, date(2022, 1, 1))
     graf = _deschide_graf(str(tmp_path / "graf.db"), readonly=True)
     dead = citari_moarte(CITARE, graf, {"lege-98-2016": date(2021, 6, 1)})
     assert len(dead) == 1
-    assert dead[0].abrogare.de_la == date(2022, 1, 1)   # the edge really is dated
+    assert dead[0].abrogare.de_la == date(2022, 1, 1)  # the edge really is dated
     assert dead[0].peste_republicare is None
     assert dead[0].severitate == "blocking"
     assert "republicării" not in dead[0].motiv
