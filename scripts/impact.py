@@ -29,12 +29,16 @@ from collections.abc import Callable
 from scripts.amendamente import amendamente
 from scripts.definitii import definitii
 from scripts.termene import obligatii
+from scripts.text import cheie
 
 # reach weights: a redefined term and a repealed provision each reach further than one more
 # citation, so they count for more than a single structural edge. Tunable, not load-bearing — the
 # components are always reported next to the total, so a reader can reweigh by eye.
 _GREUTATE_TERMEN = 10
 _GREUTATE_ABROGARE = 5
+# a removed obligation reaches like a repeal: a quietly-deleted reporting/accountability duty is the
+# rollback that hides as a deletion, so it weighs the same as an abrogation.
+_GREUTATE_ELIMINARE = 5
 _MIC = (
     400  # a payload this small or smaller "looks innocent"; big reach under it is the trojan case
 )
@@ -64,6 +68,7 @@ def raza_de_impact(
     draft: str,
     citari_fn: Callable[[str], tuple[int, int]] | None = None,
     numara_termen: Callable[[str], int | None] | None = None,
+    text_original: Callable[[str, str], str | None] | None = None,
 ) -> dict:
     """The downstream reach of the amendments in `draft`.
 
@@ -71,6 +76,8 @@ def raza_de_impact(
     reach, from the graph, injected so the engine stays testable and transport-free. `numara_termen`
     counts a term's corpus usages for the definitional reach, or returns `None` where the corpus is
     not available to count (the browser ships no corpus) — a missing count is a gap, not a zero.
+    `text_original(act_id, locator)` returns a provision's current text so the obligation *removed*
+    by a change can be found — the hidden rollback that a deletion hides; `None` where unavailable.
     """
     ams = amendamente(draft)
     pe_act: dict[str, list] = {}
@@ -112,17 +119,50 @@ def raza_de_impact(
         for o in obligatii(text_nou)
     ]
 
+    # Obligations the change removes: an `abroga` deletes every duty the provision held; a
+    # `modifica` deletes each obligation whose sentence is gone from the new text. Folded-text,
+    # so a kept-but-reworded duty is not falsely reported gone — the safe direction for a claim that
+    # a rollback hides in a deletion. Needs the provision's current text, so silent without it.
+    obligatii_eliminate: list[dict] = []
+    if text_original:
+        for a in ams:
+            if a.act_tinta is None or a.locator is None or a.fel not in ("abroga", "modifica"):
+                continue
+            orig = text_original(a.act_tinta.id, a.locator.id)
+            if not orig:
+                continue
+            vechi = obligatii(orig)
+            if a.fel == "abroga":
+                sterse = vechi
+            elif a.continut_nou:
+                pastrate = {cheie(o.text) for o in obligatii(a.continut_nou)}
+                sterse = [o for o in vechi if cheie(o.text) not in pastrate]
+            else:
+                sterse = []
+            obligatii_eliminate += [
+                {
+                    "act_id": a.act_tinta.id,
+                    "locator": a.locator.id,
+                    "text": o.text[:200],
+                    "instrument": o.tip_asteptat,
+                    "termen_zile": o.termen_zile,
+                }
+                for o in sterse
+            ]
+
     abrogari_total = sum(len(t["abrogari"]) for t in tinte)
     raza = (
         citari_total
         + sum((t["utilizari"] or 0) for t in termeni)
         + _GREUTATE_TERMEN * len(termeni)
         + _GREUTATE_ABROGARE * abrogari_total
+        + _GREUTATE_ELIMINARE * len(obligatii_eliminate)
     )
     return {
         "tinte": tinte,
         "termeni_redefiniti": termeni,
         "obligatii_noi": obligatii_noi,
+        "obligatii_eliminate": obligatii_eliminate,
         "dimensiune": len(text_nou),
         "scor": _scor(len(text_nou), raza),
     }
