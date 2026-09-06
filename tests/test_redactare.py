@@ -7,7 +7,7 @@ article-first. The forms come from Legea nr. 24/2000 and the Consiliul Legislati
 
 from __future__ import annotations
 
-from scripts.redactare import conformitate, redacteaza, titlu_modificator
+from scripts.redactare import conformitate, limbaj_normativ, redacteaza, titlu_modificator
 
 
 def test_a_non_standard_repeal_is_flagged_with_the_correct_form():
@@ -58,3 +58,42 @@ def test_the_amending_title_names_the_touched_element():
     assert titlu_modificator("abroga", "Legea nr. 50/1991", articol="15") == (
         "Lege pentru abrogarea art. 15 din Legea nr. 50/1991"
     )
+
+
+# --- normative language: the register a provision is written in, not the operation it performs ---
+
+
+def test_future_tense_is_flagged_as_non_normative():
+    ab = limbaj_normativ("Normele metodologice se vor aproba de Guvern.")
+    assert ab and ab[0].operatie == "limbaj"
+    assert "prezent" in ab[0].explicatie  # the fix names the present tense
+
+
+def test_the_mandated_cuprins_formula_is_not_mistaken_for_future_tense():
+    # "va avea următorul cuprins" is the required form — matching "se va" must not catch it
+    ok = (
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică și va avea "
+        "următorul cuprins: «Autoritatea publică anunțul.»"
+    )
+    assert limbaj_normativ(ok) == []
+
+
+def test_trebuie_sa_is_flagged_as_an_indirect_obligation():
+    ab = limbaj_normativ("Ofertantul trebuie să depună garanția.")
+    assert any("obligația" in a.explicatie for a in ab)
+
+
+def test_si_sau_and_etc_are_flagged():
+    ab = limbaj_normativ("Se depun actele și/sau documentele, avizele etc.")
+    gasite = {a.gasit for a in ab}
+    assert "și/sau" in gasite and any(g.startswith("etc") for g in gasite)
+
+
+def test_normative_language_findings_reach_conformitate():
+    # the register checks are part of the same pass the lint surface reads
+    ab = conformitate("Măsurile se vor stabili prin hotărâre.")
+    assert any(a.operatie == "limbaj" for a in ab)
+
+
+def test_clean_normative_prose_has_no_language_findings():
+    assert limbaj_normativ("Autoritatea contractantă publică anunțul de participare.") == []
