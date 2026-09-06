@@ -277,6 +277,29 @@
      fields that are meant to read as one pair. Pin the editor to the same line box as the text. */
   input[type=date]::-webkit-datetime-edit{padding:0;line-height:1.6}
   input[type=date]::-webkit-datetime-edit-fields-wrapper{padding:0}
+
+  /* Romanian date entry.
+
+     `input[type=date]` renders its segments in the *browser's* locale, never the document's, and
+     `lang="ro"` does not reach it — so on an en-US browser this Romanian page was asking for a date
+     as mm/dd/yyyy. For a tool about Romanian law that is not cosmetic: 07.12.2022 and 12.07.2022 are
+     both plausible readings of the same act, and the field gave no clue which it wanted.
+
+     So the field a person reads and types is a plain text input in zz.ll.aaaa, the order Romanian
+     actually uses. The native control is kept — a calendar is genuinely nicer than typing — but
+     demoted to a button beside the field. It stays in the layout (1px, transparent) rather than
+     display:none because showPicker() refuses to open on an element that is not rendered.
+
+     ISO is still what goes on the wire; dataRoLaIso() is the single place that conversion happens. */
+  .data-ro{position:relative;display:flex;align-items:center}
+  .data-ro>input[type=text]{padding-right:2.8rem}
+  .data-cal{position:absolute;right:.45rem;display:flex;align-items:center;justify-content:center;
+    width:1.75rem;height:1.75rem;padding:0;border:1px solid transparent;border-radius:var(--r1);
+    background:transparent;color:var(--ink-mute);cursor:pointer}
+  .data-cal:hover{color:var(--accent);border-color:var(--rule)}
+  .data-cal svg{width:1.05rem;height:1.05rem;display:block}
+  .data-native{position:absolute;right:.45rem;width:1px;height:1px;min-height:0;padding:0;margin:0;
+    border:0;opacity:0;pointer-events:none}
   /* a year is four digits typed, not nudged: the spinners only add clutter and a hover target that
      does nothing useful at this size */
   input[type=number]{-moz-appearance:textfield;appearance:textfield}
@@ -287,6 +310,11 @@
   select{appearance:none;-webkit-appearance:none;padding-right:2.4rem;
     background-image:var(--select-chevron);
     background-repeat:no-repeat;background-position:right 1rem center;background-size:.7rem}
+  /* The bare attribute selector is (0,1,0) and the base control rule above is (0,1,1), so for every
+     element that actually gets this attribute — the year/number fields in Redactează, the date in
+     Consolidat — the grey border won and the invalid state has never once been visible. Naming the
+     element types puts it at (0,2,1), ahead of the rule it is meant to override. */
+  input[aria-invalid="true"],select[aria-invalid="true"],textarea[aria-invalid="true"],
   [aria-invalid="true"]{border-color:var(--blocking)}
   .req{color:var(--blocking)}
   .opt{color:var(--ink-mute);font-weight:400;text-transform:none;letter-spacing:0}
@@ -302,7 +330,9 @@
   /* grid cells: bottom-align the field so a label that wraps to two lines does not shove its box
      down out of line with the others in the row */
   .grid>div{display:flex;flex-direction:column}
-  .grid>div>input,.grid>div>select{margin-top:auto}
+  /* .data-ro is in this list because the date field now sits inside a wrapper — without it that
+     cell stopped bottom-aligning and the date box floated above the select beside it */
+  .grid>div>input,.grid>div>select,.grid>div>.data-ro{margin-top:auto}
   /* resize is capped so the box stays within the viewport — the reserve (22rem) leaves room for
      the header and tabs above AND the button row plus a gap below, so the buttons never sit on the
      bottom edge. Text beyond the cap scrolls inside instead of pushing the page open. */
@@ -760,8 +790,16 @@
         <div class="grid">
           <div><label for="c-act">Actul</label>
             <select id="c-act"><option value="">se încarcă…</option></select></div>
-          <div><label for="c-data">La data (opțional)</label>
-            <input type="date" id="c-data" onclick="this.showPicker&&this.showPicker()" onfocus="this.showPicker&&this.showPicker()"></div>
+          <div><label for="c-data">La data <span class="opt">(opțional · zz.ll.aaaa)</span></label>
+            <div class="data-ro">
+              <input type="text" id="c-data" inputmode="numeric" autocomplete="off" maxlength="10"
+                placeholder="zz.ll.aaaa">
+              <button type="button" class="data-cal" id="c-data-cal" aria-label="Alege din calendar"
+                title="Alege din calendar"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none"
+                stroke="currentColor" stroke-width="1.3"><rect x="1.5" y="2.8" width="13" height="11.7"
+                rx="1.6"/><path d="M1.5 6.2h13M4.8 1.5v2.6M11.2 1.5v2.6"/></svg></button>
+              <input type="date" id="c-data-native" class="data-native" tabindex="-1" aria-hidden="true">
+            </div></div>
         </div>
         <div class="row"><button class="go" id="c-go">Arată</button>
           <span class="ai-set">
@@ -1782,7 +1820,8 @@ let ultimaCons=null;   // last consolidation, so a mode change can re-render but
 function renderCons(d){
   ultimaCons=d;
   const r=d.rezumat||{};
-  let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(d.la_data)}</b> · `
+  // dates come off the wire in ISO and are shown the way the field above asks for them
+  let h=`<div class="cons-bar"><span class="hint">Text la <b>${esc(isoLaDataRo(d.la_data)||d.la_data)}</b> · `
     +`<b>${r.atinse||0}</b> prevederi atinse · <b>${r.consolidate||0}</b> consolidate · `
     +`<b>${r.refuzate||0}</b> neconsolidate</span></div>`;
   const clar = aiOn();
@@ -1797,7 +1836,7 @@ function renderCons(d){
     if(!p.abrogat) body+=`<div class="cons-text">${textLizibil(p.text)}</div>`;
     body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
-      +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(s.data):""})`).join(", ")+`</div>`;
+      +p.schimbari.map(s=>`<b>${esc(s.act)}</b> (${FELV[s.fel]||esc(s.fel)}${s.data?", "+esc(isoLaDataRo(s.data)||s.data):""})`).join(", ")+`</div>`;
     if(p.limitari&&p.limitari.length) body+=p.limitari.map(l=>`<p class="cons-refuz">⚠ ${esc(l)}</p>`).join("");
     return `<div class="cons-prov ${cls}">${body}</div>`;
   }).join("") || empty("Nicio prevedere atinsă."));
@@ -1822,10 +1861,68 @@ async function rescrie(btn, p, act){
   }catch(e){ out.innerHTML=empty("Eroare: "+esc(e.message||e)); }
   finally{ btn.disabled=false; }
 }
+// ---- data în format românesc (zz.ll.aaaa) ----
+// The visible field is Romanian; the API takes ISO (date.fromisoformat). These two functions are
+// the whole boundary between the two, so there is exactly one place to look when a date is wrong.
+const RO_DATA=/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{4})$/;
+const ISO_DATA=/^(\d{4})-(\d{1,2})-(\d{1,2})$/;
+// "" for an empty field (the date is optional), an ISO string when it parses, null when it does not.
+// A round-trip through Date is what rejects 31.02: the calendar, not a regex, decides what exists.
+function dataRoLaIso(brut){
+  const s=(brut||"").trim();
+  if(!s) return "";
+  let z,l,a;
+  const ro=s.match(RO_DATA), iso=s.match(ISO_DATA);   // ISO too, so a pasted 2022-07-12 still works
+  if(ro) [,z,l,a]=ro; else if(iso) [,a,l,z]=iso; else return null;
+  [z,l,a]=[+z,+l,+a];
+  const d=new Date(Date.UTC(a,l-1,z));
+  if(d.getUTCFullYear()!==a||d.getUTCMonth()!==l-1||d.getUTCDate()!==z) return null;
+  return `${a}-${String(l).padStart(2,"0")}-${String(z).padStart(2,"0")}`;
+}
+function isoLaDataRo(iso){
+  const m=(iso||"").match(ISO_DATA);
+  return m ? `${m[3].padStart(2,"0")}.${m[2].padStart(2,"0")}.${m[1]}` : "";
+}
+(function(){
+  const camp=$("#c-data"), nativ=$("#c-data-native"), buton=$("#c-data-cal");
+  if(!camp) return;
+  // type the digits, get the dots — so nobody has to reach for punctuation mid-number
+  camp.addEventListener("input",()=>{
+    const cifre=camp.value.replace(/\D/g,"").slice(0,8);
+    if(camp.value.replace(/[.\/-]/g,"")!==cifre) return;   // editing in the middle: leave it alone
+    let v=cifre;
+    if(cifre.length>4) v=`${cifre.slice(0,2)}.${cifre.slice(2,4)}.${cifre.slice(4)}`;
+    else if(cifre.length>2) v=`${cifre.slice(0,2)}.${cifre.slice(2)}`;
+    if(v!==camp.value) camp.value=v;
+    camp.removeAttribute("aria-invalid");
+  });
+  // flag a date that cannot exist as soon as the field is left, not at submit time. The value has
+  // to be the string "true": ARIA reads it as an enum, and the stylesheet matches on
+  // [aria-invalid="true"] — toggleAttribute would set it to "" and neither would fire.
+  camp.addEventListener("blur",()=>{
+    const iso=dataRoLaIso(camp.value);
+    if(iso===null) camp.setAttribute("aria-invalid","true"); else camp.removeAttribute("aria-invalid");
+    if(iso) nativ.value=iso;
+  });
+  buton.onclick=()=>{
+    nativ.value=dataRoLaIso(camp.value)||"";
+    if(nativ.showPicker) nativ.showPicker(); else nativ.focus();
+  };
+  nativ.addEventListener("change",()=>{
+    camp.value=isoLaDataRo(nativ.value);
+    camp.removeAttribute("aria-invalid");
+  });
+})();
+
 $("#c-go").onclick=async ()=>{
   const act=$("#c-act").value;
   if(!act){ $("#cons-out").innerHTML=empty("Alege un act."); return; }
-  const data=$("#c-data").value.trim();
+  const data=dataRoLaIso($("#c-data").value);
+  if(data===null){
+    $("#c-data").setAttribute("aria-invalid","true");
+    $("#cons-out").innerHTML=empty("Data nu este validă. Scrie-o ca zz.ll.aaaa — ex.: 12.07.2022.");
+    return;
+  }
   $("#c-go").disabled=true; $("#c-go").innerHTML=`<span class="spin"></span> se consolidează…`;
   try{
     const q="/api/consolidat?act="+encodeURIComponent(act)+(data?"&la_data="+encodeURIComponent(data):"");

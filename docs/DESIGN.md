@@ -141,6 +141,24 @@ Note for anyone tempted by `@fontsource/aileron`: its only subset is `latin`, wh
 no U+00A0; `scripts/fonturi.py` maps that codepoint onto the font's own `space` glyph, because a
 missing no-break space in a legal text drops the run into a fallback face mid-sentence.
 
+## Dates
+
+Romanian writes a date `zz.ll.aaaa` — 12.07.2022. `input[type=date]` cannot be made to say that:
+it renders its segments in the **browser's** locale, and `lang="ro"` on the document does not reach
+it. On an en-US browser this page was asking for `mm/dd/yyyy`, which for a tool about Romanian law
+is worse than ugly — 07.12.2022 and 12.07.2022 are both plausible readings of the same act, and the
+field gave no clue which one it wanted.
+
+So the field is a text input in Romanian order, with the native picker kept and moved to a button
+beside it. The wire format is unchanged — the API takes ISO, because `date.fromisoformat` is what
+parses it — and `dataRoLaIso()` / `isoLaDataRo()` are the only two places the conversion happens.
+Dates coming back from the API are shown in the same Romanian form, so the answer reads the way the
+question was asked.
+
+The parser takes `.`, `/` and `-` as separators and single-digit day or month, and it also accepts a
+pasted ISO date. It rejects anything the calendar does not contain: `31.02` and `29.02.2023` fail,
+because the check is a round-trip through `Date`, not a regular expression.
+
 ## The graph palette
 
 `PALETA` in `app/index.html` gives each act a stable colour so every dot reads as its own node.
