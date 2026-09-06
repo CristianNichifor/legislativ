@@ -456,6 +456,12 @@ def _neconstitutional_json() -> None:
     (DATA / "norme_lovite.json").write_text(json.dumps(norme, ensure_ascii=False), encoding="utf-8")
     print(f"  norme lovite → {DATA / 'norme_lovite.json'} ({len(norme)} prevederi cu text)")
 
+    # Shipped separately and fetched lazily: only the model pass reads the reasoning, and that pass
+    # needs a model. An offline session should not download it to never open it.
+    cons = servicii.construieste_considerente(str(corpus))
+    (DATA / "considerente.json").write_text(json.dumps(cons, ensure_ascii=False), encoding="utf-8")
+    print(f"  considerente → {DATA / 'considerente.json'} ({len(cons)} decizii)")
+
 
 def _bundle() -> None:
     tinta = WEB / "bundle.zip"
