@@ -186,6 +186,41 @@ The HTML path also carries a constraint worth keeping: the portal answers an hon
 `User-Agent` and refuses a bare one, and it does not answer GitHub Actions runners — so the corpus is
 built locally and committed, never fetched in CI.
 
+### What collecting all 25 156 pages cost, and what it taught
+
+The first full walk took two hours and produced 205 321 documents. Three defects surfaced only at
+that scale, and each was silent — the collector stayed up, the log stayed quiet, and the corpus
+stopped being correct. They are recorded here because each looked like something else first.
+
+**The token dies at ~114 requests and says so with `HTTP 500`.** Not a SOAP fault, so
+`TokenExpired` — which is parsed out of a fault body — never fires, and a caller that treats 500 as
+a transient server error retries a token the service has already discarded, forever. Two runs sat at
+zero throughput looking healthy: 0.02 s of CPU in two minutes, hundreds of sockets in `CLOSE-WAIT`,
+no traceback. Measured directly: 114 searches at ~0.5 s, then 500 on every call with that token,
+then 0.6 s on a fresh one. `Client` now rotates the token at 100 requests and still treats a 500 as
+refresh-once-and-retry.
+
+**A citation key is not a document identity.** `acte.id` is `tip-numar-an`, which is what a drafter
+writes — and ministries number their ordine from 1 each year, so it collides constantly. Writing
+every record into `acte` meant the second erased the first: 19 975 records written, 15 014
+surviving, a quarter of the collection deleted by namesakes. `documente` now keeps every record
+under its portal id; `acte` stays the citation view. `rezumat()` reports the collision count so it
+can never be invisible again.
+
+**`DELETE FROM provizii_fts WHERE act_id = ?` is a full scan.** `act_id` is `UNINDEXED` inside the
+fts5 table, correctly — nobody full-text-searches an id — but that leaves the delete no index, and
+it runs once per record written. Measured mid-collection: 65 ms per scan at 18 000 rows, ten records
+to a page, so two thirds of every page was this one statement, and the cost grows with the corpus
+being built. Projected at the full 251 460 documents: 9.1 s per page, or roughly 32 hours of
+collection that gets slower the whole way. A rowid map (`provizii_fts_rand`) made the delete an
+indexed lookup; collection went from 53 to 173 pages a minute on the spot.
+
+**The rate is measured, not assumed.** With those fixed: 2 workers → 173 pages/min, 0 × 503;
+3 workers → 230, 0 × 503; 4 workers → 280, but **51 × 503 in four minutes**. `colector.py` already
+says a run that provokes 503s is collecting slower than one that stays under the limit — the backoff
+eats the gain — quite apart from being rude to a ministry's server. Three workers and a 0.2 s pause
+is the fastest point that does not.
+
 What one page yields, verified on Legea nr. 98/2016 (`sources/lege-98-2016.html.gz`):
 
 | | |
@@ -223,6 +258,21 @@ loop is the next piece, and the constraint it must respect is already in the sch
 table exists so a document is fetched **once, ever**. This reads a ministry's server on behalf of a
 political party, and the number of times it asks for the same act should be one.
 
+**The Court's case law after 2004.** `decizii.py` and `neconstitutional.py` read what the
+Constituțională struck and report what nobody repaired, but they read the corpus that exists: 231
+decisions, all of them between 1992 and 2004, because the chronological collector has not been run
+past 2008. The Court has issued tens of thousands since. **The register is therefore a working
+mechanism over a fifth of a percent of the material, not an answer to "what is still
+unconstitutional in Romanian law".** Every row it emits says `blocking` for that reason, and it
+will keep saying so until `--complet-pentru` can honestly name a type the collector finished.
+
+**Whether a 1990s strike survived recourse.** Until the 2003 revision a decision could be appealed
+to the plenum within ten days, and 24 decisions in this corpus admit such an appeal. `decizii.py`
+records whether a decision says it became final; it does not resolve *which earlier decision* a
+recourse overturned, because the corpus keys decisions by year of publication while the text cites
+them by year of pronouncement, and the two differ. Until that is resolved, an unfinalised strike is
+`blocking` rather than quietly counted.
+
 **Consolidation.** The package records that article 7(2) changed on a date and by which act. It does
 not apply the amendment and compute what the article now says. That is a separate problem with its
 own failure modes, and warning an MP that they are citing a provision which has moved is already the
@@ -247,9 +297,12 @@ document, and `assumed` is defined as *not in any source document yet*.
 
 ```bash
 uv sync --all-groups
-uv run pytest -q                  # 108 tests
+uv run pytest -q                  # 372 tests
 uv run python -m scripts.etalon   # precision / recall, with the failures named
 uv run python -m scripts.linter   # the worked example
+
+# What the Constituțională struck and nobody repaired, over the collected corpus:
+uv run python -m scripts.neconstitutional --db corpus.db --graf graf.db
 ```
 
 **No runtime dependencies.** Every extractor is `re`, `difflib` and `datetime`; the parser is
@@ -294,6 +347,10 @@ endpoint and a recorded fixture are the same shape.
 | `redactare.py` | Legistic drafting form (Legea 24/2000): flags intent said the wrong way, generates the right way. |
 | `neindeplinite.py` | The authority's list of unfulfilled norms, imported from a file, compared to the derived gap report. |
 | `vid_corpus.py` | The gap report over real law: obligations × graph, blocking until the corpus vouches. |
+| `publicare.py` | The Monitorul Oficial line from an act's own text: issue number, publication date, whether it is a republication. `--db` re-reads a whole corpus. |
+| `supraveghere.sh` | Keeps a collection moving: restarts the collector if it stops committing pages, at a measured concurrency that does not draw 503s. |
+| `decizii.py` | What a Curtea Constituțională decision decided, read from its dispozitiv: solution per point, provisions struck, the referral's object, and whether the Court ranged beyond it. |
+| `neconstitutional.py` | Struck provisions the corpus cannot show were ever brought into line — the art. 147 (1) register. |
 | `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
 | `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
 | `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |

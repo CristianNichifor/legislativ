@@ -45,3 +45,10 @@ web/bundle.zip
 web/index.html
 web/worker.js
 web/sw.js
+
+# jurnalul colectării supravegheate
+colector-supravegheat.log
+corpus-final.db
+graf-vechi.db
+graf-build.log
+colector-4w.log
