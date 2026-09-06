@@ -280,7 +280,10 @@ def acte(text: str) -> list[Referinta]:
     text = normalizeaza(text)
     gasite: list[Referinta] = []
     for m in _ACTE.finditer(text):
-        tip = m.lastgroup
+        # `m.lastgroup` names the last group that matched, which is not the same thing as the act
+        # type: with optional trailing groups it can be `lege_an` rather than `lege`. The scan is
+        # what actually answers the question, and it used to be preceded by a dead assignment of
+        # the other, which read as though `lastgroup` were the fallback. It was never used.
         tip = next(t for t in TIPURI if m.group(t) is not None)
         numar = _numar_curat(m.group(f"{tip}_numar"))
         an = int(m.group(f"{tip}_an"))

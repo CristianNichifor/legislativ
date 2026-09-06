@@ -198,7 +198,7 @@ def temeiuri(text: str, la_data: date | None = None) -> list[Temei]:
         return [
             Temei(
                 articol=a,
-                alineate=tuple(sorted(alin, key=lambda x: int(x))),
+                alineate=tuple(sorted(alin, key=int)),
                 fel=fel,
                 nume=tabel.get(a, ""),
                 text=citat,

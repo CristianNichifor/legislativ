@@ -198,7 +198,6 @@ def conformitate(draft: str) -> list[Abatere]:
             and not _CUPRINS.search(fraza)
             and ("«" in fraza or '"' in fraza or "următor" in fraza.lower())
         ):
-            m = _MODIFICA.search(fraza)
             abateri.append(
                 Abatere(
                     fraza.strip()[:90], "se modifică (fără „va avea următorul cuprins”)", "modifica"

@@ -168,8 +168,11 @@ def structurat(tmp_path: Path):
             [
                 "(1) Salariile de baza pentru persoanele încadrate prin cumul.",
                 "(2) Salariile realizate prin cumul se impozitează separat.",
+                # One string, deliberately: the third row is the whole article, both paragraphs
+                # run together. Joined with an explicit `+` because implicit concatenation inside
+                # a list is how a missing comma hides, and a reader cannot tell the two apart.
                 "Articolul 3 (1) Salariile de baza pentru persoanele încadrate prin cumul. "
-                "(2) Salariile realizate prin cumul se impozitează separat.",
+                + "(2) Salariile realizate prin cumul se impozitează separat.",
             ],
             start=1,
         ):
