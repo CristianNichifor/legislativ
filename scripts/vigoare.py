@@ -110,3 +110,95 @@ def citari_moarte(draft: str, graf: sqlite3.Connection) -> list[CitareMoarta]:
                     gasite.append(CitareMoarta(r.text, r.act.id, r.locator.id, ab))
                     break
     return gasite
+
+
+# Repeal is not the only thing that qualifies a citation. The graph also records that an act was
+# *suspended* (temporarily not in force), that another act *derogates* from it (an exception applies
+# in the derogating act's scope), or that a term in it was *prorogated* (a deadline pushed back).
+# None of these is death, so they are not `citari_moarte` — but a drafter citing such a provision as
+# if it stood unqualified is building on shifting ground, and the graph already carries the edges.
+_CALIFICARI: dict[str, str] = {
+    "suspenda": "suspendat",
+    "deroga": "derogare",
+    "proroga": "prorogat",
+}
+
+
+@dataclass(frozen=True)
+class Calificare:
+    """A qualification the graph asserts over an act or article: what, when, by which act."""
+
+    act_id: str
+    locator: str  # '' = the whole act
+    fel: str  # suspenda | deroga | proroga
+    de_la: date | None
+    de_catre: str
+
+    @property
+    def este_intregul_act(self) -> bool:
+        return self.locator == ""
+
+
+def _calificari(graf: sqlite3.Connection, act_id: str) -> list[Calificare]:
+    marcaje = ",".join("?" * len(_CALIFICARI))
+    randuri = graf.execute(
+        f"SELECT * FROM muchii WHERE catre_act = ? AND fel IN ({marcaje}) ORDER BY de_la",
+        (act_id, *_CALIFICARI),
+    ).fetchall()
+    muchii = (_muchie(r) for r in randuri)
+    return [Calificare(act_id, m.locator, m.fel, m.de_la, m.din_act) for m in muchii]
+
+
+@dataclass(frozen=True)
+class CitareCalificata:
+    """A reference in a draft to a provision the graph shows suspended, derogated or prorogated."""
+
+    text: str
+    act_id: str
+    locator: str
+    calificare: Calificare
+
+    @property
+    def motiv(self) -> str:
+        cand = f" ({self.calificare.de_la:%d.%m.%Y})" if self.calificare.de_la else ""
+        de = f" prin {self.calificare.de_catre}" if self.calificare.de_catre else ""
+        unde = self.act_id if self.calificare.este_intregul_act else f"{self.act_id} {self.locator}"
+        if self.calificare.fel == "suspenda":
+            return f"aplicarea {unde} este suspendată{de}{cand}"
+        if self.calificare.fel == "deroga":
+            cine = self.calificare.de_catre or "un act"
+            return f"{cine} derogă de la {unde}{cand} — se aplică o excepție"
+        return f"un termen din {unde} a fost prorogat{de}{cand}"
+
+    @property
+    def eticheta(self) -> str:
+        return _CALIFICARI.get(self.calificare.fel, self.calificare.fel)
+
+
+def citari_calificate(draft: str, graf: sqlite3.Connection) -> list[CitareCalificata]:
+    """Every reference in the draft to a provision with a qualified status short of repeal.
+
+    Same reach rule as `citari_moarte`: a whole-act qualification touches any citation into the act;
+    an article-level one touches that article or anything under it. A provision already caught as
+    repealed is not repeated here — death subsumes qualification.
+    """
+    morti = {(c.act_id, c.locator) for c in citari_moarte(draft, graf)}
+    gasite: list[CitareCalificata] = []
+    vazute: set[tuple[str, str]] = set()
+    for r in referinte(draft):
+        if r.act is None:
+            continue
+        cheie = (r.act.id, r.locator.id)
+        if cheie in vazute or cheie in morti:
+            continue
+        vazute.add(cheie)
+        for cal in _calificari(graf, r.act.id):
+            atinge = (
+                cal.este_intregul_act
+                or r.locator.id == cal.locator
+                or (r.locator.id and r.locator.id.startswith(cal.locator + "."))
+            )
+            if atinge:
+                gasite.append(CitareCalificata(r.text, r.act.id, r.locator.id, cal))
+                break
+    return gasite
