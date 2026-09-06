@@ -30,7 +30,7 @@ holds it. The graph reads the corpus `mode=ro` and writes edges beside it.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date
 
@@ -147,12 +147,43 @@ def _muchii_pentru(arg: tuple[str, str, str | None, int | None, str | None]):
     ]
 
 
+def _acte_de_construit(corp, limita: int | None, doar: Iterable[str] | None) -> list:
+    """The acts this build covers, in the order it walks them.
+
+    `doar` is what makes a daily refresh cheap. Edges are keyed by `din_act`, so an act's edges
+    live entirely on its own rows — including the inbound ones an older law gains when a new act
+    cites it. Placing newly collected acts therefore never requires revisiting the 152 079
+    already in the graph, and the difference is eleven minutes against seconds. Ids are chunked
+    because SQLite caps the number of bound variables in one statement.
+    """
+    if doar is None:
+        q = "SELECT id, tip, numar, an, publicat FROM acte ORDER BY an DESC, numar"
+        if limita:
+            q += f" LIMIT {int(limita)}"
+        return corp.execute(q).fetchall()
+
+    randuri: list = []
+    ids = list(doar)
+    for i in range(0, len(ids), 400):
+        felie = ids[i : i + 400]
+        semne = ",".join("?" * len(felie))
+        randuri.extend(
+            corp.execute(
+                f"SELECT id, tip, numar, an, publicat FROM acte WHERE id IN ({semne})"
+                " ORDER BY an DESC, numar",
+                felie,
+            )
+        )
+    return randuri
+
+
 def construieste(
     corpus_db: str = "corpus.db",
     graf_db: str = "graf.db",
     *,
     limita: int | None = None,
     lucratori: int = 1,
+    doar: Iterable[str] | None = None,
     log=print,
 ) -> int:
     """Read the corpus, extract every edge, write them to the graph database. Returns edge count.
@@ -169,17 +200,14 @@ def construieste(
     """
     if lucratori > 1:
         return _construieste_paralel(
-            corpus_db, graf_db, limita=limita, lucratori=lucratori, log=log
+            corpus_db, graf_db, limita=limita, lucratori=lucratori, doar=doar, log=log
         )
     scrise = 0
     # One read connection for the whole build. The first version reopened the corpus per act — a
     # fresh connection for every one of a quarter-million rows — which turned a minutes job into
     # an hours one. Read-only, so it still runs beside the collector's writer.
     with depozit.deschide(corpus_db, readonly=True) as corp:
-        q = "SELECT id, tip, numar, an, publicat FROM acte ORDER BY an DESC, numar"
-        if limita:
-            q += f" LIMIT {int(limita)}"
-        acte = corp.execute(q).fetchall()
+        acte = _acte_de_construit(corp, limita, doar)
 
         graf = _deschide_graf(graf_db)
         try:
@@ -217,16 +245,22 @@ def construieste(
 
 
 def _construieste_paralel(
-    corpus_db: str, graf_db: str, *, limita: int | None, lucratori: int, log=print
+    corpus_db: str,
+    graf_db: str,
+    *,
+    limita: int | None,
+    lucratori: int,
+    doar: Iterable[str] | None = None,
+    log=print,
 ) -> int:
     """The same build, with extraction fanned out and writing kept in one place."""
     from concurrent.futures import ProcessPoolExecutor
 
     with depozit.deschide(corpus_db, readonly=True) as corp:
-        q = "SELECT id, tip, numar, an, publicat FROM acte ORDER BY an DESC, numar"
-        if limita:
-            q += f" LIMIT {int(limita)}"
-        acte = [(r["id"], r["tip"], r["numar"], r["an"], r["publicat"]) for r in corp.execute(q)]
+        acte = [
+            (r["id"], r["tip"], r["numar"], r["an"], r["publicat"])
+            for r in _acte_de_construit(corp, limita, doar)
+        ]
 
     scrise = 0
     graf = _deschide_graf(graf_db)

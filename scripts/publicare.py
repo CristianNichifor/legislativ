@@ -114,7 +114,12 @@ def reciteste(cale_db: str = "corpus.db", *, lot: int = 5000, log=print) -> dict
         # pulls every document body into memory at once — measured at 4.4 GB and climbing on a
         # 205 000-document corpus, for a job whose working set is one document. The ids are
         # eight bytes each and the text is fetched only for the batch being written.
-        ids = [r[0] for r in con.execute("SELECT id_portal FROM documente WHERE publicat IS NULL")]
+        ids = [
+            r[0]
+            for r in con.execute(
+                "SELECT id_portal FROM documente WHERE publicare_incercata IS NULL"
+            )
+        ]
         log(f"{len(ids)} documente fără dată de publicare")
 
         citite = fara = vazute = 0
@@ -128,6 +133,10 @@ def reciteste(cale_db: str = "corpus.db", *, lot: int = 5000, log=print) -> dict
             for r in randuri:
                 vazute += 1
                 p = publicare(r["text"])
+                con.execute(
+                    "UPDATE documente SET publicare_incercata = 1 WHERE id_portal = ?",
+                    (r["id_portal"],),
+                )
                 if p is None:
                     fara += 1
                     continue

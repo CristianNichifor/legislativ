@@ -315,6 +315,11 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
             ("publicat", "TEXT"),
             ("monitor", "INTEGER"),
             ("republicare", "INTEGER"),
+            # Whether the Monitorul Oficial line has been looked for, as opposed to found.
+            # `publicat IS NULL` conflates "not yet examined" with "examined, has no line" —
+            # true of 22% of documents — so a resumable pass re-reads them for ever. One bit
+            # ends that: a daily refresh then costs only the documents that arrived that day.
+            ("publicare_incercata", "INTEGER"),
         ],
     }
     for tabel, coloane in noi.items():

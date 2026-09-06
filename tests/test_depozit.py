@@ -352,3 +352,25 @@ def test_backfill_clears_a_date_it_cannot_source(db):
 
     with depozit.deschide(db) as con:
         assert con.execute("SELECT publicat FROM acte").fetchone()["publicat"] is None
+
+
+def test_a_document_with_no_monitor_line_is_not_re_examined_forever(db):
+    """`publicat IS NULL` cannot tell "not yet parsed" from "parsed, has no MO line".
+
+    22% of documents genuinely carry no readable line, so resuming on NULL re-examines them on
+    every run — measured at ~100 000 documents of pointless work on the second pass of the real
+    corpus. A separate mark records that the attempt was made, whatever it found, which is what
+    makes a daily refresh cost only the documents that arrived that day.
+    """
+    from scripts.colector import act_din_inregistrare
+    from scripts.publicare import reciteste
+
+    fara = _rec_mo("LEGE nr. 3 din 28 decembrie 1962, fără linie de publicare.")
+    with depozit.deschide(db) as con:
+        depozit.scrie_inregistrare(con, fara, act_din_inregistrare(fara))
+
+    r1 = reciteste(db, log=lambda *_: None)
+    assert r1["total"] == 1 and r1["fara_linie"] == 1
+
+    r2 = reciteste(db, log=lambda *_: None)
+    assert r2["total"] == 0, f"re-examined {r2['total']} documents already tried"
