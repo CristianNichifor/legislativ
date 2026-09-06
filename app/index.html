@@ -1098,12 +1098,14 @@ function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
         tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[],
         cf=d.conflicte||[], ca=d.calificate||[], nc=d.neconstitutional||[], lb=d.limbaj||[];
+  const rl=(d.reluare&&d.reluare.gasite)||[], rlAcop=(d.reluare&&d.reluare.acoperire)||null;
   // The chip carries the worst severity actually present, never the severity of the topic. With
   // nothing declared exhaustively collected every row comes back `material`, and a red chip over
   // amber cards would promise a verdict the register explicitly refuses to give.
   const ncSev = nc.some(c=>c.severitate==="blocking") ? "blocking" : "material";
   let h = `<div class="strip">`
     +chip("neconstituțional",nc.length,ncSev,"Prevederi neconstituționale nereparate")
+    +chip("reia text lovit",rl.length,"material","Reia o formulare declarată neconstituțională")
     +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
     +chip("statut special",ca.length,"material","Prevederi suspendate, derogate sau prorogate")
     +chip("neindeplinite",on.length,"blocking","Obligații neîndeplinite ale actelor vizate")
@@ -1137,6 +1139,22 @@ function renderLint(d){
         c.norma_nota?"⚠ "+esc(c.norma_nota):"",
         ...(c.limitari||[]).map(l=>"⚠ "+esc(l)) ].filter(Boolean),
       c.norma||c.citat, c.incredere)).join(""));
+  // Always rendered when a comparison set was shipped, findings or not: "nothing matched among
+  // the 174 provisions I can quote" and "there was nothing to match against" are the same empty
+  // screen, and the difference is the entire meaning of the result.
+  if(rlAcop && rlAcop.prevederi) h += sec("Reia o formulare declarată neconstituțională", rl.length,
+    (rl.length
+      ? rl.map(r=>card("material",
+          `<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(locRo(r.locator)):""}</span>`
+            +` <span class="hint">${Math.round(r.scor*100)}% suprapunere`
+            +(r.unitate?` · ${esc(locRo(r.unitate))} din proiect`:"")+`</span>`,
+          [ esc(r.motiv),
+            "⚠ nu blochează: e o măsură a formulării, nu o hotărâre că norma e aceeași" ],
+          r.norma, r.incredere)).join("")
+      : empty("Nicio formulare din proiect nu reia o prevedere lovită."))
+    + `<div class="hint" style="margin-top:.5rem">Comparat cu <b>${rlAcop.comparabile}</b> din `
+    + `${rlAcop.prevederi} prevederi lovite (${rlAcop.procent}%) — restul sunt cunoscute doar ca `
+    + `trimitere, fără text de comparat.</div>`);
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
   if(ca.length) h += sec("Prevederi cu statut special", ca.length,

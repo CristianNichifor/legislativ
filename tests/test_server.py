@@ -138,6 +138,13 @@ def test_lint_returns_all_three_sections_from_both_databases(tmp_path):
     assert out["duplicates"][0]["senat_id"] == "L5/2024"
 
 
+NORMA_LOVITA = (
+    "Cererea se soluționează fără citarea părților, în termen de 15 zile de la "
+    "înregistrare, iar hotărârea pronunțată de instanță este definitivă și nu poate fi "
+    "atacată cu recurs."
+)
+
+
 DECIZIE_CARE_LOVESTE = (
     "DECIZIE nr. 9 din 25 noiembrie 1994 EMITENT CURTEA CONSTITUȚIONALĂ "
     "Publicat în MONITORUL OFICIAL nr. 326 din 25 noiembrie 1994 "
@@ -171,7 +178,7 @@ def _cu_lovitura(tmp_path: Path) -> tuple[str, str]:
                 "(4) Termenul este de 15 zile.\n"
                 "(5) Ședința este publică.\n"
                 "(6) Hotărârea se motivează.\n"
-                "(7) Cererea se soluționează fără citarea părților.\n"
+                f"(7) {NORMA_LOVITA}\n"
             ),
         ),
         Inregistrare(
@@ -263,7 +270,7 @@ def test_the_struck_text_itself_reaches_the_drafter(tmp_path, monkeypatch):
 
     corpus, graf = _cu_lovitura(tmp_path)
     randuri = construieste_neconstitutional(corpus, graf, complet_pentru=frozenset({"lege"}))
-    assert randuri[0]["norma"].strip() == "Cererea se soluționează fără citarea părților."
+    assert randuri[0]["norma"].strip() == NORMA_LOVITA
     assert randuri[0]["norma_granularitate"] == "exact"
     assert randuri[0]["norma_nota"] == "", "an exact recovery needs no caveat"
 
@@ -277,8 +284,49 @@ def test_the_struck_text_itself_reaches_the_drafter(tmp_path, monkeypatch):
     stare = Stare(corpus, str(initiative), graf)
 
     (c,) = _lint(DRAFT_PE_LOVITURA, stare)["neconstitutional"]
-    assert c["norma"].strip() == "Cererea se soluționează fără citarea părților."
+    assert c["norma"].strip() == NORMA_LOVITA
     assert c["citat"] == "art. 5 alin. (7) din Legea nr. 59/1993", "the citation still travels too"
+
+
+def test_lint_catches_a_re_enactment_that_cites_nothing(tmp_path, monkeypatch):
+    """The pass `neconstitutional` cannot do. This draft names no act and no article — it just
+    passes the struck wording again, which is what art. 147 (4) reaches. The citation check is
+    silent; the wording check is not."""
+    from scripts.servicii import construieste_norme_lovite
+
+    corpus, graf = _cu_lovitura(tmp_path)
+    norme = construieste_norme_lovite(corpus)
+    assert norme and norme[0]["norma"], "no struck wording was recovered to compare against"
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "norme_lovite.json").write_text(
+        json.dumps(norme, ensure_ascii=False), encoding="utf-8"
+    )
+    initiative = tmp_path / "i.db"
+    with depozit.deschide(initiative):
+        pass
+    stare = Stare(corpus, str(initiative), graf)
+
+    draft = (
+        "Articolul 1\n"
+        "(1) Prezenta lege reglementează procedura în fața instanțelor.\n"
+        f"(2) {NORMA_LOVITA}\n"
+    )
+    out = _lint(draft, stare)
+    assert out["neconstitutional"] == [], "the draft cites nothing; the citation pass must be quiet"
+    (r,) = out["reluare"]["gasite"]
+    assert r["act_id"] == "lege-59-1993"
+    assert r["severitate"] == "material", "a wording measurement blocked a bill"
+    assert out["reluare"]["acoperire"]["comparabile"] >= 1
+
+
+def test_lint_says_what_the_re_enactment_check_compared_against(tmp_path, monkeypatch):
+    """With no comparison set shipped, «nothing matched» would be a lie of omission."""
+    monkeypatch.chdir(tmp_path)
+    stare = _build(tmp_path)
+    out = _lint(f"Articolul 1\n{NORMA_LOVITA}\n", stare)
+    assert out["reluare"]["gasite"] == []
+    assert out["reluare"]["acoperire"] == {"prevederi": 0, "comparabile": 0, "procent": 0}
 
 
 def test_lint_is_silent_about_constitutionality_with_no_register_shipped(tmp_path, monkeypatch):

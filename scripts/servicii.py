@@ -60,6 +60,7 @@ class Stare:
         self.termeni: list[Termen] = self._dictionar()
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
+        self.norme_lovite: list[dict] = self._incarca_raport("norme_lovite.json")
 
     @property
     def pe_shard(self) -> bool:
@@ -221,6 +222,10 @@ def _lint(draft: str, stare: Stare) -> dict:
         # orderly; a struck and unrepaired one is text still printed in the official version that
         # has had no legal effect since a date in the 1990s. Building on the second is worse.
         "neconstitutional": _neconstitutional(draft, stare),
+        # Distinct from the pass above, and the distinction is the point: that one asks whether the
+        # draft *cites* a struck provision, this one whether it *re-enacts* one. A draft can do the
+        # second while citing nothing at all.
+        "reluare": _reluare(draft, stare),
         "repealed": _repealed(draft, stare),
         "calificate": _calificate(draft, stare),
         "drafting": drafting,
@@ -466,6 +471,106 @@ def _nereparat_dict(n, norma=None) -> dict:
             "norma_nota": norma.nota,
         }
     return rand
+
+
+def construieste_norme_lovite(corpus_db: str) -> list[dict]:
+    """The wording of every struck provision the corpus can quote — the Tier 2 comparison set.
+
+    **Every strike, not only the unrepaired ones.** `neconstitutional.json` answers "was it put
+    right", which is the question for a draft that *cites* the provision. Re-enactment is a
+    different question: article 147 (4) binds erga omnes, so passing the struck wording again is
+    caught by the original decision whether or not the original text was later repaired. A register
+    filtered to unrepaired rows would miss exactly the case where Parliament fixed the old law and
+    then wrote the same rule into a new one.
+
+    Keyed on the *resolved* unit, so a provision struck by four decisions contributes one norm
+    rather than four — otherwise a draft matching it reports four identical findings, and the norm
+    becomes its own nearest neighbour in any calibration run over this set.
+    """
+    import sqlite3
+
+    from scripts.lovituri import extrage
+    from scripts.prevedere import Prevedere, textul, versiuni
+
+    # Strikes are read, not re-derived — but a corpus that has never been extracted has an empty
+    # table, and reading it would ship an empty comparison set that looks exactly like "no
+    # provision was ever struck". Same fallback `neconstitutional.din_baze` makes, for the same
+    # reason: extract once, slowly, and say so.
+    cx = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+    try:
+        gol = cx.execute("SELECT count(*) FROM lovituri").fetchone()[0] == 0
+        neexaminate = cx.execute(
+            "SELECT count(*) FROM documente WHERE lovituri_extrase IS NULL"
+            " AND emitent LIKE 'Curtea Constitu%' AND tip = 'decizie'"
+        ).fetchone()[0]
+    finally:
+        cx.close()
+    if gol and neexaminate:
+        extrage(corpus_db)
+
+    cx = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+    try:
+        index = versiuni(cx)
+        randuri = cx.execute(
+            "SELECT act, locator, publicat, cheie_act FROM lovituri"
+            " WHERE act IS NOT NULL AND locator != '' ORDER BY publicat, cheie_act"
+        ).fetchall()
+        pe_unitate: dict[tuple[str, str], dict] = {}
+        for act, locator, publicat, decizie in randuri:
+            an = int(publicat[:4]) if publicat else None
+            p = textul(cx, act, locator, an, index)
+            if not isinstance(p, Prevedere):
+                continue
+            cheie = (p.act_gasit, p.locator_gasit)
+            if cheie in pe_unitate:
+                continue
+            pe_unitate[cheie] = {
+                "act_id": p.act_gasit,
+                "locator": p.locator_gasit,
+                "locator_cerut": p.locator,
+                "decizie": decizie,
+                "publicat": publicat,
+                "norma": p.text.strip()[:4000],
+                "norma_granularitate": p.granularitate,
+                "norma_nota": p.nota,
+            }
+        return list(pe_unitate.values())
+    finally:
+        cx.close()
+
+
+def _reluare(draft: str, stare: Stare) -> dict:
+    """Where the draft's wording re-enacts a struck provision, with what it was checked against.
+
+    The coverage travels with the findings rather than beside them: an empty list means "nothing
+    matched among the N provisions I can quote", and on the same screen that is indistinguishable
+    from "there was nothing to match against" unless the answer says which.
+    """
+    from scripts.reluare import acoperire, reluari
+
+    gasite = reluari(draft, stare.norme_lovite)
+    return {
+        "acoperire": acoperire(stare.norme_lovite),
+        "gasite": [
+            {
+                "unitate": r.unitate,
+                "text": r.text[:400],
+                "act_id": r.act_id,
+                "locator": r.locator,
+                "decizie": r.decizie,
+                "publicat": r.publicat,
+                "scor": round(r.scor, 3),
+                "suprapunere": round(r.suprapunere, 3),
+                "aproape_identic": r.aproape_identic,
+                "granularitate": r.granularitate,
+                "norma": r.norma[:400],
+                "severitate": r.severitate,
+                "motiv": r.motiv,
+                "incredere": r.increderea,
+            }
+            for r in gasite
+        ],
+    }
 
 
 def construieste_neconstitutional(
