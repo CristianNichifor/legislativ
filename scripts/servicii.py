@@ -23,7 +23,7 @@ import re
 from datetime import date
 from pathlib import Path
 
-from scripts import depozit
+from scripts import depozit, nomenclator
 from scripts.definitii import Termen, jargon
 from scripts.dublura import dubluri
 from scripts.termene import obligatii
@@ -73,6 +73,7 @@ class Stare:
         self._titluri: dict[str, str] | None = None
         self._urls: dict[str, str] | None = None
         self._republicari: dict[str, str] | None = None
+        self._ids: set[str] | None = None
         self.termeni: list[Termen] = self._dictionar()
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
@@ -147,6 +148,7 @@ class Stare:
     def sursa_url(self, act_id: str) -> str:
         """The public portal URL for an act — from the shard index in the browser, or the corpus's
         stored source / portal id on localhost. Empty when the act carries neither."""
+        act_id = self.rezolva_nume(act_id)
         if self.pe_shard:
             self._index()
             return (self._urls or {}).get(act_id, "")
@@ -178,14 +180,41 @@ class Stare:
 
     def titlu(self, act_id: str) -> str:
         """The act's title, from the shard index in the browser or `acte` on localhost."""
+        act_id = self.rezolva_nume(act_id)
         if self.pe_shard:
             return self._index().get(act_id, "")
         with depozit.deschide(self.corpus, readonly=True) as con:
             rand = con.execute("SELECT titlu FROM acte WHERE id = ?", (act_id,)).fetchone()
             return (rand["titlu"] if rand else "") or ""
 
+    def _toate_id(self) -> set[str]:
+        """Every act id the backing holds. Only the named-act resolver needs the whole set, and
+        only for the handful of names it knows, so it is read on demand and kept."""
+        if self._ids is None:
+            if self.pe_shard:
+                self._ids = set(self._index())
+            else:
+                try:
+                    with depozit.deschide(self.corpus, readonly=True) as con:
+                        self._ids = {r[0] for r in con.execute("SELECT id FROM acte")}
+                except Exception:
+                    self._ids = set()
+        return self._ids
+
+    def rezolva_nume(self, act_id: str, la_data: date | None = None) -> str:
+        """A named act (`constitutie`, `cod-penal`) mapped onto the version the corpus stores.
+
+        Citations name these acts; the collector keys them from their own titles, so the two write
+        different ids for the same law and a quarter of everything the corpus cites looked absent.
+        Anything that is not a name is returned unchanged, so callers can apply this blindly.
+        """
+        if not nomenclator.este_nume(act_id):
+            return act_id
+        return nomenclator.rezolva(act_id, self._toate_id(), la_data) or act_id
+
     def cunoscut(self, act_id: str) -> bool:
         """Whether the corpus carries this act at all — the honest 'in corpus' signal."""
+        act_id = self.rezolva_nume(act_id)
         if self.pe_shard:
             return act_id in self._index()
         with depozit.deschide(self.corpus, readonly=True) as con:
