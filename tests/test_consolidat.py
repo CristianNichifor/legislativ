@@ -59,6 +59,17 @@ def test_modificari_pentru_maps_touched_provisions_and_is_empty_off_catalog():
     assert modificari_pentru("lege-999-9999") == {}
 
 
+def test_the_catalog_is_derived_from_the_pages_present_not_hardcoded():
+    from scripts.consolidat import _catalog
+
+    cat = _catalog()
+    # discovered, not listed: 208/2022 amends 98/2016 and both pages are in sources
+    assert "lege-98-2016" in cat
+    assert "lege-208-2022.html.gz" in cat["lege-98-2016"]["amendatoare"]
+    # a target amends nothing present → not consolidatable; a page that amends no present act either
+    assert "decizie-815-2015" not in cat
+
+
 def test_lint_flags_a_citation_to_a_since_amended_provision():
     """The linter's consolidated-text pass: citing art. 187, whose alineate 208/2022 rewrote, is
     told so and pointed at the current text."""
