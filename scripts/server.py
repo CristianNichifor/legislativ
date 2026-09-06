@@ -39,6 +39,7 @@ from scripts.servicii import (
     _compune,
     _consolidat,
     _dictionar,
+    _impact,
     _lint,
     _norma,
     _parseaza,
@@ -127,6 +128,7 @@ def face_handler(stare: Stare):
                 "/api/norma",
                 "/api/termeni",
                 "/api/regula",
+                "/api/impact",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -154,6 +156,9 @@ def face_handler(stare: Stare):
             draft = str(cerere.get("draft", "")).strip()
             if not draft:
                 self._json({"error": "draft gol"}, 400)
+                return
+            if ruta == "/api/impact":
+                self._json(_impact(draft, stare))
                 return
             self._json(_lint(draft, stare))
 
