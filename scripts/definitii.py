@@ -180,6 +180,51 @@ def _spanuri_exacte(proiect: str, termeni: list[Termen]) -> list[tuple[int, int]
     return spanuri
 
 
+@dataclass(frozen=True)
+class Ocurenta:
+    """Where a draft uses a defined term — the positive `jargon` masks before it warns."""
+
+    fragment: str  # the surface form in the draft, e.g. "autorității contractante"
+    termen: Termen  # the definition it is a use of
+    start: int
+    end: int
+
+
+def recunoaste(proiect: str, termeni: list[Termen]) -> list[Ocurenta]:
+    """Every place the draft uses a defined term, in any inflection — so the editor can chip it.
+
+    The inverse of `jargon`: that flags phrases that *miss* a defined term, this surfaces the ones
+    that *hit* it, each with the definition to show on hover. Matching is on stems (via `radacini`),
+    so a plural or an article-suffixed form counts as the term, not as a deviation — the same reason
+    `_spanuri_exacte` masks these before the warning pass. One occurrence per term (the first), in
+    reading order; duplicate definitions of the same term collapse to the first seen.
+    """
+    proiect = normalizeaza(proiect)
+    dupa_radacina: dict[str, Termen] = {}
+    for t in termeni:
+        if t.radacina:
+            dupa_radacina.setdefault(t.radacina, t)
+
+    gasite: dict[str, Ocurenta] = {}
+    for n in {len(r.split()) for r in dupa_radacina}:
+        if n < 1:
+            continue
+        for fragment, start, end in _ferestre(proiect, n):
+            r = radacini(fragment)
+            termen = dupa_radacina.get(r)
+            if termen is not None and r not in gasite:
+                gasite[r] = Ocurenta(fragment=fragment, termen=termen, start=start, end=end)
+
+    # A one-word term nested in a multi-word one ("funcționar" inside "funcționar public") is noise:
+    # keep the longest match over any span and drop occurrences it fully contains.
+    ocurente = sorted(gasite.values(), key=lambda o: (o.start - o.end, o.start))
+    pastrate: list[Ocurenta] = []
+    for o in ocurente:
+        if not any(p.start <= o.start and o.end <= p.end for p in pastrate):
+            pastrate.append(o)
+    return sorted(pastrate, key=lambda o: o.start)
+
+
 def jargon(
     proiect: str,
     termeni: list[Termen],

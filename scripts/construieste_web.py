@@ -105,7 +105,8 @@ import sys, json
 if '.' not in sys.path: sys.path.insert(0, '.')
 from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
-                              _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza)
+                              _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
+                              _norma, _termeni, _dictionar)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -121,6 +122,11 @@ def _raspunde(path, query, body):
         out = _compune(json.loads(body or '{}').get('interventii', []))
     elif path == '/api/parseaza':
         out = _parseaza((json.loads(body or '{}').get('text') or '').strip())
+    elif path == '/api/norma':
+        out = _norma((json.loads(body or '{}').get('text') or '').strip())
+    elif path == '/api/termeni':
+        out = _termeni((json.loads(body or '{}').get('text') or '').strip(), _stare)
+    elif path == '/api/dictionar': out = _dictionar(_stare)
     elif path == '/api/lint':
         draft = (json.loads(body or '{}').get('draft') or '').strip()
         out = _lint(draft, _stare) if draft else {'error':'draft gol'}
@@ -282,8 +288,7 @@ def _slice_corpus() -> None:
             (*CURATE, N_ACTE),
         )
         con.execute(
-            "INSERT INTO provizii SELECT * FROM plin.provizii "
-            "WHERE act_id IN (SELECT id FROM acte)"
+            "INSERT INTO provizii SELECT * FROM plin.provizii WHERE act_id IN (SELECT id FROM acte)"
         )
         con.execute(
             "INSERT INTO provizii_fts(text, act_id, locator) SELECT text, act_id, locator "
@@ -291,7 +296,7 @@ def _slice_corpus() -> None:
         )
         con.commit()
         con.execute("DETACH plin")
-    print(f"  corpus slice → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  corpus slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _slice_initiative() -> None:
@@ -310,7 +315,7 @@ def _slice_initiative() -> None:
         )
         con.commit()
         con.execute("DETACH plin")
-    print(f"  initiative slice → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  initiative slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _date_din_corpus() -> None:
@@ -342,7 +347,7 @@ def _date_din_fixturi() -> None:
             scrie_act(con, din_fisier(gz))
             n += 1
         con.commit()
-    print(f"  corpus din {n} fixturi → {corpus} ({corpus.stat().st_size/1e6:.2f} MB)")
+    print(f"  corpus din {n} fixturi → {corpus} ({corpus.stat().st_size / 1e6:.2f} MB)")
 
     ini = DATA / "initiative.db"
     if ini.exists():
@@ -384,7 +389,7 @@ def _bundle() -> None:
             z.write(p, f"scripts/{p.name}")
         for p in sorted((ROOT / "sources").glob("*.gz")):
             z.write(p, f"sources/{p.name}")
-    print(f"  bundle → {tinta} ({tinta.stat().st_size/1e6:.1f} MB)")
+    print(f"  bundle → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
 def _worker() -> None:

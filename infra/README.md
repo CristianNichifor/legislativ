@@ -17,7 +17,7 @@ allocation, so day-to-day this costs **nothing**.
 | **Workers AI** (`env.AI`) | free daily Neuron allocation | runs the rewrite (Llama 3.3 70B) | live |
 | **Workers KV** `legislativ-rescrieri` | 100k reads / 1k writes / 1 GB free | the rewrite cache | live (`8a788c53…`) |
 | **Rate-limiting binding** (`RL`) | free | per-IP limit, no KV cost | live |
-| **AI Gateway** `legislativ` | free | caching + analytics in front of Workers AI | **create in dashboard** (optional) |
+| **AI Gateway** `law-legislation-project-gateway` | free | caching + analytics in front of Workers AI | live |
 | **R2** | — | *planned* for the bulk data shards | not enabled |
 
 Account: **CN Webify** `432316a05c0d6000c6e196fe32e47dd7`. Endpoint (already the app's default):
@@ -36,11 +36,14 @@ No secret to set — Workers AI needs no key. The app already targets the endpoi
 
 ### AI Gateway (optional, free — for caching + analytics)
 
-The Worker routes Workers AI calls through the gateway `AIG_ID` (default `legislativ`) and **falls back
-to Workers AI directly if that gateway doesn't exist**, so it works with or without it. To light up
-the gateway's caching + analytics dashboard, create it once:
+The Worker routes Workers AI calls through the gateway `AIG_ID` (`law-legislation-project-gateway`,
+already created) and **falls back to Workers AI directly if that gateway doesn't exist**, so it works
+with or without it. The gateway is live with caching on (300s TTL); **logging is off** — flip "Logs"
+on in the gateway settings for the per-request analytics dashboard.
 
-- **Dashboard:** AI → AI Gateway → **Create Gateway** → id **`legislativ`**. Done.
+To create a fresh gateway elsewhere:
+
+- **Dashboard:** AI → AI Gateway → **Create Gateway**, then set `AIG_ID` to its id.
 - **Or** with an API token that has **Account · AI Gateway · Edit**:
   `CLOUDFLARE_API_TOKEN=… ./infra/deploy.sh` (its step 1 creates the gateway, then deploys).
 

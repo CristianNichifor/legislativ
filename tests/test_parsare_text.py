@@ -35,7 +35,9 @@ def test_abrevieri_si_bis():
 
 
 def test_litere_in_alineat():
-    res = parseaza_text("Articolul 3\n(1) Se constituie prin:\na) virament bancar;\nb) instrumente.")
+    res = parseaza_text(
+        "Articolul 3\n(1) Se constituie prin:\na) virament bancar;\nb) instrumente."
+    )
     alin = _art(res)["copii"][0]
     assert alin["text"] == "Se constituie prin:"
     assert [c["numar"] for c in alin["copii"]] == ["a", "b"]
@@ -45,9 +47,11 @@ def test_litere_in_alineat():
 
 def test_ignora_referinte_in_secventa():
     # "(2)" is cited inside alineat (1) before the real (2); the parser must not split there.
-    t = ("Articolul 5\n(1) Autoritatea, potrivit art. 7 alin. (2), decide.\n"
-         "(2) Termenul este de 30 de zile.")
-    art = _art(res := parseaza_text(t))
+    t = (
+        "Articolul 5\n(1) Autoritatea, potrivit art. 7 alin. (2), decide.\n"
+        "(2) Termenul este de 30 de zile."
+    )
+    art = _art(parseaza_text(t))
     assert [a["numar"] for a in art["copii"]] == ["1", "2"]
     assert "art. 7 alin. (2)" in art["copii"][0]["text"]
     assert art["copii"][1]["text"] == "Termenul este de 30 de zile."
@@ -55,7 +59,7 @@ def test_ignora_referinte_in_secventa():
 
 def test_text_inline_fara_intreruperi():
     # everything on one line, markers glued to punctuation — the wall-of-text case from the corpus.
-    t = "Articolul 154 (1) Autoritatea are obligația.(2) Autoritatea are dreptul prin:a) unu;b) doi."
+    t = "Articolul 154 (1) Autoritatea are obligația.(2) Are dreptul prin:a) unu;b) doi."
     art = _art(parseaza_text(t))
     assert art["numar"] == "154"
     assert [a["numar"] for a in art["copii"]] == ["1", "2"]

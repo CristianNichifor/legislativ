@@ -199,6 +199,31 @@
   .chip.on.note{border-left-color:var(--note);color:var(--note)}
   .chip.off .n{color:var(--good)}
 
+  /* recognised terminology: the defined terms a draft actually uses, chipped under the textarea
+     with the definition on hover — the positive counterpart to the "talks around a term" warning. */
+  .termeni-chips{margin-top:.6rem}
+  .termeni-chips .tc-h{font-family:var(--sans);font-size:.64rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin-bottom:.35rem}
+  .termeni-chips .tc-row{display:flex;flex-wrap:wrap;gap:.4rem}
+  .term-chip{position:relative;font-family:var(--sans);font-size:.76rem;font-weight:600;
+    padding:.25rem .6rem;background:color-mix(in srgb,var(--accent) 7%,var(--surface));
+    border:1px solid var(--rule-soft);border-left:3px solid var(--accent);border-radius:var(--r1);
+    cursor:help;color:var(--ink)}
+  .term-chip[data-def]:hover::after{content:attr(data-def);position:absolute;left:0;top:calc(100% + .35rem);
+    z-index:40;width:max-content;max-width:22rem;padding:.5rem .7rem;font-weight:400;font-size:.78rem;
+    line-height:1.4;background:var(--ink);color:var(--paper);border-radius:var(--r1);box-shadow:var(--e2);
+    white-space:normal}
+
+  /* term autocomplete: a caret-anchored list of defined terms while drafting, in either textarea. */
+  .ac{position:absolute;z-index:60;min-width:16rem;max-width:30rem;max-height:15rem;overflow:auto;
+    background:var(--surface);border:1px solid var(--rule);border-radius:var(--r1);box-shadow:var(--e2)}
+  .ac-item{padding:.4rem .6rem;cursor:pointer;border-bottom:1px solid var(--rule-soft)}
+  .ac-item:last-child{border-bottom:none}
+  .ac-item.sel,.ac-item:hover{background:color-mix(in srgb,var(--accent) 12%,var(--surface))}
+  .ac-term{font-family:var(--sans);font-size:.82rem;font-weight:600;color:var(--ink)}
+  .ac-def{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute);margin-top:.1rem;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+
   section{margin-top:2rem;scroll-margin-top:1rem}
   .sec-head{display:flex;align-items:baseline;gap:.7rem;border-bottom:1px solid var(--rule);
     padding-bottom:.45rem;margin-bottom:.9rem}
@@ -227,6 +252,36 @@
     border-radius:var(--r1);box-shadow:var(--e1);
     padding:.8rem 1rem;margin-top:1rem;font-family:var(--mono);font-size:.9rem;white-space:pre-wrap;
     word-break:break-word}
+
+  /* the composed act, typeset as a document instead of a mono dump: title centred, each article's
+     chapeau in bold, its numbered points indented, and the new wording («…») set off as a quote. */
+  .act-doc{background:var(--surface);border:1px solid var(--rule);border-radius:var(--r1);
+    box-shadow:var(--e1);padding:1.1rem 1.3rem;margin-top:1rem;font-family:var(--serif);
+    font-size:.96rem;line-height:1.6;color:var(--ink)}
+  .act-titlu{font-family:var(--serif);font-weight:700;font-size:1.05rem;text-align:center;
+    margin:0 0 1rem;padding-bottom:.6rem;border-bottom:1px solid var(--rule)}
+  .act-art{margin:0 0 1.1rem}
+  .act-art:last-child{margin-bottom:0}
+  .act-chapeau{font-weight:600;margin:0 0 .5rem}
+  .act-puncte{margin:0;padding:0;list-style:none}
+  .act-pct{margin:0 0 .55rem;padding-left:1.4rem;text-indent:-1.4rem}
+  .act-pct:last-child{margin-bottom:0}
+  .pct-tinta{}
+  .act-cuprins{margin:.35rem 0 0 0;padding:.5rem .8rem;text-indent:0;
+    border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent);
+    border-radius:0 var(--r1) var(--r1) 0;font-style:italic}
+
+  /* the norm-consistency verdict: one badge that turns amber when a project mixes the two styles. */
+  .norma-badge{display:flex;gap:.5rem;align-items:flex-start;margin:.7rem 0 0;padding:.55rem .75rem;
+    border-radius:var(--r1);font-size:.82rem;line-height:1.45;border:1px solid var(--rule)}
+  .norma-badge.ok{background:color-mix(in srgb,var(--good) 10%,transparent);
+    border-color:color-mix(in srgb,var(--good) 40%,var(--rule))}
+  .norma-badge.mix{background:color-mix(in srgb,var(--material) 12%,transparent);
+    border-color:color-mix(in srgb,var(--material) 45%,var(--rule))}
+  .norma-badge .nb-ic{font-size:1rem;line-height:1.2}
+  .norma-badge ul{margin:.3rem 0 0;padding-left:1.1rem}
+  .norma-badge li{margin:.15rem 0}
+  .norma-badge .nb-q{font-family:var(--serif);font-style:italic}
 
   /* the drafting suggestion: two readings of the line being written — plain on top, the mandated
      Legea 24/2000 form below. Sits under the textarea, not at the caret, so it never covers text. */
@@ -299,9 +354,37 @@
   .redact-left{flex:1;min-width:0}
   #r-compus{flex:1;min-width:0;position:sticky;top:6.5rem;max-height:calc(100vh - 8rem);overflow:auto}
   #r-compus:empty{display:none}   /* no reserved blank column until something is composed */
+
+  /* the outline: a live table of contents of the block tree, on the far left, click to jump. */
+  .r-toc{flex:0 0 11.5rem;min-width:0;position:sticky;top:6.5rem;max-height:calc(100vh - 8rem);
+    overflow:auto;border:1px solid var(--rule);border-radius:var(--r1);background:var(--surface);
+    box-shadow:var(--e1);padding:.6rem .5rem}
+  .r-toc .toc-h{font-family:var(--sans);font-size:.63rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin:.1rem .3rem .5rem}
+  .toc-list{list-style:none;margin:0;padding:0}
+  .toc-item{display:flex;align-items:center;gap:.4rem;padding:.25rem .3rem;border-radius:var(--r1);
+    cursor:pointer;font-family:var(--sans);font-size:.8rem;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .toc-item:hover{background:color-mix(in srgb,var(--accent) 10%,var(--surface))}
+  .toc-item.lvl-art .toc-lbl{font-weight:600}
+  .toc-item.lvl-alin{color:var(--ink-mid)}
+  .toc-item.lvl-lit{color:var(--ink-mute)}
+  .toc-lbl{overflow:hidden;text-overflow:ellipsis}
+  .toc-dot{flex:0 0 auto;width:.5rem;height:.5rem;border-radius:50%;background:var(--rule)}
+  .toc-dot.none{background:transparent;border:1px solid var(--rule)}
+  .toc-dot.modifica{background:var(--material)}
+  .toc-dot.completeaza{background:var(--good)}
+  .toc-dot.abroga{background:var(--blocking)}
+  .toc-dot.introduce{background:var(--note)}
+  .toc-empty{font-family:var(--sans);font-size:.76rem;color:var(--ink-mute);padding:.3rem;list-style:none}
+  @keyframes nodeflash{0%{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 45%,transparent)}
+    100%{box-shadow:0 0 0 3px transparent}}
+  .node.flash{animation:nodeflash 1s ease-out}
+
   @media (max-width:900px){
     .redact-body{flex-direction:column}
     #r-compus{position:static;max-height:none;width:100%}
+    .r-toc{position:static;flex-basis:auto;max-height:13rem;width:100%}
   }
   /* pretty scrollbars everywhere, in place of the OS default */
   *{scrollbar-width:thin;scrollbar-color:var(--rule) transparent}
@@ -434,6 +517,7 @@
           <button class="ghost" id="draft-clar-btn">Limbaj clar</button>
           <span class="hint">Verificarea rulează local · textul proiectului nu părăsește browserul. „Limbaj clar” folosește modul AI ales.</span>
         </div>
+        <div id="termeni-chips" class="termeni-chips" hidden></div>
         <div id="lint-out"></div>
       </div>
 
@@ -457,6 +541,10 @@
           <div id="r-act-info" class="hint" style="margin:.1rem 0 0;min-height:1.1rem"></div>
         </div>
         <div class="redact-body">
+          <nav class="r-toc" id="r-toc" aria-label="Cuprinsul actului">
+            <div class="toc-h">Cuprins</div>
+            <ol class="toc-list" id="r-toc-list"></ol>
+          </nav>
           <div class="redact-left">
             <details class="import-panel">
               <summary>Importă un act existent</summary>
@@ -917,6 +1005,58 @@ $("#r-import-btn").onclick=async ()=>{
   }catch(e){ stat.textContent="eroare: "+(e.message||e); }
   finally{ btn.disabled=false; btn.textContent=et||"Parsează în arbore"; }
 };
+// Typeset the composed act as a document: title centred, each article's chapeau bold, its numbered
+// points indented, and the new wording («…») set off as a quote. Purely presentational — the copied
+// text stays the plain composed source, this only changes how the right column reads.
+function typesetAct(titlu, text){
+  const arts=(text||"").split(/\n\s*\n/);
+  let h=`<div class="act-doc"><div class="act-titlu">${esc(titlu||"")}</div>`;
+  for(const bloc of arts){
+    const linii=bloc.split("\n"); if(!linii.length) continue;
+    // lines before the first "1." belong to the chapeau; then points, each possibly with a «cuprins»
+    let chapeau=[], puncte=[], cur=null;
+    for(const l of linii){
+      if(/^\s*\d+\.\s/.test(l)){ if(cur)puncte.push(cur); cur={tinta:l.trim(), cuprins:[]}; }
+      else if(cur){ cur.cuprins.push(l); }
+      else chapeau.push(l);
+    }
+    if(cur)puncte.push(cur);
+    if(chapeau.length) h+=`<p class="act-chapeau">${esc(chapeau.join(" ").trim())}</p>`;
+    if(puncte.length){
+      h+=`<div class="act-puncte">`;
+      for(const p of puncte){
+        h+=`<div class="act-pct"><span class="pct-tinta">${esc(p.tinta.replace(/[:：]\s*$/,"").trim())}</span>`;
+        let cup=p.cuprins.join("\n").trim().replace(/^«/,"").replace(/»$/,"").trim();
+        if(cup) h+=`<blockquote class="act-cuprins">${esc(cup)}</blockquote>`;
+        h+=`</div>`;
+      }
+      h+=`</div>`;
+    }
+    h+=``;
+  }
+  return h+`</div>`;
+}
+// Check the drafted new wording is written entirely in one norm (plain-language OR current register),
+// not a mix. Judges only the texts the drafter wrote — never the boilerplate chapeau, which is always
+// current-register — so it answers the real question: did I keep one voice across my project?
+async function verificaNorma(interventii, seq){
+  const texte=interventii.map(i=>i.text_nou).filter(t=>t&&t!=="…"&&t.trim()).join("\n\n");
+  const box=$("#r-norma"); if(!box) return;
+  if(!texte.trim()){ box.innerHTML=""; return; }
+  try{
+    const d=await (await fetch("/api/norma",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:texte})})).json();
+    if(seq!==liveSeq || d.error) return;
+    const et={nou:"limbaj clar",actual:"normă curentă",neutru:"neutru"};
+    if(d.dominanta==="neutru"){ box.innerHTML=""; return; }
+    if(d.coerent){
+      box.innerHTML=`<div class="norma-badge ok"><span class="nb-ic">✓</span><div>Stil coerent — tot proiectul este scris în <b>${et[d.dominanta]}</b>.</div></div>`;
+    }else{
+      const lst=(d.abateri||[]).map(a=>{ let f=(a.text||"").replace(/\s+/g," ").trim();
+        if(f.length>90)f=f.slice(0,90)+"…"; return `<li>[<b>${et[a.norma]}</b>] <span class="nb-q">„${esc(f)}"</span></li>`; }).join("");
+      box.innerHTML=`<div class="norma-badge mix"><span class="nb-ic">⚠</span><div>Stil mixt: majoritatea este în <b>${et[d.dominanta]}</b>, dar unele blocuri se abat. Un proiect ar trebui scris într-o singură normă.<ul>${lst}</ul></div></div>`;
+    }
+  }catch(e){ /* norm check is advisory; a failure just leaves the badge empty */ }
+}
 // live preview: recompose (debounced) on any edit, so the right column tracks the tree in real time
 let liveSeq=0, liveTimer=null;
 function programeazaLive(){ clearTimeout(liveTimer); liveTimer=setTimeout(()=>compune(true), 500); }
@@ -935,12 +1075,14 @@ async function compune(live){
     if(seq!==liveSeq) return;   // a newer edit already superseded this compose
     if(d.error){ $("#r-compus").innerHTML=empty("Eroare: "+esc(d.error)); return; }
     let h=`<div class="hint" style="margin:0 0 .4rem;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">`
-      +`<span class="r-live">live</span> Titlu: <b>${esc(d.titlu)}</b></div>`
-      +`<div class="out-box" id="r-compus-text">${esc(d.text)}</div>`;
+      +`<span class="r-live">live</span> Actul compus, așa cum s-ar citi:</div>`
+      +typesetAct(d.titlu, d.text)
+      +`<div id="r-norma"></div>`;
     if(d.curat) h+=`<p class="hint" style="color:var(--good)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`;
     else h+=(d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join("");
     h+=`<div class="row"><button class="ghost" id="r-ccopy">Copiază</button><button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
     $("#r-compus").innerHTML=h;
+    verificaNorma(interventii, seq);
     $("#r-ccopy").onclick=()=>{ navigator.clipboard?.writeText(d.titlu+"\n\n"+d.text); $("#r-ccopy").textContent="Copiat"; };
     $("#r-cinsert").onclick=()=>{ $("#draft").value=d.titlu+"\n\n"+d.text; selectTab("lint"); };
   }catch(e){ if(seq===liveSeq && !live) $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
@@ -951,7 +1093,49 @@ $("#r-tree").addEventListener("input", programeazaLive);
 $("#r-tree").addEventListener("change", programeazaLive);
 ["r-tip","r-nr","r-an","r-desc"].forEach(id=>{ const el=$("#"+id);
   if(el){ el.addEventListener("input",programeazaLive); el.addEventListener("change",programeazaLive); } });
+
+// ---- outline / table of contents: a live map of the block tree, click an entry to jump to it ----
+const tocList=$("#r-toc-list");
+let tocTimer=null, tocRef=[];
+function programeazaTOC(){ clearTimeout(tocTimer); tocTimer=setTimeout(refreshTOC,120); }
+function tocEticheta(node){
+  const lvl=node.classList.contains("art")?"art":node.classList.contains("alin")?"alin":"lit";
+  const num=(node.querySelector(":scope > .node-hd > .num")?.value||"").trim();
+  const t = lvl==="art" ? "Art. "+(num||"—")
+          : lvl==="alin" ? "alin. ("+(num||"—")+")"
+          : "lit. "+(num||"—")+")";
+  return {t, lvl};
+}
+function culegeTOC(container, depth, out){
+  for(const n of container.children){
+    if(!(n.classList && n.classList.contains("node"))) continue;
+    const {t,lvl}=tocEticheta(n);
+    const op=n.querySelector(":scope > .node-hd > .op")?.value||"";
+    out.push({node:n, label:t, lvl, depth, op});
+    const kids=n.querySelector(":scope > .kids");
+    if(kids) culegeTOC(kids, depth+1, out);
+  }
+}
+function refreshTOC(){
+  tocRef=[]; culegeTOC($("#r-tree"), 0, tocRef);
+  if(!tocRef.length){ tocList.innerHTML=`<li class="toc-empty">Adaugă un articol ca să apară în cuprins.</li>`; return; }
+  tocList.innerHTML=tocRef.map((e,i)=>
+    `<li class="toc-item lvl-${e.lvl}" style="padding-left:${(0.3+e.depth*0.85).toFixed(2)}rem" data-i="${i}" title="${esc(e.label)}">`
+    +`<span class="toc-dot ${e.op||'none'}"></span><span class="toc-lbl">${esc(e.label)}</span></li>`).join("");
+  [...tocList.querySelectorAll(".toc-item")].forEach(li=>{
+    li.onclick=()=>{ const e=tocRef[+li.dataset.i]; if(!e) return; const n=e.node;
+      n.scrollIntoView({block:"center",behavior:"smooth"});
+      n.classList.remove("flash"); void n.offsetWidth; n.classList.add("flash");
+      const num=n.querySelector(":scope > .node-hd > .num"); if(num) num.focus({preventScroll:true}); };
+  });
+}
+// structure changes (add/remove/import/clear) via observer; value edits (number, op) via input/change
+new MutationObserver(programeazaTOC).observe($("#r-tree"), {childList:true, subtree:true});
+$("#r-tree").addEventListener("input", programeazaTOC);
+$("#r-tree").addEventListener("change", programeazaTOC);
+
 $("#r-tree").append(creeazaNod("art"));   // start with one article block
+refreshTOC();
 
 // ---- drafting suggestion (deterministic; top = plain reading, bottom = the required formula) ----
 const suggestBox = $("#suggest");
@@ -993,6 +1177,97 @@ function insertFormula(formula){
 }
 $("#draft").addEventListener("input",()=>{ clearTimeout(suggestTimer); suggestTimer=setTimeout(refreshSuggest,350); });
 $("#draft").addEventListener("keydown",e=>{ if(e.key==="Escape") hideSuggest(); });
+
+// ---- recognised terminology chips: the defined terms the draft actually uses, definition on hover.
+// The positive counterpart to the "talks around a defined term" warning — deterministic, local. ----
+const chipsBox=$("#termeni-chips");
+let chipsTimer, chipsFor="";
+async function refreshChips(){
+  const text=$("#draft").value;
+  if(text.trim().length<4){ chipsBox.hidden=true; chipsBox.innerHTML=""; chipsFor=""; return; }
+  if(text===chipsFor) return; chipsFor=text;
+  try{
+    const d=await (await fetch("/api/termeni",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
+    const ts=(d&&d.termeni)||[];
+    if(!ts.length){ chipsBox.hidden=true; chipsBox.innerHTML=""; return; }
+    chipsBox.innerHTML=`<div class="tc-h">Termeni definiți recunoscuți · treci cu mouse-ul pentru definiție</div>`
+      +`<div class="tc-row">`+ts.map(t=>`<span class="term-chip" data-def="${esc(t.definitie)}">${esc(t.termen)}</span>`).join("")+`</div>`;
+    chipsBox.hidden=false;
+  }catch(e){ chipsBox.hidden=true; }
+}
+$("#draft").addEventListener("input",()=>{ clearTimeout(chipsTimer); chipsTimer=setTimeout(refreshChips,450); });
+
+// ---- term autocomplete: a caret-word dropdown of defined terms, in the draft and every block
+// textarea. The dictionary (public law only) is fetched once, lazily, on first use. ----
+let DICT=null, dictLoading=null;
+function loadDict(){
+  if(DICT) return Promise.resolve(DICT);
+  if(!dictLoading) dictLoading=fetch("/api/dictionar").then(r=>r.json())
+    .then(d=>{ DICT=(d&&d.termeni)||[]; return DICT; }).catch(()=>{ DICT=[]; return DICT; });
+  return dictLoading;
+}
+const _COMBIN=new RegExp("[\\u0300-\\u036f]","g");
+function fold(s){ return (s||"").normalize("NFD").replace(_COMBIN,"").toLowerCase(); }
+const acEl=document.createElement("div"); acEl.className="ac"; acEl.hidden=true; document.body.appendChild(acEl);
+let acTA=null, acItems=[], acSel=-1, acWord=null, acSuppress=false;
+function acHide(){ acEl.hidden=true; acEl.innerHTML=""; acItems=[]; acSel=-1; acTA=null; acWord=null; }
+function wordAtCaret(ta){
+  const v=ta.value, pos=ta.selectionStart;
+  let s=pos; while(s>0 && /[\wăâîșțĂÂÎȘȚ-]/.test(v[s-1])) s--;
+  return {word:v.slice(s,pos), start:s, end:pos};
+}
+function acPosition(ta){
+  const r=ta.getBoundingClientRect();
+  acEl.style.left=(window.scrollX+r.left)+"px";
+  acEl.style.top=(window.scrollY+r.bottom+4)+"px";
+  acEl.style.width=Math.min(r.width,480)+"px";
+}
+async function acUpdate(ta){
+  if(acSuppress){ acSuppress=false; acHide(); return; }
+  acTA=ta;
+  const {word,start,end}=wordAtCaret(ta);
+  if(word.length<3){ acHide(); return; }
+  const dict=await loadDict(); const q=fold(word);
+  const pre=[], inc=[];
+  for(const t of dict){ const f=fold(t.termen);
+    if(f.startsWith(q)) pre.push(t); else if(f.includes(q)) inc.push(t);
+    if(pre.length>=8) break; }
+  const items=pre.concat(inc).slice(0,8);
+  if(!items.length){ acHide(); return; }
+  acItems=items; acSel=0; acWord={start,end};
+  acEl.innerHTML=items.map((t,i)=>`<div class="ac-item${i===0?' sel':''}" data-i="${i}"><div class="ac-term">${esc(t.termen)}</div><div class="ac-def">${esc(t.definitie)}</div></div>`).join("");
+  acPosition(ta); acEl.hidden=false;
+}
+function acMove(d){
+  const items=[...acEl.querySelectorAll(".ac-item")]; if(!items.length) return;
+  items[acSel]?.classList.remove("sel");
+  acSel=(acSel+d+items.length)%items.length;
+  items[acSel].classList.add("sel"); items[acSel].scrollIntoView({block:"nearest"});
+}
+function acInsert(i){
+  if(!acTA||!acItems[i]||!acWord) return;
+  const t=acItems[i].termen, ta=acTA, {start,end}=acWord;
+  ta.value=ta.value.slice(0,start)+t+ta.value.slice(end);
+  const caret=start+t.length; ta.focus(); ta.selectionStart=ta.selectionEnd=caret;
+  acHide(); acSuppress=true; ta.dispatchEvent(new Event("input",{bubbles:true}));
+}
+function attachAC(ta){
+  ta.addEventListener("input",()=>acUpdate(ta));
+  ta.addEventListener("keydown",e=>{
+    if(acEl.hidden) return;
+    if(e.key==="ArrowDown"){ e.preventDefault(); acMove(1); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); acMove(-1); }
+    else if(e.key==="Enter"||e.key==="Tab"){ e.preventDefault(); acInsert(acSel); }
+    else if(e.key==="Escape"){ acHide(); }
+  });
+  ta.addEventListener("blur",()=>setTimeout(acHide,120));
+}
+acEl.addEventListener("mousedown",e=>{ const it=e.target.closest(".ac-item"); if(it){ e.preventDefault(); acInsert(+it.dataset.i); } });
+window.addEventListener("scroll",()=>{ if(!acEl.hidden) acHide(); }, true);
+attachAC($("#draft"));
+// block textareas are created on demand — attach lazily the first time one is focused
+$("#r-tree").addEventListener("focusin",e=>{ const ta=e.target.closest(".txt textarea");
+  if(ta && !ta.dataset.acReady){ ta.dataset.acReady="1"; attachAC(ta); } });
 
 // ---- consolidat (a provision's current wording + attribution; local source only) ----
 let consLoaded=false;

@@ -38,10 +38,13 @@ from scripts.servicii import (
     _cauta,
     _compune,
     _consolidat,
+    _dictionar,
     _lint,
+    _norma,
     _parseaza,
     _redacteaza,
     _sugereaza,
+    _termeni,
     _vecini,
     rezumat,
 )
@@ -89,6 +92,8 @@ def face_handler(stare: Stare):
                 self._json(_consolidat(parse_qs(ruta.query)))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/dictionar":
+                self._json(_dictionar(stare))
             elif ruta.path == "/api/rezumat":
                 self._json(rezumat(stare))
             else:
@@ -96,7 +101,13 @@ def face_handler(stare: Stare):
 
         def do_POST(self) -> None:  # noqa: N802
             ruta = urlparse(self.path).path
-            if ruta not in ("/api/lint", "/api/compune", "/api/parseaza"):
+            if ruta not in (
+                "/api/lint",
+                "/api/compune",
+                "/api/parseaza",
+                "/api/norma",
+                "/api/termeni",
+            ):
                 self._json({"error": "not found"}, 404)
                 return
             lung = int(self.headers.get("Content-Length", 0))
@@ -110,6 +121,12 @@ def face_handler(stare: Stare):
                 return
             if ruta == "/api/parseaza":
                 self._json(_parseaza(str(cerere.get("text", "")).strip()))
+                return
+            if ruta == "/api/norma":
+                self._json(_norma(str(cerere.get("text", "")).strip()))
+                return
+            if ruta == "/api/termeni":
+                self._json(_termeni(str(cerere.get("text", "")).strip(), stare))
                 return
             draft = str(cerere.get("draft", "")).strip()
             if not draft:

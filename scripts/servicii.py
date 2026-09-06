@@ -356,6 +356,60 @@ def _parseaza(text: str) -> dict:
     return parseaza_text(text or "")
 
 
+def _norma(text: str) -> dict:
+    """Check a submitted project is written entirely in one drafting norm, not a mix of the two.
+
+    Deterministic, no model (see `scripts.norma`). Returns the dominant norm, whether the project is
+    coherent, and the exact units that break from the majority so the editor can point at them."""
+    from scripts.norma import coerenta
+
+    c = coerenta(text or "")
+    return {
+        "dominanta": c.dominanta,
+        "coerent": c.coerent,
+        "raport": c.raport(),
+        "unitati": [
+            {"text": u.text, "norma": u.norma, "scor_nou": u.scor_nou, "scor_actual": u.scor_actual}
+            for u in c.unitati
+        ],
+        "abateri": [{"text": u.text, "norma": u.norma} for u in c.abateri],
+    }
+
+
+def _termeni(text: str, stare: Stare) -> dict:
+    """The defined terms a draft uses, in reading order, each with its definition — so the editor
+    can chip them and show the meaning on hover. Deterministic (see `definitii.recunoaste`)."""
+    from scripts.definitii import recunoaste
+
+    occ = recunoaste(text or "", stare.termeni)
+    return {
+        "termeni": [
+            {
+                "termen": o.termen.termen,
+                "definitie": o.termen.definitie,
+                "fragment": o.fragment,
+                "start": o.start,
+                "end": o.end,
+            }
+            for o in occ
+        ]
+    }
+
+
+def _dictionar(stare: Stare) -> dict:
+    """The whole defined-term dictionary, deduplicated and alphabetised, for client-side
+    autocomplete. Sent once at startup; the terms are public law, nothing about the draft."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for t in sorted(stare.termeni, key=lambda t: t.termen.lower()):
+        k = t.cheia
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append({"termen": t.termen, "definitie": t.definitie})
+    return {"termeni": out}
+
+
 def _compune(interventii: list[dict]) -> dict:
     """Compile a list of structured changes into a whole amending act, verified by re-reading it.
 
