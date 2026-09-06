@@ -222,3 +222,28 @@ def test_the_law_named_in_an_amending_laws_title_is_not_struck_too():
     assert not any(act == "lege-249-2006" and loc == "" for act, loc in lovite), (
         "the act also came through bare, which reads as the whole law struck"
     )
+
+
+def test_the_post_2003_finality_formula_is_recognised():
+    """`Definitivă și general obligatorie` is how 84% of the case law states finality.
+
+    Recognising only `Definitivă prin nerecurare` — the 1990s formula, 1% of decisions — marked
+    16 999 of 20 006 decisions "finality unknown", and the register then warned on every one of
+    them that a recourse might have reversed the strike. There is no recourse to search: article
+    147 (4) makes a decision generally binding from publication, and the appeal to the plenum was
+    abolished with the 2003 revision.
+    """
+    text = (
+        "CURTEA În numele legii DECIDE: "
+        "Admite excepția și constată că art. 5 din Legea nr. 10/1999 este neconstituțional. "
+        "Definitivă și general obligatorie. "
+        "Pronunțată în ședința publică din 1 martie 2015."
+    )
+    dec = citeste("decizie-1-2015", text)
+    assert dec.definitiva is True
+    assert not any("recurs" in lim for lim in dec.limitari)
+
+
+def test_a_decision_still_open_to_recourse_is_unaffected():
+    """The 1990s form must keep saying what it says — 218 decisions are genuinely not final."""
+    assert citeste("decizie-101-1996", D101).definitiva is False
