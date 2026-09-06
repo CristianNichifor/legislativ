@@ -65,6 +65,22 @@ def test_missing_corpus_leaves_the_usage_count_null_not_zero():
     assert all(t["utilizari"] is None for t in r["termeni_redefiniti"])
 
 
+def test_the_xray_restates_a_modification_in_plain_words():
+    d = (
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «Autoritatea publică anunțul.»"
+    )
+    r = raza_de_impact(d, citari_fn=_citari({}))
+    linii = [x["text"] for x in r["rezumat"]]
+    assert any(ln.startswith("Rescrie articolul 7 din Legea nr. 98/2016") for ln in linii)
+    assert any("Autoritatea publică anunțul" in ln for ln in linii)
+
+
+def test_the_xray_restates_a_repeal_in_plain_words():
+    r = raza_de_impact("Articolul 12 din Legea nr. 98/2016 se abrogă.", citari_fn=_citari({}))
+    assert any(x["text"].startswith("Abrogă (elimină) articolul 12") for x in r["rezumat"])
+
+
 _ORIGINAL_CU_RAPORT = (
     "Autoritatea publică anunțul de participare. "
     "Autoritatea transmite raportul în termen de 30 de zile de la încheiere."
