@@ -7,7 +7,13 @@ article-first. The forms come from Legea nr. 24/2000 and the Consiliul Legislati
 
 from __future__ import annotations
 
-from scripts.redactare import conformitate, limbaj_normativ, redacteaza, titlu_modificator
+from scripts.redactare import (
+    conformitate,
+    interventii_conflictuale,
+    limbaj_normativ,
+    redacteaza,
+    titlu_modificator,
+)
 
 
 def test_a_non_standard_repeal_is_flagged_with_the_correct_form():
@@ -97,3 +103,53 @@ def test_normative_language_findings_reach_conformitate():
 
 def test_clean_normative_prose_has_no_language_findings():
     assert limbaj_normativ("Autoritatea contractantă publică anunțul de participare.") == []
+
+
+# --- conflicting interventions: two points in one draft that cannot both stand ---
+
+
+def test_a_repeal_and_a_modification_of_the_same_provision_is_a_contradiction():
+    d = (
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se abrogă. "
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «Autoritatea publică anunțul.»"
+    )
+    cf = interventii_conflictuale(d)
+    assert cf and cf[0].fel == "contradictie"
+    assert cf[0].locator == "art7.alin2" and cf[0].act == "lege-98-2016"
+
+
+def test_two_rewrites_of_the_same_article_are_flagged_as_an_overwrite():
+    d = (
+        "Articolul 5 din Legea nr. 98/2016 se modifică și va avea următorul cuprins: «A». "
+        "Articolul 5 din Legea nr. 98/2016 se modifică și va avea următorul cuprins: «B»."
+    )
+    cf = interventii_conflictuale(d)
+    assert cf and cf[0].fel == "suprascriere" and cf[0].locator == "art5"
+
+
+def test_edits_to_different_alineate_of_one_article_do_not_collide():
+    # the extractor's own locator keeps only the article; the finer key keeps them apart
+    d = (
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «A». La articolul 7 din Legea nr. 98/2016, alineatul (3) se modifică și va avea "
+        "următorul cuprins: «B»."
+    )
+    assert interventii_conflictuale(d) == []
+
+
+def test_a_single_clean_amendment_has_no_conflict():
+    d = (
+        "La articolul 7 din Legea nr. 98/2016, alineatul (2) se modifică și va avea următorul "
+        "cuprins: «Autoritatea publică anunțul.»"
+    )
+    assert interventii_conflictuale(d) == []
+
+
+def test_two_completions_of_the_same_provision_are_not_a_conflict():
+    # each `completează` adds its own text; both can stand, so it is not flagged
+    d = (
+        "Articolul 5 din Legea nr. 98/2016 se completează cu următorul cuprins: «o teză». "
+        "Articolul 5 din Legea nr. 98/2016 se completează cu următorul cuprins: «altă teză»."
+    )
+    assert interventii_conflictuale(d) == []
