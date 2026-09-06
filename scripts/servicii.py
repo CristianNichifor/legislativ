@@ -28,6 +28,20 @@ from scripts.dublura import dubluri
 from scripts.termene import obligatii
 
 
+def _data(brut: str | None) -> date | None:
+    """An ISO date off either backing, or None when it is absent or unparseable.
+
+    Unparseable reads as absent on purpose: a malformed republication date must not be treated as a
+    renumbering boundary, and it must not raise in the middle of a lint either.
+    """
+    if not brut:
+        return None
+    try:
+        return date.fromisoformat(str(brut)[:10])
+    except ValueError:
+        return None
+
+
 class Stare:
     """What a session holds open: the data, and the terminology dictionary built from it.
 
@@ -57,6 +71,7 @@ class Stare:
         self.date_dir = Path(date_dir) if date_dir else None
         self._titluri: dict[str, str] | None = None
         self._urls: dict[str, str] | None = None
+        self._republicari: dict[str, str] | None = None
         self.termeni: list[Termen] = self._dictionar()
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
@@ -109,8 +124,12 @@ class Stare:
                 index = json.loads(cale.read_text(encoding="utf-8"))
                 self._titluri = {a["id"]: a.get("titlu", "") for a in index}
                 self._urls = {a["id"]: a.get("url", "") for a in index}
+                # absent for all but the few republished acts, so only the keys that carry one
+                self._republicari = {
+                    a["id"]: a["republicat_din"] for a in index if a.get("republicat_din")
+                }
             else:
-                self._titluri, self._urls = {}, {}
+                self._titluri, self._urls, self._republicari = {}, {}, {}
         return self._titluri
 
     def sursa_url(self, act_id: str) -> str:
@@ -124,6 +143,26 @@ class Stare:
                 "SELECT sursa_url, id_act_portal FROM acte WHERE id = ?", (act_id,)
             ).fetchone()
             return depozit.url_document(r["sursa_url"], r["id_act_portal"]) if r else ""
+
+    def republicari(self, act_ids: set[str]) -> dict[str, date | None]:
+        """When each of these acts was republished, where the corpus records it.
+
+        `vigoare.py` needs this to know whether a locator-level repeal predates a renumbering. Read
+        for the handful of acts a draft actually cites, not the whole corpus. Both backings, like
+        `titlu` and `sursa_url`: the `acte` table on localhost, the shard index in the browser —
+        `shard.py` carries `republicat_din` in `index.json` for exactly this.
+        """
+        if not act_ids:
+            return {}
+        if self.pe_shard:
+            self._index()
+            return {a: _data((self._republicari or {}).get(a)) for a in act_ids}
+        with depozit.deschide(self.corpus, readonly=True) as con:
+            marci = ",".join("?" * len(act_ids))
+            randuri = con.execute(
+                f"SELECT id, republicat_din FROM acte WHERE id IN ({marci})", tuple(act_ids)
+            ).fetchall()
+        return {r["id"]: _data(r["republicat_din"]) for r in randuri}
 
     def titlu(self, act_id: str) -> str:
         """The act's title, from the shard index in the browser or `acte` on localhost."""
@@ -605,6 +644,14 @@ def _consolidare_semnale(draft: str) -> list[dict]:
     return out
 
 
+def _republicari_citate(draft: str, stare: Stare) -> dict[str, date | None]:
+    """Republication dates for just the acts this draft cites — the input `vigoare.py` needs to
+    decide whether a locator-level match crosses a renumbering boundary."""
+    from scripts.referinte import referinte
+
+    return stare.republicari({r.act.id for r in referinte(draft) if r.act is not None})
+
+
 def _repealed(draft: str, stare: Stare) -> list[dict]:
     """References in the draft to a repealed act or article — the citation it must not build on.
 
@@ -625,8 +672,10 @@ def _repealed(draft: str, stare: Stare) -> list[dict]:
                 "locator": cm.locator,
                 "motiv": cm.motiv,
                 "intregul_act": cm.abrogare.este_intregul_act,
+                # material, not blocking, when the match only holds across a renumbering boundary
+                "severitate": cm.severitate,
             }
-            for cm in citari_moarte(draft, graf)
+            for cm in citari_moarte(draft, graf, _republicari_citate(draft, stare))
         ]
     finally:
         graf.close()
@@ -653,7 +702,7 @@ def _calificate(draft: str, stare: Stare) -> list[dict]:
                 "motiv": cc.motiv,
                 "intregul_act": cc.calificare.este_intregul_act,
             }
-            for cc in citari_calificate(draft, graf)
+            for cc in citari_calificate(draft, graf, _republicari_citate(draft, stare))
         ]
     finally:
         graf.close()
