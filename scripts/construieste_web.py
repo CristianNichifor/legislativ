@@ -96,7 +96,7 @@ async function boot(){
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json"]) {
+  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
@@ -107,7 +107,8 @@ from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
                               _norma, _termeni, _dictionar, _regula, _impact,
-                              _cronologie, _citari, _supraveghere)
+                              _cronologie, _citari, _supraveghere,
+                              _opinie, _opinie_cerere)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -133,6 +134,13 @@ def _raspunde(path, query, body):
     elif path == '/api/dictionar': out = _dictionar(_stare)
     elif path == '/api/regula':
         out = _regula((json.loads(body or '{}').get('text') or '').strip())
+    elif path == '/api/opinie-cerere':
+        out = _opinie_cerere((json.loads(body or '{}').get('draft') or '').strip(), _stare)
+    elif path == '/api/opinie':
+        _b = json.loads(body or '{}')
+        # The tab ran WebLLM and posts the raw reply; the context is rebuilt here, never accepted
+        # from the client, because the context is what the validator holds the model to.
+        out = _opinie((_b.get('draft') or '').strip(), _stare, brut=_b.get('brut'))
     elif path == '/api/impact':
         draft = (json.loads(body or '{}').get('draft') or '').strip()
         out = _impact(draft, _stare) if draft else {'error':'draft gol'}
@@ -253,7 +261,7 @@ const NUCLEU = [
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
-  "./data/neconstitutional.json", "./data/norme_lovite.json"
+  "./data/neconstitutional.json", "./data/norme_lovite.json", "./data/considerente.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 // Fonts join the big data on the cache-first path, not the network-first shell path: they are

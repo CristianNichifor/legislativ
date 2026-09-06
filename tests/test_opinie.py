@@ -227,3 +227,41 @@ def test_a_configured_model_is_called_on_this_machine(monkeypatch):
     monkeypatch.setenv("LEGISLATIV_MODEL", "llama3.1")
     monkeypatch.delenv("LEGISLATIV_MODEL_URL", raising=False)
     assert callable(model_local())
+
+
+def test_the_prompt_can_be_built_without_calling_anything():
+    """The browser's half of the two-step: WebLLM is JavaScript and the validator is Python, so the
+    tab asks for the prompt, runs it, and posts the reply back."""
+    from scripts.opinie import cerere
+
+    prompt, context = cerere(DRAFT, [gasire()])
+    assert "decizie-114-1994" in prompt
+    assert "tratament juridic diferit" in prompt
+    assert list(context) == ["decizie-114-1994"]
+
+
+def test_a_reply_obtained_elsewhere_is_validated_the_same_way():
+    """The return leg. No model is called, and the context is rebuilt here rather than accepted
+    from the caller — a client that could supply the context could supply one containing its own
+    hallucination, and the context is exactly what the validator holds the model to."""
+    o = opinie(DRAFT, [gasire()], brut=model_bun(""))
+    assert o.a_rulat is True
+    assert len(o.acceptate) == 1
+
+    inventat = opinie(DRAFT, [gasire()], brut=model_care_inventeaza(""))
+    assert inventat.acceptate == ()
+    assert inventat.rata_de_respingere == 1.0
+
+
+def test_a_thinking_model_is_read_rather_than_dropped():
+    """Qwen3 emits `<think>…</think>` by default. Before this, every reply from it parsed as an
+    empty list — which read as a clean draft rather than an unreadable answer."""
+    o = opinie(DRAFT, [gasire()], brut="<think>Compar textele.</think>\n" + model_bun(""))
+    assert len(o.acceptate) == 1
+
+
+def test_an_unreadable_reply_is_not_a_clean_bill_of_health():
+    o = opinie(DRAFT, [gasire()], brut="Nu pot răspunde la această întrebare.")
+    assert o.a_rulat is True
+    assert o.acceptate == ()
+    assert o.rata_de_respingere == 1.0, "an unparseable answer looked like no findings"

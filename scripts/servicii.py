@@ -692,7 +692,39 @@ def construieste_norme_lovite(corpus_db: str) -> list[dict]:
         cx.close()
 
 
-def _opinie(draft: str, stare: Stare, model=None) -> dict:
+def _gasiri_pentru_opinie(draft: str, stare: Stare) -> list[dict]:
+    """The deterministic findings, each with the reasoning behind its decision attached."""
+    cons = stare.considerente()
+    iesire: list[dict] = []
+    for g in [*_neconstitutional(draft, stare), *_reluare(draft, stare)["gasite"]]:
+        decizie = g.get("decizie") or ""
+        if decizie and cons.get(decizie):
+            iesire.append({**g, "considerente": cons[decizie]})
+    return iesire
+
+
+def _opinie_cerere(draft: str, stare: Stare) -> dict:
+    """The prompt for a model the caller runs itself — the browser's half of the two-step.
+
+    WebLLM is JavaScript and the validator is Python, so the tab asks for the prompt, runs it, and
+    posts the reply back. The context is not returned for the client to send back: it is recomputed
+    when the reply arrives, because a client that could supply the context could supply one
+    containing its own hallucination.
+    """
+    from scripts.opinie import cerere
+
+    prompt, context = cerere(draft, _gasiri_pentru_opinie(draft, stare))
+    if not prompt:
+        return {
+            "are_prompt": False,
+            "motiv": "niciun considerent disponibil pentru deciziile găsite",
+            "prompt": "",
+            "decizii": [],
+        }
+    return {"are_prompt": True, "motiv": "", "prompt": prompt, "decizii": sorted(context)}
+
+
+def _opinie(draft: str, stare: Stare, model=None, brut: str | None = None) -> dict:
     """Whether the draft has the defect the Court found — the one pass that needs a model.
 
     Retrieval is already done: the context is assembled from the deterministic findings, so the
@@ -706,14 +738,7 @@ def _opinie(draft: str, stare: Stare, model=None) -> dict:
     """
     from scripts.opinie import opinie
 
-    cons = stare.considerente()
-    gasiri: list[dict] = []
-    for g in [*_neconstitutional(draft, stare), *_reluare(draft, stare)["gasite"]]:
-        decizie = g.get("decizie") or ""
-        if decizie and cons.get(decizie):
-            gasiri.append({**g, "considerente": cons[decizie]})
-
-    o = opinie(draft, gasiri, model=model)
+    o = opinie(draft, _gasiri_pentru_opinie(draft, stare), model=model, brut=brut)
     return {
         "a_rulat": o.a_rulat,
         "motiv": o.motiv,

@@ -1169,6 +1169,17 @@ function renderLint(d){
     + `trimitere, fără text de comparat.</div>`);
   // Per-card severity, like the neconstitutional section above: a repeal whose locator predates a
   // republication is amber, because the article numbered that way today may never have been touched.
+  // The model pass is opt-in and on-device: it costs a model download and seconds of GPU, so it
+  // runs when asked rather than on every lint. Rendered only when the deterministic layers found
+  // something for it to reason about — with nothing to compare, there is no question to ask.
+  if(rl.length || nc.length) h += sec("Opinie asupra viciului (experimental)", 0,
+    `<div class="card note"><span class="lead">Întreabă un model local dacă textul tău are `
+    + `<b>același viciu</b> pentru care Curtea a lovit prevederea.</span>`
+    + `<div class="meta"><span>rulează pe dispozitivul tău — proiectul nu pleacă nicăieri</span>`
+    + `<span>nu blochează: e argument, nu constatare</span></div>`
+    + `<div style="margin-top:.6rem"><button id="opinie-go" class="mic">Cere opinia modelului</button> `
+    + `<span class="hint" id="opinie-stare"></span></div>`
+    + `<div id="opinie-out" style="margin-top:.6rem"></div></div>`);
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
     rp.map(r=>card(r.severitate==="material"?"material":"blocking",
       `<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,
@@ -1225,6 +1236,55 @@ function renderLint(d){
     c.onclick=()=>{ const el=document.getElementById(c.dataset.sec); if(el) el.scrollIntoView({block:"start"}); };
   });
   renderGraph(d);
+  const bOpinie=$("#opinie-go");
+  if(bOpinie) bOpinie.onclick=()=>ceresOpinia();
+}
+
+// The two-step the split between languages forces: the engines build the prompt, WebLLM answers it
+// in the tab, and the reply goes back to be validated against a context rebuilt server-side. The
+// draft never leaves the device on either leg.
+async function ceresOpinia(){
+  const draft=$("#draft").value.trim();
+  const b=$("#opinie-go"), st=$("#opinie-stare"), out=$("#opinie-out");
+  if(!draft) return;
+  if(!LLM.disponibil()){
+    st.textContent="Acest browser nu are WebGPU, deci nu poate rula un model local.";
+    return;
+  }
+  b.disabled=true; out.innerHTML="";
+  const opt=(body)=>({method:"POST",headers:{"Content-Type":"application/json"},
+                      body:JSON.stringify(body)});
+  try{
+    st.textContent="pregătesc întrebarea…";
+    const c=await (await fetch("/api/opinie-cerere",opt({draft}))).json();
+    if(!c.are_prompt){ st.textContent="Nu a rulat: "+esc(c.motiv||"nimic de comparat"); return; }
+    st.textContent=`încarc modelul (${c.decizii.length} decizii)…`;
+    const brut=await LLM.raspunde(c.prompt,(p)=>{ st.textContent=p&&p.text?p.text:"încarc modelul…"; });
+    st.textContent="verific răspunsul…";
+    const r=await (await fetch("/api/opinie",opt({draft,brut}))).json();
+    st.textContent="";
+    out.innerHTML=renderOpinie(r);
+  }catch(e){
+    // A model that failed is a pass that did not run — never a clean answer.
+    st.textContent="Nu a rulat: "+esc(e.message||e);
+  }finally{ b.disabled=false; }
+}
+
+function renderOpinie(r){
+  if(!r || !r.a_rulat) return empty("Nu a rulat: "+esc((r&&r.motiv)||"motiv necunoscut"));
+  const acc=r.acceptate||[], resp=r.respinse||[];
+  let h="";
+  if(acc.length) h += acc.map(a=>card("material",
+    `<span class="plx">${esc(a.decizie)}</span> <span class="hint">experimental</span>`,
+    [esc(a.motiv), "⚠ argument produs de un model — verifică-l în decizie"],
+    a.citat, "assumed")).join("");
+  else h += empty("Modelul nu a găsit un viciu comun pe care să-l poată cita.");
+  // The rejection rate is the only honest measurement of whether this model can be trusted here.
+  h += `<div class="hint" style="margin-top:.5rem">${acc.length} constatări verificabile, `
+    + `${resp.length} respinse (${Math.round((r.rata_de_respingere||0)*100)}%)`
+    + (resp.length?` — ${resp.map(x=>esc(x.motiv)).slice(0,3).join("; ")}`:"")
+    + `. Comparat cu: ${(r.decizii_trimise||[]).map(esc).join(", ")||"—"}.</div>`;
+  return h;
 }
 
 $("#go").onclick = async ()=>{
@@ -1787,10 +1847,15 @@ const SIS_ACTUAL="Rescrii textul în registrul juridic român actual, conform no
  +"legislativă (Legea nr. 24/2000): limbaj normativ formal, terminologie juridică consacrată și "
  +"unitară, construcții precise și impersonale acolo unde e uzual. NU schimba sensul, nu adăuga și "
  +"nu omite nimic; păstrează termenii definiți. Răspunde DOAR cu textul rescris.";
+// Verificate față de lista `prebuiltAppConfig` din web-llm; cele Qwen2.5 rămân valide, dar sunt cu
+// două generații în urmă. Qwen3 gândește cu voce tare (`<think>…</think>`) — `validare.citeste`
+// scoate blocul, altfel fiecare răspuns s-ar citi ca „niciun rezultat".
 const MODELE=[
-  {id:"Qwen2.5-0.5B-Instruct-q4f16_1-MLC", et:"0,5B · rapid (~0,4 GB)"},
-  {id:"Qwen2.5-1.5B-Instruct-q4f16_1-MLC", et:"1,5B · echilibrat (~1,1 GB)"},
-  {id:"Qwen2.5-3B-Instruct-q4f16_1-MLC",   et:"3B · calitate (~2,2 GB)"},
+  {id:"Qwen3-0.6B-q4f16_1-MLC",            et:"0,6B · rapid (~0,5 GB)"},
+  {id:"Qwen3-1.7B-q4f16_1-MLC",            et:"1,7B · echilibrat (~1,2 GB)"},
+  {id:"Qwen3-4B-q4f16_1-MLC",              et:"4B · calitate (~2,8 GB)"},
+  {id:"Llama-3.2-3B-Instruct-q4f16_1-MLC", et:"3B · Llama 3.2 (~2,2 GB)"},
+  {id:"Qwen2.5-1.5B-Instruct-q4f16_1-MLC", et:"1,5B · Qwen2.5 (rezervă)"},
 ];
 const LLM={
   engine:null, modelIncarcat:null,
@@ -1805,7 +1870,13 @@ const LLM={
     const r=await e.chat.completions.create({temperature:0.2,
       messages:[{role:"system",content:sistem},{role:"user",content:text}]});
     return (r.choices&&r.choices[0]&&r.choices[0].message.content||"").trim(); },
-  rescrie(text,prog){ return this.rescrieCu(text, SIS_CLAR, prog); }
+  rescrie(text,prog){ return this.rescrieCu(text, SIS_CLAR, prog); },
+  // The constitutionality opinion: one prompt built by the engines, answered as JSON, validated
+  // server-side. temperature 0 because we want the same answer twice, not a better-phrased one.
+  async raspunde(prompt,prog){ const e=await this.incarca(prog);
+    const r=await e.chat.completions.create({temperature:0,
+      messages:[{role:"user",content:prompt}]});
+    return (r.choices&&r.choices[0]&&r.choices[0].message.content||"").trim(); }
 };
 const MODELE_ONLINE=[
   {id:"@cf/meta/llama-3.3-70b-instruct-fp8-fast", et:"Llama 3.3 70B (Cloudflare)"},

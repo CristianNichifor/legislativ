@@ -156,10 +156,33 @@ def context_din_gasiri(gasiri: list[dict], maxim: int = MAX_DECIZII) -> dict[str
     return context
 
 
+def cerere(fragment: str, gasiri: list[dict]) -> tuple[str, dict[str, str]]:
+    """The prompt and the context it was built from, without calling anything.
+
+    Split out because the two surfaces run the model in different languages: on localhost it is a
+    Python callable over a localhost endpoint, in the browser it is WebLLM in JavaScript. The
+    browser therefore asks for the prompt, runs it, and posts the raw reply back to be validated —
+    and the context is **recomputed** on the way back rather than round-tripped. A client that
+    could supply the context could supply one containing its own hallucination, and the context is
+    exactly what the validator holds the model to.
+    """
+    context = context_din_gasiri(gasiri)
+    if not context:
+        return "", {}
+    return (
+        PROMPT.format(
+            context="\n\n".join(f"[{k}] {v}" for k, v in context.items()),
+            proiect=fragment.strip(),
+        ),
+        context,
+    )
+
+
 def opinie(
     fragment: str,
     gasiri: list[dict],
     model: Callable[[str], str] | None = None,
+    brut: str | None = None,
 ) -> Opinie:
     """Ask a model whether the draft has the defect the Court found, and believe little of it.
 
@@ -168,25 +191,23 @@ def opinie(
     `linter.analizeaza` does: the three are the same shape and a framework between them would be
     one more thing to debug.
     """
-    if model is None:
+    if model is None and brut is None:
         return Opinie(False, "niciun model configurat — pasul nu a rulat")
     if not fragment.strip():
         return Opinie(False, "fragment gol")
 
-    context = context_din_gasiri(gasiri)
+    prompt, context = cerere(fragment, gasiri)
     if not context:
         return Opinie(
             False,
             "niciun considerent disponibil pentru deciziile găsite — nu s-a trimis nimic modelului",
         )
 
-    cerere = PROMPT.format(
-        context="\n\n".join(f"[{k}] {v}" for k, v in context.items()), proiect=fragment.strip()
-    )
-    try:
-        brut = model(cerere)
-    except Exception as e:  # a model that fails is a pass that did not run, not a clean answer
-        return Opinie(False, f"modelul nu a răspuns: {type(e).__name__}", context=context)
+    if brut is None:
+        try:
+            brut = model(prompt)
+        except Exception as e:  # a model that fails is a pass that did not run, not a clean answer
+            return Opinie(False, f"modelul nu a răspuns: {type(e).__name__}", context=context)
 
     constatari, respinse_forma = citeste(brut)
     rezultat: Rezultat = valideaza(constatari, context)

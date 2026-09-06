@@ -45,6 +45,7 @@ MOTIVE: dict[str, str] = {
     "citat-prea-scurt": "Citatul este prea scurt pentru a putea fi verificat.",
     "camp-lipsa": "Constatarea nu are forma cerută.",
     "duplicat": "Aceeași constatare, deja păstrată o dată.",
+    "raspuns-neparsabil": "Răspunsul modelului nu a putut fi citit ca JSON.",
 }
 
 
@@ -95,17 +96,78 @@ class Rezultat:
         return "\n".join(linii)
 
 
+_DESCHIS = "<think>"
+_INCHIS = "</think>"
+
+
+def _fara_ganduri(brut: str) -> str:
+    """Strip `<think>…</think>` blocks, scanning rather than matching.
+
+    Written with `str.find` on purpose. The obvious version — `re.sub(r"<think>.*?</think>", …)` —
+    backtracks quadratically on input with many unclosed `<think>` markers: for every opening tag
+    the engine rescans forward looking for a close that is not there. CodeQL flagged it as
+    `py/polynomial-redos` and was right to. On the browser path this string arrives straight from a
+    client POST, so a reply of a few hundred kilobytes of `<think>` would hold the localhost server
+    in one regex.
+
+    The scan is linear: the cursor only ever moves forward. An unclosed block swallows the rest of
+    the reply, which is correct — a model that ran out of tokens mid-thought never reached its JSON.
+    """
+    jos = brut.lower()
+    bucati: list[str] = []
+    i = 0
+    while True:
+        d = jos.find(_DESCHIS, i)
+        if d < 0:
+            bucati.append(brut[i:])
+            break
+        bucati.append(brut[i:d])
+        inchis = jos.find(_INCHIS, d + len(_DESCHIS))
+        if inchis < 0:
+            break  # unclosed: everything after it is thought, and none of it is an answer
+        i = inchis + len(_INCHIS)
+    return " ".join(b for b in bucati if b.strip())
+
+
+def _json_din(brut: str) -> Any | None:
+    """The JSON a small model buried in whatever else it wanted to say.
+
+    Three habits have to be tolerated, and the third is the one that mattered. Fenced blocks
+    (```json …```) were always handled. Prose before the list is common. And **reasoning models
+    emit a `<think>…</think>` block first** — Qwen3 and the DeepSeek-R1 distills do it by default,
+    so every answer from them parsed as nothing at all.
+
+    Returns `None` when there is no JSON to find, which the caller must report rather than treat as
+    an empty answer: a model whose output could not be read has not told you there are no findings.
+    """
+    text = _fara_ganduri(brut).strip()
+    if text.startswith("```"):
+        text = text.split("```")[1] if "```" in text[3:] else text[3:]
+        text = text.removeprefix("json").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Last resort: the outermost array or object anywhere in the reply.
+    for deschis, inchis in (("[", "]"), ("{", "}")):
+        i, j = text.find(deschis), text.rfind(inchis)
+        if 0 <= i < j:
+            try:
+                return json.loads(text[i : j + 1])
+            except json.JSONDecodeError:
+                continue
+    return None
+
+
 def citeste(brut: str | list[dict[str, Any]]) -> tuple[list[Constatare], list[Respinsa]]:
-    """Model output into findings, tolerating the fenced JSON small models like to emit."""
+    """Model output into findings, tolerating what small models actually emit."""
     if isinstance(brut, str):
-        text = brut.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1] if "```" in text[3:] else text[3:]
-            text = text.removeprefix("json").strip()
-        try:
-            incarcat = json.loads(text)
-        except json.JSONDecodeError:
-            return [], []
+        incarcat = _json_din(brut)
+        if incarcat is None:
+            # Not "no findings" — "no answer". Reported, because an unreadable reply and a clean
+            # bill of health are the same empty list otherwise, and they mean opposite things.
+            gol = Constatare(tip="", provizie="", citat="", motiv="")
+            return [], [Respinsa(gol, "raspuns-neparsabil")]
     else:
         incarcat = brut
     if isinstance(incarcat, dict):

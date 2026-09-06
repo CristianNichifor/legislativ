@@ -45,6 +45,7 @@ from scripts.servicii import (
     _lint,
     _norma,
     _opinie,
+    _opinie_cerere,
     _parseaza,
     _redacteaza,
     _regula,
@@ -134,6 +135,7 @@ def face_handler(stare: Stare):
             if ruta not in (
                 "/api/lint",
                 "/api/opinie",
+                "/api/opinie-cerere",
                 "/api/compune",
                 "/api/parseaza",
                 "/api/norma",
@@ -171,12 +173,18 @@ def face_handler(stare: Stare):
             if ruta == "/api/impact":
                 self._json(_impact(draft, stare))
                 return
+            if ruta == "/api/opinie-cerere":
+                self._json(_opinie_cerere(draft, stare))
+                return
             if ruta == "/api/opinie":
                 # On-device or not at all: `model_local` returns None unless a model is configured
                 # on this machine, and `_opinie` reports that as a pass that did not run.
                 from scripts.opinie import model_local
 
-                self._json(_opinie(draft, stare, model=model_local()))
+                # A reply the caller already obtained (the browser path) is validated as-is;
+                # otherwise a model on this machine is asked, if one is configured.
+                brut = cerere.get("brut")
+                self._json(_opinie(draft, stare, model=None if brut else model_local(), brut=brut))
                 return
             self._json(_lint(draft, stare))
 

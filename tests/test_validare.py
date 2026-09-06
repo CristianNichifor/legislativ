@@ -80,8 +80,38 @@ def test_fenced_json_from_a_small_model_is_read():
     assert len(constatari) == 1 and constatari[0].provizie == "lege-98-2016 art7.alin2"
 
 
-def test_unparseable_output_yields_nothing_rather_than_raising():
-    assert citeste("nu pot răspunde la această întrebare") == ([], [])
+def test_unparseable_output_is_reported_rather_than_read_as_no_findings():
+    """It used to return an empty pair, which is the mistake the next test names: an unreadable
+    reply and a clean bill of health are the same empty list, and they mean opposite things. A
+    model that answered in prose has not told you there is nothing wrong with the draft."""
+    constatari, respinse = citeste("nu pot răspunde la această întrebare")
+    assert constatari == []
+    assert [r.motiv_respingerii for r in respinse] == ["raspuns-neparsabil"]
+
+
+def test_a_reasoning_model_that_thinks_out_loud_is_still_read():
+    """Qwen3 and the DeepSeek-R1 distills emit `<think>…</think>` before the answer by default.
+    Every reply from them parsed as nothing at all, which read as a clean draft."""
+    constatari, respinse = citeste(
+        "<think>Trebuie să compar textele.</think>\n"
+        '[{"tip":"acelasi-viciu","provizie":"d-1","citat":"un citat destul de lung","motiv":"m"}]'
+    )
+    assert respinse == []
+    assert [c.provizie for c in constatari] == ["d-1"]
+
+
+def test_a_thought_that_never_finished_is_reported_not_swallowed():
+    """A model that ran out of tokens mid-thought emitted no JSON at all."""
+    _, respinse = citeste("<think>Mă gândesc și nu apuc să termin")
+    assert [r.motiv_respingerii for r in respinse] == ["raspuns-neparsabil"]
+
+
+def test_json_buried_in_prose_is_still_found():
+    constatari, _ = citeste(
+        'Iată răspunsul:\n[{"tip":"t","provizie":"d-1","citat":"un citat destul de lung",'
+        '"motiv":"m"}]\nSper că ajută.'
+    )
+    assert [c.provizie for c in constatari] == ["d-1"]
 
 
 def test_a_finding_missing_its_required_fields_is_rejected_not_dropped_silently():
@@ -103,3 +133,29 @@ def test_the_rejection_rate_is_reported_because_it_is_the_number_that_matters():
         CONTEXT,
     )
     assert rezultat.rata_de_respingere == 0.5
+
+
+def test_a_flood_of_unclosed_thinking_tags_does_not_hang_the_parser():
+    """`py/polynomial-redos`, and a real one: on the browser path this string arrives straight from
+    a client POST. The obvious `re.sub(r"<think>.*?</think>", …)` rescans forward from every opening
+    tag looking for a close that is not there, so a few hundred kilobytes of `<think>` would hold
+    the localhost server inside one regex. The scan that replaced it only moves forward.
+
+    The bound is deliberately generous — this is not a performance measurement, it is a trap for
+    catastrophic backtracking, which misses it by orders of magnitude.
+    """
+    import time
+
+    patologic = "<think>" * 40_000
+    t0 = time.monotonic()
+    _, respinse = citeste(patologic)
+    assert time.monotonic() - t0 < 2.0, "quadratic backtracking is back"
+    assert [r.motiv_respingerii for r in respinse] == ["raspuns-neparsabil"]
+
+
+def test_several_thinking_blocks_are_all_removed():
+    constatari, _ = citeste(
+        "<think>întâi</think> ceva text <THINK>și a doua oară</THINK>\n"
+        '[{"tip":"t","provizie":"d-1","citat":"un citat destul de lung","motiv":"m"}]'
+    )
+    assert [c.provizie for c in constatari] == ["d-1"]
