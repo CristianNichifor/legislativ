@@ -1097,7 +1097,7 @@ function renderImpact(im){
 function renderLint(d){
   const rp=d.repealed||[], dr=d.drafting||[], tg=d.targets||[], dl=d.deadlines||[],
         tm=d.terminology||[], du=d.duplicates||[], co=d.consolidare||[], on=d.obligatii_neindeplinite||[],
-        cf=d.conflicte||[], ca=d.calificate||[], nc=d.neconstitutional||[];
+        cf=d.conflicte||[], ca=d.calificate||[], nc=d.neconstitutional||[], lb=d.limbaj||[];
   // The chip carries the worst severity actually present, never the severity of the topic. With
   // nothing declared exhaustively collected every row comes back `material`, and a red chip over
   // amber cards would promise a verdict the register explicitly refuses to give.
@@ -1110,6 +1110,7 @@ function renderLint(d){
     +chip("consolidat",co.length,"material","Verifică față de textul consolidat")
     +chip("conflicte",cf.length,"blocking","Intervenții care se bat cap în cap")
     +chip("redactare",dr.length,"material","Tehnică legislativă")
+    +chip("limbaj",lb.length,"material","Limbaj normativ")
     +chip("atinge",tg.length,"note","Ce atinge proiectul")
     +chip("termene",dl.length,"material","Termene de implementare")
     +chip("terminologie",tm.length,"material","Terminologie")
@@ -1157,6 +1158,10 @@ function renderLint(d){
       `<b>${esc(felRo[c.fel]||c.fel)}</b> — ${esc(c.explicatie)}`,[],"","derived")).join(""));
   if(dr.length) h += sec("Tehnică legislativă", dr.length,
     dr.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],"","derived")).join(""));
+  // Register, kept apart from the section above: there the operation is named with the wrong verb,
+  // here the operation is right but the sentence is not written the way a norm is written.
+  if(lb.length) h += sec("Limbaj normativ", lb.length,
+    lb.map(a=>card("material",esc(a.explicatie),[`găsit: <b>${esc(a.gasit)}</b>`],a.fragment||"","derived")).join(""));
   if(tg.length) h += sec("Ce atinge proiectul", tg.length,
     tg.map(t=>card(t.amendat_de>=8?"blocking":(t.amendat_de>0?"material":"note"),
       `<span class="plx">${esc(t.act_id)}</span>${t.titlu?" — "+esc(t.titlu).slice(0,120):""}`,
@@ -1470,13 +1475,18 @@ async function verificaNorma(interventii, seq){
     const d=await (await fetch("/api/norma",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:texte})})).json();
     if(seq!==liveSeq || d.error) return;
     const et={nou:"limbaj clar",actual:"normă curentă",neutru:"neutru"};
-    if(d.dominanta==="neutru"){ box.innerHTML=""; return; }
+    // Register findings are about the sentences themselves, so they stand whatever the dominant
+    // norm is — including "neutru", where the coherence badge has nothing to say and returns early.
+    const lb=(d.limbaj||[]).map(a=>`<li>${esc(a.explicatie)} <span class="nb-q">„${esc(a.gasit)}"</span></li>`).join("");
+    const limbajBox=lb?`<div class="norma-badge mix"><span class="nb-ic">⚠</span><div>`
+      +`Limbaj normativ:<ul>${lb}</ul></div></div>`:"";
+    if(d.dominanta==="neutru"){ box.innerHTML=limbajBox; return; }
     if(d.coerent){
-      box.innerHTML=`<div class="norma-badge ok"><span class="nb-ic">✓</span><div>Stil coerent — tot proiectul este scris în <b>${et[d.dominanta]}</b>.</div></div>`;
+      box.innerHTML=`<div class="norma-badge ok"><span class="nb-ic">✓</span><div>Stil coerent — tot proiectul este scris în <b>${et[d.dominanta]}</b>.</div></div>`+limbajBox;
     }else{
       const lst=(d.abateri||[]).map(a=>{ let f=(a.text||"").replace(/\s+/g," ").trim();
         if(f.length>90)f=f.slice(0,90)+"…"; return `<li>[<b>${et[a.norma]}</b>] <span class="nb-q">„${esc(f)}"</span></li>`; }).join("");
-      box.innerHTML=`<div class="norma-badge mix"><span class="nb-ic">⚠</span><div>Stil mixt: majoritatea este în <b>${et[d.dominanta]}</b>, dar unele blocuri se abat. Un proiect ar trebui scris într-o singură normă.<ul>${lst}</ul></div></div>`;
+      box.innerHTML=`<div class="norma-badge mix"><span class="nb-ic">⚠</span><div>Stil mixt: majoritatea este în <b>${et[d.dominanta]}</b>, dar unele blocuri se abat. Un proiect ar trebui scris într-o singură normă.<ul>${lst}</ul></div></div>`+limbajBox;
     }
   }catch(e){ /* norm check is advisory; a failure just leaves the badge empty */ }
 }
