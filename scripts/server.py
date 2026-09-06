@@ -43,6 +43,7 @@ from scripts.servicii import (
     _norma,
     _parseaza,
     _redacteaza,
+    _regula,
     _sugereaza,
     _termeni,
     _vecini,
@@ -107,6 +108,7 @@ def face_handler(stare: Stare):
                 "/api/parseaza",
                 "/api/norma",
                 "/api/termeni",
+                "/api/regula",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -127,6 +129,9 @@ def face_handler(stare: Stare):
                 return
             if ruta == "/api/termeni":
                 self._json(_termeni(str(cerere.get("text", "")).strip(), stare))
+                return
+            if ruta == "/api/regula":
+                self._json(_regula(str(cerere.get("text", "")).strip()))
                 return
             draft = str(cerere.get("draft", "")).strip()
             if not draft:
