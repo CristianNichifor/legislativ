@@ -15,20 +15,34 @@
     --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
     --sans:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
     --serif:"Spectral","Iowan Old Style",Georgia,serif;
+    /* one radius + elevation scale, used everywhere so controls read as a set */
+    --r1:6px; --r2:9px; --r3:14px;
+    --e1:0 1px 2px rgba(20,23,28,.06),0 1px 1px rgba(20,23,28,.04);
+    --e2:0 8px 24px rgba(20,23,28,.10);
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --paper:#0f1218; --surface:#171b22; --sunk:#1d222b; --ink:#e5e8ee; --ink-mid:#b0b7c3;
     --ink-mute:#8d95a3; --rule:#2b313c; --rule-soft:#232833; --accent:#dd918c;
     --accent-wash:#2c2022; --blocking:#dd918c; --material:#d7ab6b; --note:#8fb5c8; --good:#7fb98f;
+    --e1:0 1px 2px rgba(0,0,0,.45); --e2:0 10px 28px rgba(0,0,0,.55);
   }}
   :root[data-theme="dark"]{
     --paper:#0f1218; --surface:#171b22; --sunk:#1d222b; --ink:#e5e8ee; --ink-mid:#b0b7c3;
     --ink-mute:#8d95a3; --rule:#2b313c; --rule-soft:#232833; --accent:#dd918c;
     --accent-wash:#2c2022; --blocking:#dd918c; --material:#d7ab6b; --note:#8fb5c8; --good:#7fb98f;
+    --e1:0 1px 2px rgba(0,0,0,.45); --e2:0 10px 28px rgba(0,0,0,.55);
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
-  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  /* one accessible focus ring for every interactive element (keyboard only) */
+  a:focus-visible,button:focus-visible,summary:focus-visible,[tabindex]:focus-visible,
+  .tab:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;
+    border-radius:var(--r1)}
+  /* gentle state transitions; fully disabled when the user asks for less motion */
+  a,button,.tab,.chip,input,select,textarea,.tema{transition:background-color .12s ease,
+    border-color .12s ease,color .12s ease,box-shadow .12s ease}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}
+    *{transition:none!important;animation:none!important}}
   body{background:var(--paper);color:var(--ink);font-family:var(--serif);line-height:1.55;
     margin:0;font-size:16px;-webkit-font-smoothing:antialiased}
   /* fills the viewport up to 1920px; past that the textarea + sidebar block stays 1920 and
@@ -116,15 +130,17 @@
      wrap on a narrow viewport */
   .tema{position:absolute;top:0;right:0;background:transparent;border:1px solid var(--rule);
     color:var(--ink-mute);cursor:pointer;font-family:var(--sans);font-size:.7rem;font-weight:600;
-    letter-spacing:.04em;text-transform:lowercase;padding:.3rem .7rem;white-space:nowrap}
+    letter-spacing:.04em;text-transform:lowercase;padding:.3rem .7rem;white-space:nowrap;
+    border-radius:var(--r1)}
   .tema:hover{color:var(--ink);border-color:var(--ink-mute)}
   .tema:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
   label{display:block;font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.1em;
     text-transform:uppercase;color:var(--ink-mute);margin:0 0 .5rem}
   textarea,input[type=search],input[type=text],input[type=date],select{width:100%;background:var(--surface);
-    color:var(--ink);border:1px solid var(--rule);padding:.75rem 1rem;font-family:var(--mono);
-    font-size:.9rem;line-height:1.6}
+    color:var(--ink);border:1px solid var(--rule);border-radius:var(--r1);padding:.75rem 1rem;
+    font-family:var(--mono);font-size:.9rem;line-height:1.6}
+  textarea:hover,input:hover,select:hover{border-color:var(--ink-mute)}
   /* the native picker's calendar glyph is near-invisible on the dark surface; lift it */
   input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6);cursor:pointer}
   /* custom dropdown chevron with the same 1rem inset as the text on the left, instead of the
@@ -138,7 +154,7 @@
   /* a clear (×) button pinned in the corner of a text field, added by JS */
   .clr-wrap{position:relative;display:block}
   .clr-btn{position:absolute;top:.45rem;right:.45rem;width:1.4rem;height:1.4rem;border:1px solid var(--rule);
-    background:var(--surface);color:var(--ink-mute);cursor:pointer;border-radius:3px;line-height:1;
+    background:var(--surface);color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);line-height:1;
     font-size:1rem;display:none;align-items:center;justify-content:center;padding:0;opacity:.75}
   .clr-wrap.has-val .clr-btn{display:flex}
   .clr-btn:hover{opacity:1;color:var(--ink);border-color:var(--ink-mute)}
@@ -157,16 +173,22 @@
   .row{display:flex;gap:.7rem;align-items:center;margin-top:.9rem;flex-wrap:wrap}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.7rem;margin-top:.5rem}
   button.go{font-family:var(--sans);font-size:.85rem;font-weight:600;background:var(--accent);
-    color:#fff;border:0;padding:.6rem 1.4rem;cursor:pointer}
-  button.go:disabled{opacity:.5;cursor:wait}
+    color:#fff;border:0;border-radius:var(--r1);padding:.6rem 1.4rem;cursor:pointer;box-shadow:var(--e1)}
+  button.go:hover{background:color-mix(in srgb,var(--accent) 88%,#000)}
+  button.go:active{background:color-mix(in srgb,var(--accent) 78%,#000)}
+  button.go:disabled{opacity:.5;cursor:wait;box-shadow:none}
   button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);
-    font-family:var(--sans);font-size:.82rem;font-weight:600;padding:.55rem 1rem;cursor:pointer}
+    border-radius:var(--r1);font-family:var(--sans);font-size:.82rem;font-weight:600;
+    padding:.55rem 1rem;cursor:pointer}
+  button.ghost:hover{background:var(--accent-wash)}
+  button.ghost:active{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+  button.ghost:disabled{opacity:.5;cursor:default;background:transparent}
   .hint{font-family:var(--sans);font-size:.76rem;color:var(--ink-mute)}
 
   .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.75rem 0 .5rem}
   .chip{font-family:var(--sans);font-size:.76rem;font-weight:600;display:flex;align-items:center;
     gap:.5rem;padding:.4rem .8rem;background:var(--surface);border:1px solid var(--rule-soft);
-    border-left:3px solid var(--rule);cursor:pointer}
+    border-left:3px solid var(--rule);border-radius:var(--r1);cursor:pointer}
   .chip:hover{background:var(--sunk)}
   .chip[disabled]{cursor:default;opacity:.7}
   .chip .n{font-variant-numeric:tabular-nums;font-size:1rem}
@@ -200,6 +222,7 @@
   a{color:var(--accent);text-underline-offset:.15em}
   .frag{font-family:var(--mono);font-size:.82rem} .frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
   .out-box{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
+    border-radius:var(--r1);box-shadow:var(--e1);
     padding:.8rem 1rem;margin-top:1rem;font-family:var(--mono);font-size:.9rem;white-space:pre-wrap;
     word-break:break-word}
 
@@ -284,7 +307,7 @@
   /* Format / norm select / Rescrie AI / revino — one uniform pill row */
   .txt-tools .mini,.txt-tools select.norma{font-family:var(--sans);font-size:.68rem;font-weight:600;
     height:1.95rem;line-height:1;padding:0 .6rem;border:1px solid var(--accent);color:var(--accent);
-    background-color:transparent;border-radius:5px;box-sizing:border-box;display:inline-flex;
+    background-color:transparent;border-radius:var(--r1);box-sizing:border-box;display:inline-flex;
     align-items:center}
   .txt-tools select.norma{padding-right:1.7rem;width:auto;min-width:0;background-size:.5rem;
     background-position:right .55rem center}
@@ -325,7 +348,7 @@
   .node .kids:empty{display:none}
   /* pinned to the block's own top-right, so it never wraps onto its own line */
   .node-x{position:absolute;top:.45rem;right:.45rem;border:1px solid var(--rule);background:var(--surface);
-    color:var(--ink-mute);cursor:pointer;border-radius:5px;font-size:.9rem;line-height:1;padding:.12rem .42rem}
+    color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);font-size:.9rem;line-height:1;padding:.12rem .42rem}
   .node-x:hover{color:var(--blocking);border-color:var(--blocking)}
   .node-add{font-size:.7rem;padding:.2rem .6rem;margin-top:.45rem;border-style:dashed}
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
