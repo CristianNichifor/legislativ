@@ -169,3 +169,88 @@ def test_parallel_extraction_gives_the_same_graph_as_sequential(tmp_path):
             con.close()
 
     assert muchii(str(secvential)) == muchii(str(paralel))
+
+
+def _corpus_mic(tmp_path, n=6):
+    """A small corpus whose acts cite each other, for incremental-build tests."""
+    from scripts import depozit
+    from scripts.api import Inregistrare
+    from scripts.colector import act_din_inregistrare
+
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as con:
+        for i in range(1, n + 1):
+            rec = Inregistrare(
+                titlu=f"LEGE nr. {i}/2020",
+                tip_act="LEGE",
+                numar=str(i),
+                an=2020,
+                data_vigoare=None,
+                emitent="Parlamentul",
+                publicatie="MO",
+                link_html=f"http://legislatie.just.ro/Public/DetaliiDocument/{i}",
+                text=(
+                    f"LEGE nr. {i} din 2020. Se modifică art. {i} din Legea nr. 98/2016 "
+                    f"și art. 5 alin. (2) din Ordonanța de urgență a Guvernului nr. 57/2019."
+                ),
+            )
+            depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    return cale
+
+
+def _muchii(cale):
+    con = sqlite3.connect(str(cale))
+    try:
+        return sorted(
+            con.execute("SELECT din_act, catre_act, locator, fel, incredere, de_la FROM muchii")
+        )
+    finally:
+        con.close()
+
+
+def test_building_only_named_acts_touches_only_those(tmp_path):
+    """A daily update collects a handful of new acts; rebuilding all 152 079 to place them is
+    eleven minutes of work to add seconds of edges.
+
+    Edges are keyed by `din_act`, so this is not an approximation: a new act's edges — including
+    the inbound ones an older law gains — all live on the new act's rows. Nothing already in the
+    graph needs revisiting."""
+    from scripts.graf import construieste
+
+    corpus = _corpus_mic(tmp_path)
+    intreg = tmp_path / "intreg.db"
+    construieste(str(corpus), str(intreg), log=lambda *_: None)
+    toate = _muchii(intreg)
+
+    partial = tmp_path / "partial.db"
+    construieste(str(corpus), str(partial), doar=["lege-2-2020"], log=lambda *_: None)
+    doar_doi = _muchii(partial)
+
+    assert doar_doi, "no edges were built"
+    assert {m[0] for m in doar_doi} == {"lege-2-2020"}
+    # and they are exactly the edges the full build produced for that act
+    assert doar_doi == [m for m in toate if m[0] == "lege-2-2020"]
+
+
+def test_an_incremental_build_adds_without_disturbing_what_is_there(tmp_path):
+    from scripts.graf import construieste
+
+    corpus = _corpus_mic(tmp_path)
+    g = tmp_path / "g.db"
+    construieste(str(corpus), str(g), doar=["lege-2-2020"], log=lambda *_: None)
+    inainte = _muchii(g)
+    construieste(str(corpus), str(g), doar=["lege-3-2020"], log=lambda *_: None)
+    dupa = _muchii(g)
+
+    assert [m for m in dupa if m[0] == "lege-2-2020"] == inainte
+    assert {m[0] for m in dupa} == {"lege-2-2020", "lege-3-2020"}
+
+
+def test_the_parallel_path_honours_the_same_filter(tmp_path):
+    from scripts.graf import construieste
+
+    corpus = _corpus_mic(tmp_path)
+    a, b = tmp_path / "a.db", tmp_path / "b.db"
+    construieste(str(corpus), str(a), doar=["lege-4-2020"], lucratori=1, log=lambda *_: None)
+    construieste(str(corpus), str(b), doar=["lege-4-2020"], lucratori=3, log=lambda *_: None)
+    assert _muchii(a) == _muchii(b)
