@@ -153,7 +153,8 @@
   .opt{color:var(--ink-mute);font-weight:400;text-transform:none;letter-spacing:0}
   /* a clear (×) button pinned in the corner of a text field, added by JS */
   .clr-wrap{position:relative;display:block}
-  .clr-btn{position:absolute;top:.45rem;right:.45rem;width:1.4rem;height:1.4rem;border:1px solid var(--rule);
+  /* right offset clears the textarea's ~11px scrollbar so the × never sits on top of it */
+  .clr-btn{position:absolute;top:.5rem;right:1rem;width:1.4rem;height:1.4rem;border:1px solid var(--rule);
     background:var(--surface);color:var(--ink-mute);cursor:pointer;border-radius:var(--r1);line-height:1;
     font-size:1rem;display:none;align-items:center;justify-content:center;padding:0;opacity:.75}
   .clr-wrap.has-val .clr-btn{display:flex}
@@ -190,7 +191,8 @@
     gap:.5rem;padding:.4rem .8rem;background:var(--surface);border:1px solid var(--rule-soft);
     border-left:3px solid var(--rule);border-radius:var(--r1);cursor:pointer}
   .chip:hover{background:var(--sunk)}
-  .chip[disabled]{cursor:default;opacity:.7}
+  .chip[disabled]{cursor:default}
+  .chip.off{color:var(--ink-mute)}   /* readable in both themes; was inheriting a too-dark colour */
   .chip .n{font-variant-numeric:tabular-nums;font-size:1rem}
   .chip.on.blocking{border-left-color:var(--blocking);color:var(--blocking)}
   .chip.on.material{border-left-color:var(--material);color:var(--material)}
@@ -204,7 +206,7 @@
   .count{font-family:var(--sans);font-size:.7rem;font-weight:600;letter-spacing:.08em;
     text-transform:uppercase;color:var(--ink-mute);margin-left:auto}
   .card{background:var(--surface);border:1px solid var(--rule-soft);padding:.8rem 1rem;
-    margin-bottom:.55rem;border-left:3px solid var(--rule)}
+    margin-bottom:.6rem;border-left:3px solid var(--rule);border-radius:var(--r1);box-shadow:var(--e1)}
   .card.blocking{border-left-color:var(--blocking)}
   .card.material{border-left-color:var(--material)}
   .card.note{border-left-color:var(--note)}
@@ -213,9 +215,9 @@
     flex-wrap:wrap;gap:.3rem 1rem}
   .card .meta b{color:var(--ink);font-variant-numeric:tabular-nums}
   .quote{font-family:var(--mono);font-size:.8rem;background:var(--accent-wash);color:var(--accent);
-    padding:.45rem .65rem;margin:.45rem 0 0;white-space:pre-wrap;word-break:break-word}
+    padding:.45rem .65rem;margin:.45rem 0 0;border-radius:var(--r1);white-space:pre-wrap;word-break:break-word}
   .tag{font-family:var(--sans);font-size:.6rem;font-weight:600;letter-spacing:.08em;
-    text-transform:uppercase;padding:.1rem .4rem;border:1px solid currentColor;margin-right:.4rem}
+    text-transform:uppercase;padding:.1rem .4rem;border:1px solid currentColor;border-radius:var(--r1);margin-right:.4rem}
   .tag.verbatim{color:var(--blocking)} .tag.derived{color:var(--material)}
   .plx{font-family:var(--mono);color:var(--accent)}
   .empty{font-family:var(--sans);font-size:.85rem;color:var(--ink-mute);font-style:italic}
@@ -230,10 +232,12 @@
      Legea 24/2000 form below. Sits under the textarea, not at the caret, so it never covers text. */
   .ta-wrap{position:relative}
   /* draft beside its plain-language rewrite; stacks on narrow screens */
-  .draft-split{display:flex;gap:1rem;align-items:stretch}
+  /* the clar box height is kept equal to the textarea's by JS (syncClarHeight), so dragging the
+     textarea taller grows the suggestion box with it; align-items:flex-start lets that height win */
+  .draft-split{display:flex;gap:1rem;align-items:flex-start}
   .draft-split>.ta-wrap{flex:1;min-width:0;display:flex;flex-direction:column}
   .draft-clar{flex:1;min-width:0;border:1px solid var(--rule);border-left:3px solid var(--note);
-    background:var(--surface);padding:.6rem .8rem;overflow:auto;max-height:calc(100vh - 22rem)}
+    border-radius:var(--r1);background:var(--surface);padding:.6rem .8rem;overflow:auto}
   .draft-clar-body{font-family:var(--sans);font-size:.9rem;white-space:pre-wrap;word-break:break-word;
     margin-top:.35rem;line-height:1.55}
   @media (max-width:820px){ .draft-split{flex-direction:column} .draft-clar{max-height:24rem} }
@@ -261,7 +265,7 @@
     padding:.05rem .5rem;vertical-align:.05em}
   .cons-flag.consolidat{color:var(--good)}
   .cons-text{font-family:var(--mono);font-size:.82rem;white-space:pre-wrap;word-break:break-word;
-    margin:.45rem 0;color:var(--ink)}
+    margin:.45rem 0;color:var(--ink);line-height:1.6}
   .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
   .cons-attrib b{color:var(--ink-mid)}
   .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
@@ -280,7 +284,10 @@
      the wrap), so the endpoint field has room and nothing misaligns against the button */
   .ai-set{display:flex;gap:.5rem .6rem;align-items:center;flex-wrap:wrap;flex-basis:100%;margin-top:.2rem}
   .ai-lbl{font-family:var(--sans);font-size:.74rem;font-weight:600;color:var(--ink-mid)}
-  .ai-endpoint{flex:1 1 18rem;min-width:14rem;max-width:34rem;font-size:.74rem;padding:.4rem .7rem}
+  /* all three controls share one height + font so the row reads as a balanced set */
+  .ai-set .ai-model,.ai-set .ai-endpoint{height:2.15rem;font-size:.74rem;box-sizing:border-box}
+  .ai-set .ai-model{padding:.35rem 2rem .35rem .6rem}
+  .ai-endpoint{flex:1 1 18rem;min-width:14rem;max-width:34rem;padding:.35rem .7rem}
   .ai-nota{flex-basis:100%}   /* the privacy note drops to its own line, left-aligned under the row */
   /* Conexiuni belongs to Verifică (the graph); hide it elsewhere so the working area gets the width */
   .app:not([data-pane="lint"]) aside.canvas{display:none}
@@ -470,7 +477,9 @@
             </select>
             <select id="ai-model" class="ai-model" title="Modelul local" style="display:none"></select>
             <select id="ai-model-online" class="ai-model" title="Modelul online" style="display:none"></select>
-            <input id="ai-endpoint" class="ai-endpoint" type="text" placeholder="https://…workers.dev/rescrie" style="display:none">
+            <input id="ai-endpoint" class="ai-endpoint" type="text" placeholder="https://…workers.dev/rescrie"
+              title="Adresa serviciului tău de rescriere — un Cloudflare Worker pe care îl publici tu (vezi infra/worker). Aici ajunge textul PUBLIC de rescris; Workerul îl trimite la Mistral (UE) și păstrează rezultatul în cache. Ex.: https://legislativ-rescrieri.NUME.workers.dev/rescrie"
+              aria-label="Adresa serviciului de rescriere (Cloudflare Worker)" style="display:none">
             <span class="hint" id="ai-sug" style="display:none"></span>
             <span class="hint" id="ai-nota"></span>
           </span></div>
@@ -521,7 +530,16 @@ function locRo(id){ if(!id) return ""; return String(id).split(".").map(s=>{ let
   return s; }).join(" · "); }
 // best-effort readability: start each alineat marker "(N)" on its own line so a welded article body
 // is not one wall of text. Only numeric markers — letters like "art. 5)" are too ambiguous to split.
-function textLizibil(t){ return esc(t).replace(/([^\n])\s+(?=\((?:\d+(?:\^\d+)?)\)\s)/g,"$1\n"); }
+// break a provision's run-on text onto readable lines at its enumerators, without splitting the
+// inline references (which start lowercase or with punctuation, not a capital):
+//   (1)/(3) alineate → new line only when followed by a capital;  a) b)… and (i)(ii)… after . ; :
+function textLizibil(t){
+  let s=esc(t);
+  s=s.replace(/\s*(?=\((?:\d+(?:\^\d+)?)\)\s*[A-ZĂÂÎȘȚ])/g,"\n");            // (1) Text / (3)Text
+  s=s.replace(/([:;.])\s*(?=[a-zăâîșț]\)\s)/g,"$1\n");                        // …:a) …
+  s=s.replace(/([:;.])\s*(?=\((?=[ivx])[ivx]{1,5}\)\s)/gi,"$1\n");           // …:(i) …
+  return s.replace(/^\n+/,"").replace(/\n{2,}/g,"\n");
+}
 
 fetch("/api/rezumat").then(r=>r.json()).then(d=>{
   $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · <b>${nf(d.provizii)}</b> prevederi`;
@@ -582,6 +600,15 @@ $(".app").dataset.pane = "lint";   // initial tab
     for(let y=acum;y>=1900;y--){ const o=document.createElement("option"); o.value=String(y); o.textContent=String(y); an.appendChild(o); } }
   const nr=$("#r-nr");
   if(nr) nr.addEventListener("input",()=>{ nr.value=nr.value.replace(/\D+/g,""); });
+})();
+
+// keep the „Limbaj clar" box exactly as tall as the (resizable) draft textarea, side by side
+(function(){
+  const ta=$("#draft"), clar=$("#draft-clar");
+  if(!ta||!clar) return;
+  const sync=()=>{ clar.style.height = (window.innerWidth>820) ? ta.offsetHeight+"px" : ""; };
+  if(typeof ResizeObserver!=="undefined") new ResizeObserver(sync).observe(ta);
+  addEventListener("resize", sync); sync();
 })();
 
 // ---- back to top ----
@@ -980,8 +1007,12 @@ async function aiRescrie(text, opt){
   const sistem = norma==="actual" ? SIS_ACTUAL : SIS_CLAR;
   const mode=aiMode();
   if(mode==="local"){
-    if(!LLM.disponibil()) throw new Error("Modul local are nevoie de WebGPU (Chrome/Edge recent).");
-    return { text:await LLM.rescrieCu(text, sistem, prog), nota:"local" };
+    if(!LLM.disponibil()) throw new Error("Acest dispozitiv nu are WebGPU. Comută pe modul «online» din setările AI, sau folosește un browser/dispozitiv cu WebGPU (Chrome/Edge recent).");
+    try{ return { text:await LLM.rescrieCu(text, sistem, prog), nota:"local" }; }
+    catch(e){ const m=String((e&&e.message)||e);
+      if(/GPU|WebGPU|adapter|device/i.test(m))
+        throw new Error("Nu s-a găsit un GPU compatibil (WebGPU) pe acest dispozitiv. Comută pe modul «online» din setările AI.");
+      throw e; }
   }
   if(mode==="online"){
     const ep=aiEndpoint(); if(!ep) throw new Error("Setează adresa serviciului online (…workers.dev/rescrie).");
