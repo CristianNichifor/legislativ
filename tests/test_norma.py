@@ -29,6 +29,16 @@ def test_fara_marcaj_este_neutru():
     assert u.norma == "neutru"
 
 
+def test_paragraf_lung_fara_marcaje_ramane_neutru():
+    # a long, marker-free sentence must not be pushed to `actual` by length alone (tie-breaker only)
+    lung = (
+        "Anexa la acest document cuprinde o listă detaliată cu toate elementele identificate "
+        "în cursul analizei tehnice desfășurate pe parcursul mai multor luni de activitate "
+        "continuă în diverse locații din întreaga regiune administrativă avută în vedere aici."
+    )
+    assert clasifica(lung).norma == "neutru"
+
+
 def test_numar_scris_in_litere_leaga_de_registrul_curent():
     u = clasifica("Contractantul depune garanția în cincisprezece zile.")
     assert u.norma == "actual"

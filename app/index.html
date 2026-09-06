@@ -406,6 +406,9 @@
   .regula-tab tr.da td{background:color-mix(in srgb,var(--good) 8%,transparent)}
   .regula-tab tr.nu td{background:color-mix(in srgb,var(--blocking) 6%,transparent)}
   .ghost.mini.logic.on{border-color:var(--note);color:var(--note)}
+  .regula-copy{display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0 .2rem}
+  .regula-set-item{padding:.4rem .5rem;margin:.3rem 0;border-left:2px solid var(--rule);
+    background:color-mix(in srgb,var(--note) 3%,transparent);border-radius:0 var(--r1) var(--r1) 0}
 
   @media (max-width:900px){
     .redact-body{flex-direction:column}
@@ -655,7 +658,7 @@
 
 <script>
 const $ = s => document.querySelector(s);
-const esc = s => (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const esc = s => (s==null?"":String(s)).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const nf = n => (n||0).toLocaleString("ro");
 // "art104.alin8.litb" → "art. 104 · alin. (8) · lit. b)" — readable locators everywhere they show
 function locRo(id){ if(!id) return ""; return String(id).split(".").map(s=>{ let m;
@@ -961,17 +964,31 @@ function creeazaNod(nivel){
 }
 // legislation-as-code: send a block's text to the deterministic rule engine and render the result —
 // the same provision in both norms, the checks (impossible condition, missing ALTFEL…), a case table.
+function proba(items){ return `<ul class="regula-prob">`+items.map(p=>`<li>⚠ ${esc(p)}</li>`).join("")+`</ul>`; }
 async function analizeazaRegula(text, panel){
   if(!text || !text.trim()){ panel.innerHTML=`<span class="hint">Scrie o regulă: <code>DACĂ &lt;condiție&gt; ATUNCI &lt;consecință&gt; [ALTFEL …]</code>.</span>`; return; }
   try{
     const d=await (await fetch("/api/regula",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
     if(!d.ok){ panel.innerHTML=`<div class="regula-err">⚠ ${esc(d.eroare||"nu am putut interpreta regula")}</div>`; return; }
+    // several DACĂ rules in one block: render each, then the cross-rule (overlap / gap) checks
+    if(d.multi){
+      let h=`<div class="regula-h">Set de ${d.reguli.length} reguli</div>`
+        +d.reguli.map((r,i)=>`<div class="regula-set-item"><div class="regula-proza"><span class="rp-tag">R${i+1}</span>${esc(r.proza_nou)}</div>`
+          +((r.probleme&&r.probleme.length)?proba(r.probleme):``)+`</div>`).join("");
+      h+=`<div class="regula-h" style="margin-top:.5rem">Între reguli</div>`
+        +((d.probleme_set&&d.probleme_set.length)?proba(d.probleme_set)
+          :`<div class="regula-ok">✓ regulile nu se suprapun și nu lasă goluri.</div>`);
+      panel.innerHTML=h; return;
+    }
     let h=`<div class="regula-h">Regula, citită ca logică</div>`
       +`<div class="regula-proza"><span class="rp-tag">limbaj clar</span>${esc(d.proza_nou)}</div>`
-      +`<div class="regula-proza"><span class="rp-tag actual">normă curentă</span>${esc(d.proza_actual)}</div>`;
+      +`<div class="regula-proza"><span class="rp-tag actual">normă curentă</span>${esc(d.proza_actual)}</div>`
+      +`<div class="regula-copy"><button type="button" class="ghost mini rp-c-nou">Copiază (limbaj clar)</button>`
+      +`<button type="button" class="ghost mini rp-c-act">Copiază (normă curentă)</button></div>`;
     if(d.variabile && d.variabile.length) h+=`<div class="regula-vars">Variabile: ${d.variabile.map(v=>`<code>${esc(v)}</code>`).join(", ")}</div>`;
-    if(d.probleme && d.probleme.length) h+=`<ul class="regula-prob">`+d.probleme.map(p=>`<li>⚠ ${esc(p)}</li>`).join("")+`</ul>`;
-    else if(d.conditionala) h+=`<div class="regula-ok">✓ regulă coerentă, ambele cazuri acoperite.</div>`;
+    if(d.probleme && d.probleme.length) h+=proba(d.probleme);
+    else if(d.conditionala) h+=`<div class="regula-ok">✓ nicio problemă detectată.</div>`;
+    if(d.coerent===false) h+=`<div class="regula-prob" style="color:var(--ink-mute)">nota: regula nu s-a recitit identic din forma canonică — verifică formularea.</div>`;
     if(d.cazuri && d.cazuri.length){
       const vars=d.variabile||[];
       h+=`<table class="regula-tab"><thead><tr>`+vars.map(v=>`<th>${esc(v)}</th>`).join("")
@@ -982,6 +999,8 @@ async function analizeazaRegula(text, panel){
         +`</tbody></table>`;
     }
     panel.innerHTML=h;
+    const cn=panel.querySelector(".rp-c-nou"); if(cn) cn.onclick=()=>{ navigator.clipboard?.writeText(d.proza_nou); cn.textContent="Copiat"; };
+    const ca=panel.querySelector(".rp-c-act"); if(ca) ca.onclick=()=>{ navigator.clipboard?.writeText(d.proza_actual); ca.textContent="Copiat"; };
   }catch(e){ panel.innerHTML=`<div class="regula-err">eroare: ${esc(e.message||e)}</div>`; }
 }
 function citesteNod(wrap, nivel, path, act, out){
@@ -1242,13 +1261,15 @@ $("#draft").addEventListener("keydown",e=>{ if(e.key==="Escape") hideSuggest(); 
 // ---- recognised terminology chips: the defined terms the draft actually uses, definition on hover.
 // The positive counterpart to the "talks around a defined term" warning — deterministic, local. ----
 const chipsBox=$("#termeni-chips");
-let chipsTimer, chipsFor="";
+let chipsTimer, chipsFor="", chipsSeq=0;
 async function refreshChips(){
   const text=$("#draft").value;
   if(text.trim().length<4){ chipsBox.hidden=true; chipsBox.innerHTML=""; chipsFor=""; return; }
   if(text===chipsFor) return; chipsFor=text;
+  const seq=++chipsSeq;
   try{
     const d=await (await fetch("/api/termeni",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})})).json();
+    if(seq!==chipsSeq) return;   // a newer edit already superseded this request
     const ts=(d&&d.termeni)||[];
     if(!ts.length){ chipsBox.hidden=true; chipsBox.innerHTML=""; return; }
     chipsBox.innerHTML=`<div class="tc-h">Termeni definiți recunoscuți · treci cu mouse-ul pentru definiție</div>`

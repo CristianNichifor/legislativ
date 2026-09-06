@@ -36,20 +36,11 @@ from scripts.text import fara_diacritice
 # Keywords are matched diacritic-insensitively (DACĂ == DACA) and case-insensitively, so a drafter
 # typing quickly without diacritics is understood. Operators accept both symbols and words.
 _KW = {"daca": "DACA", "atunci": "ATUNCI", "altfel": "ALTFEL", "si": "SI", "sau": "SAU", "nu": "NU"}
-_OP_CUV = {"este": "=", "egal": "=", "cel putin": ">=", "cel mult": "<=", "peste": ">", "sub": "<"}
 
-_UNITATI = {
-    "lei",
-    "zile",
-    "luni",
-    "ani",
-    "ore",
-    "%",
-    "la suta",
-    "euro",
-    "persoane",
-    "zile lucratoare",
-}
+_UNITATI = {"lei", "zile", "luni", "ani", "ore", "euro", "persoane", "puncte"}
+# unit modifiers glued onto the unit above (`zile lucratoare`) — the tokenizer is word-by-word, so
+# a second unit word is absorbed into the unit at parse time, not matched here.
+_UNIT_MOD = {"lucratoare", "calendaristice"}
 
 
 @dataclass(frozen=True)
@@ -115,8 +106,20 @@ def _fold(s: str) -> str:
 # Tokenizer
 # ---------------------------------------------------------------------------------------------
 
-_NUMAR = re.compile(r"\d[\d.\s]*\d|\d")
+# A number is digit-groups joined by `.` (thousands) or `,`/`.` (decimal). No interior spaces, so
+# copy-pasted "12. 5" never fuses into 125. `_curata_numar` then resolves separators to a float.
+_NUMAR = re.compile(r"\d+(?:[.,]\d+)*")
 _IDENT = re.compile(r"[A-Za-zĂÂÎȘȚăâîșț][\wĂÂÎȘȚăâîșț]*")
+
+
+def _curata_numar(raw: str) -> str:
+    """Resolve Romanian separators to a float-parseable string: `.` before exactly 3 digits is a
+    thousands separator and is dropped; a remaining `,` (or lone `.`) is the decimal point.
+
+    So `5.000.000` → `5000000`, but `2,5` → `2.5` and `2.5` (a bare 1-digit fraction) stays `2.5`.
+    """
+    raw = re.sub(r"\.(?=\d{3}(?!\d))", "", raw)
+    return raw.replace(",", ".")
 
 
 def _tokenizeaza(text: str) -> list[tuple[str, str]]:
@@ -136,6 +139,14 @@ def _tokenizeaza(text: str) -> list[tuple[str, str]]:
             toks.append(("RP", ")"))
             i += 1
             continue
+        if c in "\"'“”":
+            # a quoted enum value: `procedura = "deschisă"`. Runs to the matching (or any) quote.
+            j = i + 1
+            while j < n and text[j] not in "\"'“”":
+                j += 1
+            toks.append(("STR", text[i + 1 : j]))
+            i = j + 1
+            continue
         # two-char operators first
         if text[i : i + 2] in (">=", "<=", "!=", "<>"):
             toks.append(("OP", "!=" if text[i : i + 2] == "<>" else text[i : i + 2]))
@@ -145,10 +156,13 @@ def _tokenizeaza(text: str) -> list[tuple[str, str]]:
             toks.append(("OP", c))
             i += 1
             continue
+        if c == "%":
+            toks.append(("UNIT", "%"))
+            i += 1
+            continue
         m = _NUMAR.match(text, i)
         if m and (not toks or toks[-1][0] in ("OP", "KW", "LP", "WORD")):
-            brut = re.sub(r"[.\s]", "", m.group(0))
-            toks.append(("NUM", brut))
+            toks.append(("NUM", _curata_numar(m.group(0))))
             i = m.end()
             continue
         m = _IDENT.match(text, i)
@@ -272,11 +286,17 @@ class _Parser:
             unit = None
             if self._peek() and self._peek()[0] == "UNIT":
                 unit = self._next()[1]
+                nxt = self._peek()  # absorb a unit modifier: `zile` + `lucratoare`
+                if nxt and nxt[0] == "IDENT" and _fold(nxt[1]) in _UNIT_MOD:
+                    unit = f"{unit} {self._next()[1]}"
             return Valoare(numar=numar, unitate=unit)
+        if t[0] == "STR":
+            self._next()
+            return Valoare(text=t[1])
         if t[0] == "IDENT":
             self._next()
             return Valoare(ident=t[1])
-        raise EroareRegula("așteptam o valoare (număr sau identificator) după operator")
+        raise EroareRegula("așteptam o valoare (număr, text sau identificator) după operator")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -346,6 +366,9 @@ _OP_ACTUAL = {
 def _randeaza_cond(nod, actual: bool) -> str:
     ops = _OP_ACTUAL if actual else _OP_NOU
     if isinstance(nod, Comparatie):
+        # for an enum value, "este egal cu deschisă" reads badly — say "este/nu este deschisă"
+        if nod.val.numar is None and nod.op in ("=", "!="):
+            return f"{nod.var} {'nu este' if nod.op == '!=' else 'este'} {nod.val}"
         return f"{nod.var} {ops[nod.op]} {nod.val}"
     if isinstance(nod, Si):
         return " și ".join(_randeaza_cond(p, actual) for p in nod.parti)
@@ -425,6 +448,26 @@ def _interval_contradictoriu(comps: list[Comparatie]) -> bool:
     return bool(egal and (min(egal) < lo or max(egal) > hi or (egal & interzis)))
 
 
+def _categoric_contradictoriu(comps: list[Comparatie]) -> bool:
+    """True if a conjunction of enum equalities on one variable cannot be satisfied.
+
+    `x = "a" ȘI x = "b"` (two different required values) or `x = "a" ȘI x != "a"` — no value fits.
+    """
+    egal: set[str] = set()
+    interzis: set[str] = set()
+    for c in comps:
+        cat = _categoric(c.val)
+        if cat is None:
+            continue
+        if c.op == "=":
+            egal.add(_fold(cat))
+        elif c.op == "!=":
+            interzis.add(_fold(cat))
+    if len(egal) > 1:
+        return True
+    return bool(egal & interzis)
+
+
 def verifica(regula: Regula) -> list[str]:
     """Everything a machine can say about the rule before a court does."""
     probleme: list[str] = []
@@ -443,17 +486,20 @@ def verifica(regula: Regula) -> list[str]:
             if isinstance(p, Comparatie):
                 pe_var.setdefault(p.var, []).append(p)
         for var, cs in pe_var.items():
-            if _interval_contradictoriu(cs):
+            numeric = any(c.val.numar is not None for c in cs)
+            imposibil = _interval_contradictoriu(cs) if numeric else _categoric_contradictoriu(cs)
+            if imposibil:
                 probleme.append(
                     f"condiție imposibilă pe «{var}»: nicio valoare nu o poate satisface — "
                     "regula nu s-ar aplica niciodată."
                 )
 
-    # 2) a bare threshold on a single variable with no ALTFEL leaves the other case unspecified
-    if regula.altfel is None and isinstance(cond, Comparatie) and cond.op in (">=", ">", "<=", "<"):
+    # 2) a bare condition on a single variable with no ALTFEL leaves the other case unspecified
+    if regula.altfel is None and isinstance(cond, Comparatie):
         probleme.append(
-            f"prag fără «ALTFEL»: regula spune ce se întâmplă când {cond.var} trece pragul, dar "
-            "nu și altfel — adaugă o ramură ALTFEL (regula de claritate: spune și «altfel»)."
+            f"condiție fără «ALTFEL»: regula spune ce se întâmplă când condiția pe «{cond.var}» e "
+            "îndeplinită, dar nu și altfel — adaugă o ramură ALTFEL (regula de claritate: spune și "
+            "«altfel»)."
         )
 
     # 3) same consequence on both branches makes the condition inert
@@ -470,19 +516,37 @@ def verifica(regula: Regula) -> list[str]:
 # ---------------------------------------------------------------------------------------------
 
 
-def _evalueaza(nod, mediu: dict[str, float]) -> bool | None:
+def _categoric(val: Valoare) -> str | None:
+    """The categorical (non-numeric) value of a comparison RHS, if it has one."""
+    return val.text if val.text is not None else val.ident
+
+
+def _evalueaza(nod, mediu: dict[str, object]) -> bool | None:
     if isinstance(nod, Comparatie):
-        if nod.val.numar is None or nod.var not in mediu:
+        if nod.var not in mediu:
             return None
-        x, v = mediu[nod.var], nod.val.numar
-        return {
-            ">=": x >= v,
-            ">": x > v,
-            "<=": x <= v,
-            "<": x < v,
-            "=": x == v,
-            "!=": x != v,
-        }[nod.op]
+        x = mediu[nod.var]
+        if nod.val.numar is not None:  # numeric comparison
+            if not isinstance(x, (int, float)):
+                return None
+            v = nod.val.numar
+            return {
+                ">=": x >= v,
+                ">": x > v,
+                "<=": x <= v,
+                "<": x < v,
+                "=": x == v,
+                "!=": x != v,
+            }[nod.op]
+        cat = _categoric(nod.val)  # categorical: only = / != are meaningful
+        if cat is None:
+            return None
+        xs = str(x)
+        if nod.op == "=":
+            return _fold(xs) == _fold(cat)
+        if nod.op == "!=":
+            return _fold(xs) != _fold(cat)
+        return None
     if isinstance(nod, Si):
         vals = [_evalueaza(p, mediu) for p in nod.parti]
         return None if None in vals else all(vals)
@@ -495,15 +559,28 @@ def _evalueaza(nod, mediu: dict[str, float]) -> bool | None:
     return None
 
 
-def _praguri(comps: list[Comparatie]) -> dict[str, list[float]]:
-    """Per numeric variable, sample points that straddle every threshold it is compared against."""
-    puncte: dict[str, set[float]] = {}
+_ALTA = "(altă valoare)"  # a sentinel enum value, to exercise the else-branch of an equality
+
+
+def _grile(comps: list[Comparatie]) -> dict[str, list[object]]:
+    """Per variable, the sample values to try: numbers straddling each threshold, or the mentioned
+    enum values plus one it never names (so both branches of an equality are covered)."""
+    numerice: dict[str, set[float]] = {}
+    categorice: dict[str, set[str]] = {}
     for c in comps:
-        if c.val.numar is None:
-            continue
-        v = c.val.numar
-        puncte.setdefault(c.var, set()).update({v - 1, v, v + 1})
-    return {k: sorted(s) for k, s in puncte.items()}
+        if c.val.numar is not None:
+            numerice.setdefault(c.var, set()).update(
+                {c.val.numar - 1, c.val.numar, c.val.numar + 1}
+            )
+        else:
+            cat = _categoric(c.val)
+            if cat is not None:
+                categorice.setdefault(c.var, set()).add(cat)
+    grile: dict[str, list[object]] = {v: sorted(s) for v, s in numerice.items()}
+    for v, s in categorice.items():
+        if v not in grile:  # a var used both numerically and categorically stays numeric
+            grile[v] = [*sorted(s), _ALTA]
+    return grile
 
 
 def cazuri(regula: Regula, limita: int = 12) -> list[dict]:
@@ -513,9 +590,7 @@ def cazuri(regula: Regula, limita: int = 12) -> list[dict]:
         return []
     comps: list[Comparatie] = []
     _comparatii(cond, comps)
-    grile = _praguri(comps)
-    if not grile or any(c.val.numar is None for c in comps):
-        return []
+    grile = _grile(comps)
 
     variabile_ord = [v for v in variabile(regula) if v in grile]
     if not variabile_ord:
@@ -523,9 +598,14 @@ def cazuri(regula: Regula, limita: int = 12) -> list[dict]:
 
     import itertools
 
-    combinatii = list(itertools.product(*(grile[v] for v in variabile_ord)))
-    if len(combinatii) > limita:
-        combinatii = combinatii[:limita]
+    # islice, not list(...)[:limita]: a rule over many variables would otherwise materialise the
+    # whole Cartesian product (thousands of tuples) just to keep the first few.
+    combinatii = list(
+        itertools.islice(itertools.product(*(grile[v] for v in variabile_ord)), limita)
+    )
+
+    def afiseaza(v: object) -> object:
+        return int(v) if isinstance(v, (int, float)) and v == int(v) else v
 
     randuri: list[dict] = []
     for combo in combinatii:
@@ -533,7 +613,7 @@ def cazuri(regula: Regula, limita: int = 12) -> list[dict]:
         rez = _evalueaza(cond, mediu)
         randuri.append(
             {
-                "valori": {k: (int(v) if v == int(v) else v) for k, v in mediu.items()},
+                "valori": {k: afiseaza(v) for k, v in mediu.items()},
                 "adevarat": bool(rez),
                 "consecinta": regula.atunci if rez else (regula.altfel or "— nespecificat —"),
             }
@@ -541,18 +621,181 @@ def cazuri(regula: Regula, limita: int = 12) -> list[dict]:
     return randuri
 
 
-def analizeaza(text: str) -> dict:
-    """One call for the UI: parse, render both norms, check, enumerate cases. Errors are data."""
+# ---------------------------------------------------------------------------------------------
+# Canonical serialization + round-trip (the honesty rail: does the rule read back as itself?)
+# ---------------------------------------------------------------------------------------------
+
+
+def _serial_val(val: Valoare) -> str:
+    if val.numar is not None:
+        n = int(val.numar) if val.numar == int(val.numar) else val.numar
+        return f"{n} {val.unitate}".strip() if val.unitate else str(n)
+    if val.text is not None:
+        return f'"{val.text}"'
+    return val.ident or "?"
+
+
+def _serial_cond(nod, in_si: bool = False) -> str:
+    if isinstance(nod, Comparatie):
+        return f"{nod.var} {nod.op} {_serial_val(nod.val)}"
+    if isinstance(nod, Si):
+        return " ȘI ".join(_serial_cond(p, in_si=True) for p in nod.parti)
+    if isinstance(nod, Sau):
+        s = " SAU ".join(_serial_cond(p) for p in nod.parti)
+        return f"({s})" if in_si else s
+    if isinstance(nod, Nu):
+        return f"NU {_serial_cond(nod.parte, in_si=True)}"
+    return "?"
+
+
+def serializeaza(regula: Regula) -> str:
+    """The rule back in canonical DSL form — the input a fresh parse would accept unchanged."""
+    if regula.conditie is None:
+        return regula.atunci.rstrip(".")
+    s = f"DACĂ {_serial_cond(regula.conditie)} ATUNCI {regula.atunci.rstrip('.')}"
+    if regula.altfel:
+        s += f" ALTFEL {regula.altfel.rstrip('.')}"
+    return s
+
+
+def roundtrip(regula: Regula) -> bool:
+    """True if serializing the rule and parsing it back yields the same condition and consequences.
+
+    The generator's own test, applied to the rule DSL: if a rule cannot read back as itself, the
+    parser and serializer disagree and the drafter should not trust either. Consequences compare
+    diacritic- and case-insensitively (the parser does not touch them; the serializer only strips a
+    trailing period)."""
     try:
-        regula = parseaza(text)
+        r2 = parseaza(serializeaza(regula))
+    except EroareRegula:
+        return False
+    return (
+        r2.conditie == regula.conditie
+        and _fold(r2.atunci) == _fold(regula.atunci)
+        and _fold(r2.altfel or "") == _fold(regula.altfel or "")
+    )
+
+
+# ---------------------------------------------------------------------------------------------
+# Cross-rule checks: several DACĂ rules on one variable, overlapping or leaving a gap
+# ---------------------------------------------------------------------------------------------
+
+_INF = float("inf")
+
+
+def parseaza_multe(text: str) -> list[Regula]:
+    """Split a block into its rules (each `DACĂ` starts one) and parse each. No `DACĂ` → 1 rule."""
+    brut = " ".join((text or "").split())
+    if not brut:
+        return []
+    pozitii = [m.start() for m in _RE_DACA.finditer(brut)]
+    if len(pozitii) <= 1:
+        return [parseaza(brut)]
+    margini = [*pozitii, len(brut)]
+    return [parseaza(brut[a:b]) for a, b in zip(margini[:-1], margini[1:], strict=True)]
+
+
+def _interval_din(comp: Comparatie) -> tuple[float, bool, float, bool] | None:
+    """A numeric comparison as (lo, lo_open, hi, hi_open); None for `!=` and non-numeric."""
+    v = comp.val.numar
+    if v is None:
+        return None
+    return {
+        ">=": (v, False, _INF, True),
+        ">": (v, True, _INF, True),
+        "<=": (-_INF, True, v, False),
+        "<": (-_INF, True, v, True),
+        "=": (v, False, v, False),
+    }.get(comp.op)
+
+
+def _se_suprapun(a: tuple, b: tuple) -> bool:
+    lo = max(a[0], b[0])
+    lo_open = (a[0] == lo and a[1]) or (b[0] == lo and b[1])
+    hi = min(a[2], b[2])
+    hi_open = (a[2] == hi and a[3]) or (b[2] == hi and b[3])
+    if lo < hi:
+        return True
+    return lo == hi and not lo_open and not hi_open
+
+
+def _numar_curat(x: float) -> object:
+    return int(x) if x == int(x) else x
+
+
+def _gol_interior(intervale: list[tuple]) -> str | None:
+    """The first uncovered range between the covered pieces (interior gaps only), as text."""
+    ordonate = sorted(intervale, key=lambda iv: (iv[0], iv[2]))
+    hi, hi_open = ordonate[0][2], ordonate[0][3]
+    for iv in ordonate[1:]:
+        # a hole opens if the next piece starts strictly beyond the coverage so far
+        if iv[0] > hi or (iv[0] == hi and iv[1] and hi_open):
+            return f"({_numar_curat(hi)}, {_numar_curat(iv[0])})"
+        if iv[2] > hi or (iv[2] == hi and not iv[3]):
+            hi, hi_open = iv[2], iv[3]
+    return None
+
+
+def verifica_set(reguli: list[Regula]) -> list[str]:
+    """Across single-comparison numeric rules on one variable: overlaps and coverage gaps."""
+    probleme: list[str] = []
+    pe_var: dict[str, list[Regula]] = {}
+    for r in reguli:
+        c = r.conditie
+        if isinstance(c, Comparatie) and c.val.numar is not None and _interval_din(c):
+            pe_var.setdefault(c.var, []).append(r)
+    for var, rs in pe_var.items():
+        if len(rs) < 2:
+            continue
+        ivs = [_interval_din(r.conditie) for r in rs]
+        for i in range(len(ivs)):
+            for j in range(i + 1, len(ivs)):
+                if _se_suprapun(ivs[i], ivs[j]):
+                    probleme.append(
+                        f"reguli suprapuse pe «{var}»: condițiile «{_serial_cond(rs[i].conditie)}» "
+                        f"și «{_serial_cond(rs[j].conditie)}» pot fi ambele adevărate — "
+                        "care regulă se aplică?"
+                    )
+        gol = _gol_interior(ivs)
+        if gol:
+            probleme.append(
+                f"«{var}» neacoperit pentru valori în {gol}: niciun caz nu se aplică acolo — "
+                "adaugă o regulă sau o ramură ALTFEL."
+            )
+    return probleme
+
+
+def analizeaza(text: str) -> dict:
+    """One call for the UI: parse (one rule or several), render, check, list. Errors are data."""
+    try:
+        reguli = parseaza_multe(text)
     except EroareRegula as e:
         return {"ok": False, "eroare": str(e)}
+    if not reguli:
+        return {"ok": False, "eroare": "regulă goală"}
+
+    if len(reguli) == 1:
+        regula = reguli[0]
+        return {
+            "ok": True,
+            "conditionala": regula.conditie is not None,
+            "variabile": variabile(regula),
+            "proza_nou": randeaza(regula, "nou"),
+            "proza_actual": randeaza(regula, "actual"),
+            "probleme": verifica(regula),
+            "cazuri": cazuri(regula),
+            "coerent": roundtrip(regula),
+        }
     return {
         "ok": True,
-        "conditionala": regula.conditie is not None,
-        "variabile": variabile(regula),
-        "proza_nou": randeaza(regula, "nou"),
-        "proza_actual": randeaza(regula, "actual"),
-        "probleme": verifica(regula),
-        "cazuri": cazuri(regula),
+        "multi": True,
+        "reguli": [
+            {
+                "proza_nou": randeaza(r, "nou"),
+                "proza_actual": randeaza(r, "actual"),
+                "probleme": verifica(r),
+            }
+            for r in reguli
+        ],
+        "probleme_set": verifica_set(reguli),
     }

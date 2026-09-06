@@ -171,10 +171,11 @@ def clasifica(text: str) -> Unitate:
     scor_actual, sem_actual = _potriviri(chei, _ACTUAL)
     scor_nou, sem_nou = _potriviri(chei, _NOU)
 
-    # one long sentence with no full stop mid-way leans old-register, as a tie-breaker only
+    # one long sentence with no full stop mid-way leans old-register, but only as a tie-breaker
+    # between real markers — never on its own, or a marker-free long paragraph reads as `actual`.
     cuvinte = len(chei.split())
     propozitii = max(1, len([p for p in _PROP.split(chei) if p.strip()]))
-    if cuvinte / propozitii > 35:
+    if (scor_actual or scor_nou) and cuvinte / propozitii > 35:
         scor_actual += 1
 
     if scor_actual > scor_nou:
