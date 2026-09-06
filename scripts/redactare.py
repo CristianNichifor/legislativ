@@ -62,6 +62,45 @@ CORECT: dict[str, str] = {
 }
 LEGEA_24 = "Legea nr. 24/2000 privind normele de tehnică legislativă"
 
+# Normative-language rules the guide fixes but the verb map above does not touch: the register a
+# provision is written in, not the operation it performs. These are the "correct intent, wrong
+# words" errors a Council also sends back — future tense where the norm speaks in the present, an
+# open-ended enumeration, an obligation stated as a wish, an ambiguous conjunction. Each carries
+# its own message because none of them maps onto an operation in CORECT. Patterns run over
+# `normalizeaza` (case and diacritics kept), so `ș` and mixed case match as written.
+LIMBAJ: list[tuple[str, str]] = [
+    (
+        r"se\s+va\b",
+        "«se va» pune verbul la viitor; textul normativ se scrie la timpul prezent — "
+        f"«se» + verb la prezent ({LEGEA_24}).",
+    ),
+    (
+        r"se\s+vor\b",
+        "«se vor» pune verbul la viitor; textul normativ se scrie la timpul prezent — "
+        f"«se» + verb la prezent ({LEGEA_24}).",
+    ),
+    (
+        r"\btrebuie\s+s[ăa]\b",
+        "«trebuie să» exprimă obligația indirect; norma o exprimă la prezent sau prin "
+        f"«are obligația să» ({LEGEA_24}).",
+    ),
+    (
+        r"\bși\s*/\s*sau\b",
+        "«și/sau» este ambiguu; alege «și», «sau», ori enumeră explicit ambele variante "
+        "(Consiliul Legislativ).",
+    ),
+    (
+        r"\betc\.?",
+        "«etc.» lasă enumerarea deschisă; în textul normativ enumerările sunt complete "
+        f"({LEGEA_24}).",
+    ),
+    (
+        r"\bș\.\s*a\.",
+        "«ș.a.» lasă enumerarea deschisă; în textul normativ enumerările sunt complete "
+        f"({LEGEA_24}).",
+    ),
+]
+
 # A modification that gives new text must carry this; without it the amendment is incomplete.
 _MODIFICA = re.compile(r"se\s+modific[ăa]", re.IGNORECASE)
 _CUPRINS = re.compile(r"va\s+avea\s+urm[ăa]torul\s+cuprins", re.IGNORECASE)
@@ -70,14 +109,22 @@ _FRAZA = re.compile(r"(?<!\bart)(?<!\balin)(?<!\bnr)(?<!\blit)\.\s+")
 
 @dataclass(frozen=True)
 class Abatere:
-    """One place a draft departs from mandated legistic form."""
+    """One place a draft departs from mandated legistic form or normative language.
+
+    Most departures are operation-form errors: intent in the wrong verb, keyed by `operatie` into
+    `CORECT` for the fix. A normative-language finding (`operatie == "limbaj"`) is not about an
+    operation, so it carries its own `mesaj` and the property returns that verbatim.
+    """
 
     fragment: str
     gasit: str
     operatie: str
+    mesaj: str | None = None  # set for `limbaj` findings, which do not map onto a CORECT form
 
     @property
     def explicatie(self) -> str:
+        if self.mesaj is not None:
+            return self.mesaj
         return (
             f"«{self.gasit}» nu este forma legistică pentru {self.operatie}; "
             f"folosește «{CORECT[self.operatie]}» ({LEGEA_24})."
@@ -88,11 +135,34 @@ class Abatere:
         return "derived"  # a form judgement, not a quotation
 
 
+def limbaj_normativ(draft: str) -> list[Abatere]:
+    """Where a draft is written in the wrong register — future tense, an open enumeration, an
+    obligation stated as a wish, an ambiguous conjunction. Each finding carries its own message and
+    cites the rule; `operatie` is `"limbaj"` so it reads apart from an operation-form error.
+    """
+    text = normalizeaza(draft)
+    gasite: list[Abatere] = []
+    vazute: set[tuple[int, str]] = set()
+    for sablon, mesaj in LIMBAJ:
+        for m in re.finditer(sablon, text, re.IGNORECASE):
+            cheie = (m.start(), sablon)
+            if cheie in vazute:
+                continue
+            vazute.add(cheie)
+            inceput = max(0, m.start() - 40)
+            gasite.append(
+                Abatere(text[inceput : m.end() + 20].strip(), m.group(0).strip(), "limbaj", mesaj)
+            )
+    return gasite
+
+
 def conformitate(draft: str) -> list[Abatere]:
     """Where a draft says the right thing the wrong way. Empty means the form is clean.
 
-    Two checks: intent in a non-standard verb (a repeal as "se elimină"), and a modification that
-    supplies text without the mandatory "va avea următorul cuprins". Both cite the correct form.
+    Three checks: intent in a non-standard verb (a repeal as "se elimină"); a modification that
+    supplies text without the mandatory "va avea următorul cuprins"; and normative-language
+    departures (`limbaj_normativ` — future tense, "etc.", "trebuie să", "și/sau"). Each cites its
+    rule and, where there is one, the correct form.
     """
     text = normalizeaza(draft)
     abateri: list[Abatere] = []
@@ -109,6 +179,8 @@ def conformitate(draft: str) -> list[Abatere]:
                 abateri.append(
                     Abatere(text[inceput : m.end() + 20].strip(), m.group(0).strip(), operatie)
                 )
+
+    abateri += limbaj_normativ(draft)
 
     # `se modifică` that provides new text but omits `va avea următorul cuprins`. Checked per
     # sentence: a bare "se modifică" pointing forward to a quoted block, with no cuprins clause.
