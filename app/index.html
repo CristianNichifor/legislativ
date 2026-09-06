@@ -1106,7 +1106,7 @@ function renderLint(d){
   let h = `<div class="strip">`
     +chip("neconstituțional",nc.length,ncSev,"Prevederi neconstituționale nereparate")
     +chip("reia text lovit",rl.length,"material","Reia o formulare declarată neconstituțională")
-    +chip("abrogate",rp.length,"blocking","Citezi lege abrogată")
+    +chip("abrogate",rp.length,rp.some(r=>r.severitate!=="material")?"blocking":"material","Citezi lege abrogată")
     +chip("statut special",ca.length,"material","Prevederi suspendate, derogate sau prorogate")
     +chip("neindeplinite",on.length,"blocking","Obligații neîndeplinite ale actelor vizate")
     +chip("consolidat",co.length,"material","Verifică față de textul consolidat")
@@ -1155,8 +1155,12 @@ function renderLint(d){
     + `<div class="hint" style="margin-top:.5rem">Comparat cu <b>${rlAcop.comparabile}</b> din `
     + `${rlAcop.prevederi} prevederi lovite (${rlAcop.procent}%) — restul sunt cunoscute doar ca `
     + `trimitere, fără text de comparat.</div>`);
+  // Per-card severity, like the neconstitutional section above: a repeal whose locator predates a
+  // republication is amber, because the article numbered that way today may never have been touched.
   if(rp.length) h += sec("Citezi lege abrogată", rp.length,
-    rp.map(r=>card("blocking",`<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,[esc(r.motiv)],"","verbatim")).join(""));
+    rp.map(r=>card(r.severitate==="material"?"material":"blocking",
+      `<span class="plx">${esc(r.act_id)}${r.locator?" "+esc(r.locator):""}</span>`,
+      [esc(r.motiv)],"","verbatim")).join(""));
   if(ca.length) h += sec("Prevederi cu statut special", ca.length,
     ca.map(c=>card("material",`<span class="plx">${esc(c.act_id)}${c.locator?" "+esc(locRo(c.locator)):""}</span> <span class="hint">${esc(c.eticheta)}</span>`,[esc(c.motiv)],"","verbatim")).join(""));
   if(on.length) h += sec("Obligații neîndeplinite ale actelor vizate", on.length,

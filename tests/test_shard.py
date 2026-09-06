@@ -100,3 +100,50 @@ def test_a_shard_backed_stare_needs_no_corpus_db(tmp_path):
     lipsa = _act({"tip": ["lege"], "nr": ["1"], "an": ["1900"]}, st)
     assert lipsa["act_id"] == "lege-1-1900" and not lipsa["cunoscut"]
     assert _act({"tip": ["lege"], "nr": [""], "an": ["2016"]}, st)["act_id"] == ""  # incomplete
+
+
+# --- republication dates reach the browser --------------------------------------------------
+#
+# `vigoare.py` decides whether a locator-level repeal predates a renumbering, which needs the act's
+# republication date. On localhost that is a column; in the browser the only catalogue is
+# index.json, so the date has to be carried there or the check silently never fires on the public
+# build. These assert the same answer comes back from both backings.
+
+
+def _cu_republicare(tmp: Path, cand: str | None) -> str:
+    """A corpus whose single act carries (or does not carry) a republication date."""
+    cale = _corpus(tmp)
+    with deschide(cale) as con:
+        con.execute("UPDATE acte SET republicat_din = ?", (cand,))
+        con.commit()
+    return cale
+
+
+def test_the_shard_index_carries_republication_dates(tmp_path):
+    corpus = _cu_republicare(tmp_path, "2015-03-11")
+    construieste(corpus, str(tmp_path / "web"), log=lambda *a, **k: None)
+    index = json.loads((tmp_path / "web" / "index.json").read_text(encoding="utf-8"))
+    assert [a.get("republicat_din") for a in index] == ["2015-03-11"]
+
+
+def test_an_act_with_no_republication_does_not_carry_the_key(tmp_path):
+    """Absent for all but a handful of acts, so the key is omitted rather than written null."""
+    corpus = _cu_republicare(tmp_path, None)
+    construieste(corpus, str(tmp_path / "web"), log=lambda *a, **k: None)
+    index = json.loads((tmp_path / "web" / "index.json").read_text(encoding="utf-8"))
+    assert all("republicat_din" not in a for a in index)
+
+
+def test_both_backings_report_the_same_republication_date(tmp_path):
+    from datetime import date
+
+    corpus = _cu_republicare(tmp_path, "2015-03-11")
+    construieste(corpus, str(tmp_path / "web"), log=lambda *a, **k: None)
+    index = json.loads((tmp_path / "web" / "index.json").read_text(encoding="utf-8"))
+    act_id = index[0]["id"]
+
+    pe_disc = Stare(corpus).republicari({act_id})
+    pe_shard = Stare(date_dir=str(tmp_path / "web")).republicari({act_id})
+    assert pe_disc == pe_shard == {act_id: date(2015, 3, 11)}
+    # an act nobody asked about is not queried, and an empty request costs no read
+    assert Stare(corpus).republicari(set()) == {}
