@@ -427,16 +427,23 @@ def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) ->
     return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
 
 
-def _nereparat_dict(n) -> dict:
+def _nereparat_dict(n, norma=None) -> dict:
     """One `neconstitutional.Nereparat` row as a plain dict for the shipped register.
 
     `severitate` travels as the register means it — *evidential*: `blocking` says the corpus
     cannot tell an unrepaired provision from a repair it never collected. `coliziune.py` reads it
     that way and refuses to let such a row block a bill. It is not the linter's severity and must
     not be rendered as one.
+
+    `norma` is the recovered text of the struck provision (`prevedere.py`), when the corpus can
+    produce it. `text` is only the citation the decision used — `art. 5 alin. (7) din Legea nr.
+    59/1993`, a median of 24 characters — which identifies the provision and does not show anyone
+    what was actually struck. Two thirds of the register can be quoted; the rest ships without,
+    and `norma_granularitate` says which, because a row quoting the containing article must not
+    look like one quoting the paragraph.
     """
     p = n.lovitura.proviziune
-    return {
+    rand = {
         "act_id": p.act or "",
         "locator": p.locator or "",
         "fel": p.fel,
@@ -448,7 +455,17 @@ def _nereparat_dict(n) -> dict:
         "zile_de_la_termen": n.zile_de_la_termen,
         "severitate": n.severitate,
         "limitari": list(n.limitari),
+        "norma": "",
+        "norma_granularitate": "",
+        "norma_nota": "",
     }
+    if norma is not None:
+        rand |= {
+            "norma": norma.text.strip()[:4000],
+            "norma_granularitate": norma.granularitate,
+            "norma_nota": norma.nota,
+        }
+    return rand
 
 
 def construieste_neconstitutional(
@@ -467,7 +484,10 @@ def construieste_neconstitutional(
     a dial an operator turns by declaring what they actually finished collecting, not a default
     that flatters the data.
     """
+    import sqlite3
+
     from scripts.neconstitutional import din_baze, registru
+    from scripts.prevedere import Prevedere, textul, versiuni
 
     lovituri, muchii, tipuri = din_baze(corpus_db, graf_db)
     randuri = registru(
@@ -477,7 +497,25 @@ def construieste_neconstitutional(
         la_data=la_data or date.today(),
         complet_pentru=complet_pentru,
     )
-    return [_nereparat_dict(n) for n in randuri]
+
+    # The struck text is recovered here, at build time, and travels in the report — so the browser
+    # can show what the Court removed without holding the corpus it was cut out of. One connection
+    # and one version index for the whole register, not one per row.
+    cx = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+    try:
+        index = versiuni(cx)
+        iesire = []
+        for n in randuri:
+            p = n.lovitura.proviziune
+            norma = None
+            if p.act and p.locator:
+                an = n.lovitura.publicat.year if n.lovitura.publicat else None
+                gasit = textul(cx, p.act, p.locator, an, index)
+                norma = gasit if isinstance(gasit, Prevedere) else None
+            iesire.append(_nereparat_dict(n, norma))
+        return iesire
+    finally:
+        cx.close()
 
 
 def _neconstitutional(draft: str, stare: Stare) -> list[dict]:
@@ -506,6 +544,9 @@ def _neconstitutional(draft: str, stare: Stare) -> list[dict]:
             "sustinut": c.sustinut,
             "motiv": c.motiv,
             "citat": c.citat,
+            "norma": c.norma,
+            "norma_granularitate": c.norma_granularitate,
+            "norma_nota": c.norma_nota,
             "limitari": list(c.limitari),
             "incredere": c.increderea,
         }

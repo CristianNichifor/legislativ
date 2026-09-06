@@ -67,7 +67,10 @@ class Coliziune:
     potrivire: str
     sustinut: bool  # whether the register can stand behind the absence of a repair
     limitari: tuple[str, ...]
-    citat: str  # the span quoted from the decision
+    citat: str  # the span quoted from the decision — a citation, not the norm
+    norma: str  # the struck provision's own words, where the corpus can produce them
+    norma_granularitate: str  # exact | articol | '' (not recovered)
+    norma_nota: str  # what a reader must be told before quoting `norma`
 
     @property
     def severitate(self) -> str:
@@ -225,6 +228,9 @@ def coliziuni(draft: str, registru: list[dict]) -> list[Coliziune]:
                         dict.fromkeys(lim for x in randuri for lim in x.get("limitari", []))
                     ),
                     citat=(prima.get("text") or "")[:300],
+                    norma=prima.get("norma") or "",
+                    norma_granularitate=prima.get("norma_granularitate") or "",
+                    norma_nota=prima.get("norma_nota") or "",
                 )
             )
     return sorted(gasite, key=_rang)
@@ -239,6 +245,13 @@ def raport(gasite: list[Coliziune]) -> str:
         linii.append(f"[{c.severitate}] {c.text.strip()[:80]} → {c.motiv}")
         if c.citat:
             linii.append(f'    din decizie: „{c.citat[:120]}"')
+        if c.norma:
+            eticheta = (
+                "textul lovit" if c.norma_granularitate == "exact" else "articolul care îl conține"
+            )
+            linii.append(f'    {eticheta}: „{" ".join(c.norma.split())[:200]}"')
+        if c.norma_nota:
+            linii.append(f"    ⚠ {c.norma_nota}")
         for lim in c.limitari:
             linii.append(f"    ⚠ {lim}")
     return "\n".join(linii)
