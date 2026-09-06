@@ -156,13 +156,24 @@ def registru(
     look them up against, and a row that named an article without a law would be unusable. They
     are counted in `decizii.py`'s limitations, where they belong.
     """
+    # Edges grouped by the act they point at, once, before the loop. `_atinge` rejects on
+    # `catre_act` before it looks at anything else, so scanning the whole edge list per strike
+    # spent almost all of its time on one failed string comparison: 715 strikes over 78 958
+    # repair-capable edges is 56 million of them, and the run took six minutes. Grouping is the
+    # same predicate applied in the same order — an edge that fails the act check could never
+    # have survived — so the result is identical, and each strike now looks only at the handful
+    # of edges aimed at its own act.
+    pe_tinta: dict[str, list[Muchie]] = {}
+    for m in muchii:
+        pe_tinta.setdefault(m.catre_act, []).append(m)
+
     gasite: list[Nereparat] = []
     for lov in lovituri:
         prov = lov.proviziune
         if prov.act is None:
             continue
         catre_tip = tipuri.get(prov.act)
-        candidate = [m for m in muchii if _atinge(m, prov)]
+        candidate = [m for m in pe_tinta.get(prov.act, ()) if _atinge(m, prov)]
 
         reparatii = [
             m
@@ -176,7 +187,8 @@ def registru(
         if reparatii:
             continue
 
-        atingeri = [m for m in candidate if m.fel in FELURI_REPARATOARE and m not in reparatii]
+        socotite = set(reparatii)
+        atingeri = [m for m in candidate if m.fel in FELURI_REPARATOARE and m not in socotite]
         termen = lov.termen
         limitari, severitate = _limitari(lov, catre_tip, complet_pentru, atingeri, tipuri)
         gasite.append(
