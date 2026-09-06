@@ -123,6 +123,7 @@ class Reluare:
     suprapunere: float  # jaccard, for shape
     granularitate: str  # how precisely the struck text itself was recovered
     norma: str  # the struck wording
+    temeiuri: tuple  # the constitutional grounds the decision turned on (`temeiuri.py`)
 
     @property
     def severitate(self) -> str:
@@ -137,6 +138,22 @@ class Reluare:
     @property
     def aproape_identic(self) -> bool:
         return self.scor >= PRAG_APROAPE_IDENTIC
+
+    @property
+    def temei_rezumat(self) -> str:
+        """The constitutional ground, named. `încălcat` is quoted from a verb of violation next to
+        the article; a bare mention is only that the article appears in reasoning which may well
+        have rejected it, so the two are never phrased alike."""
+        incalcate = [t for t in self.temeiuri if t.get("fel") == "incalcat"]
+        if incalcate:
+            return "Motiv: încalcă " + ", ".join(t["eticheta"] for t in incalcate[:2]) + "."
+        if self.temeiuri:
+            return (
+                "Invocate în considerente (fără a rezulta care au fost reținute): "
+                + ", ".join(t["eticheta"] for t in self.temeiuri[:2])
+                + "."
+            )
+        return ""
 
     @property
     def motiv(self) -> str:
@@ -154,6 +171,7 @@ class Reluare:
             "Art. 147 alin. (4) leagă erga omnes, deci o normă identică în substanță intră sub "
             "aceeași decizie chiar dacă e renumerotată sau mutată în alt act. "
             "Verifică cu un jurist dacă e aceeași normă."
+            + ((" " + self.temei_rezumat) if self.temei_rezumat else "")
         )
 
 
@@ -239,6 +257,7 @@ def reluari(draft: str, norme: list[dict], *, prag: float = PRAG) -> list[Reluar
                     suprapunere=jaccard(a_unitate, a_norma),
                     granularitate=rand.get("norma_granularitate") or "",
                     norma=rand.get("norma") or "",
+                    temeiuri=tuple(rand.get("temeiuri") or ()),
                 )
             )
     return sorted(_cel_mai_strans(gasite), key=lambda r: (-r.scor, r.act_id, r.locator))

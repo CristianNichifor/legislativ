@@ -71,6 +71,7 @@ class Coliziune:
     norma: str  # the struck provision's own words, where the corpus can produce them
     norma_granularitate: str  # exact | articol | '' (not recovered)
     norma_nota: str  # what a reader must be told before quoting `norma`
+    temeiuri: tuple  # the constitutional grounds the decision turned on (`temeiuri.py`)
 
     @property
     def severitate(self) -> str:
@@ -88,6 +89,22 @@ class Coliziune:
     @property
     def unde(self) -> str:
         return self.act_id if not self.locator_lovit else f"{self.act_id} {self.locator_lovit}"
+
+    @property
+    def temei_rezumat(self) -> str:
+        """The constitutional ground, named. `încălcat` is quoted from a verb of violation next to
+        the article; a bare mention is only that the article appears in reasoning which may well
+        have rejected it, so the two are never phrased alike."""
+        incalcate = [t for t in self.temeiuri if t.get("fel") == "incalcat"]
+        if incalcate:
+            return "Motiv: încalcă " + ", ".join(t["eticheta"] for t in incalcate[:2]) + "."
+        if self.temeiuri:
+            return (
+                "Invocate în considerente (fără a rezulta care au fost reținute): "
+                + ", ".join(t["eticheta"] for t in self.temeiuri[:2])
+                + "."
+            )
+        return ""
 
     @property
     def motiv(self) -> str:
@@ -111,21 +128,22 @@ class Coliziune:
                 f"{cand}{alte}{intarziere}"
             )
 
+        temei = (" " + self.temei_rezumat) if self.temei_rezumat else ""
         if self.potrivire == "exact":
-            return f"{lovit}. Nimic din corpus nu arată că a fost pus în acord."
+            return f"{lovit}. Nimic din corpus nu arată că a fost pus în acord.{temei}"
         if self.potrivire == "sub":
             return (
                 f"Textul citat ({self.locator}) se află în interiorul unei prevederi lovite: "
-                f"{lovit}. Nimic din corpus nu arată că a fost pus în acord."
+                f"{lovit}. Nimic din corpus nu arată că a fost pus în acord.{temei}"
             )
         if self.potrivire == "peste":
             return (
                 f"Prevederea citată ({self.locator or 'actul'}) conține o parte lovită și "
-                f"nereparată: {lovit}. Restul textului citat rămâne în vigoare."
+                f"nereparată: {lovit}. Restul textului citat rămâne în vigoare.{temei}"
             )
         if self.potrivire == "tot_actul":
-            return f"Întregul act a fost lovit: {lovit}."
-        return f"Actul citat conține o prevedere lovită și nereparată: {lovit}."
+            return f"Întregul act a fost lovit: {lovit}.{temei}"
+        return f"Actul citat conține o prevedere lovită și nereparată: {lovit}.{temei}"
 
 
 def _potrivire(loc_draft: str, loc_lovit: str) -> str | None:
@@ -231,6 +249,7 @@ def coliziuni(draft: str, registru: list[dict]) -> list[Coliziune]:
                     norma=prima.get("norma") or "",
                     norma_granularitate=prima.get("norma_granularitate") or "",
                     norma_nota=prima.get("norma_nota") or "",
+                    temeiuri=tuple(prima.get("temeiuri") or ()),
                 )
             )
     return sorted(gasite, key=_rang)
