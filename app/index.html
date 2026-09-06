@@ -115,6 +115,14 @@
   .cauta-filtre .f-an{width:6.5rem}
   .cauta-total{margin:.6rem 0 .4rem}
   #cauta-more{margin-top:.6rem}
+
+  /* the Conexiuni tab: an act-lookup row over a full-height graph area */
+  .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
+  .graf-cauta select,.graf-cauta .g-nr,.graf-cauta .g-an{height:2.15rem;font-size:.85rem}
+  .graf-cauta .g-nr{width:9rem}
+  .graf-cauta .g-an{width:8rem}
+  .graf-tab-wrap{min-height:26rem;display:flex;flex-direction:column;
+    border:1px solid var(--rule);border-radius:var(--r1);background:var(--surface);padding:.4rem}
   /* below 1200px the 28rem sidebar crams the working area, so stack it — and put Conexiuni at the
      BOTTOM (order:2), under the working area, not above it. */
   @media (max-width:1200px){
@@ -529,6 +537,7 @@
     <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
+    <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
 
@@ -652,6 +661,26 @@
         </div>
         <div id="cauta-out"></div>
       </div>
+
+      <div id="pane-graf" role="tabpanel" aria-labelledby="tab-graf" hidden>
+        <label for="g-nr">Explorează legăturile unui act — cine îl modifică, ce atinge el</label>
+        <div class="graf-cauta">
+          <select id="g-tip" title="Tipul actului">
+            <option value="lege">lege</option>
+            <option value="oug">ordonanță de urgență</option>
+            <option value="og">ordonanță</option>
+            <option value="hg">hotărâre de Guvern</option>
+            <option value="ordin">ordin</option>
+            <option value="decizie">decizie</option>
+            <option value="decret">decret</option>
+          </select>
+          <input type="text" id="g-nr" class="g-nr" placeholder="număr (ex.: 98)">
+          <input type="number" id="g-an" class="g-an" placeholder="an (ex.: 2016)" min="1800" max="2100">
+          <button class="go" id="g-go">Arată graful</button>
+          <span class="hint" id="g-stat"></span>
+        </div>
+        <div id="graf-tab-wrap" class="graf-tab-wrap"><p class="graf-empty">Caută un act ca să-i vezi conexiunile.</p></div>
+      </div>
     </div>
 
     <aside class="canvas" id="canvas">
@@ -707,14 +736,14 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
     $("#pane-"+p).hidden = p!==which;
   });
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
-  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-act",consolidat:"#c-act",cauta:"#q",graf:"#g-nr"}[which];
   if(focusEl) $(focusEl).focus();
   if(which==="consolidat") loadConsAsezari();
 }
@@ -1680,15 +1709,16 @@ function renderGraph(d){
   wrap.innerHTML=""; wrap.appendChild(mountGraph(svg,vp));
 }
 
-async function focusAct(actId){
-  const wrap=$("#graf-wrap"); wrap.innerHTML=`<p class="graf-empty"><span class="spin"></span> ${esc(actId)}…</p>`;
-  try{ drawFocus(actId, await (await fetch("/api/vecini?act="+encodeURIComponent(actId))).json()); }
+async function focusAct(actId, wrap, back){
+  wrap=wrap||$("#graf-wrap");
+  wrap.innerHTML=`<p class="graf-empty"><span class="spin"></span> ${esc(actId)}…</p>`;
+  try{ drawFocus(actId, await (await fetch("/api/vecini?act="+encodeURIComponent(actId))).json(), wrap, back); }
   catch(e){ wrap.innerHTML=`<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
 }
-function drawFocus(actId,d){
+function drawFocus(actId,d,wrap,back){
+  wrap=wrap||$("#graf-wrap");
   const inb=(d.inbound||[]),outb=(d.outbound||[]);
   const nodes=[...inb.map(m=>({...m,dir:"in"})),...outb.map(m=>({...m,dir:"out"}))];
-  const wrap=$("#graf-wrap");
   const W=340,H=Math.max(300,150+nodes.length*30),cx=W/2,cy=H/2;
   const svg=svgEl("svg",{class:"graf",viewBox:`0 0 ${W} ${H}`,role:"img","aria-label":"vecinii actului "+actId});
   const vp=svgEl("g",{}); svg.appendChild(vp);
@@ -1698,11 +1728,11 @@ function drawFocus(actId,d){
     vp.appendChild(svgEl("line",{x1,y1,x2,y2,stroke:felColor(n.fel),"stroke-width":n.fel==="abroga"?2:1.3}));
     const g=svgEl("g",{});
     const circ=svgEl("circle",{cx:x,cy:y,r:11,fill:felColor(n.fel),"fill-opacity":.85,style:"cursor:pointer"});
-    circ.addEventListener("click",()=> n.sursa_url?deschideAct(n.sursa_url):focusAct(n.act_id));
+    circ.addEventListener("click",()=> n.sursa_url?deschideAct(n.sursa_url):focusAct(n.act_id,wrap,back));
     const ttl=svgEl("title",{}); ttl.textContent=`${FEL_RO[n.fel]||n.fel} · ${n.act_id}`+(n.de_la?` (${n.de_la})`:"")+(n.titlu?` — ${n.titlu.slice(0,60)}`:"")+(n.sursa_url?" · clic: deschide documentul":" · clic: vecini"); circ.appendChild(ttl); g.appendChild(circ);
     const lbl=svgEl("text",{x,y:y+22,"text-anchor":"middle","font-family":"var(--mono)","font-size":"9",fill:"var(--ink)",style:"cursor:pointer;text-decoration:underline dotted"});
     lbl.textContent=n.act_id.length>16?n.act_id.slice(0,15)+"…":n.act_id;
-    lbl.addEventListener("click",()=>focusAct(n.act_id));
+    lbl.addEventListener("click",()=>focusAct(n.act_id,wrap,back));
     const lt=svgEl("title",{}); lt.textContent="clic: vecinii lui "+n.act_id; lbl.appendChild(lt);
     g.appendChild(lbl); vp.appendChild(g);
   });
@@ -1711,9 +1741,10 @@ function drawFocus(actId,d){
   c.textContent=actId.length>14?actId.slice(0,13)+"…":actId; vp.appendChild(c);
   wrap.innerHTML="";
   const bar=document.createElement("div");
-  bar.innerHTML=`<button class="ghost" style="margin:0 0 .5rem;font-size:.72rem;padding:.3rem .7rem">← înapoi la proiect</button>`
+  const et=(back&&back.label)||"← înapoi la proiect";
+  bar.innerHTML=`<button class="ghost" style="margin:0 0 .5rem;font-size:.72rem;padding:.3rem .7rem">${esc(et)}</button>`
     +`<p class="hint" style="margin:.2rem 0 .6rem"><b>${inb.length}</b> îl modifică/citează · <b>${outb.length}</b> ținte. Clic pe un nod ca să mergi mai departe.</p>`;
-  bar.querySelector("button").onclick=()=>{ if(_lastLint) renderGraph(_lastLint); };
+  bar.querySelector("button").onclick=()=>{ if(back&&back.fn) back.fn(); else if(_lastLint) renderGraph(_lastLint); };
   wrap.appendChild(bar); wrap.appendChild(mountGraph(svg,vp));
 }
 
@@ -1763,6 +1794,24 @@ async function runSearch(append=false){
 $("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") runSearch(); });
 $("#q").addEventListener("input",()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(()=>runSearch(),400); });
 ["f-tip","f-an-min","f-an-max"].forEach(id=>$("#"+id).addEventListener("change",()=>runSearch()));
+
+// ---- Conexiuni tab: look up any act and explore its amendment neighbourhood ----
+async function grafTabCauta(){
+  const tip=$("#g-tip").value||"lege", nr=$("#g-nr").value.trim(), an=$("#g-an").value.trim();
+  const wrap=$("#graf-tab-wrap"), stat=$("#g-stat");
+  if(!nr||!an){ stat.textContent="completează numărul și anul"; return; }
+  stat.textContent=""; wrap.innerHTML=`<p class="graf-empty"><span class="spin"></span> caut actul…</p>`;
+  try{
+    const d=await (await fetch(`/api/act?tip=${encodeURIComponent(tip)}&nr=${encodeURIComponent(nr)}&an=${encodeURIComponent(an)}`)).json();
+    if(!d.act_id){ wrap.innerHTML=`<p class="graf-empty">Număr sau an invalid.</p>`; return; }
+    if(!d.cunoscut){ wrap.innerHTML=`<p class="graf-empty"><b>${esc(d.act_id)}</b> nu este în corpus (încă necolectat).</p>`; return; }
+    stat.textContent=d.titlu||"";
+    const back={label:"← altă căutare", fn:()=>{ wrap.innerHTML=`<p class="graf-empty">Caută un act ca să-i vezi conexiunile.</p>`; $("#g-nr").focus(); }};
+    focusAct(d.act_id, wrap, back);
+  }catch(e){ wrap.innerHTML=`<p class="graf-empty">Eroare: ${esc(e.message||e)}</p>`; }
+}
+$("#g-go").onclick=grafTabCauta;
+["g-nr","g-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") grafTabCauta(); }));
 </script>
 </body>
 </html>
