@@ -76,6 +76,16 @@ def construieste(
             log(f"  {tabel}: {n}")
         # The index is external-content, so it is rebuilt from the provisions just copied rather
         # than transferred — transferring it would also carry the archive's rowids.
+        # Stamp the release with where it stands, before anyone can do local work in it. A copy
+        # that has to infer its position from its own rows loses that position the moment its
+        # reader upgrades an act locally — and then `delta` skips whatever the source published in
+        # between, permanently. Every copy is born knowing where it is.
+        pozitie = con.execute("SELECT coalesce(max(citit_la), '') FROM main.acte").fetchone()[0]
+        if pozitie:
+            con.execute(
+                "INSERT OR REPLACE INTO versiune (cheie, valoare) VALUES ('adus_la', ?)",
+                (pozitie,),
+            )
         con.execute("INSERT INTO provizii_fts(provizii_fts) VALUES('rebuild')")
         log("  provizii_fts: reconstruit")
         # DETACH cannot run inside the transaction the inserts opened, and Python's sqlite3

@@ -194,6 +194,17 @@ CREATE TABLE IF NOT EXISTS surse (
 );
 CREATE INDEX IF NOT EXISTS idx_surse_stare ON surse(stare);
 
+-- What this copy was last brought up to, written by `delta.aplica`. One row, `adus_la`.
+--
+-- Recorded rather than derived, and the difference is not cosmetic. `max(acte.citit_la)` looks
+-- like a free answer until you notice a copy is not read-only: `surse.imbogateste` rewrites acts
+-- locally and marks them now, which pushes a derived position past everything the source wrote in
+-- between — and the next pack skips exactly that range, permanently, with no symptom.
+CREATE TABLE IF NOT EXISTS versiune (
+    cheie   TEXT PRIMARY KEY,
+    valoare TEXT NOT NULL
+);
+
 -- Collection progress, so an interrupted run resumes instead of restarting. One row per page
 -- of the API's unfiltered enumeration, marked done once its acts are written. A 90-minute job
 -- that cannot resume is a job that never finishes, because something always interrupts it.
@@ -447,6 +458,14 @@ def scrie_provizii(con: sqlite3.Connection, act_id: str, provizii) -> int:
     """
     _sterge_fts(con, act_id)
     con.execute("DELETE FROM provizii WHERE act_id = ?", (act_id,))
+    # `citit_la` is the only mark of when an act's stored content last changed, and it is what a
+    # delta pack selects on. Upgrading an act's provisions from its HTML changes that content, so
+    # leaving the mark alone would hide the change from every offline copy — the act would keep the
+    # flattened text for ever, silently.
+    con.execute(
+        "UPDATE acte SET citit_la = ? WHERE id = ?",
+        (datetime.now(UTC).isoformat(timespec="seconds"), act_id),
+    )
     scrise = 0
     for ord_, p in enumerate(provizii, start=1):
         cur = con.execute(
