@@ -79,3 +79,68 @@ def rezolva(nume: str, ids: set[str], la_data: date | None = None) -> str | None
         return disponibile[-1][1]
     potrivite = [(an, act) for an, act in disponibile if an <= la_data.year]
     return potrivite[-1][1] if potrivite else None
+
+
+# --- acts keyed under the wrong year ----------------------------------------------------------
+#
+# `colector._an` takes the year from the record, then from `data_vigoare`, and only then from the
+# title. For a *republished* act `data_vigoare` is the republication date, so the act is filed
+# under the year it was republished rather than the year it was passed:
+#
+#     lege-303-2005   "LEGE nr. 303 din 28 iunie 2004 (*republicată*) privind statutul
+#                      judecătorilor și procurorilor"
+#
+# Every citation says `Legea nr. 303/2004` and finds nothing. Measured on the finished corpus:
+# 20 715 documents — 10,1% — are filed under a year their own title contradicts, and the bias is
+# the wrong way round, because an act gets republished precisely when it matters and keeps being
+# amended. The most-cited law in the corpus is the most likely to be misfiled.
+#
+# This does not re-key anything. Re-keying would mean rewriting `acte`, the graph built on those
+# ids, and `lovituri` — a migration, not a lookup. Here the stored id stays and the citation's id
+# becomes an alias for it, which is the same shape as the named acts above.
+
+_TITLU_AN = re.compile(r"\bdin\s+\d{1,2}\s+[a-zăâîșț]+\s+((?:1[6-9]|20)\d{2})", re.IGNORECASE)
+
+
+def alias_an(con) -> dict[str, str]:
+    """`tip-numar-anul-din-titlu` -> the id the corpus actually stored it under.
+
+    Built from `documente`, which keeps every record, and restricted to ids `acte` really holds.
+
+    **Ambiguous aliases are dropped, not guessed.** 1 130 of them are claimed by two different
+    documents — two acts of the same type and number whose titles both point at one year. There is
+    no way to choose without inventing, and inventing is the one thing this package does not do, so
+    those citations keep resolving to nothing exactly as they did before.
+    """
+    titluri = {r[0]: r[1] or "" for r in con.execute("SELECT id, titlu FROM acte")}
+    reali = set(titluri)
+    candidat: dict[str, set[str]] = {}
+    for cheie, tip, numar, an, titlu in con.execute(
+        "SELECT cheie_act, tip, numar, an, titlu FROM documente"
+        " WHERE numar IS NOT NULL AND numar <> '' AND an IS NOT NULL"
+    ):
+        m = _TITLU_AN.search(titlu or "")
+        if not m:
+            continue
+        an_titlu = int(m.group(1))
+        if an_titlu == an or cheie not in reali:
+            continue
+        candidat.setdefault(f"{tip}-{numar}-{an_titlu}", set()).add(cheie)
+    # An alias that already names a real act is not an alias — the corpus holds both years.
+    #
+    # And the target has to *confirm* the year, because `acte` is a citation view where the last
+    # writer wins and 53 242 documents share a key with another. Deduplicating on `cheie_act`
+    # therefore does not mean one act: two unrelated laws can collapse into one row, and the row
+    # that survived may be the other one. Measured before this check, 2 566 of 10 669 aliases —
+    # 24% — pointed at an act from a different year, including `lege-303-2004` landing on a 2005
+    # ratification law rather than the statute of judges. An alias that cannot be confirmed
+    # against the stored act's own title is dropped.
+    iesire: dict[str, str] = {}
+    for alias, tinte in candidat.items():
+        if len(tinte) != 1 or alias in reali:
+            continue
+        tinta = next(iter(tinte))
+        m = _TITLU_AN.search(titluri.get(tinta, ""))
+        if m and int(m.group(1)) == int(alias.rsplit("-", 1)[1]):
+            iesire[alias] = tinta
+    return iesire
