@@ -254,3 +254,190 @@ def test_the_parallel_path_honours_the_same_filter(tmp_path):
     construieste(str(corpus), str(a), doar=["lege-4-2020"], lucratori=1, log=lambda *_: None)
     construieste(str(corpus), str(b), doar=["lege-4-2020"], lucratori=3, log=lambda *_: None)
     assert _muchii(a) == _muchii(b)
+
+
+# --- de unde vine muchia -------------------------------------------------------------------------
+#
+# An edge used to say only that this act points at that one. With article trees in the corpus it
+# can say which provision did the pointing, which is the difference between knowing that something
+# breaks and knowing what.
+
+
+def _corpus_structurat(tmp_path: Path, act_id: str, provizii: list[tuple[str, str]]) -> Path:
+    """A corpus holding one act with a real article tree, written provision by provision."""
+    db = tmp_path / "corpus.db"
+    with depozit.deschide(db) as con:
+        con.execute(
+            "INSERT OR REPLACE INTO acte (id, tip, numar, an, titlu, publicat, citit_la)"
+            " VALUES (?,?,?,?,?,?,?)",
+            (act_id, "lege", "7", 2024, "LEGE nr. 7 din 2024", "2024-01-01", "2024-01-01"),
+        )
+        for ord_, (locator, text) in enumerate(provizii):
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?,?,?,?)",
+                (act_id, locator, ord_, text),
+            )
+        con.commit()
+    return db
+
+
+def test_spans_survive_the_extractors_own_normalisation(tmp_path):
+    """The load-bearing invariant. `referinte` and `amendamente` normalise the text they are given,
+    so an offset measured against a string that normalising would change points at the wrong words
+    — and every edge would be attributed to the wrong article, silently."""
+    from scripts.graf import text_cu_spans
+    from scripts.text import normalizeaza
+
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            ("art1", "Articolul 1  Se aplică   art. 5 din Legea nr. 98/2016."),
+            ("art2", "Articolul 2\n\n\nSe abrogă art. 9 din Legea nr. 50/1991."),
+        ],
+    )
+    with depozit.deschide(db, readonly=True) as con:
+        text, spans = text_cu_spans(con, "lege-7-2024")
+    assert normalizeaza(text) == text, "offsets would shift under the extractors' own pass"
+    for inceput, sfarsit, locator in spans:
+        assert text[inceput:sfarsit].strip(), locator
+
+
+def test_an_edge_carries_the_provision_it_was_read_from(tmp_path):
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            ("art1", "Articolul 1 Se aplică art. 5 din Legea nr. 98/2016."),
+            ("art2", "Articolul 2 Se aplică art. 9 din Legea nr. 50/1991."),
+        ],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        randuri = {
+            (r["din_locator"], r["catre_act"])
+            for r in con.execute("SELECT din_locator, catre_act FROM muchii")
+        }
+    finally:
+        con.close()
+    assert ("art1", "lege-98-2016") in randuri
+    assert ("art2", "lege-50-1991") in randuri
+
+
+def test_two_articles_citing_one_act_are_two_edges(tmp_path):
+    """The reason `din_locator` is in the primary key. Without it the second article's citation
+    replaces the first's and the graph reports one source where the act has two."""
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            ("art1", "Articolul 1 Se aplică art. 5 din Legea nr. 98/2016."),
+            ("art2", "Articolul 2 Se aplică tot art. 5 din Legea nr. 98/2016."),
+        ],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        surse = sorted(
+            r["din_locator"]
+            for r in con.execute("SELECT din_locator FROM muchii WHERE catre_act = 'lege-98-2016'")
+        )
+    finally:
+        con.close()
+    assert surse == ["art1", "art2"]
+
+
+def test_a_chapeau_still_carries_its_target_across_provisions(tmp_path):
+    """Why the text is joined rather than read provision by provision. A Romanian amending act
+    names its target once and lists the changes under it; extracting each provision alone would
+    lose the target of every amendment after the first."""
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            (
+                "art1",
+                "Articolul 1 Legea nr. 98/2016 se modifică și se completează după cum urmează:",
+            ),
+            ("art1.pct1", "1. La articolul 5, alineatul (2) se modifică."),
+            ("art1.pct2", "2. La articolul 9, alineatul (1) se modifică."),
+        ],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        tinte = {r["catre_act"] for r in con.execute("SELECT catre_act FROM muchii")}
+    finally:
+        con.close()
+    assert tinte == {"lege-98-2016"}, "the chapeau's target was lost"
+
+
+def test_an_old_graph_without_the_column_is_rebuilt_not_patched(tmp_path):
+    """`din_locator` belongs in the key, so it cannot be added by `ALTER TABLE`. The old rows have
+    no source to migrate to and are recomputable from the corpus, so they go."""
+    graf = tmp_path / "vechi.db"
+    con = sqlite3.connect(graf)
+    con.executescript(
+        "CREATE TABLE muchii (din_act TEXT NOT NULL, catre_act TEXT NOT NULL, locator TEXT,"
+        " fel TEXT NOT NULL, incredere TEXT NOT NULL, de_la TEXT,"
+        " PRIMARY KEY (din_act, catre_act, locator, fel));"
+    )
+    con.execute("INSERT INTO muchii VALUES ('a','b','art1','refera','derived',NULL)")
+    con.commit()
+    con.close()
+
+    nou = _deschide_graf(str(graf))
+    try:
+        coloane = {r[1] for r in nou.execute("PRAGMA table_info(muchii)")}
+        (n,) = nou.execute("SELECT count(*) FROM muchii").fetchone()
+    finally:
+        nou.close()
+    assert "din_locator" in coloane
+    assert n == 0
+
+
+def test_the_read_api_carries_the_source_provision(tmp_path):
+    """`inbound`/`outbound` select `*` and build a `Muchie`; a mapper that dropped the column
+    would hand every consumer `None` and the graph would look as it did before."""
+    from scripts.graf import outbound
+
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [("art1", "Articolul 1 Se aplică art. 5 din Legea nr. 98/2016.")],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        muchii = outbound(con, "lege-7-2024")
+    finally:
+        con.close()
+    assert muchii and muchii[0].din_locator == "art1"
+
+
+def test_a_reader_on_a_pre_migration_graph_still_answers(tmp_path):
+    """A read-only connection never runs the migration, so the mapper must tolerate the column's
+    absence rather than raise on a graph someone has not rebuilt yet."""
+    from scripts.graf import outbound
+
+    graf = tmp_path / "vechi.db"
+    con = sqlite3.connect(graf)
+    con.executescript(
+        "CREATE TABLE muchii (din_act TEXT NOT NULL, catre_act TEXT NOT NULL, locator TEXT,"
+        " fel TEXT NOT NULL, incredere TEXT NOT NULL, de_la TEXT);"
+    )
+    con.execute("INSERT INTO muchii VALUES ('a','b','art1','refera','derived',NULL)")
+    con.commit()
+    con.close()
+
+    ro = _deschide_graf(str(graf), readonly=True)
+    try:
+        (m,) = outbound(ro, "a")
+    finally:
+        ro.close()
+    assert m.catre_act == "b" and m.din_locator is None
