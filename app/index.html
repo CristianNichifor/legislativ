@@ -2357,6 +2357,8 @@ function dependentiHtml(d){
       +` <span class="dep-fel">${esc(x.fel)}</span></div>`;
   }).join("");
   return h+`</div>`;
+}
+
 // One member's record. Fetched when a name is clicked, keyed on (legislature, chamber, id) — the
 // three the Chamber's own link carries. Keyed on the id alone one profile held four people.
 async function aratraDeputat(el){
