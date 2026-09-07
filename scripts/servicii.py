@@ -1434,11 +1434,26 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
                     (plx_id,),
                 )
             ]
+            # What the bill itself says, not only what happened to it. `obiect` is the Fișa's own
+            # statement of what the draft sets out to do, and it is the thing a reader opens an
+            # initiative to read; `sursa_url` is the Chamber's page, so anyone can check this
+            # reading against the source.
+            cap = con.execute(
+                "SELECT titlu, obiect, stadiu, tip, data_inreg, sursa_url FROM initiative"
+                " WHERE plx_id = ?",
+                (plx_id,),
+            ).fetchone()
         except sqlite3.OperationalError:
             # The store predates these tables — nothing has been collected yet.
             return {"plx_id": plx_id, "etape": [], "avize": [], "voturi": [], "initiatori": []}
     return {
         "plx_id": plx_id,
+        "titlu": cap[0] if cap else "",
+        "obiect": cap[1] if cap else "",
+        "stadiu": cap[2] if cap else "",
+        "tip": cap[3] if cap else "",
+        "data_inreg": cap[4] if cap else "",
+        "sursa_url": cap[5] if cap else "",
         "etape": etape,
         "avize": avize,
         "voturi": voturi,
@@ -1474,7 +1489,9 @@ def _spuse(con: sqlite3.Connection, idm: str, leg: str | None, camera: str | Non
                 "SELECT i.ids, i.idm, i.ord, s.data, s.titlu, s.plx_id, i.text"
                 " FROM interventie i JOIN stenograma s ON s.ids = i.ids AND s.idm = i.idm"
                 " WHERE i.dep_idm = ? AND i.dep_leg IS ? AND i.dep_camera IS ?"
-                " ORDER BY s.data DESC, i.ord LIMIT 40",
+                # Capped where the others are not: a speech is a paragraph, not a row, and a
+                # chair's record runs to thousands. The card says when it is showing a slice.
+                " ORDER BY s.data DESC, i.ord LIMIT 300",
                 (idm, leg, camera),
             )
         ]
