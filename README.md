@@ -58,8 +58,32 @@ fără alineate — așa că pagina HTML a documentului se aduce separat, **o si
 și se păstrează în corpus. De acolo `parsare.py` citește arborele real de articole:
 
 ```bash
-uv run python -m scripts.surse --db corpus.db                 # aduce ce lipsește
+uv run python -m scripts.surse --db corpus.db                 # aduce paginile actelor lovite
+uv run python -m scripts.surse --db corpus.db --toate         # …sau ale întregului corpus
 uv run python -m scripts.surse --db corpus.db --imbogateste   # structurează ce s-a adus
+```
+
+Lista implicită e îngustă și intenționat: actele lovite de o decizie a Curții, unde un text
+aplatizat costă o constatare. `--toate` cere paginile întregului corpus și e un pas separat, ca
+nimeni să nu pornească din greșeală o traversare de 30 000 de pagini pe serverul unui minister.
+`--paralel` deschide mai multe conexiuni, `--rata` e plafonul pe care îl împart: conexiuni care
+așteaptă la același ceas înmulțesc debitul la aceeași sarcină pe server, conexiuni care dorm fiecare
+pe cont propriu înmulțesc sarcina.
+
+Parlamentul e o a doua sursă, cu propriile ei comenzi — parcursul unei inițiative de pe Fișa ei,
+apoi dezbaterea de la punctul ședinței pe care pasul îl indică:
+
+```bash
+uv run python -m scripts.parcurs --db initiative.db --paralel 12 --rata 8
+uv run python -m scripts.stenograme --db initiative.db --paralel 12 --rata 8
+```
+
+Reparațiile pe un corpus deja adunat stau separat, fiindcă o migrare care se rulează singură pe un
+orar e una pe care nimeni nu poate decide să n-o ruleze:
+
+```bash
+uv run python -m scripts.curatare --db corpus.db --emitenti   # pune la loc ș și ț în emitenți
+uv run python -m scripts.omonime --db corpus.db               # dă înapoi rândul actelor omonime
 ```
 
 `scripts.actualizare` face ambele ca parte din rularea zilnică, plafonat, ca durata jobului să nu
@@ -337,7 +361,7 @@ document, and `assumed` is defined as *not in any source document yet*.
 
 ```bash
 uv sync --all-groups
-uv run pytest -q                  # 372 tests
+uv run pytest -q                  # 752 tests
 uv run python -m scripts.etalon   # precision / recall, with the failures named
 uv run python -m scripts.linter   # the worked example
 
@@ -375,7 +399,6 @@ endpoint and a recorded fixture are the same shape.
 | `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
 | `parsare.py` | One portal page into an act: designation, issuer, publication, the article tree, and the `S_CIT` replacement blocks an amending act carries. |
 | `depozit.py` | The corpus: SQLite, full-text search, and a fetch-once cache. |
-| `api.py` | The official SOAP web service: `GetToken`, paged `Search`, full text and in-force date. |
 | `colector.py` | Walks the whole corpus through the API — polite, resumable, keep-all; `--actualizeaza` re-walks the tail to stay current. |
 | `cdep.py` | Pending initiatives from the Chamber of Deputies, with their Senate id. |
 | `dublura.py` | Does a new draft duplicate a bill already moving — shared amendment target first. |
@@ -399,10 +422,28 @@ endpoint and a recorded fixture are the same shape.
 | `delta.py` | The increment an offline copy needs: acts written since its stated position, with their provisions, relations, strikes and graph edges. A day's law is a couple of megabytes against a 742 MB release. Replaces act by act, never deletes, and applying twice changes nothing. |
 | `surse.py` | The portal's own document pages, fetched once and kept, so the article tree is read from `S_ART`/`S_ALN`/`S_LIT` instead of from flattened text. Asked-for-once, like every other pass. |
 | `servicii.py` | The engine-facing services (one per question the UI asks), with no transport attached — so localhost and the browser build call the same functions. |
-| `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, and a zoomable connections graph. |
+| `server.py` | The localhost transport: `http.server` over `servicii.py`, plus the UI. Verify a draft, redactează a new one, search, consolidate, a zoomable connections graph, who made the law, and a watchlist that opens each bill's passage — its sponsors, its votes, and the debate at the sitting item the step points at. Read-only, so it runs while the corpus fills. |
 | `construieste_web.py` | Builds the browser build — the same app under Pyodide, no server, draft never leaves the tab (`web/README.md`). |
 | `shard.py` | Turns a corpus into fetch-on-demand search shards: a compact act index, a prefix-sharded inverted index, one provisions file per act. |
 | `cauta_web.py` | The browser's search: fold-identical to the shard builder, it fetches only the shards a query's tokens need — coverage of the corpus, download of the query. |
+| `nomenclator.py` | The named acts: from what a citation calls them to what the corpus stored. |
+| `omonime.py` | What to call an act when several claim the same name. `hg-1-2016` is eighteen different acts by eighteen different bodies; keying `acte` on the citation deleted seventeen of them. The one a bare citation means keeps the bare id, the rest take the portal's own document id. |
+| `curatare.py` | One-off repairs to text already collected: the service's block markers, the byte-order mark in titles, and the `ș`/`ț` the API cannot spell — it encodes in a charset without them and emits a literal `?`, in 55% of the corpus. |
+| `distributie.py` | A corpus to hand someone, cut from the corpus of record. |
+| `impacheteaza.py` | Package the built corpus for the research team. |
+| `actualizare.py` | Bring a collected corpus up to today, in the time a daily job can afford. |
+| `lovituri.py` | What each Curtea Constituțională decision put out of force, extracted once and kept. |
+| `impact.py` | Raza de impact: the true downstream reach of an amendment, so a small change with a large blast radius is visible before it is made. |
+| `ancore.py` | Where a citation sits in a passage, so a reader can follow it without leaving the sentence. |
+| `parcurs.py` | How a bill actually moved: who proposed it, which committees were asked and what they said, and how the room voted. Read off the Chamber's Fișa; nothing inferred that the page does not say. |
+| `deputati.py` | What a member has put their name to. Identity is (legislature, chamber, id) — `idm` alone covered 1 044 people with 349 values. A signature is not authorship and a bill without a recorded vote is not a defeat. |
+| `stenograme.py` | The debate itself, at the item it was held under. Each speaker carries the same (legislature, chamber, id) their profile is keyed on, so a speech joins to the person through the Chamber's id and never through the name. |
+| `domenii.py` | The corpus grouped by the body that issued it. By issuer and not by subject: the portal publishes no classification of any kind, and inventing one would present a guess as something read. |
+| `ritm.py` | A ceiling on requests per second, shared by every worker. Concurrency and politeness are separate dials: connections sharing one clock multiply throughput, connections that each sleep multiply load. |
+| `norma.py` | Which drafting norm a passage is written in, and whether a project mixes the two. |
+| `parsare_text.py` | The plain text of an act into the block tree the Redactează editor draws. |
+| `lac.py` | Legislation as code: a provision written as a rule, checked and rendered like one. |
+| `fonturi.py` | Vendor the three typefaces into `app/fonts/`, subset to the alphabet this app actually sets. |
 
 ## The documents
 
