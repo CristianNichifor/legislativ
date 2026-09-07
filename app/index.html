@@ -803,6 +803,34 @@
   .import-panel>summary::before{content:"▸ "}
   .import-panel[open]>summary::before{content:"▾ "}
   #r-import-text{min-height:8rem;font-size:.82rem}
+  /* a file lands here, or the button opens the picker. Both paths, because dragging is faster and
+     not everybody can do it */
+  .drop{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.4rem 0 .6rem;
+    padding:.6rem .7rem;border:1px dashed var(--rule);border-radius:var(--r1);
+    background:var(--sunk);transition:border-color .12s ease,background-color .12s ease}
+  .drop.drop-activ{border-color:var(--accent);background:var(--accent-wash)}
+  .drop-btn{font-family:var(--sans);font-size:.78rem;font-weight:600;color:var(--accent);
+    border:1px solid var(--rule);border-radius:var(--r1);padding:.3rem .7rem;cursor:pointer;
+    background:var(--surface)}
+  .drop-btn:hover{border-color:var(--accent)}
+
+  /* PDF export, without a PDF library. The browser already has a layout engine; this leaves only
+     the composed act on the page and the reader chooses "Save as PDF" in the print dialog.
+     Visibility rather than display, so the element keeps its place in the flow and the typeset
+     act does not reflow into something the reader did not review on screen. */
+  @media print{
+    body[data-tipar="act"] *{visibility:hidden}
+    body[data-tipar="act"] #r-compus,
+    body[data-tipar="act"] #r-compus *{visibility:visible}
+    body[data-tipar="act"] #r-compus{position:absolute;left:0;top:0;width:100%;
+      max-height:none;overflow:visible;position:static}
+    /* the controls are not part of the act */
+    body[data-tipar="act"] #r-compus .row,
+    body[data-tipar="act"] #r-compus .row *,
+    body[data-tipar="act"] #r-norma,
+    body[data-tipar="act"] #r-norma *{visibility:hidden;display:none}
+    @page{margin:2cm}
+  }
   .cons-bar{display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;margin:.5rem 0 .2rem}
 
   .spin{display:inline-block;width:.9rem;height:.9rem;border:2px solid var(--rule);
@@ -840,6 +868,7 @@
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
     <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
+    <button class="tab" id="tab-parlamentari" role="tab" aria-selected="false" aria-controls="pane-parlamentari">Parlamentari</button>
     <button class="tab" id="tab-domenii" role="tab" aria-selected="false" aria-controls="pane-domenii">Cine face legea</button>
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
@@ -897,7 +926,12 @@
           <div class="redact-left">
             <details class="import-panel">
               <summary>Importă un act existent</summary>
-              <p class="hint" style="margin:.4rem 0">Lipește textul unui act; structura (articol · alineat · literă) e recunoscută din numerotare și încărcată în arbore. Textul curent al fiecărei prevederi rămâne ca referință; alege operația și îl editezi.</p>
+              <p class="hint" style="margin:.4rem 0">Lipește textul unui act — sau trage un fișier aici — și structura (articol · alineat · literă) e recunoscută din numerotare și încărcată în arbore. Textul curent al fiecărei prevederi rămâne ca referință; alege operația și îl editezi.</p>
+              <div id="r-drop" class="drop">
+                <label class="drop-btn" for="r-fisier">Alege un fișier</label>
+                <input type="file" id="r-fisier" accept=".docx,.md,.markdown,.txt,text/plain" hidden>
+                <span class="hint">sau trage-l aici · .docx, .md, .txt · rămâne pe calculatorul tău</span>
+              </div>
               <textarea id="r-import-text" placeholder="Articolul 7&#10;(1) Primul alineat…&#10;(2) Al doilea alineat:&#10;a) …;&#10;b) …"></textarea>
               <div class="row" style="margin-top:.5rem">
                 <button class="go" id="r-import-btn">Parsează în arbore</button>
@@ -952,6 +986,24 @@
             <span class="hint" id="ai-nota"></span>
           </span></div>
         <div id="cons-out"></div>
+      </div>
+
+      <!-- A member, reachable by name. Everything under this tab was already collected and
+           served; until now the only way to a deputy was clicking their name inside a bill. -->
+      <div id="pane-parlamentari" role="tabpanel" aria-labelledby="tab-parlamentari" hidden>
+        <label for="p-q">Caută un parlamentar după nume</label>
+        <input type="search" id="p-q" placeholder="ex.: Buzoianu, Șovăială, Simonis"
+          autocomplete="off">
+        <p class="hint" style="margin:.3rem 0 .8rem">
+          Fără diacritice contează la fel. Identitatea e (legislatură, cameră, id) — numărul singur
+          nu e o persoană: 349 de numere acoperă 1 044 de oameni.
+        </p>
+        <div id="p-rez"></div>
+        <div id="p-fisa"></div>
+        <details id="p-grupuri-panel" style="margin-top:1rem">
+          <summary style="cursor:pointer;font-family:var(--sans);font-size:.82rem;font-weight:600;color:var(--accent)">Grupurile parlamentare</summary>
+          <div id="p-grupuri"><span class="hint">se încarcă…</span></div>
+        </details>
       </div>
 
       <!-- Grouped by the body that issued each act, because that is what the pages state. The
@@ -1214,7 +1266,7 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf","domenii","supraveghere"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
@@ -1223,12 +1275,13 @@ function selectTab(which){
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   // #r-nr, not #r-act: the only #r-act in the page is #r-act-info, a hint div. Redactează's first
   // typed field is the number, the same as graf and supraveghere.
-  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",supraveghere:"#s-nr"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",supraveghere:"#s-nr"}[which];
   // Look the element up rather than assuming it exists: when this pointed at a missing id it threw
   // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
   if(focusTarget) focusTarget.focus();
   if(which==="consolidat") loadConsAsezari();
+  if(which==="parlamentari") loadGrupuri();
   if(which==="domenii") loadDomenii();
   if(which==="supraveghere") renderSupraveghere();
 }
@@ -1774,6 +1827,57 @@ async function rescrieTextNod(ta, norma, btn, revino, stat){
 }
 $("#r-add-art").onclick=()=>{ $("#r-tree").append(creeazaNod("art")); programeazaLive(); };
 $("#r-goleste").onclick=()=>{ $("#r-tree").innerHTML=""; $("#r-tree").append(creeazaNod("art")); $("#r-compus").innerHTML=""; $("#r-out").innerHTML=""; };
+// ---- a file into the editor: .docx, .md, .txt ----
+// The file is read in the page and sent as base64. Under Pyodide there is no HTTP at all and the
+// same function is called directly, so the draft never leaves the tab in the browser build.
+function b64(buf){
+  let s=""; const b=new Uint8Array(buf);
+  // Chunked: String.fromCharCode over a whole megabyte blows the argument limit.
+  for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null, b.subarray(i, i+0x8000));
+  return btoa(s);
+}
+async function importaFisier(f){
+  const stat=$("#r-import-stat");
+  if(!f) return;
+  if(f.size>15*1024*1024){ stat.textContent="fișier prea mare (peste 15 MB)"; return; }
+  stat.innerHTML=`<span class="spin"></span> citesc ${esc(f.name)}…`;
+  let d=null;
+  try{
+    const buf=await f.arrayBuffer();
+    d=await fetch("/api/importa",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({nume:f.name, continut_b64:b64(buf)})}).then(r=>r.json());
+  }catch(e){ d=null; }
+  if(!d){ stat.textContent="fișierul nu a putut fi citit"; return; }
+  if(!d.ok){ stat.textContent=d.eroare||"fișierul nu a putut fi citit"; return; }
+  $("#r-import-text").value=d.text||"";
+  importaArbore(d);
+  const n=(d.noduri||[]).length;
+  stat.textContent=`${esc(d.fel)} · ${nf(d.paragrafe)} paragrafe · ${nf(n)} articole recunoscute`;
+}
+$("#r-fisier").onchange=e=>importaFisier(e.target.files&&e.target.files[0]);
+(()=>{
+  const zona=$("#r-drop");
+  ["dragenter","dragover"].forEach(ev=>zona.addEventListener(ev, e=>{
+    e.preventDefault(); zona.classList.add("drop-activ"); }));
+  ["dragleave","drop"].forEach(ev=>zona.addEventListener(ev, e=>{
+    e.preventDefault(); zona.classList.remove("drop-activ"); }));
+  zona.addEventListener("drop", e=>importaFisier(e.dataTransfer&&e.dataTransfer.files[0]));
+})();
+async function descarcaDocx(titlu, text, buton){
+  const etichetaVeche=buton.textContent;
+  buton.textContent="se pregătește…";
+  const d=await fetch("/api/docx",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({titlu, text})}).then(r=>r.json()).catch(()=>null);
+  if(!d||!d.ok){ buton.textContent=(d&&d.eroare)||"nu s-a putut exporta"; return; }
+  const octeti=Uint8Array.from(atob(d.continut_b64), c=>c.charCodeAt(0));
+  const url=URL.createObjectURL(new Blob([octeti],
+    {type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}));
+  const a=document.createElement("a");
+  a.href=url; a.download=d.nume; a.click();
+  URL.revokeObjectURL(url);
+  buton.textContent=etichetaVeche;
+}
+
 // ---- import an existing act: parse its plain text into the block tree ----
 function nodDinImport(n){
   const wrap=creeazaNod(n.nivel);
@@ -1890,10 +1994,20 @@ async function compune(live){
       +`<div id="r-norma"></div>`;
     if(d.curat) h+=`<p class="hint" style="color:var(--good)">✓ verificat: fiecare punct s-a recitit ca operația intenționată.</p>`;
     else h+=(d.verificare||[]).map(v=>`<p class="cons-refuz">⚠ ${esc(v)}</p>`).join("");
-    h+=`<div class="row"><button class="ghost" id="r-ccopy">Copiază</button><button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
+    h+=`<div class="row"><button class="ghost" id="r-ccopy">Copiază</button>`
+      +`<button class="ghost" id="r-cdocx">Descarcă .docx</button>`
+      +`<button class="ghost" id="r-cpdf" title="Deschide dialogul de tipărire; alege „Salvează ca PDF”">Descarcă PDF</button>`
+      +`<button class="ghost" id="r-cinsert">Trimite la „Verifică”</button></div>`;
     $("#r-compus").innerHTML=h;
     verificaNorma(interventii, seq);
     $("#r-ccopy").onclick=()=>{ navigator.clipboard?.writeText(d.titlu+"\n\n"+d.text); $("#r-ccopy").textContent="Copiat"; };
+    $("#r-cdocx").onclick=()=>descarcaDocx(d.titlu, d.text, $("#r-cdocx"));
+    // PDF needs no endpoint and no dependency: the browser already has a layout engine, and the
+    // print stylesheet leaves only the act on the page.
+    $("#r-cpdf").onclick=()=>{ document.body.dataset.tipar="act"; window.print(); };
+    // Cleared after the dialog closes, whatever the reader chose, so the next ordinary print of
+    // the page is an ordinary print of the page.
+    window.addEventListener("afterprint", ()=>{ delete document.body.dataset.tipar; }, {once:true});
     $("#r-cinsert").onclick=()=>{ $("#draft").value=d.titlu+"\n\n"+d.text; selectTab("lint"); };
   }catch(e){ if(seq===liveSeq && !live) $("#r-compus").innerHTML=empty("Eroare: "+esc(e.message||e)); }
   finally{ if(!live){ btn.disabled=false; btn.textContent="Compune actul"; } }
@@ -2361,8 +2475,10 @@ function dependentiHtml(d){
 
 // One member's record. Fetched when a name is clicked, keyed on (legislature, chamber, id) — the
 // three the Chamber's own link carries. Keyed on the id alone one profile held four people.
-async function aratraDeputat(el){
-  const gazda=el.closest(".parc");
+async function aratraDeputat(el, gazdaExplicita){
+  // The host is a parameter now: the profile was only ever rendered inside a bill's passage
+  // panel, which is why a member could not be looked up by name at all.
+  const gazda=gazdaExplicita||el.closest(".parc");
   if(!gazda) return;
   let box=gazda.querySelector(".dep-fisa");
   if(box && box.dataset.cheie===el.dataset.idm+"|"+el.dataset.leg+"|"+el.dataset.camera){ box.remove(); return; }
@@ -2376,6 +2492,58 @@ async function aratraDeputat(el){
     +`&leg=${encodeURIComponent(el.dataset.leg||"")}&camera=${encodeURIComponent(el.dataset.camera||"")}`;
   const d=await fetch(u).then(r=>r.json()).catch(()=>null);
   box.innerHTML=d?deputatHtml(el.textContent, el.dataset.leg, el.dataset.camera, d):"Nu am putut citi fișa.";
+}
+
+// ---- Parlamentari: a member, reachable by name ----
+let P_TIMP=null;
+$("#p-q").addEventListener("input", ()=>{
+  clearTimeout(P_TIMP);
+  P_TIMP=setTimeout(cautaParlamentar, 220);   // typed, not per keystroke
+});
+async function cautaParlamentar(){
+  const q=$("#p-q").value.trim(), box=$("#p-rez");
+  $("#p-fisa").innerHTML="";
+  if(q.length<2){ box.innerHTML=""; return; }
+  box.innerHTML=`<span class="hint"><span class="spin"></span> caut…</span>`;
+  const d=await fetch("/api/deputati?q="+encodeURIComponent(q)).then(r=>r.json()).catch(()=>null);
+  const lista=(d&&d.semnatari)||[];
+  if(!lista.length){ box.innerHTML=`<span class="hint">Niciun parlamentar cu acest nume în ce s-a colectat.</span>`; return; }
+  // The key is (legislature, chamber, id) and it is shown, because two rows can carry the same
+  // name and the same number and be two people.
+  box.innerHTML=lista.map(x=>
+    `<div class="dom-rand" role="button" tabindex="0" data-idm="${esc(x.idm)}"`
+    +` data-leg="${esc(x.leg||"")}" data-camera="${esc(x.camera||"")}" data-nume="${esc(x.nume)}">`
+    +`<span><span class="dom-nume">${esc(x.nume)}</span>`
+    +`<span class="dom-ani">${esc(x.camera||"")}${x.leg?" · legislatura "+esc(x.leg):""}</span>`
+    +(x.grupuri&&x.grupuri.length?`<br><span class="dom-tipuri">${esc(x.grupuri.join(" · "))}</span>`:``)
+    +`</span><span class="dom-n">${nf(x.initiative)} inițiative</span></div>`).join("");
+  box.querySelectorAll(".dom-rand").forEach(r=>{
+    const deschide=()=>{
+      const fals={dataset:r.dataset, textContent:r.dataset.nume, closest:()=>null};
+      $("#p-fisa").innerHTML="";
+      aratraDeputat(fals, $("#p-fisa"));
+    };
+    r.onclick=deschide;
+    r.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); deschide(); } };
+  });
+}
+let GRUPURI=null;
+async function loadGrupuri(){
+  if(GRUPURI) return;
+  const d=await fetch("/api/deputati").then(r=>r.json()).catch(()=>null);
+  GRUPURI=(d&&d.grupuri)||[];
+  const box=$("#p-grupuri");
+  if(!GRUPURI.length){ box.innerHTML=`<span class="hint">Nu s-au colectat încă semnături.</span>`; return; }
+  // `semnaturi` and `initiative` are different numbers and both are shown: twenty members of one
+  // group signing one bill is twenty signatures and one initiative.
+  box.innerHTML=GRUPURI.map(g=>
+    `<div class="dom-rand" style="cursor:default"><span><span class="dom-nume">${esc(g.grup)}</span>`
+    +`<br><span class="dom-tipuri">${nf(g.membri)} membri · ${nf(g.semnaturi)} semnături · `
+    +`${nf(g.initiative)} inițiative</span></span>`
+    +`<span class="dom-n"><span class="dep-ok">${nf(g.adoptate)}</span> / `
+    +`<span class="dep-nu">${nf(g.respinse)}</span> / `
+    +`<span class="dep-pend">${nf(g.nedecise)}</span></span></div>`).join("")
+    +`<p class="hint" style="margin-top:.5rem">adoptate / respinse / fără vot înregistrat — un proiect fără vot nu e un proiect pierdut</p>`;
 }
 function deputatHtml(nume, leg, camera, d){
   const s=d.soarta||{adoptate:0,respinse:0,nedecise:0};

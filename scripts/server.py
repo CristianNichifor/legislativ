@@ -26,6 +26,11 @@ writes, so it coexists with the collectors and answers from more law each time t
   that was debated carries the transcript's locator, `{ids, idm}` — the sitting and the item.
 - `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
   (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
+- `POST /api/importa` — an uploaded `.docx`, `.md` or `.txt` into the editor's block tree. Base64
+  in JSON, so the browser build calls the same function with no transport at all. PDF is refused
+  with a way forward: reading one needs a text-extraction dependency this package does not take.
+- `POST /api/docx` — the draft as a `.docx`, base64 for the same reason. PDF export needs no
+  endpoint: the page carries a print stylesheet and the browser's own "Save as PDF".
 - `GET /api/rol?idv=` — who voted which way in one division, grouped by parliamentary group. The
   tally on a Fișa is the room's answer and nobody's; this is the one a voter can act on.
 - `GET /api/dezbateri?q=` — full-text over what was said in the Chamber, not over bill titles.
@@ -61,8 +66,10 @@ from scripts.servicii import (
     _deputati,
     _dezbateri,
     _dictionar,
+    _docx,
     _domenii,
     _impact,
+    _importa,
     _lint,
     _norma,
     _opinie,
@@ -195,6 +202,8 @@ def face_handler(stare: Stare):
                 "/api/termeni",
                 "/api/regula",
                 "/api/impact",
+                "/api/importa",
+                "/api/docx",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -218,6 +227,14 @@ def face_handler(stare: Stare):
                 return
             if ruta == "/api/regula":
                 self._json(_regula(str(cerere.get("text", "")).strip()))
+                return
+            if ruta == "/api/importa":
+                self._json(
+                    _importa(str(cerere.get("nume", "")), str(cerere.get("continut_b64", "")))
+                )
+                return
+            if ruta == "/api/docx":
+                self._json(_docx(str(cerere.get("titlu", "")), str(cerere.get("text", ""))))
                 return
             draft = str(cerere.get("draft", "")).strip()
             if not draft:
