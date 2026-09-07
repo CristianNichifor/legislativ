@@ -147,16 +147,78 @@ def titluri(cale_db: str = "corpus.db", *, lot: int = 20000, log=print) -> Curat
     return Curatare(examinate, schimbate, time.monotonic() - t0, "titluri")
 
 
+def restaureaza_text(cale_db: str = "corpus.db", *, prag: float = 0.98, lot: int = 500, log=print):
+    """Put back the text an over-eager enrichment threw away.
+
+    `surse.imbogateste` replaced an act's flattened row with whatever its HTML page parsed to, and
+    guarded that with `len(provizii) <= 1` — a count, not a measurement. A page yielding three
+    empty preamble paragraphs passes a count check, so the Codul vamal went from 79 865 characters
+    to 95: `privind Codul vamal al României` and two more header fragments. Measured after the
+    first full run, 54% of enriched acts held less text than the archive.
+
+    Recovery is possible only because `documente.text` is never rewritten. That is the whole point
+    of keeping the archive separate from the derived copy, and this is the first time it has had to
+    pay for itself.
+
+    An act whose provisions total less than `prag` of its archived text is put back the way
+    collection wrote it: one row, `locator = 'text'`, the archive with the service's block markers
+    removed. That is not a repair to the article tree — the tree is simply gone for those acts and
+    a corrected `imbogateste` run has to rebuild it — but it restores every act to searchable,
+    quotable text, which is strictly better than the fragments it holds now.
+    """
+    from scripts.parsare import Provizie
+
+    t0 = time.monotonic()
+    examinate = schimbate = 0
+    with depozit.deschide(cale_db) as con:
+        # One scan, then repair by id. The comparison is a correlated aggregate per act, so it is
+        # done once for the whole corpus rather than per candidate inside the repair loop.
+        stricate = [
+            r[0]
+            for r in con.execute(
+                "SELECT a.id FROM acte a JOIN documente d ON d.id_portal = a.id_portal"
+                " WHERE d.text IS NOT NULL AND length(d.text) > 0"
+                " AND (SELECT sum(length(p.text)) FROM provizii p WHERE p.act_id = a.id)"
+                "     < length(d.text) * ?",
+                (prag,),
+            )
+        ]
+        log(f"{len(stricate)} acte cu mai puțin text decât arhiva")
+        for start in range(0, len(stricate), lot):
+            for act_id in stricate[start : start + lot]:
+                examinate += 1
+                rand = con.execute(
+                    "SELECT d.text FROM documente d JOIN acte a ON a.id_portal = d.id_portal"
+                    " WHERE a.id = ?",
+                    (act_id,),
+                ).fetchone()
+                if not rand or not rand[0]:
+                    continue
+                depozit.scrie_provizii(con, act_id, [Provizie("text", fara_separatoare(rand[0]))])
+                schimbate += 1
+            con.commit()
+            log(f"  {examinate}/{len(stricate)} · {schimbate} restaurate")
+    return Curatare(examinate, schimbate, time.monotonic() - t0, "acte")
+
+
 def _main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--db", default="corpus.db")
+    ap.add_argument(
+        "--restaureaza-text",
+        action="store_true",
+        help="pune la loc textul actelor pe care îmbogățirea l-a pierdut (din arhiva documente)",
+    )
     ap.add_argument(
         "--titluri",
         action="store_true",
         help="curăță titlurile (BOM, entități HTML) în loc de separatoarele din provizii",
     )
     a = ap.parse_args()
-    print(f"\ngata: {titluri(a.db) if a.titluri else separatoare(a.db)}")
+    if a.restaureaza_text:
+        print(f"\ngata: {restaureaza_text(a.db)}")
+    else:
+        print(f"\ngata: {titluri(a.db) if a.titluri else separatoare(a.db)}")
     return 0
 
 

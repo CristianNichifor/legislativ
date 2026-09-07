@@ -46,6 +46,12 @@ from scripts.api import USER_AGENT
 # slow one without letting a stalled connection hold the run.
 TERMEN: float = 60.0
 
+# How much of the archived text a parse must recover before it is allowed to replace the act's
+# provisions. Below 1.0 only to absorb whitespace normalisation: a correct article tree exceeds the
+# flat text, because provisions are stored at every level and an article's words are counted again
+# in its alineate.
+PRAG_TEXT: float = 0.98
+
 
 @dataclass(frozen=True)
 class Descarcare:
@@ -211,8 +217,22 @@ def imbogateste(
     itself must not be allowed to rename it. Only the provisions are written
     (`depozit.scrie_provizii`), so the act's reconciled publication date survives.
 
-    An act whose page parses to nothing keeps the flattened row it already had. A worse corpus is
-    not an upgrade.
+    **An act whose page parses to less text than the archive holds keeps the flattened row.** That
+    sentence used to be enforced by `len(parsat.provizii) <= 1` — a count, not a measurement — and
+    the difference cost 54% of the acts this was run over. A page whose HTML yields three empty
+    preamble paragraphs has three provisions, passes a count check, and replaces the act. Measured
+    after the first full run: the Codul vamal went from 79 865 characters to 95, of which all that
+    survived was `privind Codul vamal al României` and two more header fragments.
+
+    So the test is on content, against `documente.text` — the archive the service returned, which
+    is never rewritten and is therefore the only thing that still knows how much text the act has.
+    Comparing against the *current* provisions would compare against the damage: a second run over
+    an already-emptied act would find the parse no worse than what is there and accept it again.
+
+    A real article tree comfortably exceeds the flat text, because provisions are stored at every
+    level and an article's words are counted again in its alineate. Measured over acts that were
+    correctly enriched, the ninetieth percentile is 1.53× the archive. The tolerance below 1.0 is
+    only for whitespace normalisation, not for lost paragraphs.
 
     **`reia` skips acts that already hold a tree**, which is what makes this restartable. The store
     now holds 118 354 pages, so this is a job measured in hours, and without a skip a run that is
@@ -225,7 +245,7 @@ def imbogateste(
     """
     from scripts.parsare import parseaza
 
-    imbunatatite = provizii = sarite = 0
+    imbunatatite = provizii = sarite = pierdute = 0
     with depozit.deschide(cale_db) as con:
         randuri = con.execute(
             "SELECT s.id_portal, s.url, a.id FROM surse s JOIN acte a ON a.id_portal = s.id_portal"
@@ -257,13 +277,29 @@ def imbogateste(
                 # another flattened row costs an FTS rewrite and buys nothing.
                 sarite += 1
                 continue
+            rand = con.execute(
+                "SELECT length(text) FROM documente WHERE id_portal = ?", (id_portal,)
+            ).fetchone()
+            arhiva = rand[0] if rand and rand[0] else 0
+            recuperat = sum(len(p.text or "") for p in parsat.provizii)
+            if arhiva and recuperat < arhiva * PRAG_TEXT:
+                pierdute += 1
+                continue
             provizii += depozit.scrie_provizii(con, act_id, parsat.provizii)
             imbunatatite += 1
             if i % 20 == 0 or i == len(randuri):
                 con.commit()
-                log(f"  {i}/{len(randuri)} · {imbunatatite} acte · {provizii} provizii")
+                log(
+                    f"  {i}/{len(randuri)} · {imbunatatite} acte · {provizii} provizii"
+                    f" · {pierdute} refuzate (ar fi pierdut text)"
+                )
         con.commit()
-    return {"imbunatatite": imbunatatite, "provizii": provizii, "sarite": sarite}
+    return {
+        "imbunatatite": imbunatatite,
+        "provizii": provizii,
+        "sarite": sarite,
+        "pierdute": pierdute,
+    }
 
 
 def rezumat(cale_db: str = "corpus.db") -> dict:

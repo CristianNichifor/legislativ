@@ -237,3 +237,62 @@ def test_the_summary_reports_what_is_held(db, adu):
     r = surse.rezumat(str(db))
     assert r == {"cerute": 1, "pastrate": 1, "octeti": r["octeti"]}
     assert 0 < r["octeti"] < len(PAGINA.encode("utf-8")), "not actually compressed"
+
+
+# --- îmbogățirea nu are voie să piardă text ------------------------------------------------------
+
+PAGINA_SARACA = """<html><body>
+<div class="S_DEN">LEGE nr. 59/1993</div>
+<div class="S_ART"><span class="S_ART_TTL">Articolul 1</span>
+  <div class="S_ART_BDY">privind ceva</div></div>
+<div class="S_ART"><span class="S_ART_TTL">Articolul 2</span>
+  <div class="S_ART_BDY">(actualizată)</div></div>
+</body></html>"""
+
+
+def _corpus_cu_arhiva_lunga(tmp_path: Path) -> Path:
+    """An act whose archived text is substantial — the case the count check could not see."""
+    cale = tmp_path / "corpus.db"
+    rec = Inregistrare(
+        titlu="LEGE nr. 59/1993",
+        tip_act="LEGE",
+        numar="59",
+        an=1993,
+        data_vigoare=date(1993, 7, 1),
+        emitent="PARLAMENTUL",
+        publicatie="MO",
+        link_html="http://legislatie.just.ro/Public/DetaliiDocument/591993",
+        text="Articolul 1 " + "Dispoziții care se aplică tuturor situațiilor. " * 80,
+    )
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    return cale
+
+
+def test_a_parse_that_would_lose_text_is_refused(tmp_path, monkeypatch):
+    """The bug this guard exists for. `len(provizii) <= 1` is a count, so a page yielding two
+    header fragments passed it and replaced the act: measured over the corpus, the Codul vamal
+    went from 79 865 characters to 95, and 54% of enriched acts held less than the archive."""
+    db = _corpus_cu_arhiva_lunga(tmp_path)
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(db), candidati=["591993"], pauza=0, log=lambda *_: None)
+
+    r = surse.imbogateste(str(db), log=lambda *_: None)
+    assert r["imbunatatite"] == 0
+    assert r["pierdute"] == 1
+
+    cx = sqlite3.connect(str(db))
+    try:
+        randuri = cx.execute("SELECT locator, length(text) FROM provizii").fetchall()
+    finally:
+        cx.close()
+    assert [x[0] for x in randuri] == ["text"], "actul a fost înlocuit cu fragmente"
+    assert randuri[0][1] > 3000
+
+
+def test_a_parse_that_keeps_the_text_is_still_accepted(db, adu):
+    """The guard must not refuse a real article tree. A correct parse exceeds the flat text,
+    because provisions are stored at every level and an article's words count again below it."""
+    surse.descarca(str(db), pauza=0, log=lambda *_: None)
+    r = surse.imbogateste(str(db), log=lambda *_: None)
+    assert r["imbunatatite"] == 1 and r["pierdute"] == 0
