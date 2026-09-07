@@ -27,6 +27,9 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
   (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
 - `GET /api/dezbateri?q=` — full-text over what was said in the Chamber, not over bill titles.
+- `GET /api/domenii[?emitent=&tip=]` — the corpus grouped by the body that issued it, or one
+  body's acts. By issuer and not by subject: the portal publishes no classification of any kind,
+  and inventing one would present a guess as something read.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -56,6 +59,7 @@ from scripts.servicii import (
     _deputati,
     _dezbateri,
     _dictionar,
+    _domenii,
     _impact,
     _lint,
     _norma,
@@ -163,6 +167,8 @@ def face_handler(stare: Stare):
                 self._json(_stenograma(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dezbateri":
                 self._json(_dezbateri(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/domenii":
+                self._json(_domenii(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dictionar":

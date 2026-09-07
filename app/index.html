@@ -276,6 +276,17 @@
      transcript says who they were */
   .steno-rol{font-size:.68rem;color:var(--ink-mute);font-style:italic}
   .steno-text{display:block;font-size:.76rem;margin-top:.1rem}
+  /* Cine face legea: the issuing bodies, and one body's acts under them */
+  .dom-rand{display:grid;grid-template-columns:1fr auto;gap:.5rem;align-items:baseline;
+    padding:.35rem .5rem;border-bottom:1px solid var(--rule-soft);cursor:pointer}
+  .dom-rand:hover{background:var(--accent-wash)}
+  .dom-rand[aria-expanded="true"]{background:var(--sunk)}
+  .dom-nume{font-weight:600}
+  .dom-ani{font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);margin-left:.4rem}
+  .dom-tipuri{font-size:.7rem;color:var(--ink-mute)}
+  .dom-n{font-family:var(--mono);font-size:.78rem;white-space:nowrap}
+  .dom-act{font-size:.78rem;margin:.15rem 0;line-height:1.45}
+  .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
   @media (max-width:34rem){ .parc-etapa{grid-template-columns:1fr} .steno{margin-left:.4rem} }
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
@@ -820,6 +831,7 @@
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
     <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
+    <button class="tab" id="tab-domenii" role="tab" aria-selected="false" aria-controls="pane-domenii">Cine face legea</button>
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
@@ -931,6 +943,20 @@
             <span class="hint" id="ai-nota"></span>
           </span></div>
         <div id="cons-out"></div>
+      </div>
+
+      <!-- Grouped by the body that issued each act, because that is what the pages state. The
+           portal publishes no subject classification, so there is none to show. -->
+      <div id="pane-domenii" role="tabpanel" aria-labelledby="tab-domenii" hidden>
+        <p class="hint" style="margin:.2rem 0 .8rem">
+          Legislația după cine a emis-o. Portalul nu publică nicio clasificare pe domenii, așa că
+          nu este inventată una: emitentul e scris pe fiecare document și e felul în care statul
+          însuși își ține actele. Un minister nu e un domeniu — Guvernul emite peste tot — și
+          ministerele redenumite apar separat, pentru că nimic din date nu spune că sunt același
+          organism.
+        </p>
+        <div id="dom-lista"><span class="spin"></span> încarc…</div>
+        <div id="dom-acte"></div>
       </div>
 
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
@@ -1179,7 +1205,7 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf","supraveghere"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf","domenii","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
@@ -1194,6 +1220,7 @@ function selectTab(which){
   const focusTarget = focusEl && $(focusEl);
   if(focusTarget) focusTarget.focus();
   if(which==="consolidat") loadConsAsezari();
+  if(which==="domenii") loadDomenii();
   if(which==="supraveghere") renderSupraveghere();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
@@ -2871,6 +2898,48 @@ function stenogramaHtml(d){
   }).join("");
   return h+`</div>`;
 }
+// ---- Cine face legea ----
+// Loaded when the tab is first opened and kept: 488 bodies is one small query, and re-reading it
+// on every switch would ask the corpus for the same answer.
+let DOMENII=null;
+async function loadDomenii(){
+  if(DOMENII) return;
+  const d=await fetch("/api/domenii").then(r=>r.json()).catch(()=>null);
+  DOMENII=d&&d.emitenti?d.emitenti:[];
+  const gazda=$("#dom-lista");
+  if(!DOMENII.length){ gazda.innerHTML=`<span class="hint">Corpusul nu are încă acte colectate.</span>`; return; }
+  gazda.innerHTML=DOMENII.map((e,i)=>
+    `<div class="dom-rand" role="button" tabindex="0" aria-expanded="false" data-i="${i}">`
+    +`<span><span class="dom-nume">${esc(e.nume)}</span>`
+    +(e.de_la?`<span class="dom-ani">${esc(e.de_la)}–${esc(e.pana_la||e.de_la)}</span>`:``)
+    +`<br><span class="dom-tipuri">`
+    +e.tipuri.map(t=>`${esc(t.tip)} ${nf(t.acte)}`).join(" · ")+`</span></span>`
+    +`<span class="dom-n">${nf(e.acte)}</span></div>`).join("");
+  gazda.querySelectorAll(".dom-rand").forEach(r=>{
+    r.onclick=()=>aratraEmitent(r);
+    r.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); aratraEmitent(r); } };
+  });
+}
+async function aratraEmitent(rand){
+  const e=DOMENII[+rand.dataset.i];
+  const box=$("#dom-acte");
+  const deschis=rand.getAttribute("aria-expanded")==="true";
+  $("#dom-lista").querySelectorAll(".dom-rand").forEach(r=>r.setAttribute("aria-expanded","false"));
+  if(deschis){ box.innerHTML=""; return; }
+  rand.setAttribute("aria-expanded","true");
+  box.innerHTML=`<div class="parc"><span class="spin"></span> încarc…</div>`;
+  const d=await fetch("/api/domenii?emitent="+encodeURIComponent(e.nume)).then(r=>r.json()).catch(()=>null);
+  const acte=(d&&d.acte)||[];
+  box.innerHTML=`<div class="parc"><div class="parc-h">${esc(e.nume)} — ${nf(e.acte)} acte`
+    +(acte.length<e.acte?` <span class="hint">(cele mai recente ${acte.length})</span>`:``)+`</div>`
+    // The citation key travels with every row: an act that took a qualified id because a namesake
+    // holds the bare key is still cited by the bare one, and that is what a reader would type.
+    +acte.map(a=>`<div class="dom-act"><span class="dom-cheie">${esc(a.cheie_citare||a.act_id)}</span> `
+      +`<span class="parc-data">${esc(String(a.an||""))}</span> `
+      +`${esc((a.titlu||"").slice(0,120))}</div>`).join("")
+    +(acte.length?``:`<span class="hint">Niciun act colectat pentru acest emitent.</span>`)+`</div>`;
+}
+
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));
 </script>
