@@ -294,9 +294,13 @@ def rolul(con: sqlite3.Connection, idv: str) -> dict:
         " ORDER BY grup, nume",
         (idv,),
     ).fetchall()
+    from scripts.deputati import grup_afisat
+
     pe_grup: dict[str, list] = {}
     for grup, optiune, nume, idm, leg, camera in randuri:
-        pe_grup.setdefault(grup or "—", []).append(
+        # The same two names the source spells without capitals or diacritics — fixed here too, so
+        # a roll and a profile do not disagree about what a group is called.
+        pe_grup.setdefault(grup_afisat(grup) or "—", []).append(
             {"nume": nume, "optiune": optiune, "idm": idm, "leg": leg, "camera": camera}
         )
     return {

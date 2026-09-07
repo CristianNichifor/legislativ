@@ -1281,6 +1281,7 @@ def _deputati(qs: dict, stare: Stare) -> dict:
     idm = (qs.get("idm", [""])[0] or "").strip()
     leg = (qs.get("leg", [""])[0] or "").strip() or None
     camera = (qs.get("camera", [""])[0] or "").strip() or None
+    doar_grupuri = (qs.get("grupuri", [""])[0] or "").strip()
 
     from scripts import deputati as dep
 
@@ -1302,8 +1303,29 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                     "voturi": _cum_a_votat(con, idm, leg, camera),
                 }
             if q:
+                # One entry per person, each carrying every term they served. The search used to
+                # return one row per term, so the same member appeared twice and neither row said
+                # so.
                 return {
                     "cautare": q,
+                    "persoane": [
+                        {
+                            "nume": p.nume,
+                            "legislaturi": list(p.legislaturi),
+                            "initiative": p.initiative,
+                            "mandate": [
+                                {
+                                    "idm": m.idm,
+                                    "leg": m.leg,
+                                    "camera": m.camera,
+                                    "grupuri": [dep.grup_afisat(g) for g in m.grupuri],
+                                    "initiative": m.initiative,
+                                }
+                                for m in p.mandate
+                            ],
+                        }
+                        for p in dep.persoane(con, q)
+                    ],
                     "semnatari": [
                         {
                             "idm": x.idm,
@@ -1316,10 +1338,22 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                         for x in dep.cauta(con, q)
                     ],
                 }
-            return {"grupuri": dep.grupuri(con)}
+            # `leg` narrows a group's record to one parliament. A sum across parliaments it was
+            # differently composed in reads as one continuous record and is not.
+            return {
+                "legislaturi": dep.legislaturi(con),
+                "leg": leg if doar_grupuri or leg else None,
+                "grupuri": dep.grupuri(con, leg),
+            }
         except sqlite3.OperationalError:
             # The store predates the signature tables — nothing has been collected yet.
-            return {"grupuri": [], "semnatari": [], "initiative": []}
+            return {
+                "grupuri": [],
+                "persoane": [],
+                "semnatari": [],
+                "initiative": [],
+                "legislaturi": [],
+            }
 
 
 def _parcurs(qs: dict, stare: Stare) -> dict:
@@ -1387,7 +1421,13 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
                 )
             ]
             initiatori = [
-                {"nume": r[0], "grup": r[1], "camera": r[2], "idm": r[3], "leg": r[4]}
+                {
+                    "nume": r[0],
+                    "grup": _grup_afisat(r[1]),
+                    "camera": r[2],
+                    "idm": r[3],
+                    "leg": r[4],
+                }
                 for r in con.execute(
                     "SELECT nume, grup, camera, idm, leg FROM initiativa_initiator"
                     " WHERE plx_id = ? ORDER BY grup, nume",
@@ -1404,6 +1444,12 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
         "voturi": voturi,
         "initiatori": initiatori,
     }
+
+
+def _grup_afisat(grup):
+    from scripts.deputati import grup_afisat
+
+    return grup_afisat(grup)
 
 
 def _spuse(con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None) -> list[dict]:
