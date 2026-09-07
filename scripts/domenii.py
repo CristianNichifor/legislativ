@@ -79,6 +79,11 @@ def acte_ale(
     """
     conditie = " AND tip = ?" if tip else ""
     argumente = [emitent] + ([tip] if tip else []) + [limita]
+    # A store collected before namesakes had their own ids has no `cheie_citare`, and a read-only
+    # connection does not run migrations — that is the ordinary state of a corpus being read while
+    # a collector fills it. The id is the right stand-in: under the old rule it *was* the citation.
+    are_cheie = any(r[1] == "cheie_citare" for r in con.execute("PRAGMA table_info(acte)"))
+    coloana = "cheie_citare" if are_cheie else "id"
     return [
         {
             "act_id": r[0],
@@ -90,7 +95,7 @@ def acte_ale(
             "publicat": r[6],
         }
         for r in con.execute(
-            "SELECT id, cheie_citare, tip, numar, an, titlu, publicat FROM acte"
+            f"SELECT id, {coloana}, tip, numar, an, titlu, publicat FROM acte"
             f" WHERE emitent = ?{conditie}"
             " ORDER BY an DESC, publicat DESC, numar DESC LIMIT ?",
             argumente,
