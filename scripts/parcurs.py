@@ -32,12 +32,12 @@ reuse `cdep._celule`, whose flat `<td>…</td>` scan cannot see past the inner t
 from __future__ import annotations
 
 import re
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Final
 
+from scripts.ritm import Ritm
 from scripts.text import normalizeaza
 
 # `CD` / `SE` / `PA`: Chamber of Deputies, Senate, and the two in joint session. Written as a marker
@@ -433,33 +433,6 @@ def fisa_parcurs(idp: str, cam: int = 2, *, opener=None) -> Parcurs:
     html = _fetch(url, opener=opener or urllib.request.urlopen)
     ini = parseaza_fisa(html, idp, cam, url=url)
     return parseaza_parcurs(html, ini.plx_id, idp)
-
-
-class Ritm:
-    """A ceiling on requests per second, shared by every worker.
-
-    Concurrency and politeness are separate dials and this is the second one. Three connections
-    that each wait their turn against one clock is three times the throughput at the same load on
-    the server; three connections that each sleep between their own requests is three times the
-    load. Measured against cdep.ro, a Fișa takes 1.3 to 10.9 seconds to come back and 0.006 to
-    parse, so the whole job is waiting — which is exactly the shape concurrency helps and better
-    code does not.
-    """
-
-    def __init__(self, pe_secunda: float) -> None:
-        self._interval = 1.0 / pe_secunda if pe_secunda > 0 else 0.0
-        self._lacat = threading.Lock()
-        self._urmatorul = 0.0
-
-    def asteapta(self) -> None:
-        if not self._interval:
-            return
-        with self._lacat:
-            acum = time.monotonic()
-            if self._urmatorul > acum:
-                time.sleep(self._urmatorul - acum)
-                acum = time.monotonic()
-            self._urmatorul = acum + self._interval
 
 
 def colecteaza_parcurs(

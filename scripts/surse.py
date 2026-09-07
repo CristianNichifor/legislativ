@@ -37,11 +37,13 @@ import sqlite3
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from scripts import depozit
 from scripts.api import USER_AGENT
+from scripts.ritm import Ritm
 
 # The service answers a cold request for a megabyte of markup in about 2.5 s; 60 leaves room for a
 # slow one without letting a stalled connection hold the run.
@@ -94,6 +96,33 @@ def de_lovituri(con: sqlite3.Connection) -> list[str]:
             " ORDER BY a.id"
         )
     ]
+
+
+def de_tot(con: sqlite3.Connection) -> list[str]:
+    """Every act whose page has never been asked for, struck ones first and then newest.
+
+    `de_lovituri` is the work list that pays for itself first and it is deliberately narrow: the
+    acts a Curtea Constituțională decision struck, where a flattened text costs a finding. It is
+    also the *default*, which meant a plain `descarca` never reached the rest of the corpus — and
+    the rest of the corpus turned out to be the whole reason half the acts have no article tree.
+    33 710 acts have no row in `surse` at all: not fetched and failed, never asked for. Every one
+    of them is stored as a single flat provision, which is a 100% correlation and the diagnosis.
+
+    Ordered struck-first to keep the existing priority, then by year descending, because a run cut
+    short should have done the law people are reading rather than an alphabetical prefix.
+    """
+    lovite = de_lovituri(con)
+    vazut = set(lovite)
+    restul = [
+        r[0]
+        for r in con.execute(
+            "SELECT id_portal FROM acte"
+            " WHERE id_portal IS NOT NULL AND id_portal != ''"
+            " ORDER BY an DESC, id"
+        )
+        if r[0] not in vazut
+    ]
+    return lovite + restul
 
 
 def de_facut(con: sqlite3.Connection, candidati: list[str]) -> list[tuple[str, str]]:
@@ -160,9 +189,25 @@ def descarca(
     candidati: list[str] | None = None,
     limita: int | None = None,
     pauza: float = 0.5,
+    paralel: int = 1,
+    rata: float = 2.0,
     log=print,
 ) -> Descarcare:
-    """Fetch the document pages not yet asked for, and keep them."""
+    """Fetch the document pages not yet asked for, and keep them.
+
+    Serial by default, and that stays the default deliberately: this reads a ministry's website,
+    and nothing should start several connections to it without someone having decided to.
+
+    `paralel` opens more connections; `rata` is the ceiling they share. The two are separate dials
+    and conflating them is the mistake worth naming. Twelve connections that each wait their turn
+    against one clock is twelve times the throughput at the same load on the server; twelve that
+    each sleep between their own requests is twelve times the load. Measured on this corpus, a page
+    takes about a second to come back and 6 ms to compress, so the job is almost entirely waiting —
+    the shape concurrency helps and faster code does not.
+
+    Writes stay on this thread. SQLite takes one writer, and two collectors against one file has
+    already killed a run today with `database is locked`.
+    """
     t0 = time.monotonic()
     cerute = reusite = esuate = octeti = 0
 
@@ -172,34 +217,61 @@ def descarca(
             lista = lista[:limita]
         log(f"{len(lista)} documente de adus (restul sunt deja cerute o dată)")
 
-        for i, (id_portal, url) in enumerate(lista, start=1):
-            brut, stare = _adu(url)
-            cerute += 1
-            comprimat = gzip.compress(brut, 6) if brut else None
-            if brut:
-                reusite += 1
-                octeti += len(comprimat)
-            else:
-                esuate += 1
-            con.execute(
-                "INSERT OR REPLACE INTO surse (id_portal, url, html, octeti, stare, incercat_la)"
-                " VALUES (?,?,?,?,?,?)",
-                (
-                    id_portal,
-                    url,
-                    comprimat,
-                    len(brut) if brut else None,
-                    stare,
-                    datetime.now(UTC).isoformat(timespec="seconds"),
-                ),
-            )
-            if i % 10 == 0 or i == len(lista):
-                con.commit()
-                log(f"  {i}/{len(lista)} · {reusite} aduse · {esuate} eșuate")
-            if i < len(lista):
-                time.sleep(pauza)
+        ritm = Ritm(rata) if paralel > 1 else None
+
+        def adu_una(pereche):
+            id_portal, url = pereche
+            if ritm:
+                ritm.asteapta()
+            return pereche, _adu(url)
+
+        if paralel > 1:
+            with ThreadPoolExecutor(max_workers=paralel) as pool:
+                rezultate = pool.map(adu_una, lista)
+                for i, (pereche, (brut, stare)) in enumerate(rezultate, start=1):
+                    cerute, reusite, esuate, octeti = _pastreaza(
+                        con, pereche, brut, stare, cerute, reusite, esuate, octeti
+                    )
+                    if i % 25 == 0 or i == len(lista):
+                        con.commit()
+                        log(f"  {i}/{len(lista)} · {reusite} aduse · {esuate} eșuate")
+        else:
+            for i, pereche in enumerate(lista, start=1):
+                brut, stare = _adu(pereche[1])
+                cerute, reusite, esuate, octeti = _pastreaza(
+                    con, pereche, brut, stare, cerute, reusite, esuate, octeti
+                )
+                if i % 10 == 0 or i == len(lista):
+                    con.commit()
+                    log(f"  {i}/{len(lista)} · {reusite} aduse · {esuate} eșuate")
+                if i < len(lista):
+                    time.sleep(pauza)
 
     return Descarcare(cerute, reusite, esuate, octeti, time.monotonic() - t0)
+
+
+def _pastreaza(con, pereche, brut, stare, cerute, reusite, esuate, octeti):
+    """Write one fetched page. A failure is stored too, so it is not asked for again."""
+    id_portal, url = pereche
+    comprimat = gzip.compress(brut, 6) if brut else None
+    if brut:
+        reusite += 1
+        octeti += len(comprimat)
+    else:
+        esuate += 1
+    con.execute(
+        "INSERT OR REPLACE INTO surse (id_portal, url, html, octeti, stare, incercat_la)"
+        " VALUES (?,?,?,?,?,?)",
+        (
+            id_portal,
+            url,
+            comprimat,
+            len(brut) if brut else None,
+            stare,
+            datetime.now(UTC).isoformat(timespec="seconds"),
+        ),
+    )
+    return cerute + 1, reusite, esuate, octeti
 
 
 def html(con: sqlite3.Connection, id_portal: str) -> str | None:
@@ -363,6 +435,13 @@ def _main() -> int:
         action="store_true",
         help="nu aduce nimic: parsează paginile deja stocate în arborele de articole",
     )
+    ap.add_argument("--paralel", type=int, default=1, help="conexiuni simultane la aducere")
+    ap.add_argument("--rata", type=float, default=2.0, help="cereri pe secundă, peste toate")
+    ap.add_argument(
+        "--toate",
+        action="store_true",
+        help="adu paginile tuturor actelor, nu doar ale celor lovite de o decizie",
+    )
     ap.add_argument("--rezumat", action="store_true")
     a = ap.parse_args()
 
@@ -378,7 +457,18 @@ def _main() -> int:
         print(f"\ngata: {r['imbunatatite']} acte structurate, {r['provizii']} provizii")
         return 0
 
-    r = descarca(a.db, limita=a.limita, pauza=a.pauza)
+    candidati = None
+    if a.toate:
+        with depozit.deschide(a.db, readonly=True) as con:
+            candidati = de_tot(con)
+    r = descarca(
+        a.db,
+        candidati=candidati,
+        limita=a.limita,
+        pauza=a.pauza,
+        paralel=a.paralel,
+        rata=a.rata,
+    )
     print(f"\ngata: {r}")
     return 0
 
