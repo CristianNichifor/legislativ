@@ -510,3 +510,50 @@ def test_the_work_list_does_not_scan_the_table_once_per_candidate(tmp_path):
 
     assert len(lista) == 200
     assert len(interogari) <= 4, f"{len(interogari)} interogări pentru 200 de candidați"
+
+
+def test_the_cited_work_list_is_ordered_by_who_relies_on_the_act(tmp_path):
+    """An act's page is worth asking a ministry's server for when a locator into it will be
+    followed. Measured on the real corpus at the point this was written: 81 328 acts had no stored
+    page and 4 667 of them — 5,7% — were cited by anything at all. Fetching the other 94% buys a
+    searchable blob becoming an addressable tree that nothing points at.
+
+    Most-cited first, so a run cut short has done the load-bearing law."""
+    from scripts import depozit, surse
+
+    cale = tmp_path / "corpus.db"
+    graf = tmp_path / "graf.db"
+    with depozit.deschide(cale) as con:
+        for n, an in ((1, 2016), (2, 2020), (3, 1999)):
+            con.execute(
+                "INSERT INTO acte (id, cheie_citare, tip, numar, an, titlu, id_portal, sursa_url,"
+                " citit_la) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    f"lege-{n}-{an}",
+                    f"lege-{n}-{an}",
+                    "lege",
+                    str(n),
+                    an,
+                    "T",
+                    str(n),
+                    f"http://x/{n}",
+                    "x",
+                ),
+            )
+        con.commit()
+
+    g = sqlite3.connect(graf)
+    g.execute(
+        "CREATE TABLE muchii (din_act TEXT, din_locator TEXT, catre_act TEXT, locator TEXT,"
+        " fel TEXT)"
+    )
+    # lege-2-2020 is cited by two distinct acts, lege-1-2016 by one, lege-3-1999 by none.
+    for din, catre in (("a", "lege-2-2020"), ("b", "lege-2-2020"), ("a", "lege-1-2016")):
+        g.execute("INSERT INTO muchii VALUES (?,?,?,?,?)", (din, "", catre, "", "referire"))
+    g.commit()
+    g.close()
+
+    with depozit.deschide(cale, readonly=True) as con:
+        assert surse.de_citate(con, str(graf)) == ["2", "1"]
+        # A corpus with no graph yet asks for nothing rather than falling back to everything.
+        assert surse.de_citate(con, str(tmp_path / "nu-exista.db")) == []
