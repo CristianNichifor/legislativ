@@ -107,3 +107,54 @@ def test_without_a_collected_corpus_the_register_ships_honestly_empty(tmp_path, 
     construieste_web._neconstitutional_json()
 
     assert json.loads((data / "neconstitutional.json").read_text(encoding="utf-8")) == []
+
+
+def test_the_slice_does_not_select_acts_by_rowid(tmp_path, monkeypatch):
+    """A rowid is a position in a file, not an identity.
+
+    `scrie_act` deletes its row and inserts it again on every collection, so after a re-enrichment
+    and the namesake recovery the lowest rowid in `acte` is far above any small N. `rowid <= 200`
+    then matched nothing, and a build over a 203 353-act corpus shipped **five** acts — the curated
+    ones — and called itself a corpus. Nothing failed; the numbers on the page were simply wrong.
+    """
+    import sqlite3
+
+    from scripts import construieste_web as cw
+    from scripts import depozit
+
+    radacina = tmp_path / "radacina"
+    radacina.mkdir()
+    with depozit.deschide(str(radacina / "corpus.db")) as con:
+        for n in range(1, 21):
+            con.execute(
+                "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, citit_la)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (f"lege-{n}-2020", "lege", str(n), 2020, "T", str(n), "x"),
+            )
+        # Rewritten one at a time, exactly as `scrie_act` does it — delete, then insert. SQLite
+        # only reuses a freed rowid when the table empties, so each rewrite moves that act to the
+        # end and the low rowids are never handed out again. On the real corpus this leaves
+        # `min(rowid) = 281` over 203 353 acts, and `rowid <= 200` matches none of them.
+        for n in range(1, 16):
+            con.execute("DELETE FROM acte WHERE id = ?", (f"lege-{n}-2020",))
+            con.execute(
+                "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, citit_la)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (f"lege-{n}-2020", "lege", str(n), 2020, "T", str(n), "x"),
+            )
+        con.commit()
+        assert con.execute("SELECT min(rowid) FROM acte").fetchone()[0] > 10
+        assert con.execute("SELECT count(*) FROM acte WHERE rowid <= 10").fetchone()[0] == 0
+
+    monkeypatch.setattr(cw, "ROOT", radacina)
+    monkeypatch.setattr(cw, "DATA", tmp_path / "data")
+    monkeypatch.setattr(cw, "CURATE", [])
+    monkeypatch.setattr(cw, "N_ACTE", 10)
+    (tmp_path / "data").mkdir()
+    cw._slice_corpus()
+
+    con = sqlite3.connect(tmp_path / "data" / "corpus.db")
+    try:
+        assert con.execute("SELECT count(*) FROM acte").fetchone()[0] == 10
+    finally:
+        con.close()
