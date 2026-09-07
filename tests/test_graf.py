@@ -441,3 +441,86 @@ def test_a_reader_on_a_pre_migration_graph_still_answers(tmp_path):
     finally:
         ro.close()
     assert m.catre_act == "b" and m.din_locator is None
+
+
+# --- ce se strică dacă schimb articolul ăsta ------------------------------------------------------
+
+
+def test_containment_runs_both_ways_and_says_which(tmp_path):
+    """Two different claims, kept apart. Changing `art. 7` reaches whoever relied on
+    `art. 7 alin. (2)`, because their paragraph is inside your edit. Editing `art. 7 alin. (2)`
+    touches whoever cited `art. 7` whole — but they may not depend on your paragraph at all, and
+    reporting that as the same kind of hit would cry wolf."""
+    from scripts.graf import _atingere
+
+    assert _atingere("art7", "art7") == "exact"
+    assert _atingere("art7", "art7.alin2") == "interior"
+    assert _atingere("art7.alin2", "art7") == "incadreaza"
+    assert _atingere("art7", "art8") is None
+    assert _atingere("art7", "art70") is None, "prefixul de șir nu e conținere"
+    assert _atingere(None, "art7") == "exact", "fără locator, întrebarea e despre act"
+
+
+def test_who_cites_a_provision_names_the_citing_article(tmp_path):
+    """The whole point of `din_locator`. Before it this could only answer "forty laws cite this
+    act", which is useless to someone editing one paragraph."""
+    from scripts.graf import cine_citeaza
+
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            ("art1", "Articolul 1 Se aplică art. 5 alin. (2) din Legea nr. 98/2016."),
+            ("art9", "Articolul 9 Se abrogă art. 5 din Legea nr. 98/2016."),
+        ],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        exacte = cine_citeaza(con, "lege-98-2016", "art5")
+    finally:
+        con.close()
+    perechi = {(x["locator_sursa"], x["locator_tinta"], x["atingere"]) for x in exacte}
+    assert ("art9", "art5", "exact") in perechi
+    assert ("art1", "art5.alin2", "interior") in perechi
+
+
+def test_a_citation_of_another_article_is_not_a_hit(tmp_path):
+    from scripts.graf import cine_citeaza
+
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [("art1", "Articolul 1 Se aplică art. 5 din Legea nr. 98/2016.")],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        assert cine_citeaza(con, "lege-98-2016", "art9") == []
+    finally:
+        con.close()
+
+
+def test_the_map_counts_distinct_sources_not_edges(tmp_path):
+    """One article citing the same target under two `fel` is one dependant with two opinions, not
+    two dependants."""
+    from scripts.graf import harta_citari
+
+    db = _corpus_structurat(
+        tmp_path,
+        "lege-7-2024",
+        [
+            ("art1", "Articolul 1 Se aplică art. 5 din Legea nr. 98/2016."),
+            ("art2", "Articolul 2 Se aplică tot art. 5 din Legea nr. 98/2016."),
+        ],
+    )
+    graf = tmp_path / "graf.db"
+    construieste(str(db), str(graf), log=lambda *_: None)
+    con = _deschide_graf(str(graf), readonly=True)
+    try:
+        harta = {h["locator"]: h["surse"] for h in harta_citari(con, "lege-98-2016")}
+    finally:
+        con.close()
+    assert harta.get("art5") == 2

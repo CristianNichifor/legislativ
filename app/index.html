@@ -566,6 +566,22 @@
      is anchored to the chip, and a chip can sit anywhere on the line — a rule like `right:0` below
      some width pushes it off the *left* edge whenever the chip is near the start of the row, which
      is what it did at 380px. Only measurement knows which edge is the problem. */
+  /* what depends on a provision, opened under it */
+  .dep-buton{font-size:.7rem;padding:.1rem .45rem;min-height:1.3rem;vertical-align:.05em}
+  .dep{margin:.4rem 0 .5rem;padding:.5rem .7rem;border:1px solid var(--rule-soft);
+    border-radius:var(--r1);background:var(--sunk);font-size:.78rem}
+  .dep-h{font-family:var(--sans);font-size:.68rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);margin-bottom:.35rem}
+  .dep-rand{display:flex;flex-wrap:wrap;gap:.35rem;align-items:baseline;margin:.15rem 0;
+    line-height:1.5}
+  /* how sure the hit is, and the three are not the same claim */
+  .dep-atingere{font-size:.64rem;font-weight:600;text-transform:uppercase;letter-spacing:.03em;
+    border:1px solid currentColor;border-radius:999px;padding:.02rem .4rem;white-space:nowrap}
+  .dep-atingere.exact{color:var(--blocking)}
+  .dep-atingere.interior{color:var(--material)}
+  .dep-atingere.incadreaza{color:var(--ink-mute)}
+  .dep-loc-sursa{font-family:var(--mono);font-size:.74rem;color:var(--accent)}
+  .dep-fel{font-family:var(--sans);font-size:.66rem;color:var(--ink-mute)}
   .cons-attrib{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute)}
   .cons-attrib b{color:var(--ink-mid)}
   .cons-refuz{font-family:var(--sans);font-size:.75rem;color:var(--material);margin:.2rem 0 0}
@@ -2226,7 +2242,9 @@ function renderCons(d){
     else if(!p.complet) flag=`<span class="cons-flag" style="color:var(--material)">neconsolidat</span>`;
     else flag=`<span class="cons-flag consolidat">consolidat</span>`;
     let body=`<div class="cons-hd"><span class="cons-loc">${esc(locRo(p.locator))}</span>${flag}`
-      +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}">Limbaj clar</button>`:"")+`</div>`;
+      +((clar&&!p.abrogat&&p.text)?` <button class="ghost cons-clar" data-i="${i}">Limbaj clar</button>`:"")
+      +` <button class="ghost mini dep-buton" data-loc="${esc(p.locator)}">ce depinde</button></div>`
+      +`<div class="dep-loc" data-dep="${esc(p.locator)}"></div>`;
     if(!p.abrogat) body+=`<div class="cons-text">${textCuAncore(p.text, p.ancore)}</div>`;
     body+=`<div class="cons-clar-out" data-out="${i}"></div>`;
     if(p.schimbari&&p.schimbari.length) body+=`<div class="cons-attrib">modificat prin: `
@@ -2239,9 +2257,44 @@ function renderCons(d){
   }).join("") || empty("Nicio prevedere atinsă."));
   $("#cons-out").innerHTML=h;
   legaAncore($("#cons-out"), d.act_id);
+  $("#cons-out").querySelectorAll(".dep-buton").forEach(b=>b.onclick=()=>comutaDependenti(b, d.act_id));
   if(clar) $("#cons-out").querySelectorAll(".cons-clar").forEach(b=>{
     b.onclick=()=>rescrie(b, (d.provizii||[])[+b.dataset.i], d.act_id);
   });
+}
+// The inverse of the citation chips: those say what a provision points at, this says what points
+// at it. Only answerable per provision since edges started carrying the article that made the
+// citation — before that the honest answer was "forty laws cite this act somewhere".
+async function comutaDependenti(buton, act){
+  const gazda=buton.parentElement.parentElement.querySelector(`.dep-loc[data-dep="${CSS.escape(buton.dataset.loc)}"]`);
+  if(!gazda) return;
+  if(gazda.firstChild){ gazda.innerHTML=""; buton.textContent="ce depinde"; return; }
+  buton.textContent="ascunde";
+  gazda.innerHTML=`<div class="dep"><span class="spin"></span> caut…</div>`;
+  const d=await fetch(`/api/cine-citeaza?act=${encodeURIComponent(act)}&loc=${encodeURIComponent(buton.dataset.loc)}`)
+    .then(r=>r.json()).catch(()=>null);
+  gazda.innerHTML=d?dependentiHtml(d):`<div class="dep">Nu am putut citi graful.</div>`;
+}
+const ATINGERE={exact:"exact", interior:"în interior", incadreaza:"încadrează"};
+function dependentiHtml(d){
+  // A graph that was never built and a provision nothing depends on are different answers.
+  if(!d.are_graf) return `<div class="dep"><span class="hint">Graful nu e construit în această instalare.</span></div>`;
+  const c=d.citari||[];
+  if(!c.length) return `<div class="dep"><span class="hint">Nimic din corpus nu citează această prevedere.</span></div>`;
+  let h=`<div class="dep"><div class="dep-h">${d.total} ${d.total===1?"citare":"citări"}`
+    +(d.total>c.length?` <span class="hint">(primele ${c.length})</span>`:``)+`</div>`;
+  h+=c.map(x=>{
+    // The source article is what makes this actionable. Where the citing act was never given an
+    // article tree the honest answer is "somewhere in it", not a fabricated position.
+    const sursa = (x.locator_sursa && x.locator_sursa!=="text")
+      ? `<span class="dep-loc-sursa">${esc(locRo(x.locator_sursa))}</span>`
+      : `<span class="hint">undeva în act</span>`;
+    return `<div class="dep-rand"><span class="dep-atingere ${esc(x.atingere)}">${esc(ATINGERE[x.atingere]||x.atingere)}</span>`
+      +`<span class="plx">${esc(x.act)}</span> ${sursa}`
+      +` <span class="hint">→ ${esc(locRo(x.locator_tinta||""))}</span>`
+      +` <span class="dep-fel">${esc(x.fel)}</span></div>`;
+  }).join("");
+  return h+`</div>`;
 }
 function clarBox(text, nota){
   return `<div class="clar-box"><div class="suggest-h">Limbaj clar — sugestie, nu textul legii`

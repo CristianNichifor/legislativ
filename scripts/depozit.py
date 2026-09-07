@@ -412,6 +412,7 @@ def deschide(
         con.executescript(SCHEMA)
         _adauga_coloane(con)
         _migreaza_fts(con)
+        _migreaza_initiator(con)
         yield con
         con.commit()
     except Exception:
@@ -450,6 +451,23 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
         for nume, tip in coloane:
             if nume not in existente:
                 con.execute(f"ALTER TABLE {tabel} ADD COLUMN {nume} {tip}")
+
+
+def _migreaza_initiator(con: sqlite3.Connection) -> None:
+    """Add `leg` to a signature table written before it existed.
+
+    A plain `ALTER TABLE ADD COLUMN` is right here, unlike the graph's `din_locator`: `leg` is not
+    part of the primary key, so no existing row changes identity by gaining it. The rows keep their
+    NULL until the Fișe are re-read, and a NULL legislature is honest — it says the signature was
+    collected before the id was known to be scoped, not that the deputy sat in no legislature.
+    """
+    tabele = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "initiativa_initiator" not in tabele:
+        return
+    coloane = {r[1] for r in con.execute("PRAGMA table_info(initiativa_initiator)")}
+    if "leg" not in coloane:
+        con.execute("ALTER TABLE initiativa_initiator ADD COLUMN leg TEXT")
+        con.commit()
 
 
 def _migreaza_fts(con: sqlite3.Connection) -> None:
@@ -869,9 +887,9 @@ def scrie_parcurs(con: sqlite3.Connection, p) -> None:
         )
     for it in p.initiatori:
         con.execute(
-            "INSERT OR REPLACE INTO initiativa_initiator (plx_id, idm, nume, grup, camera)"
-            " VALUES (?,?,?,?,?)",
-            (p.plx_id, it.idm, it.nume, it.grup, it.camera),
+            "INSERT OR REPLACE INTO initiativa_initiator (plx_id, idm, leg, nume, grup, camera)"
+            " VALUES (?,?,?,?,?,?)",
+            (p.plx_id, it.idm, it.leg, it.nume, it.grup, it.camera),
         )
 
 
