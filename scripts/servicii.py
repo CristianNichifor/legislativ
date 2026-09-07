@@ -1523,6 +1523,42 @@ def _dezbateri(qs: dict, stare: Stare) -> dict:
     return {"cautare": q, "rezultate": rezultate}
 
 
+def _domenii(qs: dict, stare: Stare) -> dict:
+    """The corpus grouped by the body that issued it, or one body's acts.
+
+    Not by subject: the portal publishes no classification and this package does not invent one.
+    The issuer is on every document and is what the state itself files by.
+    """
+    from scripts import domenii
+
+    emitent = (qs.get("emitent", [""])[0] or "").strip()
+    tip = (qs.get("tip", [""])[0] or "").strip() or None
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            if emitent:
+                return {
+                    "emitent": emitent,
+                    "tip": tip,
+                    "acte": domenii.acte_ale(con, emitent, tip=tip),
+                }
+            return {
+                "emitenti": [
+                    {
+                        "nume": e.nume,
+                        "acte": e.acte,
+                        "tipuri": [{"tip": t, "acte": n} for t, n in e.tipuri[:6]],
+                        "de_la": e.de_la,
+                        "pana_la": e.pana_la,
+                    }
+                    for e in domenii.emitenti(con)
+                ]
+            }
+    except sqlite3.OperationalError:
+        # A store with no acts collected yet, or an older schema. Empty, not an error: a zero here
+        # would otherwise read as "this body has issued nothing".
+        return {"emitenti": [], "acte": []}
+
+
 def _parseaza(text: str) -> dict:
     """Recover the Articol ▸ Alineat ▸ Literă tree from the pasted plain text of an act, so the
     editor can load an existing law as blocks to redact. Deterministic, no model."""

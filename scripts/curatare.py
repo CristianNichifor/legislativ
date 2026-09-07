@@ -26,12 +26,14 @@ the same pass.
 from __future__ import annotations
 
 import argparse
+import gzip
 import html
+import re
 import time
 from dataclasses import dataclass
 
 from scripts import depozit
-from scripts.text import fara_separatoare, normalizeaza
+from scripts.text import cheie, fara_separatoare, normalizeaza
 
 
 @dataclass(frozen=True)
@@ -147,6 +149,113 @@ def titluri(cale_db: str = "corpus.db", *, lot: int = 20000, log=print) -> Curat
     return Curatare(examinate, schimbate, time.monotonic() - t0, "titluri")
 
 
+_EMT_BDY = re.compile(r'class="S_EMT_BDY"[^>]*>(.*?)</span>', re.S | re.I)
+_TAG = re.compile(r"<[^>]+>")
+
+
+def _emitent_din_pagina(pagina: str) -> str | None:
+    m = _EMT_BDY.search(pagina)
+    return " ".join(normalizeaza(_TAG.sub(" ", m.group(1))).split()) if m else None
+
+
+def repara_emitent(stricat: str, curat: str) -> str | None:
+    """`stricat` with each `?` replaced by the letter the page has in that position.
+
+    Word by word rather than over the whole string, because the two spellings differ in more than
+    the lost letters: the page writes `AGENŢIA NAŢIONALA DE PRIVATIZARE` where the service returns
+    `Agen?ia Na?ională de Privatizare`, upper case and missing a diacritic of its own. Each damaged
+    word is matched against the page's words diacritic-folded, with `?` standing for any character,
+    and only the `?` positions are taken from the match — so the service's own capitalisation
+    survives and nothing else about the name is rewritten.
+
+    `None` where any damaged word finds no match, which is the answer for a page that names a
+    different body: `Agen?ia Na?ională a Func?ionarilor Publici` is published on a page headed
+    `MINISTERUL ADMINISTRAȚIEI ȘI INTERNELOR-AGENTIA NAȚIONALĂ...`, and half a repair is worse than
+    none.
+
+    **The case of a destroyed first letter cannot be recovered** and is not guessed at: a word
+    starting `?` takes the lower-case letter unless the whole word is capitals or it follows a
+    hyphen inside a capitalised name. That is right for the common case by a wide margin — the
+    conjunction `și` is the most frequent word-initial `?` in the corpus — and wrong for a handful
+    of proper names such as `Academia de ?tiin?e`, which come back with a lower-case `ș`.
+    """
+    cuvinte_curate = curat.split()
+    iesire: list[str] = []
+    for cuv in stricat.split():
+        if "?" not in cuv:
+            iesire.append(cuv)
+            continue
+        tipar = re.compile("^" + re.escape(cheie(cuv)).replace(r"\?", ".") + "$")
+        gasit = next((c for c in cuvinte_curate if tipar.match(cheie(c))), None)
+        if not gasit or len(gasit) != len(cuv):
+            return None
+        litere = []
+        for i, ch in enumerate(cuv):
+            if ch != "?":
+                litere.append(ch)
+                continue
+            sus = cuv.isupper() or (i > 0 and cuv[i - 1] == "-" and cuv[:i].istitle())
+            litere.append(gasit[i].upper() if sus else gasit[i].lower())
+        iesire.append("".join(litere))
+    reparat = " ".join(iesire)
+    return reparat if "?" not in reparat else None
+
+
+def emitenti(cale_db: str = "corpus.db", *, log=print) -> Curatare:
+    """Put the `ș` and `ț` back into the issuer names the service could not spell.
+
+    The API encodes its responses in a charset that has no comma-below letters and emits a literal
+    `?` for each — not U+FFFD, so nothing downstream can tell it from a question mark somebody
+    typed. 113 910 documents carry an issuer damaged that way, 55% of the corpus, across 344 of the
+    488 distinct names: `Ministerul Sănătă?ii`, `Pre?edintele României`, `Curtea Constitu?ională`.
+
+    The repair is read, not inferred. Each damaged name is matched against the `S_EMT_BDY` heading
+    of a page belonging to that issuer, which the portal serves in a charset that can spell it. An
+    issuer with no stored page keeps its damaged name and is counted as unrepaired, because there
+    is nothing to read it from.
+
+    Measured on the collected corpus: 221 of the 344 names repair, covering 110 044 of the 113 910
+    damaged documents — 96,6%. The 123 that do not are mostly issuers whose every document predates
+    the HTML collection.
+
+    Both `acte` and `documente` are updated, and the act ids are deliberately untouched: they carry
+    the portal's document id rather than a slug of the name, precisely so that this pass cannot
+    make a stored reference dangle.
+    """
+    t0 = time.monotonic()
+    examinate = schimbate = 0
+    with depozit.deschide(cale_db) as con:
+        stricati = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT emitent FROM documente WHERE emitent LIKE ?", ("%?%",)
+            )
+        ]
+        log(f"{len(stricati)} emitenți stricați")
+        for em in stricati:
+            examinate += 1
+            rand = con.execute(
+                "SELECT s.html FROM documente d JOIN surse s ON s.id_portal = d.id_portal"
+                " WHERE d.emitent = ? AND s.html IS NOT NULL LIMIT 1",
+                (em,),
+            ).fetchone()
+            if not rand:
+                continue
+            curat = _emitent_din_pagina(gzip.decompress(rand[0]).decode("utf-8", "replace"))
+            reparat = repara_emitent(em, curat) if curat else None
+            if not reparat or reparat == em:
+                continue
+            con.execute("UPDATE documente SET emitent = ? WHERE emitent = ?", (reparat, em))
+            con.execute("UPDATE acte SET emitent = ? WHERE emitent = ?", (reparat, em))
+            schimbate += 1
+            if schimbate % 25 == 0:
+                con.commit()
+                log(f"  {examinate}/{len(stricati)} · {schimbate} reparați")
+        con.commit()
+    log(f"gata: {schimbate} din {examinate} emitenți reparați")
+    return Curatare(examinate, schimbate, time.monotonic() - t0, "emitenti")
+
+
 def restaureaza_text(cale_db: str = "corpus.db", *, prag: float = 0.98, lot: int = 500, log=print):
     """Put back the text an over-eager enrichment threw away.
 
@@ -214,9 +323,16 @@ def _main() -> int:
         action="store_true",
         help="curăță titlurile (BOM, entități HTML) în loc de separatoarele din provizii",
     )
+    ap.add_argument(
+        "--emitenti",
+        action="store_true",
+        help="pune la loc ș și ț în numele emitenților, citite din paginile lor",
+    )
     a = ap.parse_args()
     if a.restaureaza_text:
         print(f"\ngata: {restaureaza_text(a.db)}")
+    elif a.emitenti:
+        print(f"\ngata: {emitenti(a.db)}")
     else:
         print(f"\ngata: {titluri(a.db) if a.titluri else separatoare(a.db)}")
     return 0
