@@ -204,3 +204,36 @@ def test_running_the_recovery_twice_adds_nothing(tmp_path):
         # One provision, not two: the surviving act was written by the helper without any, and the
         # repair adds text only for the document it recovered. It does not touch what is there.
         assert con.execute("SELECT count(*) FROM provizii").fetchone()[0] == 1
+
+
+def test_a_corpus_whose_acte_table_predates_the_column_still_opens(tmp_path):
+    """The bug this is here for stopped every command against an already-collected corpus, at
+    *open* time, before a single row was read.
+
+    `deschide` runs `executescript(SCHEMA)` first and `_adauga_coloane` after it. `CREATE TABLE IF
+    NOT EXISTS` is a no-op on a table that already exists, columns and all — that is the whole
+    reason `_adauga_coloane` exists — so an index declared in `SCHEMA` over a column that arrives
+    by migration raises `no such column` on exactly the databases the migration was written for.
+    Every test until now built its database fresh, where the table is created with the column, so
+    none of them could see it.
+    """
+    import sqlite3
+
+    cale = tmp_path / "vechi.db"
+    con = sqlite3.connect(cale)
+    con.execute(
+        "CREATE TABLE acte (id TEXT PRIMARY KEY, tip TEXT NOT NULL, numar TEXT, an INTEGER,"
+        " titlu TEXT NOT NULL, emitent TEXT, publicat TEXT, vigoare TEXT, republicat_din TEXT,"
+        " id_portal TEXT, id_act_portal TEXT, sursa_url TEXT, citit_la TEXT NOT NULL)"
+    )
+    con.execute(
+        "INSERT INTO acte (id, tip, numar, an, titlu, emitent, id_portal, citit_la)"
+        " VALUES ('lege-98-2016','lege','98',2016,'T','Parlamentul','1','x')"
+    )
+    con.commit()
+    con.close()
+
+    with depozit.deschide(cale) as con:
+        assert con.execute("SELECT cheie_citare FROM acte").fetchone()[0] == "lege-98-2016"
+        indecsi = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='index'")}
+        assert "idx_acte_cheie_citare" in indecsi

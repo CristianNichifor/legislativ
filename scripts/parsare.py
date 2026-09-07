@@ -93,6 +93,8 @@ _NR_TTL = re.compile(r"(\d+(?:\^\d+)?)")
 # dropped, but nothing in the corpus cites one. The superscript form is kept as it is for articles:
 # a point inserted between 3 and 4 is 3^1, never a renumbering.
 _NR_PCT = re.compile(r"(\d+(?:\^\d+)?)\s*\.|\(?\s*([ivxl]+)\s*\)")
+# `Anexa 1`, `Anexa nr. 2`, `ANEXA`. The bare form is the only annex an act has, so it is 1.
+_NR_ANX = re.compile(r"anex[ăa]\s*(?:nr\.?\s*)?(\d+(?:\^\d+)?)?", re.I)
 # A republished act's own header carries the word `republicat(ă)`; the date on its publication line
 # is then the republication in Monitorul Oficial, not the first publication. We read it into
 # `republicat_din` so consolidation can refuse to apply pre-republication amendments to the
@@ -161,6 +163,9 @@ class _Culegator(HTMLParser):
         "S_PCT",
         "S_PCT_TTL",
         "S_PCT_BDY",
+        "S_ANX",
+        "S_ANX_TTL",
+        "S_ANX_BDY",
         "S_PAR",
         "S_LGI",
     }
@@ -320,6 +325,7 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
     """
     provizii: list[Provizie] = []
     art = aln = lit = pct = None
+    anexa: str | None = None
     rezerva: list[tuple[str, tuple[str, ...]]] = []
     # Two accumulators, not one. A body block closes *inside* the unit that contains it, so a
     # single list let the reserve consume the `S_LGI` marks before the structured provision that
@@ -334,7 +340,24 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
         if fel != "inchide":
             continue
         text = _text_din(ev, i)
-        if nume == "S_ART_TTL":
+        if nume == "S_ANX_TTL":
+            # An annex restarts the numbering: its own `Articolul 1` is not the act's. Without the
+            # reset the first thing inside an annex inherits whatever article closed before it.
+            m = _NR_ANX.search(text)
+            anexa = (m.group(1) or "1") if m else "1"
+            art = aln = lit = pct = None
+        elif nume == "S_ANX":
+            # The annex whole, at `anx2`. For the acts this was built for it is not a footnote: an
+            # `HG pentru aprobarea Normelor metodologice` says almost nothing in its articles and
+            # everything in the annex. Measured over refused acts, 75 of 120 carry one and it holds
+            # a median 45% of the page's text — the reason their parse looked like lost text and
+            # the guard kept the flat row.
+            if anexa and _are_litere(text):
+                provizii.append(
+                    Provizie(f"anx{anexa}", text, referinte_marcate=tuple(dict.fromkeys(marcate)))
+                )
+                marcate = []
+        elif nume == "S_ART_TTL":
             m = _NR_TTL.search(text)
             art, aln, lit, pct = (m.group(1) if m else None), None, None, None
         elif nume == "S_ALN_TTL":
@@ -362,8 +385,15 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
                 punct=pct if nume == "S_PCT" else None,
             )
             if loc:
+                # Prefixed while inside an annex. `art. 3` of annex 2 is not `art. 3` of the act,
+                # and before this the two shared a locator — an annex's letters were being stored
+                # under whatever article number happened to close before the annex began.
                 provizii.append(
-                    Provizie(loc.id, text, referinte_marcate=tuple(dict.fromkeys(marcate)))
+                    Provizie(
+                        f"anx{anexa}.{loc.id}" if anexa else loc.id,
+                        text,
+                        referinte_marcate=tuple(dict.fromkeys(marcate)),
+                    )
                 )
                 marcate = []
         elif nume in _REZERVA and _are_litere(text):

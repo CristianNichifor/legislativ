@@ -52,8 +52,13 @@ def test_the_url_id_and_the_acts_own_id_are_different_numbers(lege):
 
 def test_every_article_the_portal_marks_is_parsed(lege):
     """246 is the portal's own `S_ART` count. Checking against it rather than against a number
-    written here is what makes this a guard instead of a restatement."""
-    articole = [p for p in lege.provizii if "." not in p.locator_id]
+    written here is what makes this a guard instead of a restatement.
+
+    Filtered on `art` and not merely on "no dot in the locator": the act's two annexes are stored
+    at `anx1` and `anx2`, which have no dot either and are not articles."""
+    articole = [
+        p for p in lege.provizii if p.locator_id.startswith("art") and "." not in p.locator_id
+    ]
     assert len(articole) == 246
     assert articole[0].locator_id == "art1"
     assert "Prezenta lege reglementează" in articole[0].text
@@ -296,3 +301,19 @@ def test_the_amending_text_is_read_once_and_not_once_per_level():
     assert plat.count("excedent bugetar") == 1
     assert plat.count("scrisori de garanție") == 1
     assert "activitate" in plat and "asigurări de garanții" in plat
+
+
+def test_an_annex_is_stored_and_does_not_borrow_the_last_article_number(lege):
+    """An `HG pentru aprobarea Normelor metodologice` says almost nothing in its articles and
+    everything in the annex, and the annex was being dropped: measured over acts the text guard
+    refused, 75 of 120 carry one and it holds a median 45% of the page's text. That is why their
+    parse looked like lost text and they kept a single flat row.
+
+    The prefix is the other half. `art. 3` of annex 2 is not `art. 3` of the act, and before this
+    an annex's letters were stored under whatever article closed before the annex began."""
+    anexe = [p for p in lege.provizii if p.locator_id.startswith("anx")]
+    assert [p.locator_id for p in anexe] == ["anx1", "anx2"]
+    assert all(p.text for p in anexe)
+    assert not any(
+        p.locator_id.startswith("art") and "anx" in p.locator_id for p in lege.provizii
+    ), "un locator de anexă s-a scris ca articol al actului"
