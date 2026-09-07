@@ -291,6 +291,18 @@
     color:var(--ink-mute)}
   .an-chip:hover{border-color:var(--accent);color:var(--ink)}
   .an-chip-activ{border-color:var(--accent);color:var(--accent);background:var(--accent-wash)}
+  /* the rest of a list, hidden until asked for: "…and another 259" is a number nobody can act on */
+  .dep-ascuns{display:none}
+  .dep-init-desc{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;
+    text-underline-offset:.18em}
+  .dep-init-desc:hover{background:var(--accent-wash)}
+  /* one bill, opened where it was listed */
+  .init-fisa{margin:.3rem 0 .5rem;padding:.5rem .65rem;border-left:2px solid var(--rule);
+    background:var(--surface);border-radius:0 var(--r1) var(--r1) 0}
+  .init-titlu{font-weight:600;font-size:.8rem;margin-bottom:.2rem}
+  .init-obiect{font-size:.78rem;line-height:1.5;white-space:pre-wrap}
+  .init-meta{font-size:.7rem;color:var(--ink-mute);margin-top:.3rem}
+  .init-sursa{font-size:.72rem}
   .dom-act{font-size:.78rem;margin:.15rem 0;line-height:1.45}
   .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
   /* the roll of a division: who voted which way, grouped the way the chamber sits */
@@ -2502,6 +2514,56 @@ async function aratraDeputat(el, gazdaExplicita){
     +`&leg=${encodeURIComponent(el.dataset.leg||"")}&camera=${encodeURIComponent(el.dataset.camera||"")}`;
   const d=await fetch(u).then(r=>r.json()).catch(()=>null);
   box.innerHTML=d?deputatHtml(el.textContent, el.dataset.leg, el.dataset.camera, d):"Nu am putut citi fișa.";
+  legaFisaDeputat(box);
+}
+// The lists show what a member did; these open what the bill *says*. Bound after every render
+// because the card is rebuilt whenever another term is chosen.
+function legaFisaDeputat(box){
+  box.querySelectorAll(".dep-mai-mult").forEach(b=>{
+    b.onclick=()=>{
+      b.parentElement.querySelectorAll(".dep-ascuns").forEach(x=>x.classList.remove("dep-ascuns"));
+      b.remove();
+    };
+  });
+  box.querySelectorAll(".dep-init-desc").forEach(el=>{
+    const deschide=()=>arataInitiativa(el);
+    el.onclick=deschide;
+    el.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); deschide(); } };
+  });
+}
+// One bill, opened where it was listed: what it sets out to do, where it got to, and the link to
+// the Chamber's own Fișa for anyone who wants the source rather than our reading of it.
+async function arataInitiativa(el){
+  const plx=el.dataset.plx;
+  const gazda=el.parentElement.querySelector(`.dep-init-loc[data-plx="${CSS.escape(plx)}"]`);
+  if(!gazda) return;
+  if(gazda.firstChild){ gazda.innerHTML=""; return; }
+  gazda.innerHTML=`<div class="init-fisa"><span class="spin"></span> încarc…</div>`;
+  const d=await fetch("/api/parcurs?plx="+encodeURIComponent(plx)).then(r=>r.json()).catch(()=>null);
+  if(!d){ gazda.innerHTML=`<div class="init-fisa">Inițiativa nu a putut fi încărcată.</div>`; return; }
+  const et=(d.etape||[]), ini=(d.initiatori||[]), vo=(d.voturi||[]);
+  const ultima=et.length?et[et.length-1]:null;
+  let h=`<div class="init-fisa">`;
+  // On most Fișe `titlu` and `obiect` carry the same paragraph — the bill's own statement of what
+  // it sets out to do — so printing both shows it twice. The longer one is kept.
+  const titlu=(d.titlu||"").trim(), obiect=(d.obiect||"").trim();
+  const acelasi = titlu && obiect && (titlu.startsWith(obiect.slice(0,80)) || obiect.startsWith(titlu.slice(0,80)));
+  const corp = acelasi ? (obiect.length>=titlu.length?obiect:titlu) : "";
+  if(acelasi){ h+=`<div class="init-obiect">${esc(corp)}</div>`; }
+  else {
+    if(titlu) h+=`<div class="init-titlu">${esc(titlu)}</div>`;
+    if(obiect) h+=`<div class="init-obiect">${esc(obiect)}</div>`;
+  }
+  if(!titlu && !obiect) h+=`<span class="hint">Textul acestei inițiative nu e în ce s-a colectat.</span>`;
+  h+=`<div class="init-meta">`
+    +(d.stadiu?`<span class="parc-cam">${esc(d.stadiu)}</span>`:``)
+    +(ultima&&ultima.data?` <span class="parc-data">ultimul pas ${esc(ultima.data)}</span>`:``)
+    +(ini.length?` · ${nf(ini.length)} semnatari`:``)
+    +(vo.length?` · ${nf(vo.length)} voturi`:``)+`</div>`;
+  // An outbound link, and only on a click: the source is cdep.ro, and this app does not fetch it
+  // for you.
+  if(d.sursa_url) h+=`<div><a class="init-sursa" href="${esc(d.sursa_url)}" target="_blank" rel="noopener noreferrer">Fișa la Camera Deputaților ↗</a></div>`;
+  gazda.innerHTML=h+`</div>`;
 }
 
 // ---- Parlamentari: a member, reachable by name ----
@@ -2586,14 +2648,20 @@ function deputatHtml(nume, leg, camera, d){
     +`<span class="dep-nu">${s.respinse} respinse</span>`
     +`<span class="dep-pend">${s.nedecise} fără vot înregistrat</span></div>`;
   if(lista.length){
-    h+=`<div class="dep-lista">`+lista.slice(0,8).map(x=>
+    // Every bill, not the first eight. "…and another 259" is a number a reader cannot act on, and
+    // the list is the record: a member's work is what they put their name to.
+    h+=`<div class="parc-h">Inițiative (${nf(lista.length)})</div><div class="dep-lista">`
+      +lista.map((x,i)=>
       // The co-signer count is not decoration: a bill carrying sixty signatures is not this
       // person's initiative in the way one carrying two is.
-      `<div class="dep-init"><span class="plx">${esc(x.plx_id)}</span> `
-      +`<span class="hint">${esc((x.titlu||"").slice(0,90))}</span> `
+      `<div class="dep-init${i>=8?" dep-ascuns":""}">`
+      +`<span class="plx dep-init-desc" role="button" tabindex="0" data-plx="${esc(x.plx_id)}">${esc(x.plx_id)}</span> `
+      +`<span class="hint">${esc(x.titlu||"")}</span> `
       +`<span class="dep-semn">${x.semnatari} semnatari</span>`
-      +(x.rezultat?` <span class="dep-rez ${esc(x.rezultat)}">${esc(x.rezultat)}</span>`:``)+`</div>`).join("")
-      +(lista.length>8?`<div class="hint">…și încă ${lista.length-8}</div>`:``)+`</div>`;
+      +(x.rezultat?` <span class="dep-rez ${esc(x.rezultat)}">${esc(x.rezultat)}</span>`:``)
+      +`<div class="dep-init-loc" data-plx="${esc(x.plx_id)}"></div></div>`).join("")
+      +(lista.length>8?`<button type="button" class="ghost mini dep-mai-mult">vezi toate cele ${nf(lista.length)}</button>`:``)
+      +`</div>`;
   }
   // How they voted, from the Chamber's own roll. The tally on a Fișa is the room's answer and
   // nobody's; this is the one a voter can act on.
@@ -2604,22 +2672,24 @@ function deputatHtml(nume, leg, camera, d){
       +`<div class="dep-cifre"><span class="dep-ok">${n("da")} pentru</span>`
       +`<span class="dep-nu">${n("nu")} contra</span>`
       +`<span class="dep-pend">${n("abtinere")+n("nu_a_votat")} abțineri / nu a votat</span></div>`
-      +`<div class="dep-lista">`+vot.slice(0,6).map(v=>
-        `<div class="dep-init"><span class="rol-v ${esc(v.optiune)}">${esc(ROL_ETICHETE[v.optiune]||v.optiune)}</span> `
+      +`<div class="dep-lista">`+vot.map((v,i)=>
+        `<div class="dep-init${i>=6?" dep-ascuns":""}"><span class="rol-v ${esc(v.optiune)}">${esc(ROL_ETICHETE[v.optiune]||v.optiune)}</span> `
         +`<span class="parc-data">${esc(v.data||"")}</span> `
-        +(v.plx_id?`<span class="plx">${esc(v.plx_id)}</span> `:``)
-        +`<span class="hint">${esc((v.subiect||"").slice(0,90))}</span></div>`).join("")
-      +(vot.length>6?`<div class="hint">…și încă ${vot.length-6}</div>`:``)+`</div>`;
+        +(v.plx_id?`<span class="plx dep-init-desc" role="button" tabindex="0" data-plx="${esc(v.plx_id)}">${esc(v.plx_id)}</span> `:``)
+        +`<span class="hint">${esc(v.subiect||"")}</span>`
+        +(v.plx_id?`<div class="dep-init-loc" data-plx="${esc(v.plx_id)}"></div>`:``)+`</div>`).join("")
+      +(vot.length>6?`<button type="button" class="ghost mini dep-mai-mult">vezi toate cele ${nf(vot.length)}</button>`:``)+`</div>`;
   }
   // What they signed is paperwork; what they said is the argument. Joined on the same
   // (legislature, chamber, id) as the signatures, so this is the same person and not a namesake.
   const spuse=(d.interventii||[]);
   if(spuse.length){
     h+=`<div class="parc-h">În plen (${spuse.length})</div><div class="dep-lista">`
-      +spuse.slice(0,5).map(x=>`<div class="dep-init"><span class="parc-data">${esc(x.data||"")}</span> `
-      +(x.plx_id?`<span class="plx">${esc(x.plx_id)}</span> `:``)
-      +`<span class="hint">${esc((x.text||"").slice(0,160))}${(x.text||"").length>160?"…":""}</span></div>`).join("")
-      +(spuse.length>5?`<div class="hint">…și încă ${spuse.length-5}</div>`:``)+`</div>`;
+      +spuse.map((x,i)=>`<div class="dep-init${i>=5?" dep-ascuns":""}"><span class="parc-data">${esc(x.data||"")}</span> `
+      +(x.plx_id?`<span class="plx dep-init-desc" role="button" tabindex="0" data-plx="${esc(x.plx_id)}">${esc(x.plx_id)}</span> `:``)
+      +`<span class="hint">${esc(x.text||"")}</span>`
+      +(x.plx_id?`<div class="dep-init-loc" data-plx="${esc(x.plx_id)}"></div>`:``)+`</div>`).join("")
+      +(spuse.length>5?`<button type="button" class="ghost mini dep-mai-mult">vezi toate cele ${nf(spuse.length)}</button>`:``)+`</div>`;
   }
   return h;
 }

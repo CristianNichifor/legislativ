@@ -249,12 +249,16 @@ def colecteaza_nominale(
 
 
 def cum_a_votat(
-    con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None, *, limita: int = 40
+    con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None, *, limita: int = 5000
 ) -> list[dict]:
     """How one member voted, newest first, with what the division was about.
 
     Joined on `(leg, camera, idm)` and never on the name — the same key their signatures and their
     speeches hang off, so a profile is one person rather than everyone who shares a surname.
+
+    The ceiling is above the number of divisions the corpus holds, so a member who was present at
+    every one is still shown all of them. At 1 000 it bit: a sitting deputy voted in more, and a
+    card offering to show "all 1 000" of them was misreporting rather than truncating.
     """
     try:
         return [

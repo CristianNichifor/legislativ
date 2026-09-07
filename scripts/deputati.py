@@ -216,9 +216,13 @@ def initiative(
     leg: str | None = None,
     camera: str | None = None,
     *,
-    limita: int = 25,
+    limita: int = 1000,
 ) -> list[dict]:
     """The bills this deputy signed, newest first, each with how many signed it.
+
+    The ceiling is high enough not to bite: the most prolific signer in the collected corpus is
+    well under it, so "every bill" means every bill. It was 25, and a page that offered to show
+    "all 25" of a member's 267 initiatives was not truncating, it was misreporting.
 
     The co-signer count is not decoration. A bill carrying sixty signatures says something
     different from one carrying two, and a list without it invites reading every row as this

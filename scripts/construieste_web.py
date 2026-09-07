@@ -108,7 +108,9 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
                               _norma, _termeni, _dictionar, _regula, _impact,
                               _cronologie, _citari, _supraveghere,
-                              _opinie, _opinie_cerere)
+                              _opinie, _opinie_cerere,
+                              _deputati, _parcurs, _rol, _stenograma, _dezbateri,
+                              _domenii, _prevedere, _cine_citeaza)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -123,6 +125,14 @@ def _raspunde(path, query, body):
     elif path == '/api/sugereaza': out = _sugereaza(qs)
     elif path == '/api/consolidat': out = _consolidat(qs)
     elif path == '/api/act': out = _act(qs, _stare)
+    elif path == '/api/deputati': out = _deputati(qs, _stare)
+    elif path == '/api/parcurs': out = _parcurs(qs, _stare)
+    elif path == '/api/rol': out = _rol(qs, _stare)
+    elif path == '/api/stenograma': out = _stenograma(qs, _stare)
+    elif path == '/api/dezbateri': out = _dezbateri(qs, _stare)
+    elif path == '/api/domenii': out = _domenii(qs, _stare)
+    elif path == '/api/prevedere': out = _prevedere(qs, _stare)
+    elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
     elif path == '/api/compune':
         out = _compune(json.loads(body or '{}').get('interventii', []))
     elif path == '/api/parseaza':
@@ -333,16 +343,53 @@ def _slice_corpus() -> None:
     print(f"  corpus slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
-def _slice_initiative() -> None:
+def _slice_initiative(*, tot_parlamentul: bool = False) -> None:
+    """The initiatives, and the people behind them.
+
+    This used to copy 300 rows of `initiative` and nothing else, which is why the published build
+    had no members in it: the signatures, the divisions and the passages all live in other tables
+    and none of them was shipped. A tab that searches parliamentarians against a database with no
+    parliamentarians finds none, and says so, which reads like a bug in the search.
+
+    **What is shipped is a size decision, and the numbers are the reason.** Measured over the
+    collected corpus, after `VACUUM`:
+
+    | slice                                    | size    |
+    |------------------------------------------|---------|
+    | initiatives + signatures + divisions      |  17,4 MB |
+    | + the roll of every division, 2024 only   |  36,5 MB |
+    | + the roll of every division, all         | 103,6 MB |
+    | + everything said in plenary              | 131,3 MB |
+
+    The whole build was 6,4 MB before this. The first row is shipped because it is what makes a
+    member reachable at all — who signed what, and what became of it. The other two are a
+    twenty-fold increase for two panels, so they are behind `--tot-parlamentul` and the page says
+    they are absent rather than drawing an empty section.
+
+    `obiect` is kept even though dropping it would save 3,5 MB: it is the bill's own statement of
+    what it sets out to do, and it is the thing a reader opens an initiative to read.
+    """
     tinta = DATA / "initiative.db"
     if tinta.exists():
         tinta.unlink()
     with depozit.deschide(str(tinta)) as con:
         con.execute("ATTACH DATABASE ? AS plin", (str(ROOT / "initiative.db"),))
-        con.execute(
-            "INSERT INTO initiative SELECT * FROM plin.initiative WHERE rowid <= ?",
-            (N_INITIATIVE,),
-        )
+        # Every initiative, not the first 300: a member's record is a list of bills, and a slice
+        # that held a fourteenth of them would report a fourteenth of their work as all of it.
+        for tabel in ("initiative", "initiativa_initiator", "initiativa_vot", "initiativa_etapa"):
+            _copiaza_daca_exista(con, tabel)
+        if tot_parlamentul:
+            for tabel in (
+                "vot_nominal_sedinta",
+                "vot_nominal",
+                "stenograma",
+                "interventie",
+            ):
+                _copiaza_daca_exista(con, tabel)
+            con.execute(
+                "INSERT INTO interventie_fts(text, vorbitor, ids, idm, ord)"
+                " SELECT text, coalesce(vorbitor,''), ids, idm, ord FROM interventie"
+            )
         con.execute(
             "INSERT INTO initiative_fts(titlu, obiect, plx_id) "
             "SELECT titlu, obiect, plx_id FROM initiative"
@@ -352,10 +399,23 @@ def _slice_initiative() -> None:
     print(f"  initiative slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
-def _date_din_corpus() -> None:
+def _copiaza_daca_exista(con, tabel: str) -> None:
+    """Copy a table from the attached corpus, or skip it where that corpus predates it.
+
+    A build must not fail because the machine it runs on collected its initiatives before the
+    transcripts existed. A missing table is a missing panel, not a broken build.
+    """
+    are = con.execute(
+        "SELECT 1 FROM plin.sqlite_master WHERE type='table' AND name=?", (tabel,)
+    ).fetchone()
+    if are:
+        con.execute(f"INSERT INTO {tabel} SELECT * FROM plin.{tabel}")
+
+
+def _date_din_corpus(*, tot_parlamentul: bool = False) -> None:
     """The slice path: a few hundred acts out of the collected corpus, plus the whole graph."""
     _slice_corpus()
-    _slice_initiative()
+    _slice_initiative(tot_parlamentul=tot_parlamentul)
     shutil.copy(ROOT / "graf.db", DATA / "graf.db")
     print(f"  graf → {DATA / 'graf.db'} (întreg)")
 
@@ -545,7 +605,7 @@ def _pagina() -> None:
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
 
-def main(sursa: str) -> None:
+def main(sursa: str, *, tot_parlamentul: bool = False) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
     if sursa == "gata":
@@ -566,7 +626,7 @@ def main(sursa: str) -> None:
         if sursa == "fixturi":
             _date_din_fixturi()
         else:
-            _date_din_corpus()
+            _date_din_corpus(tot_parlamentul=tot_parlamentul)
         _finalizeaza_db()
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
         _vid_json()
@@ -583,6 +643,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Construiește build-ul de browser (Pyodide).")
     implicit = "corpus" if (ROOT / "corpus.db").is_file() else "fixturi"
     ap.add_argument(
+        "--tot-parlamentul",
+        action="store_true",
+        help=(
+            "include rolul fiecărui vot și tot ce s-a spus în plen. Cresc build-ul de la ~17 MB "
+            "la ~131 MB; fără ele, panourile respective spun că lipsesc."
+        ),
+    )
+    ap.add_argument(
         "--sursa",
         choices=("fixturi", "corpus", "gata"),
         default=implicit,
@@ -591,4 +659,5 @@ if __name__ == "__main__":
             "sau 'gata' (datele sunt deja în web/data, dintr-un release descărcat)"
         ),
     )
-    main(ap.parse_args().sursa)
+    a = ap.parse_args()
+    main(a.sursa, tot_parlamentul=a.tot_parlamentul)
