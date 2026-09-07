@@ -296,3 +296,106 @@ def test_a_parse_that_keeps_the_text_is_still_accepted(db, adu):
     surse.descarca(str(db), pauza=0, log=lambda *_: None)
     r = surse.imbogateste(str(db), log=lambda *_: None)
     assert r["imbunatatite"] == 1 and r["pierdute"] == 0
+
+
+def test_progress_is_reported_even_when_every_act_is_refused(tmp_path, monkeypatch):
+    """The log used to sit after the `continue` of every rejection, so a run refusing most acts
+    printed nothing: 100 754 acts to walk, four gigabytes read, one line of output. It read as a
+    hang and was diagnosed as one. A run that is working must say so."""
+    db = _corpus_cu_arhiva_lunga(tmp_path)
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(db), candidati=["591993"], pauza=0, log=lambda *_: None)
+
+    linii: list[str] = []
+    r = surse.imbogateste(str(db), log=linii.append)
+    assert r["pierdute"] == 1 and r["imbunatatite"] == 0
+    assert any("refuzate" in x for x in linii), "o rulare care refuză tot nu a raportat nimic"
+
+
+def test_the_refusal_is_measured_against_the_archive_not_the_current_rows(tmp_path, monkeypatch):
+    """Comparing against the act's current provisions would compare against the damage: a second
+    run over an act already emptied finds the parse no worse than the fragments and accepts it."""
+    db = _corpus_cu_arhiva_lunga(tmp_path)
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(db), candidati=["591993"], pauza=0, log=lambda *_: None)
+    for _ in range(2):
+        r = surse.imbogateste(str(db), reia=False, log=lambda *_: None)
+        assert r["imbunatatite"] == 0, "a doua rulare a acceptat ce prima a refuzat"
+
+    cx = sqlite3.connect(str(db))
+    try:
+        assert [x[0] for x in cx.execute("SELECT locator FROM provizii")] == ["text"]
+    finally:
+        cx.close()
+
+
+PAGINA_FARA_PREAMBUL = """<html><body>
+<div class="S_DEN">LEGE nr. 59/1993</div>
+<div class="S_ART"><span class="S_ART_TTL">Articolul 1</span>
+  <div class="S_ART_BDY">CORP_UNU</div></div>
+<div class="S_ART"><span class="S_ART_TTL">Articolul 2</span>
+  <div class="S_ART_BDY">CORP_DOI</div></div>
+</body></html>"""
+
+
+def test_a_parse_that_only_drops_the_preamble_is_accepted(tmp_path, monkeypatch):
+    """The comparison used to be against the whole archive, preamble included — and the preamble is
+    exactly what a correct parse leaves out. On a short act it is a quarter of the characters, so
+    acts whose every article had been recovered were refused for losing their title. Measured over
+    767 of them, body-against-body accepts 415 the old rule rejected."""
+    corp_unu = "Se aplică tuturor situațiilor prevăzute mai jos. " * 12
+    corp_doi = "Prezenta intră în vigoare la publicare. " * 12
+    preambul = (
+        "ACORD din 15 februarie 1974 de cooperare între guvernul României și guvernul Suediei "
+        "BULETINUL OFICIAL nr. 169 din 30 decembrie 1974. Părțile contractante, dorind să "
+        "dezvolte colaborarea, au convenit următoarele: "
+    )
+    cale = tmp_path / "corpus.db"
+    rec = Inregistrare(
+        titlu="LEGE nr. 59/1993",
+        tip_act="LEGE",
+        numar="59",
+        an=1993,
+        data_vigoare=date(1993, 7, 1),
+        emitent="PARLAMENTUL",
+        publicatie="MO",
+        link_html="http://legislatie.just.ro/Public/DetaliiDocument/591993",
+        text=preambul + "Articolul 1 " + corp_unu + "\nArticolul 2 " + corp_doi,
+    )
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+
+    pagina = PAGINA_FARA_PREAMBUL.replace("CORP_UNU", corp_unu).replace("CORP_DOI", corp_doi)
+    monkeypatch.setattr(surse, "_adu", lambda url: (pagina.encode("utf-8"), "ok"))
+    surse.descarca(str(cale), candidati=["591993"], pauza=0, log=lambda *_: None)
+
+    r = surse.imbogateste(str(cale), log=lambda *_: None)
+    assert r["imbunatatite"] == 1 and r["pierdute"] == 0
+
+    cx = sqlite3.connect(str(cale))
+    try:
+        locatori = [x[0] for x in cx.execute("SELECT locator FROM provizii ORDER BY ord")]
+    finally:
+        cx.close()
+    assert "art1" in locatori and "art2" in locatori
+
+
+def test_an_archive_with_no_article_marker_is_compared_whole(tmp_path, monkeypatch):
+    """The conservative reading: an act this cannot locate a body in is one to leave alone."""
+    cale = tmp_path / "corpus.db"
+    rec = Inregistrare(
+        titlu="LEGE nr. 59/1993",
+        tip_act="LEGE",
+        numar="59",
+        an=1993,
+        data_vigoare=date(1993, 7, 1),
+        emitent="PARLAMENTUL",
+        publicatie="MO",
+        link_html="http://legislatie.just.ro/Public/DetaliiDocument/591993",
+        text="Preambul fără nicio structură de articole. " * 40,
+    )
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(cale), candidati=["591993"], pauza=0, log=lambda *_: None)
+    assert surse.imbogateste(str(cale), log=lambda *_: None)["pierdute"] == 1
