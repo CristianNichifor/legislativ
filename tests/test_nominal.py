@@ -44,8 +44,58 @@ PAGINA = """
 """
 
 
+# The same roll as a joint sitting of both chambers: the Chamber inserts a `deputat`/`senator`
+# column, so the row has five cells instead of four. This is the layout that broke the first
+# version — a fixed four-column pattern read the *group* as the vote.
+PAGINA_REUNITA = """
+<html><body>
+<table>
+<tr valign="top"><td align="right" bgcolor="#fffef2" nowrap>Sedinta:</td>
+  <td>Camerei Deputatilor si Senatului</td></tr>
+</table>
+<table>
+<tr valign="top"><td nowrap align="right">1.</td>
+  <td><a href="/ords/pls/parlam/structura2015.mp?idm=2&cam=2&leg=2020">Achima&#351;-Cadariu
+  Patriciu-Andrei</a></td>
+  <td align="center">deputat</td>
+  <td align="center">PSD</td><td align="center" nowrap> DA </td></tr>
+<tr valign="top"><td nowrap align="right">2.</td>
+  <td><a href="/ords/pls/parlam/structura2015.mp?idm=1&cam=1&leg=2020">Achi&#355;ei
+  Vasile-Cristian</a></td>
+  <td align="center">senator</td>
+  <td align="center">PNL</td><td align="center" nowrap> AB </td></tr>
+</table>
+</body></html>
+"""
+
+
 def _rol():
     return nominal.parseaza_nominal(PAGINA, "25475")
+
+
+def test_a_joint_sitting_has_a_column_more_and_the_vote_is_still_the_vote():
+    """The roll has two layouts and the difference is invisible until it is wrong. A
+    single-chamber division prints `nr | name | group | vote`; a joint sitting inserts a
+    `deputat`/`senator` column. A fixed four-column pattern read the group as the vote on every
+    joint sitting — 4 837 rows came back holding `PSD` and `PNL` where an option belongs, and
+    they were only visible because the fold refused to recognise them.
+
+    The option is the last cell and the group the one before it, which holds for both layouts."""
+    r = nominal.parseaza_nominal(PAGINA_REUNITA, "28230")
+    pe_id = {o.idm: o for o in r.optiuni}
+    assert (pe_id["2"].grup, pe_id["2"].optiune, pe_id["2"].brut) == ("PSD", "da", "DA")
+    assert (pe_id["1"].grup, pe_id["1"].optiune, pe_id["1"].brut) == ("PNL", "abtinere", "AB")
+    # A joint sitting mixes the two chambers, and each member's own link says which.
+    assert (pe_id["2"].camera, pe_id["1"].camera) == ("Camera Deputaților", "Senat")
+
+
+def test_no_option_is_ever_stored_as_a_parliamentary_group():
+    """The shape of the bug, as a guard: a group name in the option column means the columns
+    shifted, whatever the layout."""
+    for pagina, idv in ((PAGINA, "25475"), (PAGINA_REUNITA, "28230")):
+        r = nominal.parseaza_nominal(pagina, idv)
+        grupuri = {o.grup for o in r.optiuni if o.grup}
+        assert not (grupuri & {o.brut for o in r.optiuni})
 
 
 def test_every_member_on_the_roll_is_read_with_the_key_their_profile_uses():

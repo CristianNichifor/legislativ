@@ -40,12 +40,17 @@ from scripts.text import normalizeaza
 
 BAZA = "https://www.cdep.ro/ords/pls/steno/evot2015.Nominal"
 
-# One member's row: position, their own link, the printed name, the group, the option.
-_RAND = re.compile(
-    r"<td[^>]*>\s*\d+\.\s*</td>\s*"
-    r'<td[^>]*><a href="[^"]*structura2015\.mp\?(?P<legatura>[^"]*)"[^>]*>(?P<nume>.*?)</a></td>\s*'
-    r"<td[^>]*>(?P<grup>.*?)</td>\s*<td[^>]*>(?P<optiune>.*?)</td>",
-    re.S | re.I,
+# One member's row, and the cells inside it. Read as whole rows rather than as a fixed column
+# pattern, because the roll has two layouts and the difference is invisible until it is wrong: a
+# single-chamber division prints `nr | name | group | vote`, and a joint sitting of both chambers
+# inserts a `deputat`/`senator` column, giving five. A four-column pattern read the group as the
+# vote on every joint sitting — 4 837 rows came back with `PSD` and `PNL` where an option belongs.
+#
+# So the option is the *last* cell and the group the one before it, which holds for both layouts.
+_RAND = re.compile(r"<tr[^>]*>(?P<rand>.*?)</tr>", re.S | re.I)
+_CELULA = re.compile(r"<td[^>]*>(.*?)</td>", re.S | re.I)
+_MP = re.compile(
+    r'<a href="[^"]*structura2015\.mp\?(?P<legatura>[^"]*)"[^>]*>(?P<nume>.*?)</a>', re.S | re.I
 )
 _IDM = re.compile(r"(?:^|[?&])idm=(\d+)")
 _CAM = re.compile(r"(?:^|[?&])cam=(\d+)")
@@ -117,20 +122,25 @@ def parseaza_nominal(pagina: str, idv: str, *, url: str | None = None) -> Nomina
 
     optiuni: list[Optiune] = []
     for m in _RAND.finditer(pagina):
-        legatura = m.group("legatura")
+        rand = m.group("rand")
+        mp = _MP.search(rand)
+        if not mp:
+            continue
+        legatura = mp.group("legatura")
         idm = _IDM.search(legatura)
-        if not idm:
+        celule = _CELULA.findall(rand)
+        if not idm or len(celule) < 4:
             continue
         cam = _CAM.search(legatura)
         leg = _LEG.search(legatura)
-        brut = _text(m.group("optiune"))
+        brut = _text(celule[-1])
         optiuni.append(
             Optiune(
                 idm=idm.group(1),
                 leg=leg.group(1) if leg else None,
                 camera=CAM_NUME.get(cam.group(1)) if cam else None,
-                nume=_text(m.group("nume")),
-                grup=_text(m.group("grup")) or None,
+                nume=_text(mp.group("nume")),
+                grup=_text(celule[-2]) or None,
                 optiune=OPTIUNI.get(brut.lower(), "necunoscut"),
                 brut=brut,
             )
