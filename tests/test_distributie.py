@@ -60,15 +60,21 @@ def _numar(cale: Path, tabel: str) -> int:
         con.close()
 
 
-def test_the_archive_keeps_both_documents_and_the_distribution_ships_neither(arhiva, tmp_path):
-    """The collision survivor is why the archive is large and why the distribution is not."""
+def test_the_archive_is_not_shipped_but_no_act_is_left_behind_with_it(arhiva, tmp_path):
+    """Two documents sharing a citation key are now two acts, so a distribution carries both.
+
+    This used to assert the opposite, and the opposite was the bug: `acte` kept the last writer, so
+    the other document existed only in `documente` — which a distribution deliberately does not
+    ship. 53 242 documents of the real corpus were unreachable that way. `documente` still stays
+    behind, because it is the archive and a distribution is not one, but nothing is now *only*
+    there."""
     assert _numar(arhiva, "documente") == 2
-    assert _numar(arhiva, "acte") == 1
+    assert _numar(arhiva, "acte") == 2
 
     tinta = tmp_path / "dist.db"
     r = construieste(str(arhiva), str(tinta), log=lambda *_: None)
 
-    assert r.acte == 1
+    assert r.acte == 2
     assert _numar(tinta, "documente") == 0, "the archive was shipped"
     assert _numar(tinta, "provizii") == _numar(arhiva, "provizii")
 
@@ -84,26 +90,26 @@ def test_a_distribution_is_still_a_corpus(arhiva, tmp_path):
         assert any(r["fragment"] for r in rezultate), "no snippet"
 
 
-def test_what_a_distribution_cannot_answer_and_the_archive_can(arhiva, tmp_path):
-    """The cost of leaving the archive behind, stated rather than discovered.
+def test_the_namesake_is_searchable_in_the_distribution_too(arhiva, tmp_path):
+    """The text that used to survive only in the archive.
 
-    When two documents share a citation key, `acte` and `provizii` keep the last writer — so the
-    other one's text lives only in `documente`. A distribution therefore cannot find it. That is
-    53 242 documents of the real corpus, and it is the reason `documente` stays in the archive
-    rather than being deleted as duplication.
+    When two documents shared a citation key, `acte` and `provizii` kept the last writer, so the
+    other one's words lived only in `documente` — which a distribution does not ship. This asserted
+    that loss as a documented cost. It is now a regression test for the other direction: the
+    namesake has its own act row, so its text ships and a reader can find it.
     """
     tinta = tmp_path / "dist.db"
     construieste(str(arhiva), str(tinta), log=lambda *_: None)
 
     with depozit.deschide(arhiva, readonly=True) as con:
-        pierdut = con.execute(
-            "SELECT count(*) FROM documente WHERE text LIKE '%achizitie%' OR text LIKE '%achizi%'"
+        omonim = con.execute(
+            "SELECT count(*) FROM documente WHERE text LIKE '%achizi%'"
         ).fetchone()[0]
-        assert pierdut, "fixture no longer exercises a collision"
+        assert omonim, "fixture no longer exercises a collision"
 
     with depozit.deschide(tinta, readonly=True) as con:
-        assert depozit.cauta(con, "achizitie", 5) == [], (
-            "the collided document's text appeared in the distribution after all"
+        assert depozit.cauta(con, "achizitie", 5), (
+            "the namesake's text is still missing from the distribution"
         )
 
 

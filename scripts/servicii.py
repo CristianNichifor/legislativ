@@ -1167,7 +1167,33 @@ def _act(qs: dict, stare: Stare) -> dict:
     if not nr or not an.isdigit():
         return {"act_id": "", "cunoscut": False, "titlu": ""}
     act_id = Act(tip, nr, int(an)).id
-    return {"act_id": act_id, "cunoscut": stare.cunoscut(act_id), "titlu": stare.titlu(act_id)}
+    return {
+        "act_id": act_id,
+        "cunoscut": stare.cunoscut(act_id),
+        "titlu": stare.titlu(act_id),
+        # Everything else that answers to this name. `Hotărâre nr. 1 din 2016` is eighteen
+        # different acts by eighteen different bodies, and a form that confirmed one of them
+        # silently would confirm the wrong one seventeen times out of eighteen. The citation does
+        # not say which; the reader has to.
+        "omonime": _omonime(act_id, stare),
+    }
+
+
+def _omonime(act_id: str, stare: Stare) -> list[dict]:
+    """The other acts a bare citation key could mean, if there are any.
+
+    Empty — not absent — where the key is unambiguous, which is the ordinary case. Empty too where
+    the store predates the column, because a corpus that cannot answer the question must not
+    answer it wrongly.
+    """
+    from scripts import omonime
+
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            lista = omonime.candidati(con, act_id)
+    except sqlite3.OperationalError:
+        return []
+    return [{"act_id": r[0], "titlu": r[4], "emitent": r[5], "publicat": r[6]} for r in lista[1:]]
 
 
 def _prevedere(qs: dict, stare: Stare) -> dict:

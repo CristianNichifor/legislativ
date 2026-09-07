@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from scripts import omonime
 from scripts.api import Inregistrare
 from scripts.parsare import ActParsat
 from scripts.publicare import publicare
@@ -50,7 +51,14 @@ PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS acte (
-    id              TEXT PRIMARY KEY,   -- 'lege-98-2016': what the law calls itself
+    -- 'lege-98-2016' where this act is the one a bare citation means, 'hg-1-2016-senatul' where
+    -- another act holds that name. Eighteen different acts are `Hotărâre nr. 1 din 2016` and only
+    -- the issuer tells them apart; keying on the citation alone deleted seventeen of them.
+    id              TEXT PRIMARY KEY,
+    -- What a citation would write: always the bare `tip-numar-an`, shared by every namesake. This
+    -- is what the graph's edges point at and what a watchlist stores, so it is indexed and the
+    -- resolution from a citation to an act runs through it (`omonime.candidati`).
+    cheie_citare    TEXT,
     tip             TEXT NOT NULL,
     numar           TEXT,
     an              INTEGER,
@@ -112,6 +120,7 @@ CREATE TABLE IF NOT EXISTS provizii (
     PRIMARY KEY (act_id, ord)
 );
 CREATE INDEX IF NOT EXISTS idx_provizii_locator ON provizii(act_id, locator);
+CREATE INDEX IF NOT EXISTS idx_acte_cheie_citare ON acte(cheie_citare);
 
 -- The reference spans the portal marks itself, kept apart from anything this package infers.
 CREATE TABLE IF NOT EXISTS referinte_marcate (
@@ -461,6 +470,7 @@ def deschide(
         _adauga_coloane(con)
         _migreaza_fts(con)
         _migreaza_initiator(con)
+        _migreaza_cheie_citare(con)
         yield con
         con.commit()
     except Exception:
@@ -499,6 +509,10 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
         # before the link was kept, not that the step had no debate.
         "initiativa_etapa": [("steno_ids", "TEXT"), ("steno_idm", "TEXT")],
         "initiativa_vot": [("idv", "TEXT")],
+        # The bare citation key, on a corpus collected when the id *was* the citation. Backfilled
+        # from the id below, which is correct for every act that has no namesake — and for the one
+        # holding the bare key where it does.
+        "acte": [("cheie_citare", "TEXT")],
     }
     for tabel, coloane in noi.items():
         if not con.execute(
@@ -509,6 +523,20 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
         for nume, tip in coloane:
             if nume not in existente:
                 con.execute(f"ALTER TABLE {tabel} ADD COLUMN {nume} {tip}")
+
+
+def _migreaza_cheie_citare(con: sqlite3.Connection) -> None:
+    """Fill the bare citation key on a corpus collected when the id *was* the citation.
+
+    `id` is the right value for it: every act stored under the old rule holds a bare key, and where
+    several claimed one, the row that survived is the one that held it. So the backfill is exact
+    for what is there — it is only the acts that were *deleted* by the collision that this cannot
+    recover, and those come back by re-reading their stored pages.
+    """
+    tabele = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if "acte" not in tabele:
+        return
+    con.execute("UPDATE acte SET cheie_citare = id WHERE cheie_citare IS NULL")
 
 
 def _migreaza_initiator(con: sqlite3.Connection) -> None:
@@ -626,15 +654,26 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
     and half of an old parse mixed with half of a new one is a corpus nobody can reason about.
     """
     act = parsat.act
+    # Not `act.id`: that is the *citation* key and several acts can answer to it. Eighteen
+    # different acts are `Hotărâre nr. 1 din 2016`, and deleting by the citation before inserting
+    # is what removed seventeen of them, their provisions with them.
+    act_id = omonime.id_unic(
+        con,
+        cheie_citare=act.id,
+        tip=act.tip,
+        emitent=parsat.emitent or "",
+        id_portal=parsat.id_portal,
+    )
     # Before the cascade, not after: `DELETE FROM acte` takes `provizii` with it, and an
     # external-content index cannot withdraw rows whose values are already gone.
-    _sterge_fts(con, act.id)
-    con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
+    _sterge_fts(con, act_id)
+    con.execute("DELETE FROM acte WHERE id = ?", (act_id,))
     con.execute(
-        "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
+        "INSERT INTO acte (id, cheie_citare, tip, numar, an, titlu, emitent, publicat, vigoare,"
         " republicat_din, id_portal, id_act_portal, sursa_url, citit_la)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
+            act_id,
             act.id,
             act.tip,
             act.numar,
@@ -657,7 +696,7 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
             "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la,"
             " vigoare_pana_la) VALUES (?,?,?,?,?,?)",
             (
-                act.id,
+                act_id,
                 p.locator_id,
                 ord_,
                 p.text,
@@ -665,21 +704,21 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
                 _iso(p.in_vigoare_pana_la),
             ),
         )
-        _scrie_fts(con, cur.lastrowid, act.id, p.locator_id, p.text)
+        _scrie_fts(con, cur.lastrowid, act_id, p.locator_id, p.text)
         for ref in p.referinte_marcate:
             con.execute(
                 "INSERT INTO referinte_marcate (act_id, ord, locator, text) VALUES (?,?,?,?)",
-                (act.id, ord_, p.locator_id, ref),
+                (act_id, ord_, p.locator_id, ref),
             )
             marcate += 1
 
     # The importer checks itself rather than being trusted: what the parser handed over and
     # what the table now holds must be the same number. This is the guard that would have
     # caught the thirty-one lost rows on the day they were lost.
-    stocate = con.execute("SELECT count(*) FROM provizii WHERE act_id = ?", (act.id,)).fetchone()[0]
+    stocate = con.execute("SELECT count(*) FROM provizii WHERE act_id = ?", (act_id,)).fetchone()[0]
     if stocate != len(parsat.provizii):
         raise ValueError(
-            f"{act.id}: parserul a dat {len(parsat.provizii)} provizii, în tabel au ajuns {stocate}"
+            f"{act_id}: parserul a dat {len(parsat.provizii)} provizii, în tabel au ajuns {stocate}"
         )
 
     # The portal's flags say a relation *exists*, not what it points at. Recorded as `assumed`
@@ -689,9 +728,9 @@ def scrie_act(con: sqlite3.Connection, parsat: ActParsat) -> Randament:
         con.execute(
             "INSERT OR REPLACE INTO relatii (din_act, catre_act, locator, fel, sursa,"
             " incredere, de_la) VALUES (?,?,?,?,?,?,?)",
-            (act.id, "", "", fel, "portal", "assumed", None),
+            (act_id, "", "", fel, "portal", "assumed", None),
         )
-    return Randament(act.id, len(parsat.provizii), marcate, len(parsat.relatii))
+    return Randament(act_id, len(parsat.provizii), marcate, len(parsat.relatii))
 
 
 def pune_in_cache(con: sqlite3.Connection, url: str, corp: bytes, stare: int) -> None:
@@ -1002,15 +1041,24 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
+    # Not `act.id` — see `scrie_act`. The citation key is shared; the act row is not.
+    act_id = omonime.id_unic(
+        con,
+        cheie_citare=act.id,
+        tip=act.tip,
+        emitent=rec.emitent or "",
+        id_portal=rec.id_portal,
+    )
     # Before the cascade, not after: `DELETE FROM acte` takes `provizii` with it, and an
     # external-content index cannot withdraw rows whose values are already gone.
-    _sterge_fts(con, act.id)
-    con.execute("DELETE FROM acte WHERE id = ?", (act.id,))
+    _sterge_fts(con, act_id)
+    con.execute("DELETE FROM acte WHERE id = ?", (act_id,))
     con.execute(
-        "INSERT INTO acte (id, tip, numar, an, titlu, emitent, publicat, vigoare,"
+        "INSERT INTO acte (id, cheie_citare, tip, numar, an, titlu, emitent, publicat, vigoare,"
         " republicat_din, id_portal, id_act_portal, sursa_url, citit_la)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
+            act_id,
             act.id,
             act.tip,
             act.numar,
@@ -1035,9 +1083,9 @@ def scrie_inregistrare(con: sqlite3.Connection, rec: Inregistrare, act: Act) -> 
     cur = con.execute(
         "INSERT INTO provizii (act_id, locator, ord, text, vigoare_de_la, vigoare_pana_la)"
         " VALUES (?,?,?,?,?,?)",
-        (act.id, "text", 1, curatat, _iso(rec.data_vigoare), None),
+        (act_id, "text", 1, curatat, _iso(rec.data_vigoare), None),
     )
-    _scrie_fts(con, cur.lastrowid, act.id, "text", curatat)
+    _scrie_fts(con, cur.lastrowid, act_id, "text", curatat)
 
 
 def pagina_terminata(con: sqlite3.Connection, pagina: int, acte: int) -> None:

@@ -115,9 +115,11 @@ def test_two_documents_sharing_a_citation_key_both_survive(db):
 
     Ministries number their ordine from 1 each year and `decizie-5-1996` names a Curtea
     Constituțională decision as readily as an agency's, so `tip-numar-an` collides constantly.
-    `acte` is the citation view and keeps the last writer — resolution needs exactly one answer
-    for `Legea nr. 98/2016`. `documente` keeps both, because the one thing this package may not
-    do is delete a document it fetched.
+    `acte` used to be the citation view and keep the last writer, on the reasoning that resolution
+    needs exactly one answer for `Legea nr. 98/2016`. It does — but the answer can be chosen at
+    resolution time from the issuer, and deleting the other act to get it cost 53 242 documents
+    their row and their provisions. Now both are stored: one under the bare citation key, the
+    other under the key with its issuer, and `omonime.rezolva` picks between them.
     """
     from scripts.api import Inregistrare
     from scripts.colector import act_din_inregistrare
@@ -143,7 +145,22 @@ def test_two_documents_sharing_a_citation_key_both_survive(db):
         for r in (finante, sanatate):
             depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
 
-        assert con.execute("SELECT count(*) FROM acte").fetchone()[0] == 1
+        from scripts import omonime
+
+        assert con.execute("SELECT count(*) FROM acte").fetchone()[0] == 2
+        # No issuer is canonical for an `ordin` — many ministries issue under the word — so the
+        # bare key goes to the first claimant and the second takes the portal's own document id.
+        # Both are reachable.
+        ids = {r[0] for r in con.execute("SELECT id FROM acte")}
+        assert ids == {"ordin-1-1995", "ordin-1-1995-222"}
+        assert {r[0] for r in con.execute("SELECT cheie_citare FROM acte")} == {"ordin-1-1995"}
+        assert [r[0] for r in omonime.candidati(con, "ordin-1-1995")] == [
+            "ordin-1-1995",
+            "ordin-1-1995-222",
+        ]
+        # And the text of both is in `provizii`, which is what the old rule destroyed.
+        texte = {r[0] for r in con.execute("SELECT text FROM provizii")}
+        assert texte == {"text finanțe", "text sănătate"}
         pastrate = con.execute("SELECT emitent, text FROM documente ORDER BY id_portal").fetchall()
         assert [r["emitent"] for r in pastrate] == [
             "Ministerul Finanțelor",
