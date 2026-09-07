@@ -277,3 +277,44 @@ def test_a_legitimate_document_still_imports_after_the_caps():
     """The guards must not have made the feature useless."""
     octeti = fisiere.catre_docx("LEGE nr. 1 din 2026", "Articolul 1\n(1) Text.")
     assert "Articolul 1" in fisiere.citeste(octeti, nume="p.docx").text
+
+
+def test_markdown_stays_linear_on_input_chosen_to_be_hostile():
+    """The shipped link pattern was quadratic on a run of `[`, because the engine tries
+    each one as a start and scans to the end from each.
+
+    Measured on it: 2 000 characters 0,02 s, 4 000 0,08 s, 8 000 0,33 s, 16 000 1,28 s. Clean
+    O(n²), on input the uploader chooses, and the 20 MB ceiling then *permitted* the worst case
+    rather than limiting it — one `.md` upload would have held a core for the rest of the day.
+
+    Timed rather than counted, because the defect is time. The ratio is what is asserted, not the
+    absolute seconds: quadratic quadruples when the input doubles, linear does not.
+    """
+    import time
+
+    def secunde(text: str) -> float:
+        t = time.monotonic()
+        fisiere.din_markdown(text)
+        return time.monotonic() - t
+
+    mic = secunde("[](" * 60000)
+    mare = secunde("[](" * 240000)  # four times the input
+    assert mare < mic * 12, f"creștere supraliniară: {mic:.3f}s -> {mare:.3f}s pentru 4x intrarea"
+
+
+def test_a_run_of_brackets_with_no_link_in_it_costs_nothing():
+    """Link syntax needs `](` to exist. One linear scan for it makes the adversarial input free
+    instead of driving the bounded lookahead at every position."""
+    import time
+
+    t = time.monotonic()
+    fisiere.din_markdown("[" * 2_000_000)
+    assert time.monotonic() - t < 2.0
+
+
+def test_a_line_anchored_pattern_does_not_reach_across_lines():
+    """`\\s` matches a newline, so `^\\s{0,3}#` under `re.M` could consume the break and
+    strip a `#` that is not at the start of its own line. `[ \\t]` cannot."""
+    curat = fisiere.din_markdown("Articolul 1 este despre\n\n\n# Titlu")
+    assert "Articolul 1 este despre" in curat
+    assert "Titlu" in curat and "#" not in curat

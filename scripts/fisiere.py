@@ -46,13 +46,25 @@ MAX_DESFACUT = 40 * 1024 * 1024  # `word/document.xml` after decompression
 
 # Markdown syntax that cannot also be legislative numbering. Ordered lists are deliberately absent
 # — see the module note.
-_TITLU_MD = re.compile(r"^\s{0,3}#{1,6}\s+", re.M)
-_CITAT_MD = re.compile(r"^\s{0,3}>\s?", re.M)
-_GARD_MD = re.compile(r"^\s*```.*$", re.M)
-_LEGATURA_MD = re.compile(r"\[([^\]]*)\]\([^)]*\)")
-_IMAGINE_MD = re.compile(r"!\[([^\]]*)\]\([^)]*\)")
+# Every repetition here is bounded, and every "any space" is `[ \t]` rather than `\s`.
+#
+# The link and image patterns were `\[([^\]]*)\]\([^)]*\)`, which is quadratic on input the
+# uploader chooses: on a run of `[` the engine tries each one as a start and scans to the end from
+# each. Measured on the shipped version — 2 000 characters 0,02 s, 4 000 0,08 s, 8 000 0,33 s,
+# 16 000 1,28 s — clean O(n²), and the 20 MB upload ceiling then *permits* the worst case rather
+# than limiting it. A bounded repetition caps the work per start position, which is what turns the
+# curve back into a line.
+#
+# `\s` is avoided in the line-anchored patterns for a second reason: it matches a newline, so
+# `^\s{0,3}` under `re.M` could consume across lines and match a heading that is not at a line
+# start.
+_TITLU_MD = re.compile(r"^[ \t]{0,3}#{1,6}[ \t]+", re.M)
+_CITAT_MD = re.compile(r"^[ \t]{0,3}>[ \t]?", re.M)
+_GARD_MD = re.compile(r"^[ \t]*```[^\n]*$", re.M)
+_LEGATURA_MD = re.compile(r"\[([^\]\n]{0,300})\]\([^)\n]{0,500}\)")
+_IMAGINE_MD = re.compile(r"!\[([^\]\n]{0,300})\]\([^)\n]{0,500}\)")
 _ACCENT_MD = re.compile(r"(\*\*|__|\*|_|`)")
-_LINIE_MD = re.compile(r"^\s*([-*_])\s*\1\s*\1[\s\-*_]*$", re.M)
+_LINIE_MD = re.compile(r"^[ \t]*([-*_])[ \t]*\1[ \t]*\1[ \t\-*_]{0,200}$", re.M)
 _MULTE_GOALE = re.compile(r"\n{3,}")
 
 
@@ -75,8 +87,12 @@ def din_markdown(text: str) -> str:
     """
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     text = _GARD_MD.sub("", text)
-    text = _IMAGINE_MD.sub(r"\1", text)
-    text = _LEGATURA_MD.sub(r"\1", text)
+    # Link syntax needs `](` to exist at all. Checking for it first costs one linear scan and makes
+    # the adversarial input — a long run of `[` with no link in it — cost nothing instead of
+    # driving the bounded lookahead at every position.
+    if "](" in text:
+        text = _IMAGINE_MD.sub(r"\1", text)
+        text = _LEGATURA_MD.sub(r"\1", text)
     text = _LINIE_MD.sub("", text)
     text = _TITLU_MD.sub("", text)
     text = _CITAT_MD.sub("", text)
