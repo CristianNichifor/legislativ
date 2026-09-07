@@ -200,3 +200,99 @@ def test_the_reserve_skips_blocks_with_no_letters():
     a = parseaza(PAGINA_REZERVA, "u")
     assert all(any(c.isalpha() for c in p.text) for p in a.provizii)
     assert not any(p.text.strip() == "---" for p in a.provizii)
+
+
+# --- puncte ------------------------------------------------------------------------------------
+
+PAGINA_PUNCTE = """<html><body>
+<div class="S_DEN">LEGE nr. 273 din 2006 privind finanțele publice locale</div>
+<span class="S_ART" id="a2"><span class="S_ART_TTL">Articolul 2</span>
+<span class="S_ART_BDY"><span class="S_ALN"><span class="S_ALN_TTL">(1)</span>
+<span class="S_ALN_BDY">În înțelesul prezentei legi, termenii se definesc astfel:
+<span class="S_PCT"><span class="S_PCT_TTL">1.</span>
+<span class="S_PCT_BDY">activitate — totalitatea acțiunilor efectuate.</span>
+<span style="display:none" class="S_PCT_SHORT"> ... </span></span>
+<span class="S_PCT"><span class="S_PCT_TTL">39.</span>
+<span class="S_PCT_BDY">excedent bugetar — partea veniturilor ce depășește cheltuielile.</span>
+<span style="display:none" class="S_PCT_SHORT"> ... </span></span>
+</span></span></span></span>
+<span class="S_ART" id="a3"><span class="S_ART_TTL">Articolul 3</span>
+<span class="S_ART_BDY"><span class="S_ALN"><span class="S_ALN_TTL">(4)</span>
+<span class="S_ALN_BDY"><span class="S_LIT"><span class="S_LIT_TTL">b)</span>
+<span class="S_LIT_BDY">instrumente de garantare, astfel:
+<span class="S_PCT"><span class="S_PCT_TTL">(i)</span>
+<span class="S_PCT_BDY">scrisori de garanție emise de instituții de credit;</span></span>
+<span class="S_PCT"><span class="S_PCT_TTL">(ii)</span>
+<span class="S_PCT_BDY">asigurări de garanții emise de societăți de asigurare;</span></span>
+</span></span></span></span></span></span>
+</body></html>"""
+
+
+def _puncte():
+    from scripts.parsare import parseaza
+
+    return parseaza(PAGINA_PUNCTE, "u")
+
+
+def test_a_point_is_addressable_at_the_locator_citations_use():
+    """15 550 citations in the collected graph name a point — `art. 2 alin. (1) pct. 39` — and the
+    corpus held not one provision at such a locator, so every one of them resolved to nothing."""
+    pe_loc = {p.locator_id: p.text for p in _puncte().provizii}
+    assert "art2.alin1.pct39" in pe_loc
+    assert "excedent bugetar" in pe_loc["art2.alin1.pct39"]
+    assert "art2.alin1.pct1" in pe_loc
+
+
+def test_the_hover_duplicate_of_a_point_is_not_counted_twice():
+    """The portal writes a collapsed `_SHORT` twin of every addressable unit. Only the letter's was
+    being dropped, so reading points without dropping theirs doubles every point in the act."""
+    provizii = _puncte().provizii
+    assert "..." not in " ".join(p.text for p in provizii)
+    puncte = [p.locator_id for p in provizii if p.locator_id.startswith("art2.alin1.pct")]
+    assert sorted(puncte) == ["art2.alin1.pct1", "art2.alin1.pct39"]
+
+
+def test_a_sub_point_under_a_letter_keeps_the_letter_in_its_locator():
+    """The portal marks the roman sub-letter level `S_PCT` as well. Nothing in the corpus cites one
+    — all 15 550 point references are arabic — but they carry text, so they are numbered rather
+    than dropped, and the letter above them stays in the address."""
+    locs = {p.locator_id for p in _puncte().provizii}
+    assert "art3.alin4.litb.pcti" in locs
+    assert "art3.alin4.litb.pctii" in locs
+
+
+def test_a_point_whose_number_cannot_be_read_is_not_emitted_at_its_parents_locator():
+    """This is what went wrong the first time points were tried. With no number the point built the
+    same locator as the unit containing it and appended a second row under it — Legea 98/2016 went
+    from 1 435 provisions to 1 455 with not one new locator among them. Every reader that maps
+    locator to text keeps the last row it sees, so `art187.alin8.lita` came back holding a
+    sub-point, and the consolidation pairing landed 0 of 8 blocks."""
+    from scripts.parsare import parseaza
+
+    a = parseaza(
+        """<html><body><div class="S_DEN">LEGE nr. 1 din 2020</div>
+        <span class="S_ART"><span class="S_ART_TTL">Articolul 5</span>
+        <span class="S_ART_BDY"><span class="S_LIT"><span class="S_LIT_TTL">a)</span>
+        <span class="S_LIT_BDY">textul literei a).
+        <span class="S_PCT"><span class="S_PCT_TTL">&#8212;</span>
+        <span class="S_PCT_BDY">o liniuță fără număr.</span></span>
+        </span></span></span></span></body></html>""",
+        "u",
+    )
+    locs = [p.locator_id for p in a.provizii]
+    assert len(locs) == len(set(locs)), f"locatori duplicați: {locs}"
+    assert "art5.lita" in locs
+
+
+def test_the_amending_text_is_read_once_and_not_once_per_level():
+    """Provisions are stored at every depth on purpose, so joining all of them repeats every
+    sentence. `amendamente` carries the chapeau forward from one instruction to the next, so a
+    repeat re-enters it with a stale `La articolul 187,` — Legea 208/2022 went from 49 amendments
+    to 1 the moment points made the repetition visible."""
+    from scripts.consolidare import text_o_singura_data
+
+    a = _puncte()
+    plat = text_o_singura_data(a.provizii)
+    assert plat.count("excedent bugetar") == 1
+    assert plat.count("scrisori de garanție") == 1
+    assert "activitate" in plat and "asigurări de garanții" in plat

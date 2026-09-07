@@ -1272,6 +1272,7 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                         "nedecise": s.nedecise,
                     },
                     "initiative": dep.initiative(con, idm, leg, camera),
+                    "interventii": _spuse(con, idm, leg, camera),
                 }
             if q:
                 return {
@@ -1320,10 +1321,13 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
                     # split() on an empty string yields [""], which renders as a stray separator
                     # where a step simply names no committee
                     "comisii": [c for c in (r[3] or "").split("\n") if c],
+                    # Present only where the step links a debate, so a step that had none is not
+                    # offered as one whose transcript failed to load.
+                    "steno": ({"ids": r[4], "idm": r[5]} if r[4] else None),
                 }
                 for r in con.execute(
-                    "SELECT data, camera, actiune, comisii FROM initiativa_etapa"
-                    " WHERE plx_id = ? ORDER BY ord",
+                    "SELECT data, camera, actiune, comisii, steno_ids, steno_idm"
+                    " FROM initiativa_etapa WHERE plx_id = ? ORDER BY ord",
                     (plx_id,),
                 )
             ]
@@ -1370,6 +1374,127 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
         "voturi": voturi,
         "initiatori": initiatori,
     }
+
+
+def _spuse(con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None) -> list[dict]:
+    """What this deputy said in the Chamber, newest sitting first.
+
+    Joined on `(leg, camera, idm)` — the Chamber's own key — and never on the name, for the same
+    reason the signatures are. Empty where no transcript has been read: a deputy with no speeches
+    collected must not be reported as one who never spoke.
+    """
+    try:
+        return [
+            {
+                "ids": r[0],
+                "idm": r[1],
+                "ord": r[2],
+                "data": r[3],
+                "titlu": r[4],
+                "plx_id": r[5],
+                "text": r[6],
+            }
+            for r in con.execute(
+                "SELECT i.ids, i.idm, i.ord, s.data, s.titlu, s.plx_id, i.text"
+                " FROM interventie i JOIN stenograma s ON s.ids = i.ids AND s.idm = i.idm"
+                " WHERE i.dep_idm = ? AND i.dep_leg IS ? AND i.dep_camera IS ?"
+                " ORDER BY s.data DESC, i.ord LIMIT 40",
+                (idm, leg, camera),
+            )
+        ]
+    except sqlite3.OperationalError:
+        # No transcripts collected in this store.
+        return []
+
+
+def _stenograma(qs: dict, stare: Stare) -> dict:
+    """One sitting item's debate, in the order it was spoken.
+
+    Keyed on `(ids, idm)` — the sitting and the item within it — because that is what a step links
+    and what the Chamber publishes. `gasit=False` where the transcript has not been collected,
+    rather than an empty list: a debate nobody has fetched and a debate nobody spoke at must not
+    look alike.
+    """
+    ids = (qs.get("ids", [""])[0] or "").strip()
+    idm = (qs.get("idm", [""])[0] or "").strip()
+    if not ids or not idm:
+        return {"gasit": False, "ids": ids, "idm": idm, "interventii": []}
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        try:
+            cap = con.execute(
+                "SELECT data, camera, titlu, plx_id, url FROM stenograma WHERE ids = ? AND idm = ?",
+                (ids, idm),
+            ).fetchone()
+            if not cap:
+                return {"gasit": False, "ids": ids, "idm": idm, "interventii": []}
+            interventii = [
+                {
+                    "ord": r[0],
+                    "vorbitor": r[1],
+                    "idm": r[2],
+                    "leg": r[3],
+                    "camera": r[4],
+                    "rol": r[5],
+                    "text": r[6],
+                }
+                for r in con.execute(
+                    "SELECT ord, vorbitor, dep_idm, dep_leg, dep_camera, rol, text"
+                    " FROM interventie WHERE ids = ? AND idm = ? ORDER BY ord",
+                    (ids, idm),
+                )
+            ]
+        except sqlite3.OperationalError:
+            return {"gasit": False, "ids": ids, "idm": idm, "interventii": []}
+    return {
+        "gasit": True,
+        "ids": ids,
+        "idm": idm,
+        "data": cap[0],
+        "camera": cap[1],
+        "titlu": cap[2],
+        "plx_id": cap[3],
+        "url": cap[4],
+        "interventii": interventii,
+    }
+
+
+def _dezbateri(qs: dict, stare: Stare) -> dict:
+    """Search what was actually said, rather than what a bill was called.
+
+    A title says what a law is for; the debate says what was argued about it, and the two are
+    often not the same words. Diacritic-folded by the index, so a reader who types `masuri` finds
+    `măsuri`.
+    """
+    q = (qs.get("q", [""])[0] or "").strip()
+    if not q:
+        return {"cautare": "", "rezultate": []}
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        try:
+            rezultate = [
+                {
+                    "ids": r[0],
+                    "idm": r[1],
+                    "ord": r[2],
+                    "vorbitor": r[3],
+                    "data": r[4],
+                    "titlu": r[5],
+                    "plx_id": r[6],
+                    "fragment": r[7],
+                }
+                for r in con.execute(
+                    "SELECT f.ids, f.idm, f.ord, f.vorbitor, s.data, s.titlu, s.plx_id,"
+                    "  snippet(interventie_fts, 0, '<mark>', '</mark>', '…', 24)"
+                    " FROM interventie_fts f"
+                    " LEFT JOIN stenograma s ON s.ids = f.ids AND s.idm = f.idm"
+                    " WHERE interventie_fts MATCH ? ORDER BY rank LIMIT 40",
+                    (q,),
+                )
+            ]
+        except sqlite3.OperationalError:
+            # No transcripts collected, or the query is not valid FTS syntax — either way there is
+            # nothing to show, and a 500 on a stray quote mark would be worse.
+            return {"cautare": q, "rezultate": []}
+    return {"cautare": q, "rezultate": rezultate}
 
 
 def _parseaza(text: str) -> dict:

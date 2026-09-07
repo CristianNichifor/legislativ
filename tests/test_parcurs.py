@@ -159,10 +159,13 @@ def test_an_initiative_still_in_committee_has_no_vote():
     assert p.voturi == ()
 
 
-def test_the_stenogram_of_the_sitting_is_kept():
-    """The debate is the next question a reader asks after the tally."""
+def test_the_stenogram_lands_on_the_step_it_belongs_to():
+    """The debate is the next question a reader asks after the tally, and it belongs to the step
+    rather than to the bill: a sitting runs through dozens of items and the link says which one."""
     p = parseaza_parcurs(PARCURS, "plx-42-2021", "18765")
-    assert any("steno" in s for s in p.stenograme)
+    cu_steno = [e for e in p.etape if e.steno_ids]
+    assert cu_steno, "niciun pas nu poartă stenograma"
+    assert all(e.steno_idm for e in cu_steno), "ședința fără punctul din ea nu localizează nimic"
 
 
 # --- entități ----------------------------------------------------------------------------------

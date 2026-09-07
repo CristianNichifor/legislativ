@@ -263,7 +263,20 @@
   .dep-semn{font-family:var(--mono);font-size:.68rem;color:var(--ink-mute)}
   .dep-rez{font-size:.66rem;font-weight:600;text-transform:uppercase}
   .dep-rez.adoptat{color:var(--good)} .dep-rez.respins{color:var(--blocking)}
-  @media (max-width:34rem){ .parc-etapa{grid-template-columns:1fr} }
+  /* the debate under a step. Indented under the step it belongs to, because the whole point of
+     keeping the locator on the step is that the argument sits at the moment it was made */
+  .steno-buton{font-size:.66rem;padding:.02rem .4rem;margin-left:.35rem;min-height:1.1rem;
+    vertical-align:.05em}
+  .steno{margin:.3rem 0 .4rem 5.9rem;padding:.45rem .6rem;border-left:2px solid var(--rule);
+    background:var(--surface);border-radius:0 var(--r1) var(--r1) 0}
+  .steno-h{font-size:.7rem;color:var(--ink-mute);margin-bottom:.35rem;line-height:1.4}
+  .steno-rand{margin:.35rem 0;line-height:1.5}
+  .steno-cine{font-weight:600}
+  /* the office of someone with no profile to open — a minister, a guest. The only place the
+     transcript says who they were */
+  .steno-rol{font-size:.68rem;color:var(--ink-mute);font-style:italic}
+  .steno-text{display:block;font-size:.76rem;margin-top:.1rem}
+  @media (max-width:34rem){ .parc-etapa{grid-template-columns:1fr} .steno{margin-left:.4rem} }
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
   .graf-cauta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.5rem 0 .8rem}
@@ -2347,6 +2360,16 @@ function deputatHtml(nume, leg, camera, d){
       +(x.rezultat?` <span class="dep-rez ${esc(x.rezultat)}">${esc(x.rezultat)}</span>`:``)+`</div>`).join("")
       +(lista.length>8?`<div class="hint">…și încă ${lista.length-8}</div>`:``)+`</div>`;
   }
+  // What they signed is paperwork; what they said is the argument. Joined on the same
+  // (legislature, chamber, id) as the signatures, so this is the same person and not a namesake.
+  const spuse=(d.interventii||[]);
+  if(spuse.length){
+    h+=`<div class="parc-h">În plen (${spuse.length})</div><div class="dep-lista">`
+      +spuse.slice(0,5).map(x=>`<div class="dep-init"><span class="parc-data">${esc(x.data||"")}</span> `
+      +(x.plx_id?`<span class="plx">${esc(x.plx_id)}</span> `:``)
+      +`<span class="hint">${esc((x.text||"").slice(0,160))}${(x.text||"").length>160?"…":""}</span></div>`).join("")
+      +(spuse.length>5?`<div class="hint">…și încă ${spuse.length-5}</div>`:``)+`</div>`;
+  }
   return h;
 }
 function clarBox(text, nota){
@@ -2737,7 +2760,11 @@ async function renderSupraveghere(){
   try{ localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); }catch(e){}
   box.querySelectorAll(".watch-x").forEach(b=>b.onclick=()=>{ watchRemove(b.dataset.act); renderSupraveghere(); });
   box.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+  // Delegated, unlike the passage buttons above: the debate buttons are written by `parcursHtml`
+  // long after this render, so binding them directly here would bind nothing.
   box.addEventListener("click", e=>{
+    const s=e.target.closest(".steno-buton");
+    if(s){ comutaDezbatere(s); return; }
     const n=e.target.closest(".dep-nume");
     if(n) aratraDeputat(n);
   });
@@ -2797,11 +2824,51 @@ function parcursHtml(d){
   }
   if(et.length){
     h+=`<div class="parc-h">Etape (${et.length})</div>`;
+    // A step that was debated offers the debate; one that was not says nothing, rather than
+    // offering a button that would come back empty.
     h+=et.map(e=>`<div class="parc-etapa"><span class="parc-data">${esc(e.data||"—")}</span>`
       +`<span>${esc(e.actiune)}`
       +((e.comisii||[]).filter(Boolean).length?` <span class="hint">${esc(e.comisii.filter(Boolean).join("; "))}</span>`:``)
-      +(e.camera?` <span class="parc-cam">${esc(e.camera)}</span>`:``)+`</span></div>`).join("");
+      +(e.camera?` <span class="parc-cam">${esc(e.camera)}</span>`:``)
+      +(e.steno?` <button type="button" class="ghost mini steno-buton" data-ids="${esc(e.steno.ids)}" data-idm="${esc(e.steno.idm)}">dezbaterea</button>`:``)
+      +`</span></div>`
+      +(e.steno?`<div class="steno-loc" data-cheie="${esc(e.steno.ids)}|${esc(e.steno.idm)}"></div>`:``)).join("");
   }
+  return h+`</div>`;
+}
+// The debate under one step, fetched when asked for: a bill's passage carries a dozen of them and
+// a transcript is thousands of words.
+async function comutaDezbatere(buton){
+  const cheie=buton.dataset.ids+"|"+buton.dataset.idm;
+  const gazda=buton.closest(".parc").querySelector(`.steno-loc[data-cheie="${CSS.escape(cheie)}"]`);
+  if(!gazda) return;
+  if(gazda.firstChild){ gazda.innerHTML=""; buton.textContent="dezbaterea"; return; }
+  buton.textContent="ascunde";
+  gazda.innerHTML=`<div class="steno"><span class="spin"></span> încarc…</div>`;
+  const d=await fetch(`/api/stenograma?ids=${encodeURIComponent(buton.dataset.ids)}`
+    +`&idm=${encodeURIComponent(buton.dataset.idm)}`).then(r=>r.json()).catch(()=>null);
+  gazda.innerHTML=d?stenogramaHtml(d):`<div class="steno">Dezbaterea nu a putut fi încărcată.</div>`;
+}
+function stenogramaHtml(d){
+  // Not read yet and nobody spoke are different facts, and the difference is the whole reason the
+  // endpoint answers `gasit` rather than an empty list.
+  if(!d.gasit)
+    return `<div class="steno"><span class="hint">Stenograma acestei ședințe nu a fost încă adusă.</span></div>`;
+  const its=d.interventii||[];
+  let h=`<div class="steno"><div class="steno-h">${esc(d.titlu||"")}`
+    +(d.data?` <span class="parc-data">${esc(d.data)}</span>`:``)
+    +(d.camera?` <span class="parc-cam">${esc(d.camera)}</span>`:``)+`</div>`;
+  if(!its.length) return h+`<span class="hint">Ședința nu are luări de cuvânt înregistrate la acest punct.</span></div>`;
+  h+=its.map(i=>{
+    // Clickable only where the Chamber linked a profile. A minister has none, and `Voci din sală`
+    // is deliberately stripped of the chair's id rather than opening someone else's record.
+    const cine=i.idm
+      ? `<span class="dep-nume steno-cine" data-idm="${esc(i.idm)}" data-leg="${esc(i.leg||"")}" data-camera="${esc(i.camera||"")}">${esc(i.vorbitor||"")}</span>`
+      : `<span class="steno-cine">${esc(i.vorbitor||"—")}</span>`;
+    return `<div class="steno-rand">${cine}`
+      +(i.rol?` <span class="steno-rol">(${esc(i.rol)})</span>`:``)
+      +`<span class="steno-text">${esc(i.text)}</span></div>`;
+  }).join("");
   return h+`</div>`;
 }
 $("#s-add").onclick=sAdd;

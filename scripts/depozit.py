@@ -267,6 +267,8 @@ CREATE TABLE IF NOT EXISTS initiativa_etapa (
     camera   TEXT,                  -- 'Camera Deputaților' | 'Senat' | 'Parlament'
     actiune  TEXT NOT NULL,
     comisii  TEXT,                  -- the committees named in the step, newline-separated
+    steno_ids TEXT,                 -- the sitting whose transcript covers this step
+    steno_idm TEXT,                 -- the item within that sitting; '15.02' as readily as '8'
     PRIMARY KEY (plx_id, ord)
 );
 
@@ -295,7 +297,53 @@ CREATE TABLE IF NOT EXISTS initiativa_vot (
     abtineri  INTEGER NOT NULL,
     rezultat  TEXT,                  -- 'adoptat' | 'respins', as the step's own sentence puts it
     absenti   INTEGER,               -- `nu au votat=2`, where the Fișa records it
+    idv       TEXT,                  -- the nominal roll of this division; captured, not yet read
     PRIMARY KEY (plx_id, data, camera, intrebare)
+);
+
+-- One item of one sitting, as the Chamber's transcript prints it: `stenograma?ids=8235&idm=8`.
+-- The item, not the day — a sitting runs through dozens of bills and the reader wants the one
+-- they are following. `plx_id` is what the transcript page itself says the item was about, which
+-- is not always the bill whose Fișa linked here: an item can cover several.
+CREATE TABLE IF NOT EXISTS stenograma (
+    ids      TEXT NOT NULL,
+    idm      TEXT NOT NULL,
+    data     TEXT,                  -- ISO, from the sitting's own heading
+    camera   TEXT,
+    titlu    TEXT,                  -- the item's subject line, as the transcript heads it
+    plx_id   TEXT,                  -- the bill the transcript names, where it names one
+    url      TEXT NOT NULL,
+    adus_la  TEXT NOT NULL,
+    PRIMARY KEY (ids, idm)
+);
+CREATE INDEX IF NOT EXISTS idx_stenograma_plx ON stenograma(plx_id);
+
+-- One turn at the microphone. `ord` is the transcript's own order, which is the order people
+-- spoke.
+--
+-- `dep_idm`/`dep_leg`/`dep_camera` are the speaker's own link on the page, and they are the same
+-- `(leg, camera, idm)` key `deputati.py` profiles are built on — so a speech joins to the person
+-- who gave it without matching on the name, which splits `Şovăială` from `Șovăială` and merges two
+-- people who share one. They are NULL for everyone the transcript does not link: ministers,
+-- secretaries of state, guests. `rol` is the parenthetical the page prints for exactly those
+-- people, and it is the only thing that says who they were.
+CREATE TABLE IF NOT EXISTS interventie (
+    ids        TEXT NOT NULL,
+    idm        TEXT NOT NULL,
+    ord        INTEGER NOT NULL,
+    vorbitor   TEXT,                -- the name as the transcript prints it
+    dep_idm    TEXT,
+    dep_leg    TEXT,
+    dep_camera TEXT,
+    rol        TEXT,                -- `(secretar de stat, Departamentul pentru...)`
+    text       TEXT NOT NULL,
+    PRIMARY KEY (ids, idm, ord)
+);
+CREATE INDEX IF NOT EXISTS idx_interventie_dep ON interventie(dep_leg, dep_camera, dep_idm);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS interventie_fts USING fts5(
+    text, vorbitor UNINDEXED, ids UNINDEXED, idm UNINDEXED, ord UNINDEXED,
+    tokenize = 'unicode61 remove_diacritics 2'
 );
 
 -- Who signed it. `idm` is the Chamber's own id for the person: names collide and are spelled
@@ -445,8 +493,18 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
             # cannot mean "not yet examined" without re-reading the whole corpus every time.
             ("lovituri_extrase", "INTEGER"),
         ],
+        # The transcript's own locators, added to a passage collected before they were read. Not
+        # part of any primary key, so no stored row changes identity by gaining them; they stay
+        # NULL until the Fișe are re-read, and NULL is honest — it says this step was collected
+        # before the link was kept, not that the step had no debate.
+        "initiativa_etapa": [("steno_ids", "TEXT"), ("steno_idm", "TEXT")],
+        "initiativa_vot": [("idv", "TEXT")],
     }
     for tabel, coloane in noi.items():
+        if not con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabel,)
+        ).fetchone():
+            continue
         existente = {r[1] for r in con.execute(f"PRAGMA table_info({tabel})")}
         for nume, tip in coloane:
             if nume not in existente:
@@ -859,9 +917,18 @@ def scrie_parcurs(con: sqlite3.Connection, p) -> None:
         con.execute(f"DELETE FROM {tabel} WHERE plx_id = ?", (p.plx_id,))
     for i, e in enumerate(p.etape):
         con.execute(
-            "INSERT OR REPLACE INTO initiativa_etapa (plx_id, ord, data, camera, actiune, comisii)"
-            " VALUES (?,?,?,?,?,?)",
-            (p.plx_id, i, e.data, e.camera, e.actiune, "\n".join(e.comisii) or None),
+            "INSERT OR REPLACE INTO initiativa_etapa (plx_id, ord, data, camera, actiune, comisii,"
+            " steno_ids, steno_idm) VALUES (?,?,?,?,?,?,?,?)",
+            (
+                p.plx_id,
+                i,
+                e.data,
+                e.camera,
+                e.actiune,
+                "\n".join(e.comisii) or None,
+                e.steno_ids,
+                e.steno_idm,
+            ),
         )
     for a in p.avize:
         con.execute(
@@ -872,7 +939,7 @@ def scrie_parcurs(con: sqlite3.Connection, p) -> None:
     for v in p.voturi:
         con.execute(
             "INSERT OR REPLACE INTO initiativa_vot (plx_id, data, camera, intrebare, pentru,"
-            " contra, abtineri, rezultat, absenti) VALUES (?,?,?,?,?,?,?,?,?)",
+            " contra, abtineri, rezultat, absenti, idv) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (
                 p.plx_id,
                 v.data,
@@ -883,6 +950,7 @@ def scrie_parcurs(con: sqlite3.Connection, p) -> None:
                 v.abtineri,
                 v.rezultat,
                 v.absenti,
+                v.idv,
             ),
         )
     for it in p.initiatori:

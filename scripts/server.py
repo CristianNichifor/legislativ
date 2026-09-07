@@ -22,7 +22,11 @@ writes, so it coexists with the collectors and answers from more law each time t
   cites it, and the act's load-bearing provisions by how many sources rely on each.
 - `GET /api/deputati[?q=|?idm=&leg=&camera=]` — the parliamentary groups, a name search, or one
   member's record. Identity is (legislature, chamber, id); anything less merges people.
-- `GET /api/parcurs?plx=` — one bill's passage: sponsors, timeline, avize, recorded votes.
+- `GET /api/parcurs?plx=` — one bill's passage: sponsors, timeline, avize, recorded votes. A step
+  that was debated carries the transcript's locator, `{ids, idm}` — the sitting and the item.
+- `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
+  (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
+- `GET /api/dezbateri?q=` — full-text over what was said in the Chamber, not over bill titles.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -50,6 +54,7 @@ from scripts.servicii import (
     _consolidat,
     _cronologie,
     _deputati,
+    _dezbateri,
     _dictionar,
     _impact,
     _lint,
@@ -61,6 +66,7 @@ from scripts.servicii import (
     _prevedere,
     _redacteaza,
     _regula,
+    _stenograma,
     _sugereaza,
     _supraveghere,
     _termeni,
@@ -153,6 +159,10 @@ def face_handler(stare: Stare):
                 self._json(_deputati(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/parcurs":
                 self._json(_parcurs(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/stenograma":
+                self._json(_stenograma(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/dezbateri":
+                self._json(_dezbateri(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dictionar":
