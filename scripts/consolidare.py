@@ -257,6 +257,32 @@ def consolideaza_in(
     return rezultate
 
 
+def text_o_singura_data(provizii) -> str:
+    """The page's words once, not once per level they are stored at.
+
+    Provisions are emitted at every depth on purpose — a finding may need to quote article 7 whole
+    or only its paragraph (2) — so joining all of them repeats every sentence two to four times.
+    For a reader that walks the text as a *sequence* that is not merely redundant. `amendamente`
+    carries the chapeau forward from one instruction to the next, so a repeated block re-enters it
+    with a stale `La articolul 187,` and the instruction after lands on the wrong article.
+
+    It went unnoticed while only articles, paragraphs and letters were parsed, because those close
+    in an order the reader happened to tolerate. Reading points broke it in one step: Legea
+    208/2022 went from 49 amendments to 1, and the abrogation notes the portal prints inside a
+    point — `Abrogat. (la 24-05-2024, Punctul 5., Articolul I ...)` — were the text that poisoned
+    it, by naming an article in the middle of another article's instructions.
+
+    A child closes before the parent that contains it, so the reduction is a stack: each provision
+    swallows the trailing ones it contains. What is left is the outermost text, in printed order.
+    """
+    iesire: list = []
+    for p in provizii:
+        while iesire and iesire[-1].text and iesire[-1].text in p.text:
+            iesire.pop()
+        iesire.append(p)
+    return "\n".join(p.text for p in iesire)
+
+
 def operatii_amendatoare(
     amendator: ActParsat,
     citate: list[Provizie],
@@ -280,7 +306,7 @@ def operatii_amendatoare(
     across several dates is not handled here, and an operation with no date will make the engine
     refuse downstream, which is the correct visible failure.
     """
-    plain = "\n".join(p.text for p in amendator.provizii)
+    plain = text_o_singura_data(amendator.provizii)
     ams = amendamente(plain, act_gazda=amendator.act)
     data = data_operatie or amendator.vigoare
     act_id = amendator.act.id

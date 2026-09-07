@@ -86,6 +86,13 @@ _ASCUNS = re.compile(
     r'[^>]*value="(?P<val>[^"]*)"'
 )
 _NR_TTL = re.compile(r"(\d+(?:\^\d+)?)")
+# A point's own number, which the portal writes in two different alphabets under one class name.
+# `1.` is the point a citation addresses — all 15 550 references to a point in the collected graph
+# are arabic. `(i)`, `(ii)` are the sub-letter level Romanian drafting puts below a literă, and the
+# portal marks those `S_PCT` as well; they are numbered here so they become addressable rather than
+# dropped, but nothing in the corpus cites one. The superscript form is kept as it is for articles:
+# a point inserted between 3 and 4 is 3^1, never a renumbering.
+_NR_PCT = re.compile(r"(\d+(?:\^\d+)?)\s*\.|\(?\s*([ivxl]+)\s*\)")
 # A republished act's own header carries the word `republicat(ă)`; the date on its publication line
 # is then the republication in Monitorul Oficial, not the first publication. We read it into
 # `republicat_din` so consolidation can refuse to apply pre-republication amendments to the
@@ -151,11 +158,16 @@ class _Culegator(HTMLParser):
         "S_LIT",
         "S_LIT_TTL",
         "S_LIT_BDY",
+        "S_PCT",
+        "S_PCT_TTL",
+        "S_PCT_BDY",
         "S_PAR",
         "S_LGI",
     }
-    # The collapsed copy the page reveals on hover. Counted, it doubles every letter in the act.
-    IGNORATE = {"S_LIT_SHORT"}
+    # The collapsed copy the page reveals on hover. Counted, it doubles every letter in the act —
+    # and every point, which is the same trap one level down: the portal writes a `_SHORT` twin
+    # for each addressable unit and only the letter's was being dropped.
+    IGNORATE = {"S_LIT_SHORT", "S_PCT_SHORT"}
     GOALE = {"br", "img", "input", "meta", "link", "hr", "col", "area", "base", "source", "wbr"}
     # `script` and `style` bodies are text to HTMLParser and would land in the nearest buffer.
     MUTE = {"script", "style"}
@@ -286,7 +298,7 @@ def parseaza(html: str, url: str = "") -> ActParsat:
 
 # What stands in for structure when an act has none the walk can use: its paragraphs, and the body
 # blocks of units whose wrappers did not yield text.
-_REZERVA = {"S_PAR", "S_ART_BDY", "S_ALN_BDY", "S_LIT_BDY"}
+_REZERVA = {"S_PAR", "S_ART_BDY", "S_ALN_BDY", "S_LIT_BDY", "S_PCT_BDY"}
 
 
 def _are_litere(text: str) -> bool:
@@ -307,7 +319,7 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
     reassemble the parent from its children to do the first.
     """
     provizii: list[Provizie] = []
-    art = aln = lit = None
+    art = aln = lit = pct = None
     rezerva: list[tuple[str, tuple[str, ...]]] = []
     # Two accumulators, not one. A body block closes *inside* the unit that contains it, so a
     # single list let the reserve consume the `S_LGI` marks before the structured provision that
@@ -324,18 +336,30 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
         text = _text_din(ev, i)
         if nume == "S_ART_TTL":
             m = _NR_TTL.search(text)
-            art, aln, lit = (m.group(1) if m else None), None, None
+            art, aln, lit, pct = (m.group(1) if m else None), None, None, None
         elif nume == "S_ALN_TTL":
             m = _NR_TTL.search(text)
-            aln, lit = (m.group(1) if m else None), None
+            aln, lit, pct = (m.group(1) if m else None), None, None
         elif nume == "S_LIT_TTL":
             m = re.search(r"([a-zșț](?:\^\d+)?)\)", text)
-            lit = m.group(1) if m else None
-        elif nume in {"S_ART", "S_ALN", "S_LIT"} and text:
+            lit, pct = (m.group(1) if m else None), None
+        elif nume == "S_PCT_TTL":
+            m = _NR_PCT.search(text)
+            pct = (m.group(1) or m.group(2)) if m else None
+        elif nume in {"S_ART", "S_ALN", "S_LIT", "S_PCT"} and text:
+            # A point whose number could not be read is *not* emitted, and that is the whole of
+            # what went wrong the first time this was tried. With `punct=None` the point built the
+            # same locator as the letter containing it and appended a second row under it — 1 435
+            # provisions became 1 455 with not one new locator among them — and every reader that
+            # maps locator to text keeps the last row it sees. `art187.alin8.lita` then held a
+            # sub-point instead of the letter, and the consolidation pairing landed 0 of 8 blocks.
+            if nume == "S_PCT" and not pct:
+                continue
             loc = Locator(
                 articol=art,
-                alineat=aln if nume in {"S_ALN", "S_LIT"} else None,
-                litera=lit if nume == "S_LIT" else None,
+                alineat=aln if nume in {"S_ALN", "S_LIT", "S_PCT"} else None,
+                litera=lit if nume in {"S_LIT", "S_PCT"} else None,
+                punct=pct if nume == "S_PCT" else None,
             )
             if loc:
                 provizii.append(
