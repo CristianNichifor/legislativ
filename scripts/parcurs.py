@@ -35,7 +35,7 @@ import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final
 
 from scripts.text import normalizeaza
@@ -89,6 +89,14 @@ _CAM = re.compile(r"[?&]cam=(\d+)")
 # strangers and reports one deputy sitting in three parties at once.
 _LEG = re.compile(r"[?&]leg=(\d+)")
 CAM_NUME: Final[dict[str, str]] = {"1": "Senat", "2": "Camera Deputaților"}
+# The sitting's transcript, at the item this bill was taken under: `ids` is the sitting, `idm` the
+# item within it — and it is `15.02` as readily as `8`, because an item can be split. Matched on
+# the whole shape rather than on `steno` anywhere in the href: every Fișa also links the transcript
+# section's own front page and the video player, and those say nothing about this bill.
+_STENO = re.compile(r"steno2015\.stenograma\?ids=(\d+)&(?:amp;)?idm=([\d.]+)", re.I)
+# The roll of the division: who voted which way, name by name. Captured here because it is the
+# step's own link and there is nowhere else it is stated; nothing reads it yet.
+_IDV = re.compile(r"evot2015\.Nominal\?idv=(\d+)", re.I)
 
 
 @dataclass(frozen=True)
@@ -134,16 +142,26 @@ class Vot:
     abtineri: int
     rezultat: str | None = None  # 'adoptat' | 'respins', as the step's own sentence puts it
     absenti: int | None = None  # `nu au votat=2`, where the Fișa records it
+    idv: str | None = None  # the nominal roll of this division, where the step links one
 
 
 @dataclass(frozen=True)
 class Etapa:
-    """One dated step of the passage, in the chamber the Fișa filed it under."""
+    """One dated step of the passage, in the chamber the Fișa filed it under.
+
+    `steno_ids`/`steno_idm` locate the debate on *this step*, not on the day. The Chamber's link is
+    `stenograma?ids=8235&idm=8` — the sitting and the item within it — so a bill taken up twice
+    lands on two different transcripts and each sits at the moment it happened. Storing the
+    transcript per bill instead of per step would lose that, and the passage is the thing the
+    reader is following.
+    """
 
     data: str | None
     camera: str | None
     actiune: str
     comisii: tuple[str, ...] = ()
+    steno_ids: str | None = None
+    steno_idm: str | None = None
 
 
 @dataclass(frozen=True)
@@ -156,7 +174,6 @@ class Parcurs:
     etape: tuple[Etapa, ...] = ()
     avize: tuple[Aviz, ...] = ()
     voturi: tuple[Vot, ...] = ()
-    stenograme: tuple[str, ...] = field(default=())
 
 
 def _text(brut: str) -> str:
@@ -325,7 +342,6 @@ def parseaza_parcurs(html: str, plx_id: str, idp: str) -> Parcurs:
     etape: list[Etapa] = []
     avize: list[Aviz] = []
     voturi: list[Vot] = []
-    stenograme: list[str] = []
     camera: str | None = None
     pornit = False
 
@@ -348,18 +364,25 @@ def parseaza_parcurs(html: str, plx_id: str, idp: str) -> Parcurs:
             continue
         data = _data_iso(text[0]) if text else None
         comisii = _comisii(rand)
-        etape.append(Etapa(data, camera, actiune, comisii))
+        steno = _STENO.search(rand)
+        etape.append(
+            Etapa(
+                data,
+                camera,
+                actiune,
+                comisii,
+                steno.group(1) if steno else None,
+                steno.group(2) if steno else None,
+            )
+        )
 
         f = _fold(actiune)
-        if "stenograma" in f:
-            stenograme.extend(
-                m.group(1) for m in re.finditer(r'href="([^"]*steno[^"]*)"', rand, re.I)
-            )
         if "aviz" in f or "punct de vedere" in f or "raport" in f:
             avize.extend(_avize_din(actiune, comisii, data))
         m = _VOT.search(actiune)
         if m:
             rez = _REZULTAT.search(actiune)
+            idv = _IDV.search(rand)
             voturi.append(
                 Vot(
                     data,
@@ -370,6 +393,7 @@ def parseaza_parcurs(html: str, plx_id: str, idp: str) -> Parcurs:
                     int(m.group("abtineri")),
                     _fold(rez.group(1))[:7].rstrip("a") if rez else None,
                     int(m.group("absenti")) if m.group("absenti") else None,
+                    idv.group(1) if idv else None,
                 )
             )
 
@@ -380,7 +404,6 @@ def parseaza_parcurs(html: str, plx_id: str, idp: str) -> Parcurs:
         etape=tuple(etape),
         avize=tuple(avize),
         voturi=tuple(voturi),
-        stenograme=tuple(dict.fromkeys(stenograme)),
     )
 
 
@@ -531,7 +554,7 @@ def colecteaza_parcurs(
             # The Fișa's own plx_id wins over the stored one only when it says something; a page
             # that failed to name itself must not rename the initiative it was fetched for.
             depozit.scrie_parcurs(
-                con, Parcurs(plx_id, idp, p.initiatori, p.etape, p.avize, p.voturi, p.stenograme)
+                con, Parcurs(plx_id, idp, p.initiatori, p.etape, p.avize, p.voturi)
             )
             citite += 1
             etape += len(p.etape)
