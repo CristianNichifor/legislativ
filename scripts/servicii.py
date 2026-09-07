@@ -1201,6 +1201,45 @@ def _prevedere(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _cine_citeaza(qs: dict, stare: Stare) -> dict:
+    """What depends on a provision — the answer to "what breaks if I change this".
+
+    `harta` is the act's load-bearing provisions by how many distinct sources cite each, so a
+    drafter can see where the weight sits before choosing what to edit. `citari` is the detail for
+    one provision, each entry saying whether the citation names it exactly, names something inside
+    it, or names something it sits inside — three different strengths of "this would be affected",
+    kept apart rather than summed.
+
+    Empty rather than an error where no graph is built: the graph is derived, an install may not
+    have it yet, and a silent zero would read as "nothing depends on this".
+    """
+    act_id = (qs.get("act", [""])[0] or "").strip()
+    locator = (qs.get("loc", [""])[0] or "").strip() or None
+    if not act_id:
+        return {"act_id": "", "locator": None, "citari": [], "harta": [], "are_graf": False}
+    if not stare.are_graf():
+        return {"act_id": act_id, "locator": locator, "citari": [], "harta": [], "are_graf": False}
+
+    from scripts.graf import _deschide_graf, cine_citeaza, harta_citari
+
+    act_id = stare.rezolva_nume(act_id)
+    graf = _deschide_graf(stare.graf, readonly=True)
+    try:
+        citari = cine_citeaza(graf, act_id, locator)
+        harta = harta_citari(graf, act_id)
+    finally:
+        graf.close()
+    return {
+        "act_id": act_id,
+        "locator": locator,
+        "titlu": stare.titlu(act_id),
+        "citari": citari[:120],
+        "total": len(citari),
+        "harta": harta,
+        "are_graf": True,
+    }
+
+
 def _parcurs(qs: dict, stare: Stare) -> dict:
     """How one bill moved: who signed it, who was asked, and how the room voted.
 

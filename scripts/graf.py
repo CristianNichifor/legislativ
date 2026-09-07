@@ -415,6 +415,100 @@ def _muchie(r: sqlite3.Row) -> Muchie:
     )
 
 
+def cine_citeaza(graf: sqlite3.Connection, act_id: str, locator: str | None = None) -> list[dict]:
+    """Which provisions of which acts point at this one.
+
+    The answer to "what breaks if I change it".
+
+    Until edges carried `din_locator` this could only be asked of a whole act: *forty laws cite
+    Legea 98/2016*. That is true and nearly useless to someone editing one paragraph of it. With
+    the source recorded it becomes *article 210 of OUG 107/2017 repeals your art. 167 alin. (4)*,
+    which is a sentence a drafter can act on.
+
+    **Containment runs both ways, and the two are not the same claim**, so each edge says which it
+    is rather than being flattened into one count:
+
+    - `exact` — the citation names the provision being changed.
+    - `interior` — it names something inside it. Changing `art. 7` reaches everyone who cited
+      `art. 7 alin. (2)`, because the paragraph they relied on is inside what you are editing.
+    - `incadreaza` — it names something the provision is inside. Editing `art. 7 alin. (2)` touches
+      those who cited `art. 7` as a whole, but less directly: they may not depend on your paragraph
+      at all, and reporting that as the same kind of hit would cry wolf.
+
+    With no `locator` this returns every citation of the act, which is the old act-level question
+    and still the right one when the change is to the act as such.
+    """
+    randuri = graf.execute(
+        "SELECT din_act, din_locator, locator, fel, incredere, de_la FROM muchii"
+        " WHERE catre_act = ?",
+        (act_id,),
+    ).fetchall()
+    iesire: list[dict] = []
+    for r in randuri:
+        tinta = r["locator"] or ""
+        fel_atingere = _atingere(locator, tinta)
+        if fel_atingere is None:
+            continue
+        iesire.append(
+            {
+                "act": r["din_act"],
+                "locator_sursa": r["din_locator"],
+                "locator_tinta": tinta or None,
+                "fel": r["fel"],
+                "incredere": r["incredere"],
+                "de_la": r["de_la"],
+                "atingere": fel_atingere,
+            }
+        )
+    # Exact first, then what sits inside the change, then what merely encloses it — the order of
+    # how sure the hit is. Within each, a citation whose own article is known comes before one
+    # whose source is a whole flattened act: `art. 210 of OUG 107/2017 repeals your alin. (4)` is
+    # actionable, `somewhere in decision 147/2022` is a pointer to go read something. Sorting
+    # alphabetically put every `decizie-` ahead of every `oug-` and buried the actionable half.
+    rang = {"exact": 0, "interior": 1, "incadreaza": 2}
+    return sorted(
+        iesire,
+        key=lambda x: (
+            rang[x["atingere"]],
+            0 if x["locator_sursa"] and x["locator_sursa"] != "text" else 1,
+            x["act"],
+            x["locator_sursa"] or "",
+        ),
+    )
+
+
+def _atingere(schimbat: str | None, citat: str) -> str | None:
+    """How a citation of `citat` relates to a change at `schimbat`. None when it does not."""
+    if not schimbat:
+        return "exact"
+    if not citat:
+        return None
+    if citat == schimbat:
+        return "exact"
+    if citat.startswith(schimbat + "."):
+        return "interior"
+    if schimbat.startswith(citat + "."):
+        return "incadreaza"
+    return None
+
+
+def harta_citari(graf: sqlite3.Connection, act_id: str, *, limita: int = 40) -> list[dict]:
+    """Which provisions of an act are the load-bearing ones, by how many distinct sources cite them.
+
+    Counted per distinct citing *provision*, not per edge: one article that cites the same target
+    under two different `fel` is one source with two opinions about it, not two dependants.
+    """
+    return [
+        {"locator": r[0], "surse": r[1]}
+        for r in graf.execute(
+            "SELECT locator, count(DISTINCT din_act || '#' || coalesce(din_locator, '')) c"
+            " FROM muchii WHERE catre_act = ? AND locator IS NOT NULL AND locator != ''"
+            " GROUP BY locator ORDER BY c DESC, locator LIMIT ?",
+            (act_id, limita),
+        )
+    ]
+
+
 def rezumat(graf: sqlite3.Connection) -> dict[str, int]:
     def n(q: str) -> int:
         return graf.execute(q).fetchone()[0]
