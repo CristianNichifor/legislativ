@@ -296,3 +296,34 @@ def test_a_parse_that_keeps_the_text_is_still_accepted(db, adu):
     surse.descarca(str(db), pauza=0, log=lambda *_: None)
     r = surse.imbogateste(str(db), log=lambda *_: None)
     assert r["imbunatatite"] == 1 and r["pierdute"] == 0
+
+
+def test_progress_is_reported_even_when_every_act_is_refused(tmp_path, monkeypatch):
+    """The log used to sit after the `continue` of every rejection, so a run refusing most acts
+    printed nothing: 100 754 acts to walk, four gigabytes read, one line of output. It read as a
+    hang and was diagnosed as one. A run that is working must say so."""
+    db = _corpus_cu_arhiva_lunga(tmp_path)
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(db), candidati=["591993"], pauza=0, log=lambda *_: None)
+
+    linii: list[str] = []
+    r = surse.imbogateste(str(db), log=linii.append)
+    assert r["pierdute"] == 1 and r["imbunatatite"] == 0
+    assert any("refuzate" in x for x in linii), "o rulare care refuză tot nu a raportat nimic"
+
+
+def test_the_refusal_is_measured_against_the_archive_not_the_current_rows(tmp_path, monkeypatch):
+    """Comparing against the act's current provisions would compare against the damage: a second
+    run over an act already emptied finds the parse no worse than the fragments and accepts it."""
+    db = _corpus_cu_arhiva_lunga(tmp_path)
+    monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
+    surse.descarca(str(db), candidati=["591993"], pauza=0, log=lambda *_: None)
+    for _ in range(2):
+        r = surse.imbogateste(str(db), reia=False, log=lambda *_: None)
+        assert r["imbunatatite"] == 0, "a doua rulare a acceptat ce prima a refuzat"
+
+    cx = sqlite3.connect(str(db))
+    try:
+        assert [x[0] for x in cx.execute("SELECT locator FROM provizii")] == ["text"]
+    finally:
+        cx.close()

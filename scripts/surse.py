@@ -268,30 +268,28 @@ def imbogateste(
 
         for i, (id_portal, url, act_id) in enumerate(randuri, start=1):
             brut = html(con, id_portal)
-            if brut is None:
+            if brut is not None:
+                parsat = parseaza(brut, url)
+                if len(parsat.provizii) <= 1:
+                    # One provision is what the act already has. Replacing a flattened row with
+                    # another flattened row costs an FTS rewrite and buys nothing.
+                    sarite += 1
+                elif _pastreaza_textul(con, id_portal, parsat):
+                    provizii += depozit.scrie_provizii(con, act_id, parsat.provizii)
+                    imbunatatite += 1
+                else:
+                    pierdute += 1
+            else:
                 sarite += 1
-                continue
-            parsat = parseaza(brut, url)
-            if len(parsat.provizii) <= 1:
-                # One provision is what the act already has. Replacing a flattened row with
-                # another flattened row costs an FTS rewrite and buys nothing.
-                sarite += 1
-                continue
-            rand = con.execute(
-                "SELECT length(text) FROM documente WHERE id_portal = ?", (id_portal,)
-            ).fetchone()
-            arhiva = rand[0] if rand and rand[0] else 0
-            recuperat = sum(len(p.text or "") for p in parsat.provizii)
-            if arhiva and recuperat < arhiva * PRAG_TEXT:
-                pierdute += 1
-                continue
-            provizii += depozit.scrie_provizii(con, act_id, parsat.provizii)
-            imbunatatite += 1
-            if i % 20 == 0 or i == len(randuri):
+            # Reported unconditionally, and that is the point. This used to sit after the
+            # `continue` of every rejection, so a run that was refusing most acts printed nothing
+            # at all: 100 754 acts to walk, four gigabytes read, and a log holding one line. It
+            # read exactly like a hang, and was diagnosed as one for twenty minutes.
+            if i % 200 == 0 or i == len(randuri):
                 con.commit()
                 log(
-                    f"  {i}/{len(randuri)} · {imbunatatite} acte · {provizii} provizii"
-                    f" · {pierdute} refuzate (ar fi pierdut text)"
+                    f"  {i}/{len(randuri)} · {imbunatatite} îmbogățite · {provizii} provizii"
+                    f" · {pierdute} refuzate (ar fi pierdut text) · {sarite} fără structură"
                 )
         con.commit()
     return {
@@ -300,6 +298,24 @@ def imbogateste(
         "sarite": sarite,
         "pierdute": pierdute,
     }
+
+
+def _pastreaza_textul(con, id_portal: str, parsat) -> bool:
+    """Whether this parse keeps what the archive holds, and so may replace the act's provisions.
+
+    Measured against `documente.text`, which is never rewritten and is therefore the only thing
+    that still knows how much text an act has. Comparing against the current provisions would
+    compare against the damage: a second run over an act this already emptied would find the parse
+    no worse than the fragments left behind and accept it again.
+    """
+    rand = con.execute(
+        "SELECT length(text) FROM documente WHERE id_portal = ?", (id_portal,)
+    ).fetchone()
+    arhiva = rand[0] if rand and rand[0] else 0
+    if not arhiva:
+        return True
+    recuperat = sum(len(p.text or "") for p in parsat.provizii)
+    return recuperat >= arhiva * PRAG_TEXT
 
 
 def rezumat(cale_db: str = "corpus.db") -> dict:
