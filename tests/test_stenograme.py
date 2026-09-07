@@ -209,3 +209,90 @@ def test_the_debate_is_searchable_by_what_was_said(tmp_path):
     finally:
         con.close()
     assert [r[0] for r in gasit] == ["Domnul Nini Săpunaru"]
+
+
+# --- ce servește pagina ---------------------------------------------------------------------
+
+
+def _stare(cale: Path):
+    from scripts.servicii import Stare
+
+    return Stare(corpus=str(cale), initiative=str(cale), graf=str(cale))
+
+
+def test_a_debate_that_was_never_fetched_says_so_rather_than_reading_empty(tmp_path):
+    """An unread transcript and a sitting nobody spoke at are different facts. A card that showed
+    an empty list for both would report silence where there is only a missing fetch."""
+    from scripts.servicii import _stenograma
+
+    cale = _magazin(tmp_path)
+    r = _stenograma({"ids": ["8235"], "idm": ["8"]}, _stare(cale))
+    assert r["gasit"] is False and r["interventii"] == []
+
+
+def test_the_served_debate_carries_the_key_a_profile_is_opened_by(tmp_path):
+    """A speaker's name in the transcript is only useful if clicking it reaches the right person,
+    and the only thing that reaches the right person is (legislature, chamber, id)."""
+    from scripts.servicii import _stenograma
+
+    cale = _magazin(tmp_path)
+    with depozit.deschide(cale) as con:
+        scrie_stenograma(con, _steno())
+        con.commit()
+    r = _stenograma({"ids": ["8235"], "idm": ["8"]}, _stare(cale))
+    assert r["gasit"] is True
+    assert r["data"] == "2021-02-22" and r["plx_id"] == "plx-1-2021"
+    prima = r["interventii"][0]
+    assert (prima["idm"], prima["leg"], prima["camera"]) == ("165", "2020", "Camera Deputaților")
+
+
+def test_the_step_that_was_debated_carries_the_locator_and_the_others_do_not(tmp_path):
+    """A step with no debate must not offer one; `steno` is absent rather than empty."""
+    from scripts.servicii import _parcurs
+
+    cale = _magazin(tmp_path)
+    with depozit.deschide(cale) as con:
+        con.execute(
+            "INSERT INTO initiativa_etapa (plx_id, ord, data, camera, actiune) VALUES (?,?,?,?,?)",
+            ("plx-1-2021", 1, "2021-03-01", "Senat", "înaintat la Senat"),
+        )
+        con.commit()
+    etape = _parcurs({"plx": ["plx-1-2021"]}, _stare(cale))["etape"]
+    assert etape[0]["steno"] == {"ids": "8235", "idm": "8"}
+    assert etape[1]["steno"] is None
+
+
+def test_a_search_of_the_debates_is_not_a_search_of_the_titles(tmp_path):
+    """A title says what a law is for; the debate says what was argued about it."""
+    from scripts.servicii import _dezbateri
+
+    cale = _magazin(tmp_path)
+    with depozit.deschide(cale) as con:
+        scrie_stenograma(con, _steno())
+        con.commit()
+    r = _dezbateri({"q": ["organice"]}, _stare(cale))
+    assert [x["vorbitor"] for x in r["rezultate"]] == ["Voci din sală"]
+    assert r["rezultate"][0]["plx_id"] == "plx-1-2021"
+    assert "<mark>" in r["rezultate"][0]["fragment"]
+
+
+def test_a_stray_quote_in_the_search_box_is_not_a_crash(tmp_path):
+    """FTS5 has its own syntax and a reader typing a quotation mark does not know that."""
+    from scripts.servicii import _dezbateri
+
+    cale = _magazin(tmp_path)
+    assert _dezbateri({"q": ['"']}, _stare(cale))["rezultate"] == []
+
+
+def test_what_a_deputy_said_hangs_off_the_same_key_as_what_they_signed(tmp_path):
+    """The profile already answers "what did they propose"; this is "what did they say", and it
+    must be the same person — joined on the Chamber's id, never on the printed name."""
+    from scripts.servicii import _deputati
+
+    cale = _magazin(tmp_path)
+    with depozit.deschide(cale) as con:
+        scrie_stenograma(con, _steno())
+        con.commit()
+    r = _deputati({"idm": ["165"], "leg": ["2020"], "camera": ["Camera Deputaților"]}, _stare(cale))
+    assert [i["ord"] for i in r["interventii"]] == [0]
+    assert r["interventii"][0]["data"] == "2021-02-22"
