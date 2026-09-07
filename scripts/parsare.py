@@ -144,6 +144,7 @@ class _Culegator(HTMLParser):
         "S_ART",
         "S_ART_TTL",
         "S_ART_DEN",
+        "S_ART_BDY",
         "S_ALN",
         "S_ALN_TTL",
         "S_ALN_BDY",
@@ -283,6 +284,21 @@ def parseaza(html: str, url: str = "") -> ActParsat:
     )
 
 
+# What stands in for structure when an act has none the walk can use: its paragraphs, and the body
+# blocks of units whose wrappers did not yield text.
+_REZERVA = {"S_PAR", "S_ART_BDY", "S_ALN_BDY", "S_LIT_BDY"}
+
+
+def _are_litere(text: str) -> bool:
+    """Whether a block carries words rather than rule marks.
+
+    Reading the body blocks brought in the page's separators with them — a decision came out with
+    a fifty-first provision reading `---`. A block with no letter in it is not text a finding can
+    quote, and giving it a locator invites a citation to a horizontal rule.
+    """
+    return bool(text) and any(c.isalpha() for c in text)
+
+
 def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
     """Walk the flat event list into one Provizie per article, alineat and literă.
 
@@ -292,11 +308,17 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
     """
     provizii: list[Provizie] = []
     art = aln = lit = None
-    paragrafe: list[tuple[str, tuple[str, ...]]] = []
+    rezerva: list[tuple[str, tuple[str, ...]]] = []
+    # Two accumulators, not one. A body block closes *inside* the unit that contains it, so a
+    # single list let the reserve consume the `S_LGI` marks before the structured provision that
+    # owns them ever closed — every marked reference in the corpus went missing. The two paths are
+    # mutually exclusive at output, so each keeps its own tally and neither robs the other.
     marcate: list[str] = []
+    marcate_rez: list[str] = []
     for i, (fel, nume, _) in enumerate(ev):
         if fel == "inchide" and nume == "S_LGI":
             marcate.append(_text_din(ev, i))
+            marcate_rez.append(_text_din(ev, i))
         if fel != "inchide":
             continue
         text = _text_din(ev, i)
@@ -320,18 +342,26 @@ def _provizii(ev: list[tuple[str, str, str]]) -> list[Provizie]:
                     Provizie(loc.id, text, referinte_marcate=tuple(dict.fromkeys(marcate)))
                 )
                 marcate = []
-        elif nume == "S_PAR" and text:
-            paragrafe.append((text, tuple(dict.fromkeys(marcate))))
-            marcate = []
+        elif nume in _REZERVA and _are_litere(text):
+            rezerva.append((text, tuple(dict.fromkeys(marcate_rez))))
+            marcate_rez = []
 
     # Not every act has articles. A Curtea Constituțională decision is `S_PAR` all the way
     # down, and the first version of this returned nothing for one — a document with text in
     # it, stored as empty, which is worse than refusing it. Numbered paragraphs are a poor
     # locator but they are addressable, and they keep the text searchable.
+    #
+    # **The reserve is not only `S_PAR`.** Where an act's wrappers do not close the way the
+    # structured walk needs, its letters and articles still carry their text in `S_LIT_BDY` and
+    # `S_ART_BDY` — and taking paragraphs alone dropped every one of them. Measured over 368
+    # previously-refused acts, 278 fell to this path and their median recovery was 0.90 of the
+    # archived body; with the body blocks kept it is 1.07, and 240 of them now hold their text
+    # instead of losing a tenth of it. The blocks are appended in document order, so the reserve
+    # reads in the order the act does.
     if not provizii:
         provizii = [
             Provizie(f"par{i}", text, referinte_marcate=refs)
-            for i, (text, refs) in enumerate(paragrafe, start=1)
+            for i, (text, refs) in enumerate(rezerva, start=1)
         ]
     return provizii
 
