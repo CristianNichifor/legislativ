@@ -428,3 +428,52 @@ def test_the_default_work_list_is_narrow_and_the_whole_corpus_is_a_choice(tmp_pa
         # Struck first, then the rest newest-first: a run cut short should have done the law
         # people are reading rather than an alphabetical prefix.
         assert de_tot(con) == ["1", "2"]
+
+
+def test_concurrent_fetching_keeps_one_writer_and_one_clock(tmp_path, monkeypatch):
+    """Concurrency and politeness are separate dials. Twelve connections sharing one clock is
+    twelve times the throughput at the same load; twelve that each sleep is twelve times the load.
+    This asserts the first half — every page written, none lost to the threads."""
+    from scripts import depozit, surse
+
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as con:
+        for n in range(30):
+            con.execute(
+                "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, sursa_url, citit_la)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (f"lege-{n}-2020", "lege", str(n), 2020, "T", str(n), f"http://x/{n}", "x"),
+            )
+        con.commit()
+
+    monkeypatch.setattr(surse, "_adu", lambda url: (b"<html>" + url.encode() + b"</html>", "ok"))
+    with depozit.deschide(cale, readonly=True) as con:
+        candidati = surse.de_tot(con)
+    r = surse.descarca(cale, candidati=candidati, paralel=8, rata=0, log=lambda *_: None)
+
+    assert (r.cerute, r.reusite, r.esuate) == (30, 30, 0)
+    with depozit.deschide(cale, readonly=True) as con:
+        assert con.execute("SELECT count(*) FROM surse").fetchone()[0] == 30
+        # Each page landed under its own id rather than another's — the failure a threaded writer
+        # produces and a serial one cannot.
+        for n in ("0", "17", "29"):
+            assert surse.html(con, n) == f"<html>http://x/{n}</html>"
+
+
+def test_a_failed_fetch_is_recorded_so_it_is_not_asked_for_again(tmp_path, monkeypatch):
+    """`de_facut` skips a document already in `surse` whatever its state: re-asking on every run
+    is what turns a fetch into a hammer."""
+    from scripts import depozit, surse
+
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as con:
+        con.execute(
+            "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, sursa_url, citit_la)"
+            " VALUES ('lege-1-2020','lege','1',2020,'T','1','http://x/1','x')"
+        )
+        con.commit()
+    monkeypatch.setattr(surse, "_adu", lambda url: (None, "http-500"))
+    surse.descarca(cale, candidati=["1"], paralel=2, rata=0, log=lambda *_: None)
+    with depozit.deschide(cale, readonly=True) as con:
+        assert con.execute("SELECT stare FROM surse").fetchone()[0] == "http-500"
+        assert surse.de_facut(con, ["1"]) == []
