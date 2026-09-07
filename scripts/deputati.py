@@ -31,6 +31,62 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+# The two group names the source writes without capitals or diacritics. Everything else in the
+# column is an acronym — PSD, USR, PNL, AUR, UDMR, UPR, SOS RO, PACE, PMP — and must not be
+# "corrected" into something the Chamber does not write. So this is a map of the two it spells
+# wrongly, not a title-casing rule applied to a column it would damage.
+GRUP_AFISAT: dict[str, str] = {
+    "neafiliati": "Neafiliați",
+    "Minoritati": "Minorități",
+}
+
+
+def grup_afisat(grup: str | None) -> str | None:
+    return GRUP_AFISAT.get(grup or "", grup)
+
+
+@dataclass(frozen=True)
+class Mandat:
+    """One term: what the Chamber's own link is keyed on, and what it carries."""
+
+    idm: str
+    leg: str | None
+    camera: str | None
+    nume: str
+    grupuri: tuple[str, ...]
+    initiative: int
+
+
+@dataclass(frozen=True)
+class Persoana:
+    """One member, with every term they served.
+
+    **The terms are grouped; the numbers are not.** `idm` is not stable across legislatures —
+    Buzoianu Diana-Anda is 56 in 2020 and 48 in 2024 — and the Chamber publishes no id that is:
+    the member page states the mandate history in prose and the photograph's filename is a name
+    rendering, written two different ways (`HorgaMariaGabriela.JPG` against
+    `Horga_Maria-Gabriela.jpg`, `Alina_Stefania_Gorghiu.jpg` against `GorghiuAlinaStefania.JPG`),
+    so it identifies nothing the name does not.
+
+    So the grouping is by diacritic-folded name, which is a guess, and it is confined to
+    *navigation*. Measured over the collected corpus: 1 052 terms, 818 folded names, and **no name
+    carried by two people in the same legislature and chamber** — so within a term the name is
+    unambiguous, and only a cross-term collision is possible. Every count stays attached to its own
+    term, so if two people ever are merged the card shows two labelled terms side by side rather
+    than one wrong total.
+    """
+
+    nume: str
+    mandate: tuple[Mandat, ...]
+
+    @property
+    def legislaturi(self) -> tuple[str, ...]:
+        return tuple(sorted({m.leg for m in self.mandate if m.leg}, reverse=True))
+
+    @property
+    def initiative(self) -> int:
+        return sum(m.initiative for m in self.mandate)
+
 
 @dataclass(frozen=True)
 class Semnatar:
@@ -84,6 +140,36 @@ def cauta(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Semnatar
     ).fetchall()
     gasiti = [r for r in randuri if tinta in _fara_diacritice(r[3] or "")][:limita]
     return [_semnatar(con, r[0], r[1], r[2], r[3], r[4]) for r in gasiti]
+
+
+def persoane(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Persoana]:
+    """Members matching a name, one entry each, with every term they served.
+
+    `cauta` returns one row per *term*, which is what the store is keyed on and what made the
+    search list the same person twice. This groups those rows for navigation — see `Persoana` for
+    why that grouping is a name match and why it is safe to make it here and nowhere else.
+
+    Ordered by the most recent legislature first, then by how much the person signed, so a search
+    for a common surname puts the sitting member above one who left in 2016.
+    """
+    grupat: dict[str, list[Mandat]] = {}
+    for s in cauta(con, q, limita=limita * 4):
+        cheie_nume = _fara_diacritice(s.nume)
+        grupat.setdefault(cheie_nume, []).append(
+            Mandat(s.idm, s.leg, s.camera, s.nume, s.grupuri, s.initiative)
+        )
+    iesire = [
+        Persoana(
+            # The name as the most recent term spells it: the Fișe change their spelling over the
+            # years and the newest is the one a reader will recognise.
+            nume=max(m, key=lambda x: (x.leg or "", x.idm)).nume,
+            mandate=tuple(sorted(m, key=lambda x: x.leg or "", reverse=True)),
+        )
+        for m in grupat.values()
+    ]
+    return sorted(iesire, key=lambda p: (p.legislaturi[0] if p.legislaturi else "", p.initiative))[
+        ::-1
+    ][:limita]
 
 
 def _semnatar(
@@ -161,13 +247,28 @@ def initiative(
     ]
 
 
-def grupuri(con: sqlite3.Connection) -> list[dict]:
+def legislaturi(con: sqlite3.Connection) -> list[str]:
+    """Every legislature the store holds signatures for, newest first."""
+    return [
+        r[0]
+        for r in con.execute(
+            "SELECT DISTINCT leg FROM initiativa_initiator WHERE leg IS NOT NULL ORDER BY leg DESC"
+        )
+    ]
+
+
+def grupuri(con: sqlite3.Connection, leg: str | None = None) -> list[dict]:
     """Every parliamentary group, with its members, its signatures and what became of them.
 
     `semnaturi` and `initiative` are different numbers and both are reported: twenty members of one
     group signing one bill is twenty signatures and one initiative, and showing only the first
     would make a group look busy for co-signing.
+
+    `leg` narrows every number to one legislature. Without it a group's record is a sum across
+    parliaments it was differently composed in — AUR in 2020 and AUR in 2024 are one row and two
+    different sets of people — which reads as one continuous record and is not.
     """
+    unde_leg = " AND leg = ?" if leg else ""
     iesire: list[dict] = []
     for grup, membri, semnaturi in con.execute(
         # Members counted as distinct (leg, camera, idm) triples, which is what the Chamber's own
@@ -176,20 +277,23 @@ def grupuri(con: sqlite3.Connection) -> list[dict]:
         # a senator who share it.
         "SELECT grup, count(DISTINCT leg || '/' || camera || '/' || idm), count(*)"
         " FROM initiativa_initiator"
-        " WHERE grup IS NOT NULL AND idm IS NOT NULL GROUP BY grup"
-    ):
+        f" WHERE grup IS NOT NULL AND idm IS NOT NULL{unde_leg} GROUP BY grup",
+        ([leg] if leg else []),
+    ).fetchall():
         randuri = con.execute(
             "SELECT ii.plx_id, ("
             "  SELECT v.rezultat FROM initiativa_vot v WHERE v.plx_id = ii.plx_id"
             "  AND v.rezultat IS NOT NULL ORDER BY v.data DESC LIMIT 1)"
-            " FROM (SELECT DISTINCT plx_id FROM initiativa_initiator WHERE grup = ?) ii",
-            (grup,),
+            " FROM (SELECT DISTINCT plx_id FROM initiativa_initiator"
+            f"       WHERE grup = ?{unde_leg}) ii",
+            ([grup] + ([leg] if leg else [])),
         ).fetchall()
         adoptate = sum(1 for _, r in randuri if r == "adoptat")
         respinse = sum(1 for _, r in randuri if r == "respins")
         iesire.append(
             {
-                "grup": grup,
+                "grup": grup_afisat(grup),
+                "grup_brut": grup,
                 "membri": membri,
                 "semnaturi": semnaturi,
                 "initiative": len(randuri),

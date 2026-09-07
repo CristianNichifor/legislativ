@@ -137,3 +137,100 @@ def test_signatures_and_initiatives_are_different_numbers(tmp_path):
     finally:
         con.close()
     assert pnl["semnaturi"] == 1 and pnl["initiative"] == 1
+
+
+# --- o persoană, mai multe mandate ---------------------------------------------------------
+
+
+def _mandate(tmp_path: Path) -> sqlite3.Connection:
+    """The same person across two legislatures, under two different ids, plus a namesake risk."""
+    cale = tmp_path / "initiative.db"
+    with depozit.deschide(cale) as con:
+        for plx, stadiu in (("plx-1-2021", "adoptată"), ("plx-2-2025", "adoptată")):
+            con.execute(
+                "INSERT INTO initiative (plx_id, cam, idp, tip, titlu, obiect, urgenta, stadiu,"
+                " data_inreg, citit_la) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (plx, 2, "0", "propunere", "T", "", 0, stadiu, "2021-01-01", "x"),
+            )
+        for plx, idm, leg, nume, grup in (
+            # `idm` is not stable between legislatures: the same person is 56 then 48.
+            ("plx-1-2021", "56", "2020", "Buzoianu Diana-Anda", "USR"),
+            ("plx-2-2025", "48", "2024", "Buzoianu Diana-Anda", "USR"),
+            ("plx-1-2021", "77", "2020", "Popescu Ion", "neafiliati"),
+        ):
+            con.execute(
+                "INSERT INTO initiativa_initiator (plx_id, idm, leg, nume, grup, camera)"
+                " VALUES (?,?,?,?,?,?)",
+                (plx, idm, leg, nume, grup, "Camera Deputaților"),
+            )
+        # `soarta` counts recorded divisions, not the `stadiu` string — a bill without a vote is
+        # not a bill that failed, which is the whole reason `nedecise` is its own column.
+        for plx in ("plx-1-2021", "plx-2-2025"):
+            con.execute(
+                "INSERT INTO initiativa_vot (plx_id, data, camera, intrebare, pentru, contra,"
+                " abtineri, rezultat) VALUES (?,?,?,?,?,?,?,?)",
+                (plx, "2021-06-01", "Camera Deputaților", None, 200, 10, 0, "adoptat"),
+            )
+        con.commit()
+    return sqlite3.connect(f"file:{cale}?mode=ro", uri=True)
+
+
+def test_one_person_is_one_entry_with_a_term_each(tmp_path):
+    """The search returned one row per *term*, so the same member appeared twice and neither row
+    said so. `idm` cannot be the join: it is 56 in 2020 and 48 in 2024 for one person, and the
+    Chamber publishes no id that is stable — the member page states the mandate history in prose
+    and the photograph's filename is a name rendering written two different ways."""
+    con = _mandate(tmp_path)
+    try:
+        (p,) = deputati.persoane(con, "buzoianu")
+    finally:
+        con.close()
+    assert p.nume == "Buzoianu Diana-Anda"
+    assert p.legislaturi == ("2024", "2020")
+    assert [(m.leg, m.idm) for m in p.mandate] == [("2024", "48"), ("2020", "56")]
+
+
+def test_no_number_is_summed_across_a_term(tmp_path):
+    """The grouping is a name match and therefore a guess. Confining it to navigation is what makes
+    it safe: every count stays attached to its own term, so two people wrongly merged would show
+    two labelled terms rather than one wrong total."""
+    con = _mandate(tmp_path)
+    try:
+        (p,) = deputati.persoane(con, "buzoianu")
+        pe_leg = {m.leg: deputati.soarta(con, m.idm, m.leg, m.camera) for m in p.mandate}
+    finally:
+        con.close()
+    assert pe_leg["2020"].adoptate == 1
+    assert pe_leg["2024"].adoptate == 1
+    assert all(m.initiative == 1 for m in p.mandate)
+
+
+def test_a_group_can_be_read_for_one_parliament_at_a_time(tmp_path):
+    """A group's record summed across parliaments it was differently composed in reads as one
+    continuous record and is not."""
+    con = _mandate(tmp_path)
+    try:
+        assert deputati.legislaturi(con) == ["2024", "2020"]
+        toate = {g["grup"]: g for g in deputati.grupuri(con)}
+        doar_2024 = {g["grup"]: g for g in deputati.grupuri(con, "2024")}
+    finally:
+        con.close()
+    assert toate["USR"]["membri"] == 2, "cele două mandate sunt doi membri în total"
+    assert doar_2024["USR"]["membri"] == 1
+    assert "Neafiliați" not in doar_2024, "grupul din 2020 nu apare sub filtrul 2024"
+
+
+def test_the_two_group_names_the_source_spells_badly_are_fixed(tmp_path):
+    """`neafiliati` and `Minoritati` are written without capitals or diacritics at the source.
+    Everything else in the column is an acronym — PSD, USR, UDMR, SOS RO — and must not be
+    "corrected" into something the Chamber does not write, so this is a map of two names and not a
+    title-casing rule applied to a column it would damage."""
+    con = _mandate(tmp_path)
+    try:
+        nume = {g["grup"] for g in deputati.grupuri(con)}
+    finally:
+        con.close()
+    assert "Neafiliați" in nume and "neafiliati" not in nume
+    assert deputati.grup_afisat("Minoritati") == "Minorități"
+    assert deputati.grup_afisat("SOS RO") == "SOS RO"
+    assert deputati.grup_afisat("PSD") == "PSD"

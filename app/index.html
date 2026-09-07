@@ -285,6 +285,12 @@
   .dom-ani{font-family:var(--mono);font-size:.7rem;color:var(--ink-mute);margin-left:.4rem}
   .dom-tipuri{font-size:.7rem;color:var(--ink-mute)}
   .dom-n{font-family:var(--mono);font-size:.78rem;white-space:nowrap}
+  /* one chip per term. The terms are grouped for navigation; every number stays on its own term */
+  .an-chip{font-family:var(--mono);font-size:.7rem;padding:.1rem .5rem;margin:.1rem .2rem .1rem 0;
+    border:1px solid var(--rule);border-radius:999px;background:var(--surface);cursor:pointer;
+    color:var(--ink-mute)}
+  .an-chip:hover{border-color:var(--accent);color:var(--ink)}
+  .an-chip-activ{border-color:var(--accent);color:var(--accent);background:var(--accent-wash)}
   .dom-act{font-size:.78rem;margin:.15rem 0;line-height:1.45}
   .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
   /* the roll of a division: who voted which way, grouped the way the chamber sits */
@@ -1002,6 +1008,10 @@
         <div id="p-fisa"></div>
         <details id="p-grupuri-panel" style="margin-top:1rem">
           <summary style="cursor:pointer;font-family:var(--sans);font-size:.82rem;font-weight:600;color:var(--accent)">Grupurile parlamentare</summary>
+          <div class="row" style="margin:.5rem 0">
+            <label for="p-leg" class="hint">Legislatura</label>
+            <select id="p-leg"><option value="">toate</option></select>
+          </div>
           <div id="p-grupuri"><span class="hint">se încarcă…</span></div>
         </details>
       </div>
@@ -2506,33 +2516,50 @@ async function cautaParlamentar(){
   if(q.length<2){ box.innerHTML=""; return; }
   box.innerHTML=`<span class="hint"><span class="spin"></span> caut…</span>`;
   const d=await fetch("/api/deputati?q="+encodeURIComponent(q)).then(r=>r.json()).catch(()=>null);
-  const lista=(d&&d.semnatari)||[];
+  const lista=(d&&d.persoane)||[];
   if(!lista.length){ box.innerHTML=`<span class="hint">Niciun parlamentar cu acest nume în ce s-a colectat.</span>`; return; }
-  // The key is (legislature, chamber, id) and it is shown, because two rows can carry the same
-  // name and the same number and be two people.
-  box.innerHTML=lista.map(x=>
-    `<div class="dom-rand" role="button" tabindex="0" data-idm="${esc(x.idm)}"`
-    +` data-leg="${esc(x.leg||"")}" data-camera="${esc(x.camera||"")}" data-nume="${esc(x.nume)}">`
-    +`<span><span class="dom-nume">${esc(x.nume)}</span>`
-    +`<span class="dom-ani">${esc(x.camera||"")}${x.leg?" · legislatura "+esc(x.leg):""}</span>`
-    +(x.grupuri&&x.grupuri.length?`<br><span class="dom-tipuri">${esc(x.grupuri.join(" · "))}</span>`:``)
-    +`</span><span class="dom-n">${nf(x.initiative)} inițiative</span></div>`).join("");
-  box.querySelectorAll(".dom-rand").forEach(r=>{
-    const deschide=()=>{
-      const fals={dataset:r.dataset, textContent:r.dataset.nume, closest:()=>null};
+  // One entry per person, one chip per term. The terms are grouped for navigation and nothing
+  // else: `idm` is not stable between legislatures and the Chamber publishes no id that is, so
+  // the grouping is a name match — and every number stays attached to its own term, which is why
+  // a wrong merge would show two labelled terms rather than one wrong total.
+  box.innerHTML=lista.map((x,i)=>
+    `<div class="dom-rand" style="cursor:default"><span><span class="dom-nume">${esc(x.nume)}</span>`
+    +`<br><span class="dom-tipuri">`
+    +x.mandate.map((m,j)=>
+      `<button type="button" class="an-chip" data-i="${i}" data-j="${j}"`
+      +` data-idm="${esc(m.idm)}" data-leg="${esc(m.leg||"")}" data-camera="${esc(m.camera||"")}"`
+      +` data-nume="${esc(x.nume)}">${esc(m.leg||"?")}`
+      +(m.grupuri&&m.grupuri.length?` · ${esc(m.grupuri.join("/"))}`:``)
+      +` · ${nf(m.initiative)}</button>`).join(" ")
+    +`</span></span><span class="dom-n">${nf(x.initiative)} inițiative</span></div>`).join("");
+  box.querySelectorAll(".an-chip").forEach(b=>{
+    b.onclick=()=>{
+      box.querySelectorAll(".an-chip").forEach(o=>o.classList.remove("an-chip-activ"));
+      b.classList.add("an-chip-activ");
+      const fals={dataset:b.dataset, textContent:b.dataset.nume, closest:()=>null};
       $("#p-fisa").innerHTML="";
       aratraDeputat(fals, $("#p-fisa"));
     };
-    r.onclick=deschide;
-    r.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); deschide(); } };
   });
+  // One term, one click: a member with a single mandate should not need it.
+  const chipuri=box.querySelectorAll(".an-chip");
+  if(lista.length===1 && chipuri.length===1) chipuri[0].click();
 }
-let GRUPURI=null;
+let LEG_INITIALIZAT=false;
 async function loadGrupuri(){
-  if(GRUPURI) return;
-  const d=await fetch("/api/deputati").then(r=>r.json()).catch(()=>null);
-  GRUPURI=(d&&d.grupuri)||[];
+  const leg=$("#p-leg").value;
   const box=$("#p-grupuri");
+  box.innerHTML=`<span class="hint"><span class="spin"></span> încarc…</span>`;
+  const d=await fetch("/api/deputati"+(leg?"?leg="+encodeURIComponent(leg)+"&grupuri=1":""))
+    .then(r=>r.json()).catch(()=>null);
+  // The legislature list comes back with the answer, so the selector fills itself from the store
+  // rather than from a list written here that would go stale the next election.
+  if(!LEG_INITIALIZAT && d && d.legislaturi && d.legislaturi.length){
+    $("#p-leg").insertAdjacentHTML("beforeend",
+      d.legislaturi.map(l=>`<option value="${esc(l)}">${esc(l)}</option>`).join(""));
+    LEG_INITIALIZAT=true;
+  }
+  const GRUPURI=(d&&d.grupuri)||[];
   if(!GRUPURI.length){ box.innerHTML=`<span class="hint">Nu s-au colectat încă semnături.</span>`; return; }
   // `semnaturi` and `initiative` are different numbers and both are shown: twenty members of one
   // group signing one bill is twenty signatures and one initiative.
@@ -2543,8 +2570,10 @@ async function loadGrupuri(){
     +`<span class="dom-n"><span class="dep-ok">${nf(g.adoptate)}</span> / `
     +`<span class="dep-nu">${nf(g.respinse)}</span> / `
     +`<span class="dep-pend">${nf(g.nedecise)}</span></span></div>`).join("")
-    +`<p class="hint" style="margin-top:.5rem">adoptate / respinse / fără vot înregistrat — un proiect fără vot nu e un proiect pierdut</p>`;
+    +`<p class="hint" style="margin-top:.5rem">adoptate / respinse / fără vot înregistrat — un proiect fără vot nu e un proiect pierdut`
+    +(leg?` · doar legislatura ${esc(leg)}`:` · însumat peste toate legislaturile, care nu e un mandat continuu`)+`</p>`;
 }
+$("#p-leg").onchange=loadGrupuri;
 function deputatHtml(nume, leg, camera, d){
   const s=d.soarta||{adoptate:0,respinse:0,nedecise:0};
   const lista=(d.initiative||[]);
