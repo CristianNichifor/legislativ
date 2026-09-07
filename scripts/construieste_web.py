@@ -327,9 +327,16 @@ def _slice_corpus() -> None:
     with depozit.deschide(str(tinta)) as con:
         con.execute("ATTACH DATABASE ? AS plin", (str(ROOT / "corpus.db"),))
         marcaje = ",".join("?" * len(CURATE))
+        # Chosen by year, not by `rowid`. A rowid is a position in a file, not an identity: every
+        # `scrie_act` deletes its row and inserts it again, so after a re-enrichment and the
+        # namesake recovery the lowest rowid in `acte` is far above any small N — `rowid <= 200`
+        # silently matched nothing and the build shipped five acts, the curated ones, and called
+        # itself a corpus.
         con.execute(
-            f"INSERT INTO acte SELECT * FROM plin.acte WHERE id IN ({marcaje}) OR rowid <= ?",
-            (*CURATE, N_ACTE),
+            f"INSERT INTO acte SELECT * FROM plin.acte WHERE id IN ({marcaje})"
+            " UNION SELECT * FROM plin.acte WHERE id NOT IN"
+            f" ({marcaje}) ORDER BY an DESC, id LIMIT ?",
+            (*CURATE, *CURATE, N_ACTE),
         )
         con.execute(
             "INSERT INTO provizii SELECT * FROM plin.provizii WHERE act_id IN (SELECT id FROM acte)"
