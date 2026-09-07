@@ -32,9 +32,7 @@ reuse `cdep._celule`, whose flat `<td>…</td>` scan cannot see past the inner t
 from __future__ import annotations
 
 import re
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -83,11 +81,6 @@ _MP = re.compile(r"<a[^>]+structura2015\.mp\?idm=(\d+)([^>]*)>([\s\S]*?)</a>", r
 # The chamber the person sits in, from their own link. Some headings read `- neafiliati:` with no
 # chamber word at all, and `cam` is then the only place the page states it — read, not inferred.
 _CAM = re.compile(r"[?&]cam=(\d+)")
-# The legislature the link is scoped to. `idm` is unique *within* one, not across them: measured on
-# the collected corpus, 349 distinct `idm` values cover 1 044 distinct people, and `idm=56` alone is
-# four — Buzoianu (USR), Ghica (USR), Ciobanu (PNL) and Lavric (AUR). Without this a profile merges
-# strangers and reports one deputy sitting in three parties at once.
-_LEG = re.compile(r"[?&]leg=(\d+)")
 CAM_NUME: Final[dict[str, str]] = {"1": "Senat", "2": "Camera Deputaților"}
 
 
@@ -95,20 +88,15 @@ CAM_NUME: Final[dict[str, str]] = {"1": "Senat", "2": "Camera Deputaților"}
 class Initiator:
     """One name on the bill, with the group it was signed under.
 
-    `idm` is the Chamber's id for the person and `leg` the legislature it is scoped to. **Both are
-    needed to name someone.** `idm` is reused between legislatures: 349 distinct values cover 1 044
-    distinct people, and `idm=56` is Buzoianu, Ghica, Ciobanu and Lavric depending on the year.
-    Keying on `idm` alone merges strangers and reports one deputy sitting in three parties.
-
-    Matching on the name string is no better in the other direction — it splits `Şovăială` from
-    `Șovăială` and merges two people who share a name.
+    `idm` is the Chamber's own id for the person, taken from the link the name is wrapped in. It is
+    what makes a second question answerable — everything this deputy has signed — where matching on
+    a name string would merge two people who share one and split one who is spelled two ways.
     """
 
     nume: str
     grup: str | None
     camera: str | None
     idm: str | None = None
-    leg: str | None = None  # the legislature `idm` is scoped to; `idm` alone is not a person
 
 
 @dataclass(frozen=True)
@@ -239,14 +227,12 @@ def _initiatori(html: str, plat: str) -> list[Initiator]:
                 grup, camera = _grup_si_camera(_text(celule[0]))
                 for mm in _MP.finditer(celule[1]):
                     din_link = _CAM.search(mm.group(2))
-                    leg = _LEG.search(mm.group(2))
                     iesire.append(
                         Initiator(
                             _text(mm.group(3)),
                             grup,
                             camera or (CAM_NUME.get(din_link.group(1)) if din_link else None),
                             mm.group(1),
-                            leg.group(1) if leg else None,
                         )
                     )
             if iesire:
@@ -257,7 +243,7 @@ def _initiatori(html: str, plat: str) -> list[Initiator]:
         if len(text) >= 2 and "initiator" in _fold(text[0]):
             nume = _text(_ANEXA.sub(" ", celule[-1]))
             if nume and len(nume) <= 60:
-                return [Initiator(nume, None, None, None, None)]
+                return [Initiator(nume, None, None, None)]
             return []
     return []
 
@@ -412,42 +398,12 @@ def fisa_parcurs(idp: str, cam: int = 2, *, opener=None) -> Parcurs:
     return parseaza_parcurs(html, ini.plx_id, idp)
 
 
-class Ritm:
-    """A ceiling on requests per second, shared by every worker.
-
-    Concurrency and politeness are separate dials and this is the second one. Three connections
-    that each wait their turn against one clock is three times the throughput at the same load on
-    the server; three connections that each sleep between their own requests is three times the
-    load. Measured against cdep.ro, a Fișa takes 1.3 to 10.9 seconds to come back and 0.006 to
-    parse, so the whole job is waiting — which is exactly the shape concurrency helps and better
-    code does not.
-    """
-
-    def __init__(self, pe_secunda: float) -> None:
-        self._interval = 1.0 / pe_secunda if pe_secunda > 0 else 0.0
-        self._lacat = threading.Lock()
-        self._urmatorul = 0.0
-
-    def asteapta(self) -> None:
-        if not self._interval:
-            return
-        with self._lacat:
-            acum = time.monotonic()
-            if self._urmatorul > acum:
-                time.sleep(self._urmatorul - acum)
-                acum = time.monotonic()
-            self._urmatorul = acum + self._interval
-
-
 def colecteaza_parcurs(
     cale_db: str = "corpus.db",
     *,
     limita: int | None = None,
     pauza: float = 0.3,
     doar_lipsa: bool = True,
-    fara_legislatura: bool = False,
-    paralel: int = 1,
-    rata: float = 2.0,
     opener=None,
     log=print,
 ) -> dict:
@@ -461,15 +417,6 @@ def colecteaza_parcurs(
     `doar_lipsa` skips initiatives whose passage is already stored, so a run can be resumed. Pass
     False to re-read them, which is what a refetch is for: a bill that was in committee last month
     has moved, and its Fișa is the only thing that knows.
-
-    `fara_legislatura` selects only the initiatives whose signatures were stored before `leg` was
-    read. A backfill needs to re-read pages it has already seen, which `doar_lipsa` would skip and
-    `doar_lipsa=False` would restart from the top on every interruption — this makes the pass
-    resumable against what is actually missing.
-
-    `paralel` opens more than one connection; `rata` caps requests per second across all of them,
-    so raising the first does not raise the load. The work is 99.9% waiting on the server, so this
-    is the only dial that changes anything.
     """
     from scripts import depozit
 
@@ -486,47 +433,19 @@ def colecteaza_parcurs(
             if doar_lipsa
             else set()
         )
-        cu_leg = (
-            {
-                r[0]
-                for r in con.execute(
-                    "SELECT DISTINCT plx_id FROM initiativa_initiator WHERE leg IS NOT NULL"
-                )
-            }
-            if fara_legislatura
-            else set()
-        )
     de_facut = [r for r in randuri if r[0] not in deja]
-    if fara_legislatura:
-        de_facut = [r for r in de_facut if r[0] not in cu_leg]
     if limita is not None:
         de_facut = de_facut[:limita]
     log(f"{len(de_facut)} inițiative de citit (din {len(randuri)})")
 
     citite = etape = voturi = esuate = 0
-    ritm = Ritm(rata) if paralel > 1 else None
-
-    def adu_unul(rand):
-        plx_id, idp, cam = rand
-        if ritm is not None:
-            ritm.asteapta()
-        try:
-            return rand, fisa_parcurs(idp, cam or 2, opener=opener)
-        except Exception as e:  # noqa: BLE001
-            return rand, e
-
-    if paralel > 1:
-        pool = ThreadPoolExecutor(max_workers=paralel)
-        rezultate = pool.map(adu_unul, de_facut)
-    else:
-        pool = None
-        rezultate = (adu_unul(r) for r in de_facut)
-
     with depozit.deschide(cale_db) as con:
-        for i, ((plx_id, idp, _cam), p) in enumerate(rezultate, start=1):
-            if isinstance(p, Exception):
+        for i, (plx_id, idp, cam) in enumerate(de_facut, start=1):
+            try:
+                p = fisa_parcurs(idp, cam or 2, opener=opener)
+            except Exception as e:  # noqa: BLE001
                 esuate += 1
-                log(f"  idp={idp}: {p}")
+                log(f"  idp={idp}: {e}")
                 continue
             # The Fișa's own plx_id wins over the stored one only when it says something; a page
             # that failed to name itself must not rename the initiative it was fetched for.
@@ -541,13 +460,10 @@ def colecteaza_parcurs(
                 log(f"  {i}/{len(de_facut)} · {etape} etape · {voturi} voturi · {esuate} eșuate")
             # Paced, and the pause is the whole reason the parameter exists. cdep.ro is a second
             # ministry's server and this is a few thousand requests against it; an unpaced loop is
-            # the difference between collecting a corpus and being a nuisance. With workers the
-            # pacing is `Ritm`, one clock for all of them, so the pause here would double it.
-            if pool is None and i < len(de_facut):
+            # the difference between collecting a corpus and being a nuisance.
+            if i < len(de_facut):
                 time.sleep(pauza)
         con.commit()
-    if pool is not None:
-        pool.shutdown()
     return {"citite": citite, "etape": etape, "voturi": voturi, "esuate": esuate}
 
 
@@ -560,28 +476,13 @@ def _main() -> int:
     ap.add_argument("--db", default="corpus.db")
     ap.add_argument("--limita", type=int)
     ap.add_argument("--pauza", type=float, default=0.3)
-    ap.add_argument("--paralel", type=int, default=1, help="conexiuni simultane")
-    ap.add_argument("--rata", type=float, default=2.0, help="cereri pe secundă, peste toate")
-    ap.add_argument(
-        "--fara-legislatura",
-        action="store_true",
-        help="doar inițiativele ale căror semnături nu au încă legislatura",
-    )
     ap.add_argument(
         "--reciteste",
         action="store_true",
         help="recitește și inițiativele al căror parcurs e deja stocat (au mai avansat)",
     )
     a = ap.parse_args()
-    r = colecteaza_parcurs(
-        a.db,
-        limita=a.limita,
-        pauza=a.pauza,
-        doar_lipsa=not a.reciteste,
-        fara_legislatura=a.fara_legislatura,
-        paralel=a.paralel,
-        rata=a.rata,
-    )
+    r = colecteaza_parcurs(a.db, limita=a.limita, pauza=a.pauza, doar_lipsa=not a.reciteste)
     print(f"\ngata: {r['citite']} fișe · {r['etape']} etape · {r['voturi']} voturi")
     with depozit.deschide(a.db, readonly=True) as con:
         n = con.execute("SELECT count(*) FROM initiativa_initiator").fetchone()[0]
