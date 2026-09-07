@@ -120,7 +120,6 @@ CREATE TABLE IF NOT EXISTS provizii (
     PRIMARY KEY (act_id, ord)
 );
 CREATE INDEX IF NOT EXISTS idx_provizii_locator ON provizii(act_id, locator);
-CREATE INDEX IF NOT EXISTS idx_acte_cheie_citare ON acte(cheie_citare);
 
 -- The reference spans the portal marks itself, kept apart from anything this package infers.
 CREATE TABLE IF NOT EXISTS referinte_marcate (
@@ -480,6 +479,14 @@ def deschide(
         con.close()
 
 
+# Indexes over columns that arrive by migration rather than in `CREATE TABLE`. Kept out of
+# `SCHEMA` and run after `_adauga_coloane`, because the column does not exist yet when `SCHEMA`
+# executes against a corpus that was collected before it.
+INDECSI_DUPA_COLOANE: tuple[str, ...] = (
+    "CREATE INDEX IF NOT EXISTS idx_acte_cheie_citare ON acte(cheie_citare)",
+)
+
+
 def _adauga_coloane(con: sqlite3.Connection) -> None:
     """Add columns a corpus collected under an older schema does not have.
 
@@ -523,6 +530,13 @@ def _adauga_coloane(con: sqlite3.Connection) -> None:
         for nume, tip in coloane:
             if nume not in existente:
                 con.execute(f"ALTER TABLE {tabel} ADD COLUMN {nume} {tip}")
+    # An index over a migrated column cannot live in `SCHEMA`, and this is where that was learned.
+    # `executescript(SCHEMA)` runs first, `CREATE TABLE IF NOT EXISTS` is a no-op on a table that
+    # already exists, and `CREATE INDEX ... ON acte(cheie_citare)` then raises `no such column` —
+    # at *open* time, so every command against an already-collected corpus dies before it starts.
+    # Fresh databases never see it, because there the table is created with the column.
+    for instructiune in INDECSI_DUPA_COLOANE:
+        con.execute(instructiune)
 
 
 def _migreaza_cheie_citare(con: sqlite3.Connection) -> None:
