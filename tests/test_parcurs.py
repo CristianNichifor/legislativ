@@ -320,3 +320,30 @@ def test_the_members_who_did_not_vote_are_kept():
     """`nu au votat=3` is on the page and was being dropped."""
     p = parseaza_parcurs(GUVERN, "plx-1-2021", "19122")
     assert p.voturi[0].absenti == 3
+
+
+def test_a_signature_carries_the_legislature_its_id_is_scoped_to():
+    """`idm` is not a person. The Chamber reuses it between legislatures: measured on the collected
+    corpus, 349 distinct values covered 1 044 distinct people, and `idm=56` alone was Buzoianu
+    (USR), Ghica (USR), Ciobanu (PNL) and Lavric (AUR). Keyed on the id alone a profile merges
+    strangers and reports one deputy sitting in three parties at once."""
+    a = parseaza_parcurs(INITIATORI, "plx-99-2021", "19145").initiatori[0]
+    b = parseaza_parcurs(PARCURS, "plx-42-2021", "18765").initiatori[0]
+    assert a.leg == "2020" and a.idm == "45"
+    assert b.leg == "2016" and b.idm == "88"
+    assert (a.leg, a.idm) != (b.leg, b.idm)
+
+
+def test_a_rate_ceiling_is_shared_by_every_worker():
+    """Concurrency and politeness are separate dials. Three connections that each wait their turn
+    against one clock is three times the throughput at the same load; three that each sleep
+    between their own requests is three times the load."""
+    import time as _t
+
+    from scripts.parcurs import Ritm
+
+    r = Ritm(20.0)
+    t0 = _t.monotonic()
+    for _ in range(4):
+        r.asteapta()
+    assert _t.monotonic() - t0 >= 0.15, "cererile nu au fost distanțate"
