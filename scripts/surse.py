@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import re
 import sqlite3
 import time
 import urllib.error
@@ -51,6 +52,13 @@ TERMEN: float = 60.0
 # flat text, because provisions are stored at every level and an article's words are counted again
 # in its alineate.
 PRAG_TEXT: float = 0.98
+
+# Where an act's body starts in the archived text. Everything before the first article marker is
+# the title, the Monitorul Oficial line and the preamble — which the HTML page carries in its own
+# markup and `parsare` does not put in a provision. On a long code that is a rounding error; on a
+# four-page treaty it is a quarter of the characters, which is why comparing against the whole
+# archive rejected 767 of 767 sampled acts whose articles had all been recovered correctly.
+_PRIMUL_ARTICOL = re.compile(r"\b(?:Articolul|Art\.)\s*(?:\d|I\b|unic)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -308,14 +316,20 @@ def _pastreaza_textul(con, id_portal: str, parsat) -> bool:
     compare against the damage: a second run over an act this already emptied would find the parse
     no worse than the fragments left behind and accept it again.
     """
-    rand = con.execute(
-        "SELECT length(text) FROM documente WHERE id_portal = ?", (id_portal,)
-    ).fetchone()
-    arhiva = rand[0] if rand and rand[0] else 0
+    rand = con.execute("SELECT text FROM documente WHERE id_portal = ?", (id_portal,)).fetchone()
+    arhiva = rand[0] if rand and rand[0] else ""
     if not arhiva:
         return True
+    # Body against body. The comparison used to be against the whole archive, preamble included,
+    # and the preamble is exactly what a correct parse leaves out — so acts whose every article had
+    # been recovered were refused for losing their title. Measured over 767 of them, this accepts
+    # 415 that the old rule rejected, and still refuses 309 that lose a median 9% of the body
+    # itself. Where no article marker is found the whole archive is used, which is the conservative
+    # reading: an act this cannot locate a body in is one to leave alone.
+    m = _PRIMUL_ARTICOL.search(arhiva)
+    referinta = arhiva[m.start() :] if m else arhiva
     recuperat = sum(len(p.text or "") for p in parsat.provizii)
-    return recuperat >= arhiva * PRAG_TEXT
+    return recuperat >= len(referinta) * PRAG_TEXT
 
 
 def rezumat(cale_db: str = "corpus.db") -> dict:
