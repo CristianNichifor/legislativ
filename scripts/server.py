@@ -26,6 +26,8 @@ writes, so it coexists with the collectors and answers from more law each time t
   that was debated carries the transcript's locator, `{ids, idm}` — the sitting and the item.
 - `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
   (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
+- `GET /api/rol?idv=` — who voted which way in one division, grouped by parliamentary group. The
+  tally on a Fișa is the room's answer and nobody's; this is the one a voter can act on.
 - `GET /api/dezbateri?q=` — full-text over what was said in the Chamber, not over bill titles.
 - `GET /api/domenii[?emitent=&tip=]` — the corpus grouped by the body that issued it, or one
   body's acts. By issuer and not by subject: the portal publishes no classification of any kind,
@@ -70,6 +72,7 @@ from scripts.servicii import (
     _prevedere,
     _redacteaza,
     _regula,
+    _rol,
     _stenograma,
     _sugereaza,
     _supraveghere,
@@ -165,6 +168,8 @@ def face_handler(stare: Stare):
                 self._json(_parcurs(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/stenograma":
                 self._json(_stenograma(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/rol":
+                self._json(_rol(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dezbateri":
                 self._json(_dezbateri(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/domenii":

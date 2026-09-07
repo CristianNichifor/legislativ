@@ -287,6 +287,15 @@
   .dom-n{font-family:var(--mono);font-size:.78rem;white-space:nowrap}
   .dom-act{font-size:.78rem;margin:.15rem 0;line-height:1.45}
   .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
+  /* the roll of a division: who voted which way, grouped the way the chamber sits */
+  .rol{margin:.3rem 0 .4rem .5rem;padding:.45rem .6rem;border-left:2px solid var(--rule);
+    background:var(--surface);border-radius:0 var(--r1) var(--r1) 0}
+  .rol-grup{margin:.35rem 0}
+  .rol-cap{font-family:var(--mono);font-size:.72rem;margin-bottom:.1rem}
+  .rol-membri{font-size:.74rem;line-height:1.6}
+  .rol-v{border-bottom:2px solid currentColor;padding-bottom:.02em}
+  .rol-v.da{color:var(--good)} .rol-v.nu{color:var(--blocking)}
+  .rol-v.abtinere{color:var(--ink-mute)} .rol-v.nu_a_votat{color:var(--ink-mute);opacity:.65}
   @media (max-width:34rem){ .parc-etapa{grid-template-columns:1fr} .steno{margin-left:.4rem} }
 
   /* the Conexiuni tab: an act-lookup row over a full-height graph area */
@@ -2387,6 +2396,22 @@ function deputatHtml(nume, leg, camera, d){
       +(x.rezultat?` <span class="dep-rez ${esc(x.rezultat)}">${esc(x.rezultat)}</span>`:``)+`</div>`).join("")
       +(lista.length>8?`<div class="hint">…și încă ${lista.length-8}</div>`:``)+`</div>`;
   }
+  // How they voted, from the Chamber's own roll. The tally on a Fișa is the room's answer and
+  // nobody's; this is the one a voter can act on.
+  const vot=(d.voturi||[]);
+  if(vot.length){
+    const n=o=>vot.filter(v=>v.optiune===o).length;
+    h+=`<div class="parc-h">Cum a votat (${vot.length})</div>`
+      +`<div class="dep-cifre"><span class="dep-ok">${n("da")} pentru</span>`
+      +`<span class="dep-nu">${n("nu")} contra</span>`
+      +`<span class="dep-pend">${n("abtinere")+n("nu_a_votat")} abțineri / nu a votat</span></div>`
+      +`<div class="dep-lista">`+vot.slice(0,6).map(v=>
+        `<div class="dep-init"><span class="rol-v ${esc(v.optiune)}">${esc(ROL_ETICHETE[v.optiune]||v.optiune)}</span> `
+        +`<span class="parc-data">${esc(v.data||"")}</span> `
+        +(v.plx_id?`<span class="plx">${esc(v.plx_id)}</span> `:``)
+        +`<span class="hint">${esc((v.subiect||"").slice(0,90))}</span></div>`).join("")
+      +(vot.length>6?`<div class="hint">…și încă ${vot.length-6}</div>`:``)+`</div>`;
+  }
   // What they signed is paperwork; what they said is the argument. Joined on the same
   // (legislature, chamber, id) as the signatures, so this is the same person and not a namesake.
   const spuse=(d.interventii||[]);
@@ -2792,6 +2817,8 @@ async function renderSupraveghere(){
   box.addEventListener("click", e=>{
     const s=e.target.closest(".steno-buton");
     if(s){ comutaDezbatere(s); return; }
+    const r=e.target.closest(".rol-buton");
+    if(r){ comutaRol(r); return; }
     const n=e.target.closest(".dep-nume");
     if(n) aratraDeputat(n);
   });
@@ -2839,7 +2866,11 @@ function parcursHtml(d){
         +`<span class="parc-cifre">pentru ${v.pentru} · contra ${v.contra} · abțineri ${v.abtineri}`
         +(v.absenti!=null?` · nu au votat ${v.absenti}`:``)+`</span>`
         +(v.intrebare?` <span class="hint">(${esc(v.intrebare)})</span>`:``)
-        +(v.camera?` <span class="parc-cam">${esc(v.camera)}</span>`:``)+`</div>`;
+        +(v.camera?` <span class="parc-cam">${esc(v.camera)}</span>`:``)
+        // A division with no roll linked offers no button, rather than one that comes back empty.
+        +(v.idv?` <button type="button" class="ghost mini rol-buton" data-idv="${esc(v.idv)}">cine cum a votat</button>`:``)
+        +`</div>`
+        +(v.idv?`<div class="rol-loc" data-idv="${esc(v.idv)}"></div>`:``);
     }).join("");
   }
   if(av.length){
@@ -2898,6 +2929,37 @@ function stenogramaHtml(d){
   }).join("");
   return h+`</div>`;
 }
+// The roll of one division, fetched when asked for: a bill carries several and each is 300 names.
+async function comutaRol(buton){
+  const gazda=buton.closest(".parc").querySelector(`.rol-loc[data-idv="${CSS.escape(buton.dataset.idv)}"]`);
+  if(!gazda) return;
+  if(gazda.firstChild){ gazda.innerHTML=""; buton.textContent="cine cum a votat"; return; }
+  buton.textContent="ascunde";
+  gazda.innerHTML=`<div class="rol"><span class="spin"></span> încarc…</div>`;
+  const d=await fetch("/api/rol?idv="+encodeURIComponent(buton.dataset.idv)).then(r=>r.json()).catch(()=>null);
+  gazda.innerHTML=d?rolHtml(d):`<div class="rol">Votul nominal nu a putut fi încărcat.</div>`;
+}
+const ROL_ETICHETE={da:"pentru",nu:"contra",abtinere:"abținere",nu_a_votat:"nu a votat"};
+function rolHtml(d){
+  // Not collected and nobody voted are different facts, and an empty list for both would report a
+  // silence that did not happen.
+  if(!d.gasit) return `<div class="rol"><span class="hint">Votul nominal al acestei ședințe nu a fost încă adus.</span></div>`;
+  let h=`<div class="rol">`;
+  if(d.subiect) h+=`<div class="steno-h">${esc(d.subiect)}</div>`;
+  h+=(d.grupuri||[]).map(g=>
+    `<div class="rol-grup"><div class="rol-cap"><span class="parc-grup">${esc(g.grup)}</span> `
+    +`<span class="dep-ok">${g.da} pentru</span> · <span class="dep-nu">${g.nu} contra</span>`
+    +(g.abtineri?` · ${g.abtineri} abțineri`:``)
+    +(g.nu_au_votat?` · ${g.nu_au_votat} nu au votat`:``)+`</div>`
+    // Names are clickable where the roll linked a profile — the same (legislature, chamber, id)
+    // the signatures and the speeches use, so it opens the person who actually voted.
+    +`<div class="rol-membri">`+g.membri.map(m=>
+      `<span class="dep-nume rol-v ${esc(m.optiune)}" title="${esc(ROL_ETICHETE[m.optiune]||m.optiune)}"`
+      +` data-idm="${esc(m.idm)}" data-leg="${esc(m.leg||"")}" data-camera="${esc(m.camera||"")}">`
+      +`${esc(m.nume)}</span>`).join(", ")+`</div></div>`).join("");
+  return h+`</div>`;
+}
+
 // ---- Cine face legea ----
 // Loaded when the tab is first opened and kept: 488 bodies is one small query, and re-reading it
 // on every switch would ask the corpus for the same answer.
