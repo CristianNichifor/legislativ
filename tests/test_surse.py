@@ -477,3 +477,36 @@ def test_a_failed_fetch_is_recorded_so_it_is_not_asked_for_again(tmp_path, monke
     with depozit.deschide(cale, readonly=True) as con:
         assert con.execute("SELECT stare FROM surse").fetchone()[0] == "http-500"
         assert surse.de_facut(con, ["1"]) == []
+
+
+def test_the_work_list_does_not_scan_the_table_once_per_candidate(tmp_path):
+    """The failure this guards was invisible for as long as the only caller passed a short list.
+
+    `acte.id_portal` is not the primary key and carries no index, so `WHERE id_portal = ?` is a
+    full scan. One per candidate is nothing over the few hundred acts `de_lovituri` returns, and
+    203 353 scans of a 203 353-row table over the whole corpus: the crawl sat for 41 minutes
+    without printing its work list.
+
+    Counted rather than timed, so it fails for the right reason and not on a slow machine.
+    """
+    from scripts import depozit, surse
+
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as con:
+        for n in range(200):
+            con.execute(
+                "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, sursa_url, citit_la)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (f"lege-{n}-2020", "lege", str(n), 2020, "T", str(n), f"http://x/{n}", "x"),
+            )
+        con.commit()
+
+    with depozit.deschide(cale, readonly=True) as con:
+        candidati = surse.de_tot(con)
+        interogari = []
+        con.set_trace_callback(interogari.append)
+        lista = surse.de_facut(con, candidati)
+        con.set_trace_callback(None)
+
+    assert len(lista) == 200
+    assert len(interogari) <= 4, f"{len(interogari)} interogări pentru 200 de candidați"

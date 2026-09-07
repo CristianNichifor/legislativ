@@ -135,14 +135,20 @@ def de_facut(con: sqlite3.Connection, candidati: list[str]) -> list[tuple[str, s
     if not candidati:
         return []
     facute = {r[0] for r in con.execute("SELECT id_portal FROM surse")}
+    # One query for the URLs, not one per candidate. `acte.id_portal` is not the primary key and
+    # carries no index, so `WHERE id_portal = ?` is a full scan — which was invisible while the
+    # only caller passed `de_lovituri`, a few hundred acts. Passing the whole corpus turned it into
+    # 203 353 scans of a 203 353-row table and the crawl sat for 41 minutes without printing its
+    # work list. The candidate order is the caller's priority and is preserved.
+    urluri = {
+        r[0]: depozit.url_document(r[1], r[2])
+        for r in con.execute("SELECT id_portal, sursa_url, id_act_portal FROM acte")
+    }
     iesire: list[tuple[str, str]] = []
     for id_portal in candidati:
         if id_portal in facute:
             continue
-        rand = con.execute(
-            "SELECT sursa_url, id_act_portal FROM acte WHERE id_portal = ?", (id_portal,)
-        ).fetchone()
-        url = depozit.url_document(rand[0], rand[1]) if rand else ""
+        url = urluri.get(id_portal) or ""
         if url:
             iesire.append((id_portal, url))
     return iesire
