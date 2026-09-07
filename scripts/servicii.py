@@ -1592,6 +1592,79 @@ def _domenii(qs: dict, stare: Stare) -> dict:
         return {"emitenti": [], "acte": []}
 
 
+def _importa(nume: str, continut_b64: str) -> dict:
+    """One uploaded file into the editor's block tree, in a single round trip.
+
+    Base64 in JSON rather than multipart, and that is a decision about the *other* build: under
+    Pyodide there is no HTTP at all, the page calls this function directly, and a transport that
+    only exists on localhost would mean two code paths for one feature. The draft still never
+    leaves the tab in the browser build.
+
+    Parsed here too, because a caller that got text back would immediately ask for the tree and
+    nothing else can be done with the text meanwhile.
+    """
+    import base64
+    import binascii
+
+    from scripts import fisiere
+
+    try:
+        octeti = base64.b64decode(continut_b64 or "", validate=True)
+    except (binascii.Error, ValueError):
+        return {"ok": False, "eroare": "conținut invalid"}
+    if not octeti:
+        return {"ok": False, "eroare": "fișier gol"}
+    try:
+        citit = fisiere.citeste(octeti, nume=nume or "")
+    except ValueError as e:
+        # A refusal a person can act on — a PDF says what to do instead — rather than a stack
+        # trace, and never a half-read draft that somebody then edits.
+        return {"ok": False, "eroare": str(e)}
+    return {
+        "ok": True,
+        "fel": citit.fel,
+        "paragrafe": citit.paragrafe,
+        "text": citit.text,
+        **_parseaza(citit.text),
+    }
+
+
+def _docx(titlu: str, text: str) -> dict:
+    """The draft as a `.docx`, base64 so the page can save it without a download endpoint.
+
+    Same reason as `_importa`: the browser build has no server to stream bytes from, and one path
+    for both builds beats a feature that only works on localhost.
+    """
+    import base64
+
+    from scripts import fisiere
+
+    if not (text or "").strip():
+        return {"ok": False, "eroare": "nimic de exportat"}
+    octeti = fisiere.catre_docx(titlu or "Proiect", text)
+    return {
+        "ok": True,
+        "nume": _nume_fisier(titlu),
+        "continut_b64": base64.b64encode(octeti).decode("ascii"),
+    }
+
+
+_NUME_RAU = re.compile(r"[^\w .,()\-]", re.UNICODE)
+
+
+def _nume_fisier(titlu: str) -> str:
+    """A download name built from a title the user typed.
+
+    Path separators, control characters and anything else that is not a letter, a digit or ordinary
+    punctuation are dropped rather than escaped. The title reaches a browser's `download` attribute
+    here, and could reach a `Content-Disposition` header the day this is served over something
+    else — where a newline is header injection and a `/` is a path. Sanitising at the point the
+    name is made means that day is not a new decision.
+    """
+    curat = _NUME_RAU.sub("", (titlu or "").strip())[:60].strip(" .") or "proiect"
+    return f"{curat}.docx"
+
+
 def _parseaza(text: str) -> dict:
     """Recover the Articol ▸ Alineat ▸ Literă tree from the pasted plain text of an act, so the
     editor can load an existing law as blocks to redact. Deterministic, no model."""
