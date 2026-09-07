@@ -1644,9 +1644,25 @@ def _docx(titlu: str, text: str) -> dict:
     octeti = fisiere.catre_docx(titlu or "Proiect", text)
     return {
         "ok": True,
-        "nume": f"{(titlu or 'proiect')[:60].strip()}.docx",
+        "nume": _nume_fisier(titlu),
         "continut_b64": base64.b64encode(octeti).decode("ascii"),
     }
+
+
+_NUME_RAU = re.compile(r"[^\w .,()\-]", re.UNICODE)
+
+
+def _nume_fisier(titlu: str) -> str:
+    """A download name built from a title the user typed.
+
+    Path separators, control characters and anything else that is not a letter, a digit or ordinary
+    punctuation are dropped rather than escaped. The title reaches a browser's `download` attribute
+    here, and could reach a `Content-Disposition` header the day this is served over something
+    else — where a newline is header injection and a `/` is a path. Sanitising at the point the
+    name is made means that day is not a new decision.
+    """
+    curat = _NUME_RAU.sub("", (titlu or "").strip())[:60].strip(" .") or "proiect"
+    return f"{curat}.docx"
 
 
 def _parseaza(text: str) -> dict:

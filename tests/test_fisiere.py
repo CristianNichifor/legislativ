@@ -194,3 +194,86 @@ def test_exporting_nothing_says_so():
     from scripts.servicii import _docx
 
     assert _docx("T", "   ")["ok"] is False
+
+
+# --- ce refuză, și de ce ------------------------------------------------------------------------
+
+
+def _bomba_zip(marime_mb: int) -> bytes:
+    """A small `.docx` whose `word/document.xml` expands to `marime_mb` megabytes."""
+    w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    corp = "<w:p><w:r><w:t>" + ("A" * 1000) + "</w:t></w:r></w:p>"
+    doc = (
+        f'<?xml version="1.0"?><w:document xmlns:w="{w}"><w:body>'
+        + corp * (marime_mb * 1000)
+        + "</w:body></w:document>"
+    )
+    iesire = BytesIO()
+    with zipfile.ZipFile(iesire, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        z.writestr("word/document.xml", doc)
+    return iesire.getvalue()
+
+
+def test_a_small_upload_cannot_expand_into_a_large_one():
+    """A `.docx` is a ZIP and a ZIP is a lever. Measured before the cap existed: 707 KB of input
+    expanded to 295 MB, which the reader accepted in 6,7 seconds and held as text — plus several
+    times that again as a parse tree. One upload, one process, gone.
+
+    Refused rather than truncated: a silently shortened act is worse than one that did not
+    import."""
+    bomba = _bomba_zip(45)
+    assert len(bomba) < 2 * 1024 * 1024, "fixtura nu mai e o bombă"
+    with pytest.raises(ValueError, match="prea mare"):
+        fisiere.din_docx(bomba)
+
+
+def test_the_declared_size_is_checked_and_then_not_trusted():
+    """`file_size` is a number the attacker writes into the archive. It is read first because it is
+    free, and the read is capped again anyway."""
+    bomba = _bomba_zip(45)
+    with zipfile.ZipFile(BytesIO(bomba)) as z:
+        assert z.getinfo("word/document.xml").file_size > fisiere.MAX_DESFACUT
+    # and the guard survives a lying header: the second cap is on bytes actually read
+    with pytest.raises(ValueError, match="prea mare"):
+        fisiere.din_docx(bomba)
+
+
+def test_a_document_that_declares_entities_is_refused_before_it_is_parsed():
+    """Entity expansion is how a few kilobytes become gigabytes. The expat underneath caps the
+    amplification factor and rejects the classic attack on its own — but that is a property of one
+    build of one library. A `.docx` body has no legitimate reason to declare entities."""
+    doc = (
+        '<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">]>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:body><w:p><w:r><w:t>&lol;</w:t></w:r></w:p></w:body></w:document>"
+    )
+    iesire = BytesIO()
+    with zipfile.ZipFile(iesire, "w") as z:
+        z.writestr("word/document.xml", doc)
+    with pytest.raises(ValueError, match="entități"):
+        fisiere.din_docx(iesire.getvalue())
+
+
+def test_an_upload_larger_than_the_ceiling_is_refused_by_the_reader_not_the_page():
+    """The browser checks `file.size` before sending, and that check is a suggestion: the endpoint
+    is reachable without the page."""
+    with pytest.raises(ValueError, match="prea mare"):
+        fisiere.citeste(b"x" * (fisiere.MAX_INCARCARE + 1), nume="mare.txt")
+
+
+def test_the_download_name_cannot_carry_a_path_or_a_newline():
+    """The title is typed by the user and becomes a download name. Today it reaches a `download`
+    attribute; the day it reaches a `Content-Disposition` header, a newline is header injection and
+    a slash is a path. Sanitised where the name is made, so that day is not a new decision."""
+    from scripts.servicii import _docx
+
+    r = _docx("../../etc/passwd\r\nX-Injected: 1", "Articolul 1")
+    assert r["nume"] == "etcpasswdX-Injected 1.docx"
+    assert "/" not in r["nume"] and "\r" not in r["nume"] and "\n" not in r["nume"]
+    assert _docx("", "text")["nume"] == "proiect.docx"
+
+
+def test_a_legitimate_document_still_imports_after_the_caps():
+    """The guards must not have made the feature useless."""
+    octeti = fisiere.catre_docx("LEGE nr. 1 din 2026", "Articolul 1\n(1) Text.")
+    assert "Articolul 1" in fisiere.citeste(octeti, nume="p.docx").text

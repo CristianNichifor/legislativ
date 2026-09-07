@@ -36,6 +36,14 @@ from io import BytesIO
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
+# What one upload may cost, in memory, before it is refused. A `.docx` is a ZIP, and a ZIP is a
+# lever: 707 KB of well-chosen input expands to 295 MB of `word/document.xml`, which this reader
+# accepted in 6,7 seconds and held as text — plus several times that again as a parse tree. The
+# limits are here rather than in the page because a browser-side check on `file.size` is a
+# suggestion: the endpoint is reachable without the page.
+MAX_INCARCARE = 20 * 1024 * 1024  # the uploaded file itself
+MAX_DESFACUT = 40 * 1024 * 1024  # `word/document.xml` after decompression
+
 # Markdown syntax that cannot also be legislative numbering. Ordered lists are deliberately absent
 # — see the module note.
 _TITLU_MD = re.compile(r"^\s{0,3}#{1,6}\s+", re.M)
@@ -91,7 +99,18 @@ def din_docx(octeti: bytes) -> str:
         nume = "word/document.xml"
         if nume not in z.namelist():
             raise ValueError("fișierul nu conține word/document.xml — nu pare un .docx")
-        radacina = ET.fromstring(z.read(nume))
+        # Read to a ceiling rather than to the end. The declared `file_size` is checked first
+        # because it is free, and then ignored: it is a number in the archive an attacker writes,
+        # so the read is capped again on the way out. One byte over the cap is a refusal, not a
+        # truncation — a silently shortened act is worse than one that did not import.
+        if z.getinfo(nume).file_size > MAX_DESFACUT:
+            raise ValueError("documentul e prea mare pentru a fi citit (peste 40 MB desfăcut)")
+        with z.open(nume) as f:
+            brut = f.read(MAX_DESFACUT + 1)
+        if len(brut) > MAX_DESFACUT:
+            raise ValueError("documentul e prea mare pentru a fi citit (peste 40 MB desfăcut)")
+    _fara_dtd(brut)
+    radacina = ET.fromstring(brut)
 
     linii: list[str] = []
     for p in radacina.iter(f"{W}p"):
@@ -111,6 +130,22 @@ def din_docx(octeti: bytes) -> str:
     return _MULTE_GOALE.sub("\n\n", "\n".join(linii)).strip()
 
 
+_DOCTYPE = re.compile(rb"<!\s*(DOCTYPE|ENTITY)", re.I)
+
+
+def _fara_dtd(brut: bytes) -> None:
+    """Refuse a document that declares a DTD, before any parser sees it.
+
+    Entity expansion is how a few kilobytes of XML become gigabytes of text. The expat this runs
+    against caps the amplification factor and rejects the classic attack on its own — but that is a
+    property of one build of one library, checked once, on one machine. A document part of a `.docx`
+    has no legitimate reason to declare entities, so refusing outright costs nothing and does not
+    depend on which expat is underneath.
+    """
+    if _DOCTYPE.search(brut[:8192]):
+        raise ValueError("documentul declară entități XML și nu poate fi citit în siguranță")
+
+
 def citeste(octeti: bytes, nume: str = "") -> Citit:
     """One uploaded file into text, deciding by content first and by name second.
 
@@ -118,6 +153,8 @@ def citeste(octeti: bytes, nume: str = "") -> Citit:
     the browser labelled `application/octet-stream` still has a signature. `PK\\x03\\x04` decides
     it before anything the caller claims.
     """
+    if len(octeti) > MAX_INCARCARE:
+        raise ValueError("fișierul e prea mare (peste 20 MB)")
     jos = (nume or "").lower()
     if octeti[:4] == b"PK\x03\x04":
         return _citit(din_docx(octeti), "docx")

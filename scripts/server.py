@@ -89,6 +89,9 @@ from scripts.servicii import (
 )
 
 APP = Path(__file__).resolve().parent.parent / "app"
+# The largest request body this server will read into memory: a `.docx` at `fisiere.MAX_INCARCARE`
+# plus the third that base64 adds, plus room for the rest of the JSON.
+MAX_CERERE = 30 * 1024 * 1024
 
 
 def _incalzeste(stare: Stare) -> None:
@@ -207,7 +210,18 @@ def face_handler(stare: Stare):
             ):
                 self._json({"error": "not found"}, 404)
                 return
-            lung = int(self.headers.get("Content-Length", 0))
+            # Bounded before it is read, not after. `Content-Length` is a number the client
+            # chooses, and `rfile.read(n)` will happily allocate whatever it says — so a request
+            # that claims a gigabyte costs a gigabyte before any handler decides it is nonsense.
+            # 30 MB is a `.docx` at the import ceiling plus its base64 overhead.
+            try:
+                lung = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                self._json({"error": "content-length invalid"}, 400)
+                return
+            if lung > MAX_CERERE:
+                self._json({"error": "cerere prea mare"}, 413)
+                return
             try:
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except json.JSONDecodeError:
