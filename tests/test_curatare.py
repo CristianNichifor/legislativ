@@ -25,7 +25,7 @@ from pathlib import Path
 from scripts import depozit
 from scripts.api import Inregistrare
 from scripts.colector import act_din_inregistrare
-from scripts.curatare import separatoare, titluri
+from scripts.curatare import restaureaza_text, separatoare, titluri
 from scripts.text import fara_separatoare
 
 MURDAR = (
@@ -226,3 +226,86 @@ def test_an_ampersand_in_a_title_survives_one_decode(tmp_path: Path):
     finally:
         cx.close()
     assert titlu == "LEGE nr. 7 privind A & B"
+
+
+# --- textul pierdut de îmbogățire ---------------------------------------------------------------
+#
+# `imbogateste` guarded on `len(provizii) <= 1` — a count, not a measurement — so a page parsing to
+# three empty preamble paragraphs replaced the act. The Codul vamal went from 79 865 characters to
+# 95. Recovery is possible only because `documente.text` is never rewritten.
+
+
+def _corpus_cu_act_golit(tmp_path: Path, text: str):
+    """An act whose provisions have been reduced to header fragments, archive intact."""
+    from scripts.parsare import Provizie
+
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995")
+    r = Inregistrare(**{**r.__dict__, "text": text})
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+        act_id = act_din_inregistrare(r).id
+        depozit.scrie_provizii(
+            con,
+            act_id,
+            [Provizie("par1", "privind ceva"), Provizie("par2", "(actualizată)")],
+        )
+        con.commit()
+    return cale, act_id
+
+
+def test_an_emptied_act_is_restored_from_the_archive(tmp_path: Path):
+    text = "Articolul 1 " + "Dispoziții generale care se aplică tuturor. " * 60
+    cale, act_id = _corpus_cu_act_golit(tmp_path, text)
+
+    cx = sqlite3.connect(str(cale))
+    try:
+        (inainte,) = cx.execute(
+            "SELECT sum(length(text)) FROM provizii WHERE act_id=?", (act_id,)
+        ).fetchone()
+    finally:
+        cx.close()
+    assert inainte < 100, "fixtura nu reproduce paguba"
+
+    raport = restaureaza_text(str(cale), log=lambda *_: None)
+    assert raport.schimbate == 1
+
+    cx = sqlite3.connect(str(cale))
+    try:
+        randuri = cx.execute(
+            "SELECT locator, length(text) FROM provizii WHERE act_id=?", (act_id,)
+        ).fetchall()
+    finally:
+        cx.close()
+    assert [r[0] for r in randuri] == ["text"]
+    assert randuri[0][1] > 0.98 * len(text)
+
+
+def test_an_act_that_kept_its_text_is_left_alone(tmp_path: Path):
+    """The repair must not undo a correct enrichment: a real article tree exceeds the flat text,
+    because provisions are stored at every level and an article's words count again in its
+    alineate."""
+    from scripts.parsare import Provizie
+
+    text = "Articolul 1 " + "Se aplică. " * 80
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995")
+    r = Inregistrare(**{**r.__dict__, "text": text})
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+        act_id = act_din_inregistrare(r).id
+        depozit.scrie_provizii(con, act_id, [Provizie("art1", text), Provizie("art1.alin1", text)])
+        con.commit()
+    assert restaureaza_text(str(cale), log=lambda *_: None).schimbate == 0
+
+
+def test_a_still_flat_act_is_left_alone(tmp_path: Path):
+    """Collection writes exactly the archive minus the service's separators, so a flat act sits at
+    the threshold by construction and must not be rewritten on every run."""
+    text = "Articolul 1 " + "Se aplică tuturor. " * 50
+    cale = tmp_path / "corpus.db"
+    r = _rec_titlu("LEGE nr. 7 din 1995")
+    r = Inregistrare(**{**r.__dict__, "text": text})
+    with depozit.deschide(cale) as con:
+        depozit.scrie_inregistrare(con, r, act_din_inregistrare(r))
+    assert restaureaza_text(str(cale), log=lambda *_: None).schimbate == 0
