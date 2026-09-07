@@ -18,6 +18,8 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/sugereaza?text=` — the legistic form of the line being written. No model, no corpus.
 - `GET /api/consolidat[?act=]` — a provision's current wording with each change attributed, or the
   acts available to show. Reads locally synced pages, never a live portal fetch.
+- `GET /api/deputati[?q=|?idm=&leg=&camera=]` — the parliamentary groups, a name search, or one
+  member's record. Identity is (legislature, chamber, id); anything less merges people.
 - `GET /api/parcurs?plx=` — one bill's passage: sponsors, timeline, avize, recorded votes.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
@@ -44,6 +46,7 @@ from scripts.servicii import (
     _compune,
     _consolidat,
     _cronologie,
+    _deputati,
     _dictionar,
     _impact,
     _lint,
@@ -141,6 +144,8 @@ def face_handler(stare: Stare):
                 self._json(_consolidat(parse_qs(ruta.query)))
             elif ruta.path == "/api/prevedere":
                 self._json(_prevedere(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/deputati":
+                self._json(_deputati(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/parcurs":
                 self._json(_parcurs(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
