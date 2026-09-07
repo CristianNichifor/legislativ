@@ -196,7 +196,13 @@ def html(con: sqlite3.Connection, id_portal: str) -> str | None:
     return gzip.decompress(rand[0]).decode("utf-8", "replace")
 
 
-def imbogateste(cale_db: str = "corpus.db", *, limita: int | None = None, log=print) -> dict:
+def imbogateste(
+    cale_db: str = "corpus.db",
+    *,
+    limita: int | None = None,
+    reia: bool = True,
+    log=print,
+) -> dict:
     """Upgrade acts from their stored page: one flattened row becomes the real article tree.
 
     The act's identity is *not* taken from the parse. `parsare.parseaza` reads the page's own
@@ -207,6 +213,15 @@ def imbogateste(cale_db: str = "corpus.db", *, limita: int | None = None, log=pr
 
     An act whose page parses to nothing keeps the flattened row it already had. A worse corpus is
     not an upgrade.
+
+    **`reia` skips acts that already hold a tree**, which is what makes this restartable. The store
+    now holds 118 354 pages, so this is a job measured in hours, and without a skip a run that is
+    interrupted at the ninety-thousandth act begins again at the first — re-parsing and rewriting
+    everything it already did, including the FTS rows, which is the expensive half. A flattened act
+    has exactly one provision and an enriched one has many, so "already has a tree" is a count, not
+    a flag that could drift out of step with the data.
+
+    Pass `reia=False` to re-parse everything, which is what a change to `parsare` calls for.
     """
     from scripts.parsare import parseaza
 
@@ -216,9 +231,20 @@ def imbogateste(cale_db: str = "corpus.db", *, limita: int | None = None, log=pr
             "SELECT s.id_portal, s.url, a.id FROM surse s JOIN acte a ON a.id_portal = s.id_portal"
             " WHERE s.stare = 'ok' ORDER BY a.id"
         ).fetchall()
+        total_pagini = len(randuri)
+        if reia:
+            # One scan for the whole set, not a count per act: at 118 354 acts the per-act form is
+            # 118 354 aggregate queries before the first page is parsed.
+            structurate = {
+                r[0]
+                for r in con.execute(
+                    "SELECT act_id FROM provizii GROUP BY act_id HAVING count(*) > 1"
+                )
+            }
+            randuri = [r for r in randuri if r[2] not in structurate]
         if limita is not None:
             randuri = randuri[:limita]
-        log(f"{len(randuri)} acte cu pagină stocată")
+        log(f"{len(randuri)} acte de îmbogățit (din {total_pagini} cu pagină stocată)")
 
         for i, (id_portal, url, act_id) in enumerate(randuri, start=1):
             brut = html(con, id_portal)
@@ -262,6 +288,11 @@ def _main() -> int:
         help="secunde între cereri. Serverul e al unui minister; nu-l grăbi.",
     )
     ap.add_argument(
+        "--de-la-capat",
+        action="store_true",
+        help="reparsează și actele care au deja arbore (după o schimbare în parsare)",
+    )
+    ap.add_argument(
         "--imbogateste",
         action="store_true",
         help="nu aduce nimic: parsează paginile deja stocate în arborele de articole",
@@ -277,7 +308,7 @@ def _main() -> int:
         )
         return 0
     if a.imbogateste:
-        r = imbogateste(a.db, limita=a.limita)
+        r = imbogateste(a.db, limita=a.limita, reia=not a.de_la_capat)
         print(f"\ngata: {r['imbunatatite']} acte structurate, {r['provizii']} provizii")
         return 0
 
