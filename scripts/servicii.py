@@ -1240,6 +1240,60 @@ def _cine_citeaza(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _deputati(qs: dict, stare: Stare) -> dict:
+    """A deputy's record, or the parliamentary groups when no name is given.
+
+    Identity is `(leg, camera, idm)` — the Chamber's own link key. Anything less merges people:
+    `idm` alone covered 1 044 individuals with 349 values, and adding only the legislature still
+    left 282 keys holding more than one person, because a deputy and a senator can share a number
+    in the same year.
+
+    Empty rather than an error where the passages have not been collected: an install with
+    initiatives but no Fișe read has no signatures, and a zero must not read as "signed nothing".
+    """
+    q = (qs.get("q", [""])[0] or "").strip()
+    idm = (qs.get("idm", [""])[0] or "").strip()
+    leg = (qs.get("leg", [""])[0] or "").strip() or None
+    camera = (qs.get("camera", [""])[0] or "").strip() or None
+
+    from scripts import deputati as dep
+
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        try:
+            if idm:
+                s = dep.soarta(con, idm, leg, camera)
+                return {
+                    "idm": idm,
+                    "leg": leg,
+                    "camera": camera,
+                    "soarta": {
+                        "adoptate": s.adoptate,
+                        "respinse": s.respinse,
+                        "nedecise": s.nedecise,
+                    },
+                    "initiative": dep.initiative(con, idm, leg, camera),
+                }
+            if q:
+                return {
+                    "cautare": q,
+                    "semnatari": [
+                        {
+                            "idm": x.idm,
+                            "leg": x.leg,
+                            "camera": x.camera,
+                            "nume": x.nume,
+                            "grupuri": list(x.grupuri),
+                            "initiative": x.initiative,
+                        }
+                        for x in dep.cauta(con, q)
+                    ],
+                }
+            return {"grupuri": dep.grupuri(con)}
+        except sqlite3.OperationalError:
+            # The store predates the signature tables — nothing has been collected yet.
+            return {"grupuri": [], "semnatari": [], "initiative": []}
+
+
 def _parcurs(qs: dict, stare: Stare) -> dict:
     """How one bill moved: who signed it, who was asked, and how the room voted.
 
@@ -1299,9 +1353,9 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
                 )
             ]
             initiatori = [
-                {"nume": r[0], "grup": r[1], "camera": r[2], "idm": r[3]}
+                {"nume": r[0], "grup": r[1], "camera": r[2], "idm": r[3], "leg": r[4]}
                 for r in con.execute(
-                    "SELECT nume, grup, camera, idm FROM initiativa_initiator"
+                    "SELECT nume, grup, camera, idm, leg FROM initiativa_initiator"
                     " WHERE plx_id = ? ORDER BY grup, nume",
                     (plx_id,),
                 )

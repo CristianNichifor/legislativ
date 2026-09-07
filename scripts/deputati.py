@@ -38,9 +38,9 @@ class Semnatar:
 
     idm: str
     leg: str | None
+    camera: str | None
     nume: str
     grupuri: tuple[str, ...]
-    camera: str | None
     initiative: int
 
 
@@ -66,10 +66,11 @@ def _fara_diacritice(s: str) -> str:
 def cauta(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Semnatar]:
     """Deputies whose name matches, most prolific signer first.
 
-    Grouped by `(leg, idm)`, never by `idm` alone: the Chamber reuses the id between legislatures,
-    so 349 distinct values cover 1 044 distinct people and `idm=56` is four of them. Keyed on the
-    id alone this returned Buzoianu Diana-Anda sitting in AUR, PNL and USR at once — three other
-    members' records folded into hers.
+    Grouped by `(leg, camera, idm)`, which is what the Chamber's own link is keyed on:
+    `structura2015.mp?idm=56&leg=2020&cam=2`. All three are needed and each was learned the hard
+    way. Keyed on `idm` alone, 349 values covered 1 044 people. Adding the legislature left 282
+    pairs still covering more than one person — `idm=56, leg=2020` is Buzoianu Diana-Anda in the
+    Chamber and Ghica Cristian in the Senate. With the chamber too, no key covers two names.
 
     Matched diacritic-folded, because the Fișe spell the same person `Şovăială` and `Șovăială` in
     the same legislature and a reader types neither.
@@ -78,24 +79,32 @@ def cauta(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Semnatar
         return []
     tinta = _fara_diacritice(q)
     randuri = con.execute(
-        "SELECT idm, leg, nume, count(DISTINCT plx_id) n FROM initiativa_initiator"
-        " WHERE idm IS NOT NULL GROUP BY leg, idm ORDER BY n DESC"
+        "SELECT idm, leg, camera, nume, count(DISTINCT plx_id) n FROM initiativa_initiator"
+        " WHERE idm IS NOT NULL GROUP BY leg, camera, idm ORDER BY n DESC"
     ).fetchall()
-    gasiti = [r for r in randuri if tinta in _fara_diacritice(r[2] or "")][:limita]
-    return [_semnatar(con, r[0], r[1], r[2], r[3]) for r in gasiti]
+    gasiti = [r for r in randuri if tinta in _fara_diacritice(r[3] or "")][:limita]
+    return [_semnatar(con, r[0], r[1], r[2], r[3], r[4]) for r in gasiti]
 
 
-def _semnatar(con: sqlite3.Connection, idm: str, leg: str | None, nume: str, n: int) -> Semnatar:
-    randuri = con.execute(
-        "SELECT DISTINCT grup, camera FROM initiativa_initiator WHERE idm = ? AND leg IS ?",
-        (idm, leg),
-    ).fetchall()
-    grupuri = tuple(sorted({r[0] for r in randuri if r[0]}))
-    camere = {r[1] for r in randuri if r[1]}
-    return Semnatar(idm, leg, nume, grupuri, next(iter(camere), None) if camere else None, n)
+def _semnatar(
+    con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None, nume: str, n: int
+) -> Semnatar:
+    grupuri = tuple(
+        sorted(
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT grup FROM initiativa_initiator"
+                " WHERE idm = ? AND leg IS ? AND camera IS ? AND grup IS NOT NULL",
+                (idm, leg, camera),
+            )
+        )
+    )
+    return Semnatar(idm, leg, camera, nume, grupuri, n)
 
 
-def soarta(con: sqlite3.Connection, idm: str, leg: str | None = None) -> Soarta:
+def soarta(
+    con: sqlite3.Connection, idm: str, leg: str | None = None, camera: str | None = None
+) -> Soarta:
     """What happened to the bills this deputy signed.
 
     Counted per initiative, not per vote row: a bill can be divided on more than once — in each
@@ -107,8 +116,8 @@ def soarta(con: sqlite3.Connection, idm: str, leg: str | None = None) -> Soarta:
         "  SELECT v.rezultat FROM initiativa_vot v WHERE v.plx_id = i.plx_id"
         "  AND v.rezultat IS NOT NULL ORDER BY v.data DESC LIMIT 1)"
         " FROM (SELECT DISTINCT plx_id FROM initiativa_initiator"
-        "       WHERE idm = ? AND leg IS ?) i",
-        (idm, leg),
+        "       WHERE idm = ? AND leg IS ? AND camera IS ?) i",
+        (idm, leg, camera),
     ).fetchall()
     adoptate = sum(1 for _, r in randuri if r == "adoptat")
     respinse = sum(1 for _, r in randuri if r == "respins")
@@ -116,7 +125,12 @@ def soarta(con: sqlite3.Connection, idm: str, leg: str | None = None) -> Soarta:
 
 
 def initiative(
-    con: sqlite3.Connection, idm: str, leg: str | None = None, *, limita: int = 25
+    con: sqlite3.Connection,
+    idm: str,
+    leg: str | None = None,
+    camera: str | None = None,
+    *,
+    limita: int = 25,
 ) -> list[dict]:
     """The bills this deputy signed, newest first, each with how many signed it.
 
@@ -139,10 +153,10 @@ def initiative(
             "  (SELECT v.rezultat FROM initiativa_vot v WHERE v.plx_id = ii.plx_id"
             "   AND v.rezultat IS NOT NULL ORDER BY v.data DESC LIMIT 1)"
             " FROM (SELECT DISTINCT plx_id FROM initiativa_initiator"
-            "       WHERE idm = ? AND leg IS ?) ii"
+            "       WHERE idm = ? AND leg IS ? AND camera IS ?) ii"
             " LEFT JOIN initiative i ON i.plx_id = ii.plx_id"
             " ORDER BY i.data_inreg DESC LIMIT ?",
-            (idm, leg, limita),
+            (idm, leg, camera, limita),
         )
     ]
 
@@ -156,10 +170,12 @@ def grupuri(con: sqlite3.Connection) -> list[dict]:
     """
     iesire: list[dict] = []
     for grup, membri, semnaturi in con.execute(
-        # Members counted as distinct (leg, idm) pairs, not distinct ids: the Chamber reuses an
-        # id between legislatures, so counting ids alone reports one person where a group has had
-        # several sit under the same number.
-        "SELECT grup, count(DISTINCT leg || '/' || idm), count(*) FROM initiativa_initiator"
+        # Members counted as distinct (leg, camera, idm) triples, which is what the Chamber's own
+        # link is keyed on. Counting ids alone reports one person where a group has had several
+        # sit under the same number, and the pair without the chamber still merges a deputy with
+        # a senator who share it.
+        "SELECT grup, count(DISTINCT leg || '/' || camera || '/' || idm), count(*)"
+        " FROM initiativa_initiator"
         " WHERE grup IS NOT NULL AND idm IS NOT NULL GROUP BY grup"
     ):
         randuri = con.execute(
