@@ -349,6 +349,41 @@ CREATE TABLE IF NOT EXISTS interventie (
 );
 CREATE INDEX IF NOT EXISTS idx_interventie_dep ON interventie(dep_leg, dep_camera, dep_idm);
 
+-- One division's roll: who voted which way, name by name. `initiativa_vot` holds the tally, which
+-- is the room's answer and nobody's; this is the answer a voter can do something with.
+--
+-- `idv` is the Chamber's own id for the division, captured on the vote row from the step's own
+-- link. The header is kept separately from the options so that a roll fetched and found empty is
+-- distinguishable from one never fetched — the same reason `stenograma` has its own row.
+CREATE TABLE IF NOT EXISTS vot_nominal_sedinta (
+    idv      TEXT PRIMARY KEY,
+    camera   TEXT,
+    subiect  TEXT,                 -- `Vot final / Adoptare PL 1/2021 pentru aprobarea...`
+    idp      TEXT,                 -- the Fișa the roll names, where it names one
+    url      TEXT NOT NULL,
+    adus_la  TEXT NOT NULL
+);
+
+-- One member, one division. Keyed on the Chamber's own `(leg, camera, idm)` — the same triple the
+-- signatures and the speeches hang off, so a vote reaches the person who cast it without matching
+-- on a name.
+--
+-- A member listed with `-` was in the room and did not vote; a member not listed was not there.
+-- The page states the first and is silent about the second, so only the first is a row here.
+-- Inventing rows for the absent would be inventing an attendance record.
+CREATE TABLE IF NOT EXISTS vot_nominal (
+    idv      TEXT NOT NULL,
+    idm      TEXT NOT NULL,
+    leg      TEXT,
+    camera   TEXT,
+    nume     TEXT NOT NULL,        -- as the roll prints it
+    grup     TEXT,
+    optiune  TEXT NOT NULL,        -- 'da' | 'nu' | 'abtinere' | 'nu_a_votat' | 'necunoscut'
+    brut     TEXT NOT NULL,        -- what the page printed, so a reading can be checked
+    PRIMARY KEY (idv, leg, camera, idm)
+);
+CREATE INDEX IF NOT EXISTS idx_vot_nominal_dep ON vot_nominal(leg, camera, idm);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS interventie_fts USING fts5(
     text, vorbitor UNINDEXED, ids UNINDEXED, idm UNINDEXED, ord UNINDEXED,
     tokenize = 'unicode61 remove_diacritics 2'

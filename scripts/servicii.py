@@ -1299,6 +1299,7 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                     },
                     "initiative": dep.initiative(con, idm, leg, camera),
                     "interventii": _spuse(con, idm, leg, camera),
+                    "voturi": _cum_a_votat(con, idm, leg, camera),
                 }
             if q:
                 return {
@@ -1375,10 +1376,13 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
                     "abtineri": r[5],
                     "rezultat": r[6],
                     "absenti": r[7],
+                    # Present only where the step linked a roll, so a division with none is not
+                    # offered as one whose roll failed to load.
+                    "idv": r[8],
                 }
                 for r in con.execute(
-                    "SELECT data, camera, intrebare, pentru, contra, abtineri, rezultat, absenti"
-                    " FROM initiativa_vot WHERE plx_id = ? ORDER BY data",
+                    "SELECT data, camera, intrebare, pentru, contra, abtineri, rezultat, absenti,"
+                    " idv FROM initiativa_vot WHERE plx_id = ? ORDER BY data",
                     (plx_id,),
                 )
             ]
@@ -1431,6 +1435,35 @@ def _spuse(con: sqlite3.Connection, idm: str, leg: str | None, camera: str | Non
     except sqlite3.OperationalError:
         # No transcripts collected in this store.
         return []
+
+
+def _cum_a_votat(con: sqlite3.Connection, idm: str, leg: str | None, camera: str | None):
+    """How this member voted, from the Chamber's own roll of each division.
+
+    The tally on a Fișa is the room's answer and nobody's. This is the one a voter can act on, and
+    it hangs off the same key as their signatures and their speeches.
+    """
+    from scripts import nominal
+
+    return nominal.cum_a_votat(con, idm, leg, camera)
+
+
+def _rol(qs: dict, stare: Stare) -> dict:
+    """One division's roll, grouped by parliamentary group.
+
+    `gasit=False` where the roll has not been collected. An unread roll and a division nobody voted
+    in must not look alike — an empty list for both would report a silence that did not happen.
+    """
+    from scripts import nominal
+
+    idv = (qs.get("idv", [""])[0] or "").strip()
+    if not idv:
+        return {"gasit": False, "idv": "", "grupuri": []}
+    with depozit.deschide(stare.initiative, readonly=True) as con:
+        try:
+            return nominal.rolul(con, idv)
+        except sqlite3.OperationalError:
+            return {"gasit": False, "idv": idv, "grupuri": []}
 
 
 def _stenograma(qs: dict, stare: Stare) -> dict:
