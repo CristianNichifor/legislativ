@@ -96,6 +96,33 @@ def de_lovituri(con: sqlite3.Connection) -> list[str]:
     ]
 
 
+def de_tot(con: sqlite3.Connection) -> list[str]:
+    """Every act whose page has never been asked for, struck ones first and then newest.
+
+    `de_lovituri` is the work list that pays for itself first and it is deliberately narrow: the
+    acts a Curtea Constituțională decision struck, where a flattened text costs a finding. It is
+    also the *default*, which meant a plain `descarca` never reached the rest of the corpus — and
+    the rest of the corpus turned out to be the whole reason half the acts have no article tree.
+    33 710 acts have no row in `surse` at all: not fetched and failed, never asked for. Every one
+    of them is stored as a single flat provision, which is a 100% correlation and the diagnosis.
+
+    Ordered struck-first to keep the existing priority, then by year descending, because a run cut
+    short should have done the law people are reading rather than an alphabetical prefix.
+    """
+    lovite = de_lovituri(con)
+    vazut = set(lovite)
+    restul = [
+        r[0]
+        for r in con.execute(
+            "SELECT id_portal FROM acte"
+            " WHERE id_portal IS NOT NULL AND id_portal != ''"
+            " ORDER BY an DESC, id"
+        )
+        if r[0] not in vazut
+    ]
+    return lovite + restul
+
+
 def de_facut(con: sqlite3.Connection, candidati: list[str]) -> list[tuple[str, str]]:
     """(id_portal, url) for the documents never asked for. The incremental half.
 
@@ -363,6 +390,11 @@ def _main() -> int:
         action="store_true",
         help="nu aduce nimic: parsează paginile deja stocate în arborele de articole",
     )
+    ap.add_argument(
+        "--toate",
+        action="store_true",
+        help="adu paginile tuturor actelor, nu doar ale celor lovite de o decizie",
+    )
     ap.add_argument("--rezumat", action="store_true")
     a = ap.parse_args()
 
@@ -378,7 +410,11 @@ def _main() -> int:
         print(f"\ngata: {r['imbunatatite']} acte structurate, {r['provizii']} provizii")
         return 0
 
-    r = descarca(a.db, limita=a.limita, pauza=a.pauza)
+    candidati = None
+    if a.toate:
+        with depozit.deschide(a.db, readonly=True) as con:
+            candidati = de_tot(con)
+    r = descarca(a.db, candidati=candidati, limita=a.limita, pauza=a.pauza)
     print(f"\ngata: {r}")
     return 0
 

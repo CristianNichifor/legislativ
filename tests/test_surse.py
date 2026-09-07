@@ -399,3 +399,32 @@ def test_an_archive_with_no_article_marker_is_compared_whole(tmp_path, monkeypat
     monkeypatch.setattr(surse, "_adu", lambda url: (PAGINA_SARACA.encode("utf-8"), "ok"))
     surse.descarca(str(cale), candidati=["591993"], pauza=0, log=lambda *_: None)
     assert surse.imbogateste(str(cale), log=lambda *_: None)["pierdute"] == 1
+
+
+def test_the_default_work_list_is_narrow_and_the_whole_corpus_is_a_choice(tmp_path):
+    """`de_lovituri` is the list that pays for itself first — the acts a decision struck — and it
+    is also the default, so a plain `descarca` never reached the rest. That is why 33 710 acts
+    have no row in `surse` at all: not fetched and failed, never asked for. Every one of them is
+    stored as a single flat provision, a 100% correlation and the diagnosis for half the corpus
+    having no article tree."""
+    from scripts import depozit
+    from scripts.surse import de_lovituri, de_tot
+
+    cale = tmp_path / "corpus.db"
+    with depozit.deschide(cale) as con:
+        for id_portal, act_id, an in (("1", "lege-1-1990", 1990), ("2", "lege-2-2024", 2024)):
+            con.execute(
+                "INSERT INTO acte (id, tip, numar, an, titlu, id_portal, sursa_url, citit_la)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (act_id, "lege", act_id.split("-")[1], an, "T", id_portal, "http://x", "x"),
+            )
+        con.execute(
+            "INSERT INTO lovituri (id_portal, ord, cheie_act, act, locator, fel, text)"
+            " VALUES ('9', 1, 'decizie-1-2020', 'lege-1-1990', 'art1', 'neconstitutional', 't')"
+        )
+        con.commit()
+    with depozit.deschide(cale, readonly=True) as con:
+        assert de_lovituri(con) == ["1"], "lista implicită nu mai e cea îngustă"
+        # Struck first, then the rest newest-first: a run cut short should have done the law
+        # people are reading rather than an alphabetical prefix.
+        assert de_tot(con) == ["1", "2"]
