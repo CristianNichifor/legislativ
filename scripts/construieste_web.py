@@ -235,7 +235,7 @@ async function boot(){
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
   // Cu un depozit în spate, graf.db și initiative.db se montează de acolo întregi; nu are rost să
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
-  const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json"];
+  const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json"];
   for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db"].concat(catalog))) {
     // manifest.json is the one that has to describe what is in the repository rather than what
     // the build happened to ship: it carries the headline counts, and counting 3,3 million
@@ -707,6 +707,27 @@ def _finalizeaza_db() -> None:
                 sidecar.unlink()
 
 
+def _parlament_json() -> None:
+    """The groups and the directory, prebuilt as `data/parlament.json`.
+
+    Built from the whole `initiative.db`, not the shipped slice, for the same reason the register
+    is: the answer is small because Parliament has 818 members, not because the corpus is small.
+    0,38 MB against a query that took 54,2 s over a mounted database — which the page rendered as
+    an empty panel, since a panel cannot tell "slow" from "nothing here".
+    """
+    sursa = ROOT / "initiative.db"
+    cale = sursa if sursa.is_file() else DATA / "initiative.db"
+    if not Path(cale).is_file():
+        return
+    from scripts import servicii
+
+    date = servicii.construieste_parlament(str(cale))
+    (DATA / "parlament.json").write_text(json.dumps(date, ensure_ascii=False), encoding="utf-8")
+    n = len(date.get("persoane", {}).get("", []))
+    marime = (DATA / "parlament.json").stat().st_size / 1e6
+    print(f"  parlament → {DATA / 'parlament.json'} ({n} persoane, {marime:.2f} MB)")
+
+
 def _vid_json() -> None:
     """The unmet-obligations report, precomputed over the sliced corpus + its graph and shipped as
     `data/vid.json`. Built here (with full corpus access) so the browser never scans for it."""
@@ -881,6 +902,7 @@ def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> Non
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
         _vid_json()
         _neconstitutional_json()
+        _parlament_json()
     _bundle()
     _worker(depozit)
     _fonturi()
