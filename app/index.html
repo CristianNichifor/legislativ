@@ -1426,6 +1426,7 @@ function selectTab(which){
   // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
   if(focusTarget) focusTarget.focus();
+  if(which==="ue") pregatesteUEDinDraft(false);
   if(which==="consolidat") loadConsAsezari();
   if(which==="parlamentari"){ loadGrupuri(); loadToti(); }
   if(which==="domenii") loadDomenii();
@@ -1777,7 +1778,11 @@ $("#go").onclick = async ()=>{
     renderLint(await r.json());
     // impact (reach) loads on its own, so a slow corpus count never delays the lint results
     fetch("/api/impact",opt).then(ri=>ri.ok?ri.json():null).then(im=>{
-      const html=im?renderImpact(im):""; if(html) $("#lint-out").insertAdjacentHTML("afterbegin", html);
+      const html=im?renderImpact(im):""; if(html) insertLintSection("sec-impact", html);
+    }).catch(()=>{});
+    // EU retrieval is also separate: it is useful context, but not part of the blocking lint gate.
+    fetch("/api/ue",opt).then(ri=>ri.ok?ri.json():null).then(ue=>{
+      const html=ue?renderUEInline(ue):""; if(html) insertLintSection("sec-drept-ue", html);
     }).catch(()=>{});
     const ms=performance.now()-t0;
     const s=document.createElement("p"); s.className="hint"; s.style.margin=".4rem 0 0";
@@ -3602,6 +3607,15 @@ $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 // ---- Drept UE: candidate CELEX provisions for the draft text ----
+function insertLintSection(id, html){
+  const out=$("#lint-out"); if(!out || !html) return;
+  const vechi=document.getElementById(id); if(vechi) vechi.remove();
+  const impact=document.getElementById("sec-impact"), ue=document.getElementById("sec-drept-ue");
+  if(id==="sec-impact" && ue) ue.insertAdjacentHTML("beforebegin", html);
+  else if(id==="sec-drept-ue" && impact) impact.insertAdjacentHTML("afterend", html);
+  else out.insertAdjacentHTML("afterbegin", html);
+  out.querySelectorAll(".ue-open").forEach(b=>{ b.onclick=deschideUEDinLint; });
+}
 function markFragment(html){
   return esc(html).replace(/&lt;mark&gt;/g,"<mark>").replace(/&lt;\/mark&gt;/g,"</mark>");
 }
@@ -3609,13 +3623,11 @@ function urlSigur(u){
   const s=String(u||"").trim();
   return /^https?:\/\//i.test(s) ? s : "";
 }
-function renderUE(d){
-  const out=$("#ue-out"), stat=$("#ue-stat");
-  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[];
-  stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate` : "";
-  const note=lim.length ? lim.map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("") : "";
-  if(!rr.length){ out.innerHTML=empty("Nicio prevedere UE de arătat.")+note; return; }
-  out.innerHTML=`<div class="ue-list">`+rr.map(r=>{
+function ueLimitariHtml(lim, deLa){
+  return (lim||[]).slice(deLa||0).map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("");
+}
+function ueHitsHtml(rr){
+  return `<div class="ue-list">`+(rr||[]).map(r=>{
     const href=urlSigur(r.sursa_url||r.item_url);
     const loc=[r.celex, r.locator].filter(Boolean).join(" · ");
     return `<article class="ue-hit">`
@@ -3628,7 +3640,39 @@ function renderUE(d){
       +(href?`<a href="${esc(href)}" target="_blank" rel="noopener">sursa oficială</a>`:"")
       +((r.termeni||[]).length?`<span>termeni: ${r.termeni.map(esc).join(", ")}</span>`:"")
       +`</div></article>`;
-  }).join("")+`</div>`+note;
+  }).join("")+`</div>`;
+}
+function renderUE(d){
+  const out=$("#ue-out"), stat=$("#ue-stat");
+  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[];
+  stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate` : "";
+  const note=ueLimitariHtml(lim);
+  if(!rr.length){ out.innerHTML=empty("Nicio prevedere UE de arătat.")+note; return; }
+  out.innerHTML=ueHitsHtml(rr)+note;
+}
+function renderUEInline(d){
+  if(!d || d.error) return "";
+  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], primele=rr.slice(0,5);
+  const corp=rr.length
+    ? ueHitsHtml(primele)
+      +(rr.length>primele.length?`<p class="hint" style="margin:.25rem 0">Se afișează primele ${primele.length} din ${rr.length}; fila «Drept UE» poate căuta separat același text.</p>`:"")
+      +ueLimitariHtml(lim)
+    : empty(esc(lim[0]||"Nicio prevedere UE de arătat."))+ueLimitariHtml(lim,1);
+  return sec("Drept UE", rr.length, corp
+    +`<div class="row" style="margin-top:.5rem"><button type="button" class="ghost ue-open">Vezi în fila Drept UE</button></div>`);
+}
+function pregatesteUEDinDraft(forta){
+  const ue=$("#ue-text"), draft=$("#draft");
+  if(!ue || !draft) return;
+  if(forta || !ue.value.trim()){
+    ue.value=draft.value;
+    ue.dispatchEvent(new Event("input",{bubbles:true}));
+  }
+}
+function deschideUEDinLint(){
+  pregatesteUEDinDraft(true);
+  selectTab("ue");
+  cautaUE();
 }
 async function cautaUE(){
   const text=($("#ue-text").value||"").trim();
@@ -3651,8 +3695,7 @@ async function cautaUE(){
 }
 $("#ue-go").onclick=cautaUE;
 $("#ue-draft").onclick=()=>{
-  $("#ue-text").value=$("#draft").value;
-  $("#ue-text").dispatchEvent(new Event("input",{bubbles:true}));
+  pregatesteUEDinDraft(true);
   $("#ue-text").focus();
 };
 $("#ue-text").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)) cautaUE(); });
