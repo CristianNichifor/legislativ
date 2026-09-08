@@ -1011,7 +1011,9 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
 
-def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "", felii_cautare: int = 0) -> None:
+def main(
+    sursa: str, *, tot_parlamentul: bool = False, depozit: str = "", felii_cautare: int = 0
+) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
     if sursa == "gata":
@@ -1097,4 +1099,6 @@ if __name__ == "__main__":
         ),
     )
     a = ap.parse_args()
-    main(a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit, felii_cautare=a.felii_cautare)
+    main(
+        a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit, felii_cautare=a.felii_cautare
+    )
