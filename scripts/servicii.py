@@ -66,11 +66,13 @@ class Stare:
         graf: str = "graf.db",
         *,
         date_dir: str | None = None,
+        corpus_intreg: bool = False,
     ):
         self.corpus = corpus
         self.initiative = initiative
         self.graf = graf
         self.date_dir = Path(date_dir) if date_dir else None
+        self.corpus_intreg = corpus_intreg
         self._titluri: dict[str, str] | None = None
         self._urls: dict[str, str] | None = None
         self._republicari: dict[str, str] | None = None
@@ -86,6 +88,20 @@ class Stare:
 
     @property
     def pe_shard(self) -> bool:
+        """Whether corpus questions must be answered from prebuilt slices instead of the corpus.
+
+        `date_dir` used to decide this on its own, which conflated two different things: where the
+        precomputed reports live, and whether there is a corpus to query at all. Once the browser
+        mounts the whole corpus over the network there is one — so the reports still come from
+        `date_dir`, but every count, title and search goes to the database. Leaving them on the
+        slice is what made a build with 203.353 acts announce four.
+        """
+        return self.date_dir is not None and not self.corpus_intreg
+
+    @property
+    def are_rapoarte(self) -> bool:
+        """Prebuilt JSON is available. True whenever `date_dir` is set, corpus or not: these are
+        whole-corpus scans that are far too slow per request even when the corpus is right there."""
         return self.date_dir is not None
 
     def are_graf(self) -> bool:
@@ -96,7 +112,7 @@ class Stare:
     # recent N carry the vocabulary a current draft is most likely to talk around. On shards the
     # same bounded dictionary arrives prebuilt as `termeni.json`.
     def _dictionar(self, limita: int = 800) -> list[Termen]:
-        if self.pe_shard:
+        if self.are_rapoarte:
             cale = self.date_dir / "termeni.json"
             if not cale.is_file():
                 return []
@@ -116,7 +132,7 @@ class Stare:
     # Absent (a localhost that has not been built) → the pass is silently empty, like every other
     # data-gated pass. The linter filters each to what the current draft touches.
     def _incarca_raport(self, nume: str) -> list[dict]:
-        cai = [self.date_dir / nume] if self.pe_shard else [Path("web/data") / nume, Path(nume)]
+        cai = [self.date_dir / nume] if self.are_rapoarte else [Path("web/data") / nume, Path(nume)]
         for cale in cai:
             if cale.is_file():
                 try:
@@ -245,8 +261,13 @@ class Stare:
 
 
 def rezumat(stare: Stare) -> dict:
-    """The corpus headline the page opens with: how much law, how many bills."""
-    if stare.pe_shard:
+    """The corpus headline the page opens with: how much law, how many bills.
+
+    Read from the manifest whenever there is one. These counts are settled when the dataset is
+    published; recounting them per request costs nothing locally and reads most of the corpus when
+    it is behind byte-range requests.
+    """
+    if stare.are_rapoarte:
         cale = stare.date_dir / "manifest.json"
         m = json.loads(cale.read_text(encoding="utf-8")) if cale.is_file() else {}
         r = {

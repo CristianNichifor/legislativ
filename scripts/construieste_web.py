@@ -40,6 +40,7 @@ import shutil
 import sqlite3
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 from scripts import depozit, shard
 from scripts.graf import construieste as construieste_graf
@@ -76,11 +77,31 @@ CSP = (
     #    provision text stays on the device; only the model is downloaded.
     "connect-src 'self' https://cdn.jsdelivr.net https://esm.run https://*.workers.dev "
     "https://huggingface.co https://*.huggingface.co https://hf.co https://*.hf.co "
-    "https://raw.githubusercontent.com; "
+    "https://raw.githubusercontent.com__DEPOZIT_CSP__; "
     "worker-src 'self' blob:; child-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
     "base-uri 'none'; form-action 'none'; object-src 'none'"
 )
+
+
+def _origine(url: str) -> str:
+    """The scheme://host of a repository URL — the most a CSP entry should ever name."""
+    p = urlparse(url)
+    return f"{p.scheme}://{p.netloc}" if p.scheme and p.netloc else ""
+
+
+def _csp(depozit: str = "") -> str:
+    """The page's policy, widened by exactly one origin when a repository is configured.
+
+    This is worth being honest about: `connect-src` is what makes "the draft never leaves the tab"
+    a rule rather than a promise, and naming another origin means a compromised script could in
+    principle POST there. Three things keep that from being a real hole — the entry is the bucket's
+    own origin and nothing broader, the bucket's CORS allows only GET and HEAD, and an unsigned
+    write to R2 is rejected outright. The read it enables is public law; the draft is still only
+    ever sent to 'self'.
+    """
+    return CSP.replace("__DEPOZIT_CSP__", f" {_origine(depozit)}" if depozit else "")
+
 
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
 
@@ -115,7 +136,9 @@ function cuMemorie(adu, lungime){
         }
         const inceput = (poz + scrisi) % BUCATA;
         const acum = Math.min(b.length - inceput, cati - scrisi);
-        if (acum <= 0) break;
+        // Ieșirea tăcută de aici ar returna o citire scurtă, iar SQLite ar lua restul paginii
+        // drept date. Mai bine o eroare pe care o vede cineva decât un articol inventat.
+        if (acum <= 0) throw new Error(`bucata ${idx} e prea scurtă: ${b.length} octeți`);
         dest.set(b.subarray(inceput, inceput + acum), la + scrisi);
         scrisi += acum;
       }
@@ -124,20 +147,44 @@ function cuMemorie(adu, lungime){
   };
 }
 
-// Online: cereri Range către R2. Sincrone — permise doar în worker, care e exact unde suntem.
-function prinRange(url){
-  const cap = new XMLHttpRequest();
-  cap.open("HEAD", url, false);
-  cap.send();
-  if (cap.status >= 400) throw new Error("depozitul nu răspunde: " + cap.status);
-  return cuMemorie((de, la) => {
+// Online: cereri Range către depozit. Sincrone — permise doar în worker, care e exact unde suntem.
+//
+// O bucată scurtă nu e o bucată: SQLite ar primi o pagină ciuntită și ar citi din ea numere care
+// arată ca niște numere. De aceea nimic sub lungimea cerută nu e acceptat, iar un 429 (depozitul
+// public are limită de ritm) se reîncearcă în loc să treacă drept date.
+function aduBucata(url, de, la, incercari){
+  const cati = la - de + 1;
+  let ultima = "";
+  for (let i = 0; i < incercari; i++) {
+    if (i) {
+      // Worker-ul e oricum blocat de XHR-ul sincron; așteptarea asta doar rărește reîncercările.
+      const pana = Date.now() + 250 * Math.pow(2, i - 1);
+      while (Date.now() < pana) { /* pauză înainte de următoarea încercare */ }
+    }
     const x = new XMLHttpRequest();
     x.open("GET", url, false);
     x.responseType = "arraybuffer";
     x.setRequestHeader("Range", `bytes=${de}-${la}`);
-    x.send();
-    return new Uint8Array(x.response);
-  }, Number(cap.getResponseHeader("Content-Length")));
+    try { x.send(); } catch (e) { ultima = e.message; continue; }
+    if (x.status !== 206 && x.status !== 200) { ultima = "HTTP " + x.status; continue; }
+    const b = new Uint8Array(x.response || 0);
+    if (b.length !== cati) { ultima = `${b.length} din ${cati} octeți`; continue; }
+    return b;
+  }
+  throw new Error(`nu am putut citi octeții ${de}-${la}: ${ultima}`);
+}
+
+function prinRange(url, incercari){
+  const cap = new XMLHttpRequest();
+  cap.open("HEAD", url, false);
+  cap.send();
+  if (cap.status >= 400) throw new Error("depozitul nu răspunde: " + cap.status);
+  if (cap.getResponseHeader("Accept-Ranges") !== "bytes") {
+    throw new Error("depozitul nu servește intervale de octeți; corpusul nu poate fi citit pe bucăți");
+  }
+  const lungime = Number(cap.getResponseHeader("Content-Length"));
+  if (!lungime) throw new Error("depozitul nu spune cât e de mare fișierul");
+  return cuMemorie((de, la) => aduBucata(url, de, la, incercari || 4), lungime);
 }
 
 // Offline: aceleași pagini, citite de pe disc. Copia descărcată o dată nu mai cere nimic rețelei.
@@ -150,9 +197,10 @@ function dinOpfs(maner){
 }
 
 // Îl legăm de sistemul de fișiere al Pyodide, ca SQLite să-l vadă ca pe orice fișier obișnuit.
-function monteaza(pyodide, sursa){
+function monteaza(pyodide, sursa, nume){
   const FS = pyodide.FS;
-  const nod = FS.createFile("data", "corpus.db", {}, true, false);
+  try { FS.unlink("data/" + nume); } catch (e) { /* nu era acolo */ }
+  const nod = FS.createFile("data", nume, {}, true, false);
   nod.usedBytes = sursa.lungime;
   nod.stream_ops = {
     llseek(flux, deplasare, dinCe){
@@ -169,11 +217,11 @@ function monteaza(pyodide, sursa){
   };
 }
 
-// Copia offline, dacă utilizatorul a cerut-o vreodată. O singură cerere pentru tot corpusul.
-async function copiaOffline(){
+// Copia offline, dacă utilizatorul a cerut-o vreodată. O singură cerere pentru tot fișierul.
+async function copiaOffline(nume){
   const dir = await navigator.storage.getDirectory();
-  const f = await dir.getFileHandle("corpus.db");   // aruncă dacă nu există; atunci mergem online
-  return dinOpfs(await (await f).createSyncAccessHandle());
+  const f = await dir.getFileHandle(nume);   // aruncă dacă nu există; atunci mergem în depozit
+  return dinOpfs(await f.createSyncAccessHandle());
 }
 
 async function boot(){
@@ -185,22 +233,35 @@ async function boot(){
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
   // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json"]) {
-    const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
+  // Cu un depozit în spate, graf.db și initiative.db se montează de acolo întregi; nu are rost să
+  // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
+  const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json"];
+  for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db"].concat(catalog))) {
+    // manifest.json is the one that has to describe what is in the repository rather than what
+    // the build happened to ship: it carries the headline counts, and counting 3,3 million
+    // provisions over byte ranges to recompute them would read most of the corpus.
+    const url = (DEPOZIT && name === "manifest.json")
+      ? DEPOZIT.replace(/\\/$/, "") + "/manifest.json"
+      : "data/" + name;
+    const buf = new Uint8Array(await fetch(url).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
-  // Corpusul întreg — 203.353 de acte — fără a-l descărca. Preferăm copia offline dacă există,
-  // fiindcă atunci aplicația merge fără rețea; altfel citim din depozit, pagină cu pagină.
+  // Toate cele trei baze, fără a descărca niciuna. Textul legii stă în corpus.db, citările în
+  // graf.db, iar tot ce ține de Parlament în initiative.db — degeaba am 203.353 de acte dacă
+  // «cine citează legea asta» și «cum a votat deputatul» răspund dintr-o felie de câteva sute.
   if (DEPOZIT) {
-    let sursa = null, deUnde = "";
-    try { sursa = await copiaOffline(); deUnde = "offline"; }
-    catch (e) {
-      try { sursa = prinRange(DEPOZIT.replace(/\\/$/, "") + "/corpus.db"); deUnde = "depozit"; }
-      catch (e2) { console.warn("corpusul nu e disponibil:", e2.message); }
-    }
-    if (sursa) {
-      monteaza(pyodide, sursa);
-      console.log(`corpus montat (${deUnde}): ${(sursa.lungime/1e9).toFixed(2)} GB`);
+    const baza = DEPOZIT.replace(/\\/$/, "");
+    for (const nume of ["corpus.db", "graf.db", "initiative.db"]) {
+      let sursa = null, deUnde = "";
+      try { sursa = await copiaOffline(nume); deUnde = "offline"; }
+      catch (e) {
+        try { sursa = prinRange(`${baza}/${nume}`); deUnde = "depozit"; }
+        catch (e2) { console.warn(`${nume} nu e disponibil:`, e2.message); }
+      }
+      if (sursa) {
+        monteaza(pyodide, sursa, nume);
+        console.log(`${nume} montat (${deUnde}): ${(sursa.lungime/1e9).toFixed(2)} GB`);
+      }
     }
   }
   raspunde = pyodide.runPython(`
@@ -214,11 +275,22 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
                               _domenii, _prevedere, _cine_citeaza)
-_stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data')
+_stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data',
+               corpus_intreg=__CORPUS_INTREG__)
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
+    def _i(k):
+        v = qs.get(k, [''])[0]
+        try: return int(v) if v not in ('', None) else None
+        except ValueError: return None
     if path == '/api/rezumat': out = rezumat(_stare)
-    elif path == '/api/cauta': out = _cauta(qs.get('q',[''])[0], _stare)
+    elif path == '/api/cauta':
+        # The same filters the shard path accepts. Dropping them here would give the UI a type
+        # selector and a year range that quietly do nothing.
+        out = _cauta(qs.get('q',[''])[0], _stare,
+                     tip=(qs.get('tip',[''])[0] or None),
+                     an_min=_i('an_min'), an_max=_i('an_max'),
+                     limita=_i('limita') or 25, offset=_i('offset') or 0)
     elif path == '/api/vecini':
         a = qs.get('act',[''])[0]; out = _vecini(a, _stare) if a else {'error':'act lipsă'}
     elif path == '/api/cronologie': out = _cronologie(qs.get('act',[''])[0], _stare)
@@ -268,7 +340,8 @@ _raspunde
   cautaJson = pyodide.runPython(`
 import json as _json
 from urllib.parse import parse_qs
-from scripts.cauta_web import cauta as _cauta_shard
+from scripts.cauta_web import cauta as _cauta_shard, cauta_montat as _cauta_montat
+_DEPOZIT = __DEPOZIT_PY__
 def _int(qs, k):
     v = qs.get(k, [''])[0]
     try: return int(v) if v not in ('', None) else None
@@ -276,10 +349,16 @@ def _int(qs, k):
 async def _cauta_json(query):
     qs = parse_qs(query or '')
     q = qs.get('q', [''])[0]
-    r = await _cauta_shard(q, 'data',
+    filtre = dict(
         limita=_int(qs, 'limita') or 25, offset=_int(qs, 'offset') or 0,
         tip=(qs.get('tip', [''])[0] or None),
         an_min=_int(qs, 'an_min'), an_max=_int(qs, 'an_max'))
+    # The index shards live in the repository; the titles and snippets come from the mounted
+    # corpus, so nothing has to ship the 7,3 GB of per-act files the standalone shards needed.
+    if _DEPOZIT:
+        r = await _cauta_montat(q, _DEPOZIT, 'data/corpus.db', **filtre)
+    else:
+        r = await _cauta_shard(q, 'data', **filtre)
     return _json.dumps(r, ensure_ascii=False)
 _cauta_json
   `);
@@ -290,6 +369,9 @@ onmessage = async (e) => {
   const {id, path, query, body} = e.data;
   try {
     await gata;
+    // Căutarea trece mereu prin index, nu prin corpus. Măsurat pe corpusul montat: ordonarea a
+    // 6.478 potriviri după bm25 a cerut ~1.000 de citiri împrăștiate și 291 de secunde, fiindcă
+    // bm25 vrea lungimea fiecărui document. Aceleași potriviri ies din index în două cereri.
     const res = (path === "/api/cauta")
       ? await cautaJson(query || "")
       : raspunde(path, query, body);
@@ -691,7 +773,16 @@ def _bundle() -> None:
 
 
 def _worker(depozit: str = "") -> None:
-    text = WORKER.replace("__PYODIDE__", PYODIDE).replace("__DEPOZIT__", depozit)
+    text = (
+        WORKER.replace("__PYODIDE__", PYODIDE)
+        .replace("__DEPOZIT__", depozit)
+        # With a repository behind it the corpus is really there, so counts, titles and search
+        # must come from the database and not from the slice manifest.
+        .replace("__CORPUS_INTREG__", "True" if depozit else "False")
+        # The same URL again, as a Python literal: the search runs inside Pyodide and fetches its
+        # index shards from the repository, not from the shipped `data/` directory.
+        .replace("__DEPOZIT_PY__", repr(depozit.rstrip("/")) if depozit else "None")
+    )
     (WEB / "worker.js").write_text(text, encoding="utf-8")
     unde = depozit or "fără depozit — doar catalogul și feliile"
     print(f"  worker → {WEB / 'worker.js'} ({unde})")
@@ -744,11 +835,11 @@ def _fonturi() -> None:
     print(f"  fonturi ({len(list(tinta.glob('*.woff2')))} fișiere, {kb:.0f} KB) → {tinta}")
 
 
-def _pagina() -> None:
+def _pagina(depozit: str = "") -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
-    csp = f'<meta http-equiv="Content-Security-Policy" content="{CSP}">'
+    csp = f'<meta http-equiv="Content-Security-Policy" content="{_csp(depozit)}">'
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
     # Prepend the manager block right after <body> so it runs before the app's own inline script.
     pagina = pagina.replace("<body>", "<body>\n" + BOOT, 1)
@@ -793,7 +884,7 @@ def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> Non
     _bundle()
     _worker(depozit)
     _fonturi()
-    _pagina()
+    _pagina(depozit)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
 

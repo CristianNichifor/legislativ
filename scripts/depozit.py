@@ -831,13 +831,42 @@ def cauta(
     # Joined to `acte` for the source URL, title and the filterable fields, so a result links
     # straight to the act on the portal rather than to a search-by-number that returns a list.
     clauze, params = _filtre_cauta(tip, an_min, an_max)
-    return con.execute(
-        "SELECT f.act_id, f.locator, snippet(provizii_fts, 0, '[', ']', '…', 12) AS fragment,"
+    coloane = (
+        "f.act_id, f.locator, snippet(provizii_fts, 0, '[', ']', '…', 12) AS fragment,"
         " a.titlu, a.sursa_url, a.tip, a.an"
-        " FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
-        f" WHERE provizii_fts MATCH ?{clauze} ORDER BY rank LIMIT ? OFFSET ?",
-        (intrebare, *params, limita, offset),
+    )
+    if clauze:
+        # Filtering is a condition on `acte`, so the join has to happen before the page is cut.
+        return con.execute(
+            f"SELECT {coloane} FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
+            f" WHERE provizii_fts MATCH ?{clauze} ORDER BY rank LIMIT ? OFFSET ?",
+            (intrebare, *params, limita, offset),
+        ).fetchall()
+
+    # Unfiltered — rank first, then hydrate only the page. `ORDER BY rank` with a join makes
+    # SQLite build every matched row, join it and snippet it before `LIMIT` cuts 25 of them: for a
+    # query matching 6.478 provisions that is thousands of scattered reads, invisible on a local
+    # file and minutes when the corpus is behind byte-range requests. Ranking on the index alone
+    # touches nothing but the index, and then exactly `limita` rows are looked up.
+    randuri = con.execute(
+        "SELECT rowid FROM provizii_fts WHERE provizii_fts MATCH ? ORDER BY rank LIMIT ? OFFSET ?",
+        (intrebare, limita, offset),
     ).fetchall()
+    if not randuri:
+        return []
+    ids = [r[0] for r in randuri]
+    marcaje = ",".join("?" * len(ids))
+    gasite = {
+        r["rowid"]: r
+        for r in con.execute(
+            f"SELECT f.rowid AS rowid, {coloane}"
+            " FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
+            f" WHERE provizii_fts MATCH ? AND f.rowid IN ({marcaje})",
+            (intrebare, *ids),
+        )
+    }
+    # Reordered here because `IN (…)` returns rowid order, and rank order is the whole point.
+    return [gasite[i] for i in ids if i in gasite]
 
 
 def cauta_numar(
@@ -848,8 +877,19 @@ def cauta_numar(
     an_min: int | None = None,
     an_max: int | None = None,
 ) -> int:
-    """How many provisions match the query and filters — the total behind a paged result."""
+    """How many provisions match the query and filters — the total behind a paged result.
+
+    Without filters there is nothing to join to. That is worth a branch rather than leaving the
+    optimiser to it: the join is one index seek per *matched* row, and the rows are only counted,
+    never read. On a corpus behind byte-range requests those seeks are the whole cost — a query
+    matching 6.478 provisions counted in 0,08 s from disk did not finish in two minutes over the
+    network, because it was fetching 6.478 scattered pages of `acte` to look at none of them.
+    """
     clauze, params = _filtre_cauta(tip, an_min, an_max)
+    if not clauze:
+        return con.execute(
+            "SELECT count(*) FROM provizii_fts WHERE provizii_fts MATCH ?", (intrebare,)
+        ).fetchone()[0]
     return con.execute(
         "SELECT count(*) FROM provizii_fts f LEFT JOIN acte a ON a.id = f.act_id"
         f" WHERE provizii_fts MATCH ?{clauze}",
@@ -874,23 +914,19 @@ _MARCAJE_NORMATIV = ",".join(f"'{t}'" for t in TIPURI_NORMATIVE)
 def _structurate_normative(con: sqlite3.Connection) -> int:
     """Normative acts holding a real article tree, not a single flattened row.
 
-    Two steps on purpose. Asking it as one correlated `EXISTS` over `acte` measured 385 ms on the
-    finished corpus; taking the handful of act ids that have a tree and then checking their type
-    measured 130 ms for the same answer, and this runs on every page load.
+    One query, and it has to stay one query. This used to read the act ids that have a tree and
+    then bind them back as `id IN (?, ?, …)`, which is fine while there are a few hundred and
+    fails at 85.914: SQLite refuses more variables than `SQLITE_MAX_VARIABLE_NUMBER`, and the
+    `except OperationalError: return 0` underneath turned that refusal into the number zero. The
+    finished corpus therefore reported **no structured acts at all**, on the page that exists to
+    state the corpus's own coverage.
     """
+    q = (
+        "SELECT count(*) FROM (SELECT DISTINCT act_id FROM provizii WHERE locator <> 'text') s"
+        f" JOIN acte a ON a.id = s.act_id WHERE a.tip IN ({_MARCAJE_NORMATIV})"
+    )
     try:
-        ids = [
-            r[0]
-            for r in con.execute("SELECT DISTINCT act_id FROM provizii WHERE locator <> 'text'")
-        ]
-    except sqlite3.OperationalError:
-        return 0
-    if not ids:
-        return 0
-    marcaje = ",".join("?" * len(ids))
-    q = f"SELECT count(*) FROM acte WHERE id IN ({marcaje}) AND tip IN ({_MARCAJE_NORMATIV})"
-    try:
-        return con.execute(q, ids).fetchone()[0]
+        return con.execute(q).fetchone()[0]
     except sqlite3.OperationalError:
         return 0
 

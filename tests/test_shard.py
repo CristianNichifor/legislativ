@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.cauta_web import _fragment, _tokenuri
+from scripts.cauta_web import _PREFIX, _fragment, _tokenuri
 from scripts.depozit import deschide, scrie_act
 from scripts.parsare import din_fisier
 from scripts.servicii import Stare, rezumat
@@ -42,7 +42,9 @@ def test_the_builder_writes_an_index_and_a_resolvable_inverted_index(tmp_path):
     assert index[0]["id"] == "decizie-815-2015"
 
     # 'neconstituționalitate' folds to 'neconstitutionalitate'; its postings point back at act 0.
-    shard = json.loads((out / "idx" / "ne.json").read_text())
+    # The shard is named from the token's own leading characters, so the test asks the builder's
+    # constant rather than hard-coding a width that turned out to be a tuning decision.
+    shard = json.loads((out / "idx" / f"{'neconstitutionalitate'[:_PREFIX]}.json").read_text())
     assert "neconstitutionalitate" in shard
     assert shard["neconstitutionalitate"] == [0]
 
