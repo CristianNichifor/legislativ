@@ -203,6 +203,7 @@ async def cauta_montat(
     tip: str | None = None,
     an_min: int | None = None,
     an_max: int | None = None,
+    doar_titluri: bool = False,
 ) -> dict:
     """Search when the browser has the corpus mounted: postings from the shards, text from SQLite.
 
@@ -240,7 +241,11 @@ async def cauta_montat(
         # *below* laws that happen to use the bare form — the canonical act, demoted for grammar.
         for n in _postari(cap, t):
             titlu[n] = titlu.get(n, 0) + 1
-    scor = set(corp) | set(titlu)
+    # `doar_titluri` is the band the page puts above full-text search: only acts whose *title*
+    # matched, which is the question "which act is this about" rather than "where is this phrase".
+    # It exists because Pagefind ranks the body and cannot be told that a title is worth more —
+    # with 20.367 acts mentioning public procurement somewhere, Legea 98/2016 lands at #172.
+    scor = set(titlu) if doar_titluri else set(corp) | set(titlu)
     if not scor:
         return empty
 
@@ -281,13 +286,20 @@ async def cauta_montat(
             # Bounded hard, because this is per result and each read is a round trip: at 200
             # provisions a page of three cost 23 s, almost all of it here. Forty finds the quote
             # in nearly every act, and the ones it misses simply show no quote.
-            provizii = con.execute(
-                "SELECT locator, text FROM provizii WHERE act_id = ? ORDER BY ord LIMIT 40",
-                (meta["id"],),
-            ).fetchall()
-            frag = _fragment(
-                {"provizii": [{"loc": p["locator"], "text": p["text"]} for p in provizii]}, toks
-            )
+            #
+            # The title band skips it altogether. Its whole point is to name the act, and the
+            # quotation is what makes a result expensive — dropping it is what lets a band of
+            # eight arrive in a fraction of the time a page of full results takes.
+            if doar_titluri:
+                frag = {"locator": "", "fragment": ""}
+            else:
+                provizii = con.execute(
+                    "SELECT locator, text FROM provizii WHERE act_id = ? ORDER BY ord LIMIT 40",
+                    (meta["id"],),
+                ).fetchall()
+                frag = _fragment(
+                    {"provizii": [{"loc": p["locator"], "text": p["text"]} for p in provizii]}, toks
+                )
             # `_fragment` falls back to the act's first provision when it finds no token, and that
             # fallback reads as evidence: quoting "1.1. VALOAREA CREDITULUI" under a search for
             # public procurement claims a match that does not exist. The brackets are the marker
