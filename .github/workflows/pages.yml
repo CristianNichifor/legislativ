@@ -36,7 +36,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release download date-latest --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
+          # The newest dataset release, not a fixed tag. `date-latest` is immutable — GitHub
+          # refuses to replace an asset on it — so each build of the corpus is published as its
+          # own `date-YYYY-MM-DD`, which suits a legal corpus anyway: a snapshot somebody cited
+          # stays exactly as it was.
+          # Sorted by the tag itself rather than by creation time: `date-2026-09-08` beats
+          # `date-2026-09-05` by string order, and the legacy `date-latest` is excluded by name so
+          # it cannot win by having been re-created.
+          TAG=$(gh release list --limit 100 --json tagName \
+            -q '[.[].tagName | select(test("^date-[0-9]{4}-[0-9]{2}-[0-9]{2}$"))] | sort | reverse | .[0] // ""')
+          if [ -n "$TAG" ] && gh release download "$TAG" --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
+            echo "dataset: $TAG"
             mkdir -p web && tar xzf date.tar.gz -C web
             echo "sursa=gata" >> "$GITHUB_OUTPUT"
             echo "building from the collected dataset release"
