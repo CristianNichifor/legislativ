@@ -78,6 +78,14 @@ uv run python -m scripts.parcurs --db initiative.db --paralel 12 --rata 8
 uv run python -m scripts.stenograme --db initiative.db --paralel 12 --rata 8
 ```
 
+Dreptul UE intră separat, prin Cellar / CELEX. Primul pas doar aduce sursa oficială: caută
+manifestările Cellar, preferă textul românesc (`RON`) și cade pe engleză (`ENG`) dacă româna nu e
+disponibilă. Nu decide încă dacă un proiect contrazice dreptul UE:
+
+```bash
+uv run python -m scripts.cellar 32018R1805 --db eu.db
+```
+
 Reparațiile pe un corpus deja adunat stau separat, fiindcă o migrare care se rulează singură pe un
 orar e una pe care nimeni nu poate decide să n-o ruleze:
 
