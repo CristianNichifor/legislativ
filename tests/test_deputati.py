@@ -234,3 +234,82 @@ def test_the_two_group_names_the_source_spells_badly_are_fixed(tmp_path):
     assert deputati.grup_afisat("Minoritati") == "Minorități"
     assert deputati.grup_afisat("SOS RO") == "SOS RO"
     assert deputati.grup_afisat("PSD") == "PSD"
+
+
+def test_the_directory_lists_everyone_once_for_a_reader_with_no_name_to_type(tmp_path):
+    """The search answers "how did this person vote"; the directory answers "who are they", which
+    is the question of a reader who has not got a name — most readers. Grouped the same way as the
+    search, so the two cannot describe the same person differently."""
+    con = _mandate(tmp_path)
+    try:
+        toti = deputati.toti(con)
+        doar_2024 = deputati.toti(con, leg="2024")
+    finally:
+        con.close()
+    assert [p.nume for p in toti] == ["Buzoianu Diana-Anda", "Popescu Ion"]
+    (buzoianu,) = [p for p in toti if p.nume.startswith("Buzoianu")]
+    assert buzoianu.legislaturi == ("2024", "2020"), "cele două mandate sunt o singură persoană"
+    assert [p.nume for p in doar_2024] == ["Buzoianu Diana-Anda"]
+
+
+def test_the_directory_is_sorted_where_a_reader_looks(tmp_path):
+    """`Șovăială` belongs under Ș. A byte comparison files it after Z, which is where nobody looks
+    for it."""
+    cale = tmp_path / "initiative.db"
+    with depozit.deschide(cale) as con:
+        for i, nume in enumerate(("Zamfir Ion", "Șovăială Petru", "Abrudean Mircea")):
+            con.execute(
+                "INSERT INTO initiativa_initiator (plx_id, idm, leg, nume, grup, camera)"
+                " VALUES (?,?,?,?,?,?)",
+                (f"plx-{i}-2021", str(i), "2020", nume, "PNL", "Camera Deputaților"),
+            )
+        con.commit()
+    con = sqlite3.connect(f"file:{cale}?mode=ro", uri=True)
+    try:
+        assert [p.nume for p in deputati.toti(con)] == [
+            "Abrudean Mircea",
+            "Șovăială Petru",
+            "Zamfir Ion",
+        ]
+    finally:
+        con.close()
+
+
+def test_a_groups_counts_can_be_opened_into_the_bills_behind_them(tmp_path):
+    """A card that says 466 adopted and cannot show which 466 is a number a reader has to take on
+    trust. Counted and listed off the same query, so the number and the list cannot drift."""
+    con = _mandate(tmp_path)
+    try:
+        card = {g["grup"]: g for g in deputati.grupuri(con, "2020")}["USR"]
+        adoptate = deputati.initiative_grup(con, "USR", leg="2020", rezultat="adoptat")
+        respinse = deputati.initiative_grup(con, "USR", leg="2020", rezultat="respins")
+        toate = deputati.initiative_grup(con, "USR", leg="2020")
+    finally:
+        con.close()
+    assert len(adoptate) == card["adoptate"]
+    assert len(respinse) == card["respinse"]
+    assert len(toate) == card["initiative"]
+
+
+def test_no_recorded_vote_is_its_own_outcome_and_not_a_defeat(tmp_path):
+    """`nedecis` is a third value rather than the absence of the first two, because a bill still
+    moving is not a bill that lost."""
+    cale = tmp_path / "initiative.db"
+    with depozit.deschide(cale) as con:
+        con.execute(
+            "INSERT INTO initiative (plx_id, cam, idp, tip, titlu, obiect, urgenta, stadiu,"
+            " data_inreg, citit_la) VALUES ('plx-9-2021',2,'0','p','T','',0,'în comisie','2021',"
+            " 'x')"
+        )
+        con.execute(
+            "INSERT INTO initiativa_initiator (plx_id, idm, leg, nume, grup, camera)"
+            " VALUES ('plx-9-2021','1','2020','X','PNL','Camera Deputaților')"
+        )
+        con.commit()
+    con = sqlite3.connect(f"file:{cale}?mode=ro", uri=True)
+    try:
+        (x,) = deputati.initiative_grup(con, "PNL")
+        assert x["rezultat"] == "nedecis"
+        assert deputati.initiative_grup(con, "PNL", rezultat="respins") == []
+    finally:
+        con.close()

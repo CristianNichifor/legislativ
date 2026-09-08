@@ -291,8 +291,22 @@
     color:var(--ink-mute)}
   .an-chip:hover{border-color:var(--accent);color:var(--ink)}
   .an-chip-activ{border-color:var(--accent);color:var(--accent);background:var(--accent-wash)}
+  /* the directory: grouped by initial so it can be scanned rather than read */
+  .az-grup{display:grid;grid-template-columns:1.6rem 1fr;gap:.4rem;margin:.35rem 0}
+  .az-litera{font-family:var(--sans);font-weight:600;color:var(--accent);font-size:.82rem}
+  .az-nume{display:flex;flex-wrap:wrap;gap:.2rem .5rem}
+  .az-p{font:inherit;font-size:.76rem;background:none;border:0;padding:.05rem .1rem;cursor:pointer;
+    color:var(--ink);text-align:left}
+  .az-p:hover{color:var(--accent);text-decoration:underline}
+  .az-ani{font-family:var(--mono);font-size:.62rem;color:var(--ink-mute);margin-left:.2rem}
   /* the rest of a list, hidden until asked for: "…and another 259" is a number nobody can act on */
   .dep-ascuns{display:none}
+  .dep-filtrat{display:none}
+  /* the three counts, as filters over the list they count */
+  .soarta-f{font:inherit;font-size:.74rem;border:1px solid currentColor;border-radius:999px;
+    padding:.02rem .5rem;background:transparent;cursor:pointer}
+  .soarta-f:hover{background:var(--accent-wash)}
+  .soarta-activ{background:var(--accent-wash);font-weight:600}
   .dep-init-desc{cursor:pointer;text-decoration:underline;text-decoration-style:dotted;
     text-underline-offset:.18em}
   .dep-init-desc:hover{background:var(--accent-wash)}
@@ -1018,6 +1032,10 @@
         </p>
         <div id="p-rez"></div>
         <div id="p-fisa"></div>
+        <details id="p-toti-panel" open>
+          <summary style="cursor:pointer;font-family:var(--sans);font-size:.82rem;font-weight:600;color:var(--accent)">Toți parlamentarii</summary>
+          <div id="p-toti"><span class="hint">se încarcă…</span></div>
+        </details>
         <details id="p-grupuri-panel" style="margin-top:1rem">
           <summary style="cursor:pointer;font-family:var(--sans);font-size:.82rem;font-weight:600;color:var(--accent)">Grupurile parlamentare</summary>
           <div class="row" style="margin:.5rem 0">
@@ -1303,7 +1321,7 @@ function selectTab(which){
   const focusTarget = focusEl && $(focusEl);
   if(focusTarget) focusTarget.focus();
   if(which==="consolidat") loadConsAsezari();
-  if(which==="parlamentari") loadGrupuri();
+  if(which==="parlamentari"){ loadGrupuri(); loadToti(); }
   if(which==="domenii") loadDomenii();
   if(which==="supraveghere") renderSupraveghere();
 }
@@ -2519,6 +2537,23 @@ async function aratraDeputat(el, gazdaExplicita){
 // The lists show what a member did; these open what the bill *says*. Bound after every render
 // because the card is rebuilt whenever another term is chosen.
 function legaFisaDeputat(box){
+  // Filtering by outcome hides rows rather than refetching: the list is already here, and a
+  // filter that went back to the server would show a spinner for work already done.
+  const lista=box.querySelector(".dep-lista");
+  box.querySelectorAll(".soarta-f").forEach(b=>{
+    b.onclick=()=>{
+      box.querySelectorAll(".soarta-f").forEach(o=>o.classList.remove("soarta-activ"));
+      b.classList.add("soarta-activ");
+      const fel=b.dataset.fel;
+      if(!lista) return;
+      lista.querySelectorAll(".dep-init").forEach(r=>{
+        r.classList.toggle("dep-filtrat", !!fel && r.dataset.fel!==fel);
+      });
+      // "see all" is about the first eight, and it means nothing once a filter is on.
+      const mai=lista.querySelector(".dep-mai-mult");
+      if(fel && mai){ lista.querySelectorAll(".dep-ascuns").forEach(x=>x.classList.remove("dep-ascuns")); mai.remove(); }
+    };
+  });
   box.querySelectorAll(".dep-mai-mult").forEach(b=>{
     b.onclick=()=>{
       b.parentElement.querySelectorAll(".dep-ascuns").forEach(x=>x.classList.remove("dep-ascuns"));
@@ -2607,6 +2642,49 @@ async function cautaParlamentar(){
   const chipuri=box.querySelectorAll(".an-chip");
   if(lista.length===1 && chipuri.length===1) chipuri[0].click();
 }
+// The directory, for a reader with no name to type. Fetched once per legislature filter and kept:
+// 818 people is one modest list, and re-asking on every tab switch would be a spinner for an
+// answer already in hand.
+const TOTI={};
+async function loadToti(){
+  const leg=$("#p-leg")?.value||"";
+  const box=$("#p-toti");
+  if(TOTI[leg]){ deseneazaToti(TOTI[leg], leg); return; }
+  box.innerHTML=`<span class="hint"><span class="spin"></span> încarc…</span>`;
+  const d=await fetch("/api/deputati?toti=1"+(leg?"&leg="+encodeURIComponent(leg):""))
+    .then(r=>r.json()).catch(()=>null);
+  TOTI[leg]=(d&&d.persoane)||[];
+  deseneazaToti(TOTI[leg], leg);
+}
+function deseneazaToti(lista, leg){
+  const box=$("#p-toti");
+  if(!lista.length){ box.innerHTML=`<span class="hint">Nu s-au colectat încă semnături.</span>`; return; }
+  // Grouped by initial, so the list can be scanned rather than read. The heading letter is the
+  // folded one — `Șovăială` belongs under Ș, and a reader looking for it does not care that a
+  // byte comparison would file it after Z.
+  const pe_litera={};
+  lista.forEach((p,i)=>{
+    const l=(p.nume||"?").normalize("NFD").replace(/[\u0300-\u036f]/g,"").charAt(0).toUpperCase();
+    (pe_litera[l]=pe_litera[l]||[]).push({p,i});
+  });
+  box.innerHTML=`<p class="hint" style="margin:.3rem 0">${nf(lista.length)} parlamentari`
+    +(leg?` în legislatura ${esc(leg)}`:` în tot ce s-a colectat`)+` · apasă un nume</p>`
+    +Object.keys(pe_litera).sort().map(l=>
+      `<div class="az-grup"><div class="az-litera">${esc(l)}</div><div class="az-nume">`
+      +pe_litera[l].map(({p,i})=>
+        `<button type="button" class="az-p" data-i="${i}" data-leg="${esc(leg)}">${esc(p.nume)}`
+        +`<span class="az-ani">${esc((p.legislaturi||[]).join("/"))}</span></button>`).join("")
+      +`</div></div>`).join("");
+  box.querySelectorAll(".az-p").forEach(b=>{
+    b.onclick=()=>{
+      const p=TOTI[b.dataset.leg][+b.dataset.i];
+      // Straight to the record when there is one term, and to the choice when there are several.
+      $("#p-q").value=p.nume;
+      cautaParlamentar();
+      $("#p-q").scrollIntoView({block:"center"});
+    };
+  });
+}
 let LEG_INITIALIZAT=false;
 async function loadGrupuri(){
   const leg=$("#p-leg").value;
@@ -2625,28 +2703,67 @@ async function loadGrupuri(){
   if(!GRUPURI.length){ box.innerHTML=`<span class="hint">Nu s-au colectat încă semnături.</span>`; return; }
   // `semnaturi` and `initiative` are different numbers and both are shown: twenty members of one
   // group signing one bill is twenty signatures and one initiative.
+  // Each count opens the bills behind it. A group's row is the only place a reader meets these
+  // numbers, and a number that cannot be opened is one they have to take on trust.
   box.innerHTML=GRUPURI.map(g=>
     `<div class="dom-rand" style="cursor:default"><span><span class="dom-nume">${esc(g.grup)}</span>`
     +`<br><span class="dom-tipuri">${nf(g.membri)} membri · ${nf(g.semnaturi)} semnături · `
     +`${nf(g.initiative)} inițiative</span></span>`
-    +`<span class="dom-n"><span class="dep-ok">${nf(g.adoptate)}</span> / `
-    +`<span class="dep-nu">${nf(g.respinse)}</span> / `
-    +`<span class="dep-pend">${nf(g.nedecise)}</span></span></div>`).join("")
-    +`<p class="hint" style="margin-top:.5rem">adoptate / respinse / fără vot înregistrat — un proiect fără vot nu e un proiect pierdut`
+    +`<span class="dom-n">`
+    +`<button type="button" class="soarta-f dep-ok grup-f" data-grup="${esc(g.grup_brut||g.grup)}" data-fel="adoptat">${nf(g.adoptate)}</button> `
+    +`<button type="button" class="soarta-f dep-nu grup-f" data-grup="${esc(g.grup_brut||g.grup)}" data-fel="respins">${nf(g.respinse)}</button> `
+    +`<button type="button" class="soarta-f dep-pend grup-f" data-grup="${esc(g.grup_brut||g.grup)}" data-fel="nedecis">${nf(g.nedecise)}</button>`
+    +`</span></div><div class="grup-loc" data-grup="${esc(g.grup_brut||g.grup)}"></div>`).join("")
+    +`<p class="hint" style="margin-top:.5rem">apasă un număr ca să vezi inițiativele · apasă un număr ca să vezi inițiativele · adoptate / respinse / fără vot înregistrat — un proiect fără vot nu e un proiect pierdut`
     +(leg?` · doar legislatura ${esc(leg)}`:` · însumat peste toate legislaturile, care nu e un mandat continuu`)+`</p>`;
+  box.querySelectorAll(".grup-f").forEach(b=>{ b.onclick=()=>arataInitiativeGrup(b); });
 }
-$("#p-leg").onchange=loadGrupuri;
+// One group's bills, by outcome. Fetched when a count is clicked: twelve groups times three
+// outcomes is thirty-six lists nobody asked for.
+async function arataInitiativeGrup(buton){
+  const grup=buton.dataset.grup, fel=buton.dataset.fel;
+  const gazda=$("#p-grupuri").querySelector(`.grup-loc[data-grup="${CSS.escape(grup)}"]`);
+  if(!gazda) return;
+  const acelasi = gazda.dataset.fel===fel && gazda.firstChild;
+  $("#p-grupuri").querySelectorAll(".grup-f").forEach(b=>b.classList.remove("soarta-activ"));
+  if(acelasi){ gazda.innerHTML=""; gazda.dataset.fel=""; return; }
+  buton.classList.add("soarta-activ");
+  gazda.dataset.fel=fel;
+  gazda.innerHTML=`<div class="init-fisa"><span class="spin"></span> încarc…</div>`;
+  const leg=$("#p-leg").value;
+  const d=await fetch("/api/deputati?grup="+encodeURIComponent(grup)+"&rezultat="+encodeURIComponent(fel)
+    +(leg?"&leg="+encodeURIComponent(leg):"")).then(r=>r.json()).catch(()=>null);
+  const lista=(d&&d.initiative)||[];
+  if(!lista.length){ gazda.innerHTML=`<div class="init-fisa"><span class="hint">Nicio inițiativă aici.</span></div>`; return; }
+  const ETICHETA={adoptat:"adoptate",respins:"respinse",nedecis:"fără vot înregistrat"};
+  gazda.innerHTML=`<div class="init-fisa"><div class="parc-h">${esc(d.grup)} — ${nf(lista.length)} ${esc(ETICHETA[fel]||fel)}`
+    +(leg?` · legislatura ${esc(leg)}`:``)+`</div><div class="dep-lista">`
+    +lista.map((x,i)=>`<div class="dep-init${i>=15?" dep-ascuns":""}">`
+      +`<span class="plx dep-init-desc" data-plx="${esc(x.plx_id)}" role="button" tabindex="0">${esc(x.plx_id)}</span> `
+      +`<span class="parc-data">${esc(x.data||"")}</span> `
+      +`<span class="hint">${esc(x.titlu||"")}</span> `
+      +`<span class="dep-semn">${x.semnatari} semnatari</span>`
+      +`<div class="dep-init-loc" data-plx="${esc(x.plx_id)}"></div></div>`).join("")
+    +(lista.length>15?`<button type="button" class="ghost mini dep-mai-mult">vezi toate cele ${nf(lista.length)}</button>`:``)
+    +`</div></div>`;
+  legaFisaDeputat(gazda);
+}
+$("#p-leg").onchange=()=>{ loadGrupuri(); loadToti(); };
 function deputatHtml(nume, leg, camera, d){
   const s=d.soarta||{adoptate:0,respinse:0,nedecise:0};
   const lista=(d.initiative||[]);
   // «nedecise» is its own number, never folded into either outcome: only 1 729 of 4 052 collected
   // initiatives have a division on their Fișa, and a rate over «adoptate / tot» would quietly turn
   // every bill still moving into a defeat.
+  // The three counts are the filter. A reader who reads "57 adoptate" wants those 57, and a
+  // number that cannot be opened is one they have to take on trust.
   let h=`<div class="dep-fisa-h">${esc(nume)} <span class="hint">${esc(camera||"")}`
     +(leg?` · legislatura ${esc(leg)}`:``)+`</span></div>`
-    +`<div class="dep-cifre"><span class="dep-ok">${s.adoptate} adoptate</span>`
-    +`<span class="dep-nu">${s.respinse} respinse</span>`
-    +`<span class="dep-pend">${s.nedecise} fără vot înregistrat</span></div>`;
+    +`<div class="dep-cifre">`
+    +`<button type="button" class="soarta-f dep-ok" data-fel="adoptat">${s.adoptate} adoptate</button>`
+    +`<button type="button" class="soarta-f dep-nu" data-fel="respins">${s.respinse} respinse</button>`
+    +`<button type="button" class="soarta-f dep-pend" data-fel="nedecis">${s.nedecise} fără vot înregistrat</button>`
+    +`<button type="button" class="soarta-f soarta-activ" data-fel="">toate</button></div>`;
   if(lista.length){
     // Every bill, not the first eight. "…and another 259" is a number a reader cannot act on, and
     // the list is the record: a member's work is what they put their name to.
@@ -2654,7 +2771,7 @@ function deputatHtml(nume, leg, camera, d){
       +lista.map((x,i)=>
       // The co-signer count is not decoration: a bill carrying sixty signatures is not this
       // person's initiative in the way one carrying two is.
-      `<div class="dep-init${i>=8?" dep-ascuns":""}">`
+      `<div class="dep-init${i>=8?" dep-ascuns":""}" data-fel="${esc(x.rezultat||"nedecis")}">`
       +`<span class="plx dep-init-desc" role="button" tabindex="0" data-plx="${esc(x.plx_id)}">${esc(x.plx_id)}</span> `
       +`<span class="hint">${esc(x.titlu||"")}</span> `
       +`<span class="dep-semn">${x.semnatari} semnatari</span>`
@@ -2666,6 +2783,12 @@ function deputatHtml(nume, leg, camera, d){
   // How they voted, from the Chamber's own roll. The tally on a Fișa is the room's answer and
   // nobody's; this is the one a voter can act on.
   const vot=(d.voturi||[]);
+  // Absent from the build and absent from the record are different facts. The published build
+  // leaves the roll and the transcripts out for size, and saying so beats a panel that vanishes.
+  if(d.are_voturi===false)
+    h+=`<div class="parc-h">Cum a votat</div><p class="hint">Rolul fiecărui vot nu e inclus în această versiune publicată (ar adăuga ~75 MB). Rulează local pentru el.</p>`;
+  if(d.are_dezbateri===false)
+    h+=`<div class="parc-h">În plen</div><p class="hint">Stenogramele nu sunt incluse în această versiune publicată (ar adăuga ~28 MB). Rulează local pentru ele.</p>`;
   if(vot.length){
     const n=o=>vot.filter(v=>v.optiune===o).length;
     h+=`<div class="parc-h">Cum a votat (${vot.length})</div>`
