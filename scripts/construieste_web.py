@@ -340,7 +340,8 @@ _raspunde
   cautaJson = pyodide.runPython(`
 import json as _json
 from urllib.parse import parse_qs
-from scripts.cauta_web import cauta as _cauta_shard
+from scripts.cauta_web import cauta as _cauta_shard, cauta_montat as _cauta_montat
+_DEPOZIT = __DEPOZIT_PY__
 def _int(qs, k):
     v = qs.get(k, [''])[0]
     try: return int(v) if v not in ('', None) else None
@@ -348,10 +349,16 @@ def _int(qs, k):
 async def _cauta_json(query):
     qs = parse_qs(query or '')
     q = qs.get('q', [''])[0]
-    r = await _cauta_shard(q, 'data',
+    filtre = dict(
         limita=_int(qs, 'limita') or 25, offset=_int(qs, 'offset') or 0,
         tip=(qs.get('tip', [''])[0] or None),
         an_min=_int(qs, 'an_min'), an_max=_int(qs, 'an_max'))
+    # The index shards live in the repository; the titles and snippets come from the mounted
+    # corpus, so nothing has to ship the 7,3 GB of per-act files the standalone shards needed.
+    if _DEPOZIT:
+        r = await _cauta_montat(q, _DEPOZIT, 'data/corpus.db', **filtre)
+    else:
+        r = await _cauta_shard(q, 'data', **filtre)
     return _json.dumps(r, ensure_ascii=False)
 _cauta_json
   `);
@@ -362,10 +369,10 @@ onmessage = async (e) => {
   const {id, path, query, body} = e.data;
   try {
     await gata;
-    // Fără depozit, căutarea citește feliile per-act de pe disc, iar acelea acoperă doar bucata
-    // publicată. Cu depozit, `provizii_fts` din corpusul montat acoperă toate cele 3.302.558 de
-    // prevederi — altfel utilizatorul poate deschide orice lege, dar nu poate găsi decât câteva.
-    const res = (path === "/api/cauta" && !DEPOZIT)
+    // Căutarea trece mereu prin index, nu prin corpus. Măsurat pe corpusul montat: ordonarea a
+    // 6.478 potriviri după bm25 a cerut ~1.000 de citiri împrăștiate și 291 de secunde, fiindcă
+    // bm25 vrea lungimea fiecărui document. Aceleași potriviri ies din index în două cereri.
+    const res = (path === "/api/cauta")
       ? await cautaJson(query || "")
       : raspunde(path, query, body);
     postMessage({id, ok:true, result:res});
@@ -772,6 +779,9 @@ def _worker(depozit: str = "") -> None:
         # With a repository behind it the corpus is really there, so counts, titles and search
         # must come from the database and not from the slice manifest.
         .replace("__CORPUS_INTREG__", "True" if depozit else "False")
+        # The same URL again, as a Python literal: the search runs inside Pyodide and fetches its
+        # index shards from the repository, not from the shipped `data/` directory.
+        .replace("__DEPOZIT_PY__", repr(depozit.rstrip("/")) if depozit else "None")
     )
     (WEB / "worker.js").write_text(text, encoding="utf-8")
     unde = depozit or "fără depozit — doar catalogul și feliile"
