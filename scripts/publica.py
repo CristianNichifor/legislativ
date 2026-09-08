@@ -19,11 +19,14 @@ The source is opened read-only and never modified.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import sqlite3
 import time
 from pathlib import Path
+
+from scripts import depozit
 
 # Build-time only: the never-rewritten HTML archive, the crawl state, the fetch cache, the log.
 DE_ARUNCAT = ("documente", "surse", "cache", "progres")
@@ -80,12 +83,71 @@ def _verifica(tinta: Path) -> None:
         con.close()
 
 
+def _verifica_orice(tinta: Path) -> None:
+    """The weaker check for the companion databases: it opens, and it is not empty.
+
+    `graf.db` and `initiative.db` carry the citation edges and everything parliamentary. They keep
+    all their tables — there is no build-time bulk to strip — but they are written in WAL like the
+    corpus, and WAL is what `immutable=1` refuses. So they still have to pass through here.
+    """
+    con = sqlite3.connect(f"file:{tinta}?immutable=1", uri=True)
+    try:
+        tabele = [
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%_fts%'"
+            )
+        ]
+        randuri = {}
+        for t in tabele:
+            try:
+                randuri[t] = con.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+            except sqlite3.DatabaseError:
+                continue
+        if not any(randuri.values()):
+            raise SystemExit(f"{tinta} nu are niciun rând în nicio tabelă")
+        for t, n in sorted(randuri.items(), key=lambda x: -x[1])[:4]:
+            print(f"  {t:<24} {n:>9,}")
+    finally:
+        con.close()
+
+
+def _manifest(tinta: Path) -> Path:
+    """Write, next to the published copy, the counts describing it.
+
+    The headline the page opens with used to be counted per request. That is fine against a local
+    file and ruinous against a remote one: `count(*)` over 3.302.558 provisions reads essentially
+    the whole table, which over byte-range requests means gigabytes for a number that never
+    changes between publications. So the counts are settled once, here, where the file is local.
+    """
+    con = sqlite3.connect(f"file:{tinta}?immutable=1", uri=True)
+    try:
+        m = {
+            "acte": con.execute("SELECT count(*) FROM acte").fetchone()[0],
+            "provizii": con.execute("SELECT count(*) FROM provizii").fetchone()[0],
+            "acte_structurate": depozit._structurate_normative(con),
+            "acte_normative": con.execute(
+                f"SELECT count(*) FROM acte WHERE tip IN ({depozit._MARCAJE_NORMATIV})"
+            ).fetchone()[0],
+        }
+    finally:
+        con.close()
+    cale = tinta.with_name("manifest.json")
+    cale.write_text(json.dumps(m, ensure_ascii=False), encoding="utf-8")
+    print(f"  manifest → {cale}: " + " · ".join(f"{k} {v:,}" for k, v in m.items()))
+    return cale
+
+
 def _gb(cale: Path) -> float:
     return cale.stat().st_size / 1e9
 
 
-def publica(sursa: Path, tinta: Path) -> Path:
-    """Write `tinta` as the published copy of `sursa`. Returns the path written."""
+def publica(sursa: Path, tinta: Path, *, de_aruncat: tuple[str, ...] = DE_ARUNCAT) -> Path:
+    """Write `tinta` as the published copy of `sursa`. Returns the path written.
+
+    `de_aruncat` empty means "keep everything" — the companion databases need the WAL folded in
+    and the file rebuilt, but have nothing to strip.
+    """
     if not sursa.is_file():
         raise SystemExit(f"nu găsesc {sursa}")
     tinta.parent.mkdir(parents=True, exist_ok=True)
@@ -111,7 +173,7 @@ def publica(sursa: Path, tinta: Path) -> Path:
             raise SystemExit(f"jurnalul a rămas {jurnal}; immutable=1 ar refuza fișierul")
 
         prezente = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        for tabel in DE_ARUNCAT:
+        for tabel in de_aruncat:
             if tabel in prezente:
                 con.execute(f"DROP TABLE {tabel}")
                 print(f"  aruncat {tabel}", flush=True)
@@ -129,7 +191,9 @@ def publica(sursa: Path, tinta: Path) -> Path:
         if vecin.is_file():
             os.remove(vecin)
 
-    _verifica(tinta)
+    _verifica(tinta) if de_aruncat else _verifica_orice(tinta)
+    if de_aruncat:
+        _manifest(tinta)
 
     marime = _gb(tinta)
     marja = GRATUIT_R2_GB - marime
@@ -145,8 +209,17 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--sursa", type=Path, default=Path("corpus.db"))
     ap.add_argument("--tinta", type=Path, default=Path("publicat.db"))
+    ap.add_argument(
+        "--fel",
+        choices=("corpus", "auxiliar"),
+        default="corpus",
+        help=(
+            "'corpus' aruncă tabelele de construire; 'auxiliar' (graf.db, initiative.db) păstrează "
+            "tot și doar scoate WAL-ul și rescrie fișierul, fiindcă immutable=1 refuză un -wal"
+        ),
+    )
     a = ap.parse_args(argv)
-    publica(a.sursa, a.tinta)
+    publica(a.sursa, a.tinta, de_aruncat=DE_ARUNCAT if a.fel == "corpus" else ())
 
 
 if __name__ == "__main__":
