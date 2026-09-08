@@ -292,6 +292,7 @@ def rezumat(stare: Stare) -> dict:
             r = depozit.rezumat(con)
     with depozit.deschide(stare.initiative, readonly=True) as con:
         r["initiative"] = depozit.rezumat(con)["initiative"]
+    r |= _rezumat_ue(stare)
     return r
 
 
@@ -904,6 +905,87 @@ def _schema_ue(con: sqlite3.Connection) -> bool:
     return {"eu_acte", "eu_provizii", "eu_provizii_fts"} <= tabele
 
 
+def _rezumat_ue(stare: Stare) -> dict:
+    zero = {"ue_disponibil": False, "ue_acte": 0, "ue_prevederi": 0, "ue_limbi": []}
+    if not stare.are_ue():
+        return zero
+
+    from scripts import cellar
+
+    try:
+        with cellar.deschide(stare.eu, readonly=True) as con:
+            if not _schema_ue(con):
+                return zero
+            limbi = [
+                r[0]
+                for r in con.execute(
+                    "SELECT DISTINCT limba FROM eu_acte WHERE limba IS NOT NULL ORDER BY limba"
+                )
+            ]
+            return {
+                "ue_disponibil": True,
+                "ue_acte": con.execute("SELECT count(*) FROM eu_acte").fetchone()[0],
+                "ue_prevederi": con.execute("SELECT count(*) FROM eu_provizii").fetchone()[0],
+                "ue_limbi": limbi,
+            }
+    except sqlite3.Error:
+        return zero
+
+
+def _dosare_ue(rezultate: list[dict]) -> list[dict]:
+    dosare: dict[str, dict] = {}
+    for rand in rezultate:
+        celex = rand.get("celex") or ""
+        if not celex:
+            continue
+        dosar = dosare.setdefault(
+            celex,
+            {
+                "celex": celex,
+                "titlu": rand.get("act_titlu") or "",
+                "limba": rand.get("limba") or "",
+                "sursa_url": rand.get("sursa_url") or "",
+                "item_url": rand.get("item_url") or "",
+                "prevederi": 0,
+                "articole": 0,
+                "considerente": 0,
+                "anexe": 0,
+                "locatori": [],
+                "termeni": [],
+                "feluri": {},
+                "scor": rand.get("scor"),
+            },
+        )
+        dosar["prevederi"] += 1
+        fel = rand.get("fel") or ""
+        dosar["feluri"][fel] = dosar["feluri"].get(fel, 0) + 1
+        if fel == "articol":
+            dosar["articole"] += 1
+        elif fel == "considerent":
+            dosar["considerente"] += 1
+        elif fel == "anexa":
+            dosar["anexe"] += 1
+        locator = rand.get("locator") or ""
+        if locator and locator not in dosar["locatori"] and len(dosar["locatori"]) < 8:
+            dosar["locatori"].append(locator)
+        for termen in rand.get("termeni") or []:
+            if termen not in dosar["termeni"]:
+                dosar["termeni"].append(termen)
+        scor = rand.get("scor")
+        if scor is not None and (dosar["scor"] is None or scor < dosar["scor"]):
+            dosar["scor"] = scor
+
+    iesire = []
+    for dosar in dosare.values():
+        dosar["feluri"] = [
+            {"fel": fel, "prevederi": n}
+            for fel, n in sorted(dosar["feluri"].items(), key=lambda x: (-x[1], x[0]))
+            if fel
+        ]
+        iesire.append(dosar)
+    return iesire
+
+
 def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     """Candidate EU provisions, from the local CELEX database.
 
@@ -920,6 +1002,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "sursa": "eu.db",
             "limba": limba_filtru,
             "total": 0,
+            "dosare": [],
             "rezultate": [],
             "limitari": ["Textul proiectului este gol.", LIMITARE_UE],
         }
@@ -928,6 +1011,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "sursa": "absent",
             "limba": limba_filtru,
             "total": 0,
+            "dosare": [],
             "rezultate": [],
             "limitari": [
                 "Dreptul UE nu este încărcat local; importă acte CELEX în eu.db cu "
@@ -945,6 +1029,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
                     "sursa": "eu.db",
                     "limba": limba_filtru,
                     "total": 0,
+                    "dosare": [],
                     "rezultate": [],
                     "limitari": [
                         "eu.db există, dar nu are indexul de prevederi UE; rulează importul CELEX "
@@ -959,6 +1044,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "sursa": "eu.db",
             "limba": limba_filtru,
             "total": 0,
+            "dosare": [],
             "rezultate": [],
             "limitari": [f"eu.db nu a putut fi citit: {e}", LIMITARE_UE],
         }
@@ -967,6 +1053,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
         "sursa": "eu.db",
         "limba": limba_filtru,
         "total": len(rezultate),
+        "dosare": _dosare_ue(rezultate),
         "rezultate": rezultate,
         "limitari": (
             [LIMITARE_UE]

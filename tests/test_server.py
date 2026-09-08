@@ -28,6 +28,7 @@ from scripts.servicii import (
     _targets,
     _ue,
     _vecini,
+    rezumat,
 )
 
 
@@ -67,15 +68,15 @@ def _build(tmp_path: Path) -> Stare:
     return Stare(str(corpus), str(initiative))
 
 
-def _manifestare_ue() -> cellar.ManifestareUE:
+def _manifestare_ue(celex: str = "32018R1805", item: str = "https://cellar/ron.xhtml"):
     return cellar.ManifestareUE(
-        celex="32018R1805",
+        celex=celex,
         work_uri="http://publications.europa.eu/resource/cellar/work",
         expression_uri="http://publications.europa.eu/resource/cellar/work.0020",
         manifestation_uri="http://publications.europa.eu/resource/cellar/work.0020.xhtml",
         limba="RON",
         format="xhtml",
-        item_url="https://cellar/ron.xhtml",
+        item_url=item,
         titlu="Română",
         data_document="2018-11-14",
         tip_uri="http://publications.europa.eu/type/regulation",
@@ -128,6 +129,56 @@ def test_ue_returns_local_celex_provision_candidates(tmp_path):
     assert out["rezultate"]
     assert out["rezultate"][0]["celex"] == "32018R1805"
     assert "<mark>" in out["rezultate"][0]["fragment"]
+    assert out["dosare"] == [
+        {
+            "celex": "32018R1805",
+            "titlu": "Română",
+            "limba": "RON",
+            "sursa_url": "http://publications.europa.eu/resource/celex/32018R1805",
+            "item_url": "https://cellar/ron.xhtml",
+            "prevederi": len(out["rezultate"]),
+            "articole": len(out["rezultate"]),
+            "considerente": 0,
+            "anexe": 0,
+            "locatori": [r["locator"] for r in out["rezultate"]],
+            "termeni": out["rezultate"][0]["termeni"],
+            "feluri": [{"fel": "articol", "prevederi": len(out["rezultate"])}],
+            "scor": out["rezultate"][0]["scor"],
+        }
+    ]
+
+
+def test_ue_groups_candidates_by_celex_act(tmp_path):
+    stare = _build(tmp_path)
+    db = _eu_db(tmp_path)
+    text = """REGULAMENTUL (UE) 2019/1111
+
+Articolul 1
+
+Prezentul regulament stabilește norme privind ordine de indisponibilizare și confiscare.
+"""
+    m = _manifestare_ue("32019R1111", "https://cellar/alt.xhtml")
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32019R1111", [m], m, text)
+    stare.eu = str(db)
+
+    out = _ue("ordin de indisponibilizare", stare, limba="RON", limita=12)
+
+    assert {d["celex"] for d in out["dosare"]} == {"32018R1805", "32019R1111"}
+    assert all(d["prevederi"] >= 1 for d in out["dosare"])
+    assert all(d["locatori"] for d in out["dosare"])
+
+
+def test_rezumat_reports_local_eu_coverage(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+
+    out = rezumat(stare)
+
+    assert out["ue_disponibil"] is True
+    assert out["ue_acte"] == 1
+    assert out["ue_prevederi"] == 3
+    assert out["ue_limbi"] == ["RON"]
 
 
 def test_lint_reports_normative_register_apart_from_operation_form(tmp_path):
