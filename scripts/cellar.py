@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 
-from scripts.text import normalizeaza
+from scripts.text import cheie, normalizeaza
 
 SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql"
 CELEX_URI = "http://publications.europa.eu/resource/celex/{celex}"
@@ -39,6 +39,46 @@ LIMBI_IMPLICITE = ("RON", "ENG")
 FORMATE_TEXT = ("xhtml", "html", "txt", "text", "xml", "fmx4")
 PRIORITATE_FORMAT = {fmt: i for i, fmt in enumerate(FORMATE_TEXT)}
 _DOC_NR = re.compile(r"/DOC_(\d+)(?:$|[?#])")
+_ARTICOL = re.compile(r"^(?:Articolul|Article)\s+([0-9]+[A-Za-z]?)\.?$", re.I)
+_CONSIDERENT = re.compile(r"^\((\d{1,3})\)$")
+_ANEXA = re.compile(r"^(?:ANEXA|ANNEX)\s*([IVXLCDM]+|\d+)?\b", re.I)
+_CUVINTE_GOLE = {
+    "acest",
+    "acesta",
+    "aceste",
+    "acestea",
+    "acestor",
+    "aceasta",
+    "ale",
+    "alin",
+    "articolul",
+    "asupra",
+    "care",
+    "catre",
+    "ceea",
+    "cele",
+    "este",
+    "fost",
+    "intr",
+    "lege",
+    "normele",
+    "pentru",
+    "prezent",
+    "prezenta",
+    "prin",
+    "privind",
+    "regulament",
+    "sunt",
+    "this",
+    "that",
+    "shall",
+    "with",
+    "from",
+    "into",
+    "under",
+    "article",
+    "regulation",
+}
 
 SCHEMA = """
 PRAGMA journal_mode = WAL;
@@ -78,6 +118,25 @@ CREATE TABLE IF NOT EXISTS eu_manifestari (
 );
 CREATE INDEX IF NOT EXISTS idx_eu_manifestari_celex ON eu_manifestari(celex);
 CREATE INDEX IF NOT EXISTS idx_eu_manifestari_limba ON eu_manifestari(limba);
+
+CREATE TABLE IF NOT EXISTS eu_provizii (
+    celex    TEXT NOT NULL,
+    locator  TEXT NOT NULL,
+    fel      TEXT NOT NULL,
+    titlu    TEXT,
+    text     TEXT NOT NULL,
+    ord      INTEGER NOT NULL,
+    limba    TEXT NOT NULL,
+    PRIMARY KEY (celex, locator)
+);
+CREATE INDEX IF NOT EXISTS idx_eu_provizii_celex_ord ON eu_provizii(celex, ord);
+CREATE INDEX IF NOT EXISTS idx_eu_provizii_fel ON eu_provizii(fel);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS eu_provizii_fts USING fts5(
+    text, titlu, celex UNINDEXED, locator UNINDEXED, limba UNINDEXED,
+    content = 'eu_provizii', content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
 """
 
 
@@ -106,6 +165,17 @@ class ManifestareUE:
     data_document: str | None
     tip_uri: str | None
     in_vigoare: bool | None
+
+
+@dataclass(frozen=True)
+class ProvizieUE:
+    celex: str
+    locator: str
+    fel: str
+    titlu: str
+    text: str
+    ord: int
+    limba: str
 
 
 @contextmanager
@@ -416,13 +486,241 @@ def extrage_text(brut: bytes, *, content_type: str = "", format: str = "") -> st
     return text
 
 
+def _loc_articol(numar: str) -> str:
+    return f"art{numar.lower()}"
+
+
+def _loc_anexa(numar: str) -> str:
+    return f"anexa-{numar.lower()}" if numar else "anexa"
+
+
+def _linie_noua(line: str) -> tuple[str, str, str] | None:
+    art = _ARTICOL.match(line)
+    if art:
+        return "articol", _loc_articol(art.group(1)), line
+    anexa = _ANEXA.match(line)
+    if anexa:
+        return "anexa", _loc_anexa(anexa.group(1) or ""), line
+    return None
+
+
+def _titlu_dupa(linii: list[str], idx: int) -> str:
+    urm = linii[idx + 1] if idx + 1 < len(linii) else ""
+    if not urm or _linie_noua(urm) or _CONSIDERENT.match(urm):
+        return ""
+    if len(urm) > 140 or re.match(r"^\(?\d+[.)]?$", urm):
+        return ""
+    return urm
+
+
+def _curata_bloc(linii: list[str]) -> str:
+    return _curata_text("\n".join(linii))
+
+
+def provizii_din_text(celex: str, text: str, limba: str) -> list[ProvizieUE]:
+    """Split one imported EU act into citeable blocks.
+
+    The split is intentionally coarse: recitals before the articles, each article as one unit, and
+    annexes as one unit. That is enough for the first EU-law search surface to cite a location
+    without pretending we already understand every table row inside an annex.
+    """
+    celex = normalizeaza_celex(celex)
+    limba = limba.strip().upper()
+    linii = [linie.strip() for linie in normalizeaza(text).splitlines() if linie.strip()]
+    iesire: list[ProvizieUE] = []
+    folosite: dict[str, int] = {}
+    curent: tuple[str, str, str] | None = None
+    buf: list[str] = []
+    in_articole = False
+
+    def unic(locator: str) -> str:
+        folosite[locator] = folosite.get(locator, 0) + 1
+        return locator if folosite[locator] == 1 else f"{locator}-{folosite[locator]}"
+
+    def emite() -> None:
+        nonlocal buf, curent
+        if not curent or not buf:
+            buf = []
+            return
+        fel, locator, titlu = curent
+        bloc = _curata_bloc(buf)
+        if bloc:
+            iesire.append(
+                ProvizieUE(
+                    celex=celex,
+                    locator=unic(locator),
+                    fel=fel,
+                    titlu=titlu,
+                    text=bloc,
+                    ord=len(iesire) + 1,
+                    limba=limba,
+                )
+            )
+        buf = []
+
+    for i, linie in enumerate(linii):
+        inceput = _linie_noua(linie)
+        if inceput:
+            emite()
+            fel, locator, _ = inceput
+            curent = (fel, locator, _titlu_dupa(linii, i))
+            buf = [linie]
+            in_articole = True
+            continue
+
+        considerent = _CONSIDERENT.match(linie)
+        if considerent and not in_articole:
+            emite()
+            curent = ("considerent", f"considerent-{considerent.group(1)}", "")
+            buf = [linie]
+            continue
+
+        if curent is None:
+            curent = ("preambul", "preambul", "")
+            buf = [linie]
+        else:
+            buf.append(linie)
+
+    emite()
+    if not iesire and text.strip():
+        iesire.append(
+            ProvizieUE(
+                celex=celex,
+                locator="document",
+                fel="document",
+                titlu="",
+                text=_curata_text(text),
+                ord=1,
+                limba=limba,
+            )
+        )
+    return iesire
+
+
+def _sterge_provizii(con: sqlite3.Connection, celex: str) -> None:
+    randuri = con.execute(
+        "SELECT rowid, text, titlu, celex, locator, limba FROM eu_provizii WHERE celex = ?",
+        (celex,),
+    ).fetchall()
+    for r in randuri:
+        con.execute(
+            "INSERT INTO eu_provizii_fts(eu_provizii_fts, rowid, text, titlu, celex, locator,"
+            " limba) VALUES('delete', ?, ?, ?, ?, ?, ?)",
+            (r["rowid"], r["text"], r["titlu"], r["celex"], r["locator"], r["limba"]),
+        )
+    con.execute("DELETE FROM eu_provizii WHERE celex = ?", (celex,))
+
+
+def _scrie_provizie(con: sqlite3.Connection, p: ProvizieUE) -> None:
+    cur = con.execute(
+        "INSERT INTO eu_provizii (celex, locator, fel, titlu, text, ord, limba)"
+        " VALUES (?,?,?,?,?,?,?)",
+        (p.celex, p.locator, p.fel, p.titlu, p.text, p.ord, p.limba),
+    )
+    con.execute(
+        "INSERT INTO eu_provizii_fts(rowid, text, titlu, celex, locator, limba)"
+        " VALUES (?,?,?,?,?,?)",
+        (cur.lastrowid, p.text, p.titlu, p.celex, p.locator, p.limba),
+    )
+
+
+def scrie_provizii_celex(con: sqlite3.Connection, celex: str, text: str, limba: str) -> int:
+    """Replace one CELEX act's citeable provisions and their FTS rows."""
+    celex = normalizeaza_celex(celex)
+    _sterge_provizii(con, celex)
+    provizii = provizii_din_text(celex, text, limba)
+    for p in provizii:
+        _scrie_provizie(con, p)
+    return len(provizii)
+
+
+def indexeaza_stocate(con: sqlite3.Connection, celex: str | None = None) -> int:
+    """Backfill `eu_provizii` from texts already stored in `eu_acte`."""
+    params = (normalizeaza_celex(celex),) if celex else ()
+    clauza = " WHERE celex = ?" if celex else ""
+    total = 0
+    for r in con.execute(f"SELECT celex, limba, text FROM eu_acte{clauza}", params).fetchall():
+        total += scrie_provizii_celex(con, r["celex"], r["text"], r["limba"])
+    return total
+
+
+def termeni_cautare(text: str, *, maxim: int = 18) -> list[str]:
+    """Content words for the EU provision FTS prefilter."""
+    termeni: list[str] = []
+    for cuvant in re.findall(r"[a-z0-9]+", cheie(text)):
+        bun = (len(cuvant) > 4 and cuvant not in _CUVINTE_GOLE) or (
+            cuvant.isdigit() and len(cuvant) >= 2
+        )
+        if bun and cuvant not in termeni:
+            termeni.append(cuvant)
+    return termeni[:maxim]
+
+
+def _fts_query(text: str) -> str:
+    return " OR ".join(f'"{t}"' for t in termeni_cautare(text))
+
+
+def cauta_ue(
+    con: sqlite3.Connection,
+    text: str,
+    *,
+    limita: int = 12,
+    limba: str | None = None,
+) -> list[dict]:
+    """Deterministic EU provision candidates for a draft or query.
+
+    This is a retrieval helper, not a legality verdict. Every row is a CELEX locator and a snippet
+    from the official text stored locally.
+    """
+    intrebare = _fts_query(text)
+    if not intrebare:
+        return []
+    limita = max(1, min(limita, 50))
+    params: list[object] = [intrebare]
+    clauza = ""
+    if limba:
+        clauza = " AND p.limba = ?"
+        params.append(limba.strip().upper())
+    try:
+        randuri = con.execute(
+            "SELECT p.celex, p.locator, p.fel, p.titlu, p.limba,"
+            " a.titlu AS act_titlu, a.sursa_url, a.item_url,"
+            " snippet(eu_provizii_fts, 0, '<mark>', '</mark>', '…', 28) AS fragment,"
+            " rank AS scor"
+            " FROM eu_provizii_fts f"
+            " JOIN eu_provizii p ON p.rowid = f.rowid"
+            " JOIN eu_acte a ON a.celex = p.celex"
+            f" WHERE eu_provizii_fts MATCH ?{clauza}"
+            " ORDER BY rank LIMIT ?",
+            (*params, limita),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [
+        {
+            "celex": r["celex"],
+            "locator": r["locator"],
+            "fel": r["fel"],
+            "titlu": r["titlu"] or "",
+            "limba": r["limba"],
+            "act_titlu": r["act_titlu"] or "",
+            "sursa_url": r["sursa_url"] or "",
+            "item_url": r["item_url"] or "",
+            "fragment": r["fragment"] or "",
+            "scor": r["scor"],
+            "termeni": termeni_cautare(text),
+        }
+        for r in randuri
+    ]
+
+
 def scrie_celex(
     con: sqlite3.Connection,
     celex: str,
     manifestari: Sequence[ManifestareUE],
     aleasa: ManifestareUE,
     text: str,
-) -> None:
+) -> int:
     """Store the selected text and all manifestations that justified the selection."""
     celex = normalizeaza_celex(celex)
     con.execute("DELETE FROM eu_manifestari WHERE celex = ?", (celex,))
@@ -468,6 +766,7 @@ def scrie_celex(
             datetime.now(UTC).isoformat(timespec="seconds"),
         ),
     )
+    return scrie_provizii_celex(con, celex, text, aleasa.limba)
 
 
 def importa_celex(
@@ -483,7 +782,7 @@ def importa_celex(
     aleasa = alege_manifestare_text(manifestari, limbi=limbi)
     text = descarca_text(aleasa, manifestari=manifestari, timeout=timeout, opener=opener)
     with deschide(db) as con:
-        scrie_celex(con, aleasa.celex, manifestari, aleasa, text)
+        prevederi = scrie_celex(con, aleasa.celex, manifestari, aleasa, text)
     return {
         "celex": aleasa.celex,
         "titlu": aleasa.titlu,
@@ -491,6 +790,7 @@ def importa_celex(
         "format": aleasa.format,
         "item_url": aleasa.item_url,
         "manifestari": len(manifestari),
+        "prevederi": prevederi,
         "caractere": len(text),
     }
 
@@ -499,8 +799,13 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("celex", nargs="+", help="CELEX id or URL, e.g. 32018R1805")
+    ap.add_argument("celex", nargs="*", help="CELEX id or URL, e.g. 32018R1805")
     ap.add_argument("--db", default="eu.db", help="SQLite database to write")
+    ap.add_argument(
+        "--indexeaza",
+        action="store_true",
+        help="Rebuild eu_provizii from already imported eu_acte rows instead of fetching",
+    )
     ap.add_argument(
         "--limbi",
         default="RON,ENG",
@@ -509,9 +814,19 @@ if __name__ == "__main__":
     ap.add_argument("--timeout", type=float, default=60.0)
     a = ap.parse_args()
     limbi = tuple(x.strip() for x in a.limbi.split(",") if x.strip())
+    if a.indexeaza:
+        with deschide(a.db) as con:
+            if a.celex:
+                n = sum(indexeaza_stocate(con, celex=c) for c in a.celex)
+            else:
+                n = indexeaza_stocate(con)
+        print(f"{n} prevederi UE indexate")
+        raise SystemExit(0)
+    if not a.celex:
+        ap.error("celex este obligatoriu fără --indexeaza")
     for celex in a.celex:
         out = importa_celex(celex, db=a.db, limbi=limbi, timeout=a.timeout)
         print(
             f"{out['celex']} {out['limba']} {out['format']} · "
-            f"{out['caractere']} caractere · {out['titlu']}"
+            f"{out['caractere']} caractere · {out['prevederi']} prevederi · {out['titlu']}"
         )
