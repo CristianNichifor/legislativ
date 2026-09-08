@@ -205,5 +205,6 @@ def test_pagina_cu_depozit_incalzeste_banda_dupa_worker_ready(tmp_path, monkeypa
     assert 'new URLSearchParams({q: INCALZIRE_BANDA, limita: "1", doar_titluri: "1"})' in text
     assert 'incalzireBanda = ready.then(() => call("/api/cauta", p.toString(), "")' in text
     assert "const pregatire = DEPOZIT_CAUTARE ? incalzesteBanda() : ready;" in text
+    assert "new Promise(res => setTimeout(() => res(null), RABDARE_BANDA))" in text
     assert "incalzesteBanda().catch(()=>{});" in text
-    assert "const BANDA_TITLURI = 8, RABDARE_BANDA = 8000;" in text
+    assert "const BANDA_TITLURI = 8, RABDARE_BANDA = 25000;" in text
