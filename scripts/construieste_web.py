@@ -421,7 +421,7 @@ BOOT = """
 
   // Câte acte intră în bandă și cât o așteptăm. Motorul stă în worker, deci o căutare făcută
   // înainte să fie cald nu blochează pagina: peste termen, răspunde Pagefind singur.
-  const BANDA_TITLURI = 8, RABDARE_BANDA = 8000;
+  const BANDA_TITLURI = 8, RABDARE_BANDA = 25000;
   const INCALZIRE_BANDA = "achizitii publice";
   let incalzireBanda = null;
   function incalzesteBanda(){
