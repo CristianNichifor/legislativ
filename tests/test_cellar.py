@@ -22,6 +22,38 @@ RON_XHTML = (
     b"</body></html>"
 )
 RON_XHTML_2 = b"<html><body><p>Articolul 2</p><p>Anexa se aplic\xc4\x83.</p></body></html>"
+EU_TEXT = """REGULAMENTUL (UE) 2018/1805
+
+întrucât:
+
+(1)
+
+Uniunea menține un spațiu de libertate, securitate și justiție.
+
+(2)
+
+Cooperarea judiciară în materie penală se bazează pe recunoaștere reciprocă.
+
+ADOPTĂ PREZENTUL REGULAMENT:
+
+Articolul 1
+
+Obiectul
+
+Prezentul regulament stabilește norme privind ordine de indisponibilizare.
+
+Articolul 2
+
+Definiții
+
+În sensul prezentului regulament, ordin de indisponibilizare înseamnă o hotărâre.
+
+ANEXA I
+
+CERTIFICAT DE INDISPONIBILIZARE
+
+Statul emitent completează certificatul.
+"""
 
 
 class _Raspuns:
@@ -70,6 +102,22 @@ def _binding(
         "legal_type": {"type": "uri", "value": "http://publications.europa.eu/type/regulation"},
         "in_force": {"type": "literal", "value": in_force},
     }
+
+
+def _manifestare(item: str = "https://cellar/ron.xhtml") -> cellar.ManifestareUE:
+    return cellar.ManifestareUE(
+        celex="32018R1805",
+        work_uri="http://publications.europa.eu/resource/cellar/work",
+        expression_uri="http://publications.europa.eu/resource/cellar/work.0020",
+        manifestation_uri="http://publications.europa.eu/resource/cellar/work.0020.xhtml",
+        limba="RON",
+        format="xhtml",
+        item_url=item,
+        titlu="Română",
+        data_document="2018-11-14",
+        tip_uri="http://publications.europa.eu/type/regulation",
+        in_vigoare=True,
+    )
 
 
 def _sparql(*bindings: dict) -> bytes:
@@ -153,6 +201,24 @@ def test_pdf_is_not_silently_stored_as_text():
         cellar.extrage_text(b"%PDF-1.7 binary", content_type="application/pdf", format="pdfa1a")
 
 
+def test_eu_text_is_split_into_citeable_recitals_articles_and_annexes():
+    provizii = cellar.provizii_din_text("32018R1805", EU_TEXT, "ron")
+
+    assert [p.locator for p in provizii] == [
+        "preambul",
+        "considerent-1",
+        "considerent-2",
+        "art1",
+        "art2",
+        "anexa-i",
+    ]
+    art1 = next(p for p in provizii if p.locator == "art1")
+    assert art1.fel == "articol"
+    assert art1.titlu == "Obiectul"
+    assert "Articolul 1\nObiectul" in art1.text
+    assert next(p for p in provizii if p.locator == "anexa-i").fel == "anexa"
+
+
 def test_importing_celex_writes_selected_text_and_all_manifestations(tmp_path: Path):
     db = tmp_path / "eu.db"
     ron_xhtml = "https://cellar/ron.xhtml"
@@ -170,6 +236,7 @@ def test_importing_celex_writes_selected_text_and_all_manifestations(tmp_path: P
     assert out["limba"] == "RON"
     assert out["format"] == "xhtml"
     assert out["manifestari"] == 3
+    assert out["prevederi"] == 2
     with cellar.deschide(str(db), readonly=True) as con:
         act = con.execute("SELECT * FROM eu_acte WHERE celex = ?", ("32018R1805",)).fetchone()
         assert act["limba"] == "RON"
@@ -178,6 +245,14 @@ def test_importing_celex_writes_selected_text_and_all_manifestations(tmp_path: P
         assert len(act["text_sha256"]) == 64
         manifestari = con.execute("SELECT count(*) FROM eu_manifestari").fetchone()[0]
         assert manifestari == 3
+        provizii = con.execute(
+            "SELECT locator, fel FROM eu_provizii WHERE celex = ? ORDER BY ord",
+            ("32018R1805",),
+        ).fetchall()
+        assert [(p["locator"], p["fel"]) for p in provizii] == [
+            ("preambul", "preambul"),
+            ("art1", "articol"),
+        ]
 
 
 def test_importing_fetches_all_items_of_the_selected_manifestation(tmp_path: Path):
@@ -200,6 +275,58 @@ def test_importing_fetches_all_items_of_the_selected_manifestation(tmp_path: Pat
         ]
     assert text.index("Articolul 1") < text.index("Articolul 2")
     assert "Anexa se aplică." in text
+
+
+def test_eu_search_returns_cited_provisions_with_snippets(tmp_path: Path):
+    db = tmp_path / "eu.db"
+    m = _manifestare()
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32018R1805", [m], m, EU_TEXT)
+        rezultate = cellar.cauta_ue(con, "ordin de indisponibilizare emis în materie penală")
+
+    assert rezultate
+    assert rezultate[0]["celex"] == "32018R1805"
+    assert any(r["locator"] in {"art1", "art2", "anexa-i"} for r in rezultate)
+    assert rezultate[0]["limba"] == "RON"
+    assert "<mark>" in rezultate[0]["fragment"]
+    assert "indisponibilizare" in rezultate[0]["termeni"]
+
+
+def test_eu_search_can_be_filtered_by_language(tmp_path: Path):
+    db = tmp_path / "eu.db"
+    m = _manifestare()
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32018R1805", [m], m, EU_TEXT)
+        assert cellar.cauta_ue(con, "ordin de indisponibilizare", limba="RON")
+        assert cellar.cauta_ue(con, "ordin de indisponibilizare", limba="ENG") == []
+
+
+def test_reimporting_celex_removes_stale_eu_fts_rows(tmp_path: Path):
+    db = tmp_path / "eu.db"
+    m = _manifestare()
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32018R1805", [m], m, EU_TEXT)
+        assert cellar.cauta_ue(con, "indisponibilizare")
+        cellar.scrie_celex(
+            con,
+            "32018R1805",
+            [m],
+            m,
+            "Articolul 1\nObiectul\nPrezentul regulament stabilește norme despre confiscare.",
+        )
+        assert cellar.cauta_ue(con, "indisponibilizare") == []
+        assert cellar.cauta_ue(con, "confiscare")
+
+
+def test_existing_eu_texts_can_be_backfilled_into_provisions(tmp_path: Path):
+    db = tmp_path / "eu.db"
+    m = _manifestare()
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32018R1805", [m], m, EU_TEXT)
+        con.execute("DELETE FROM eu_provizii_fts")
+        con.execute("DELETE FROM eu_provizii")
+        assert cellar.indexeaza_stocate(con, celex="32018R1805") == 6
+        assert cellar.cauta_ue(con, "recunoaștere reciprocă")
 
 
 def test_no_manifestation_for_requested_languages_is_explicit():
