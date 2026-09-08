@@ -356,6 +356,21 @@
     line-height:1.45}
   .matrix-ex.blocking{border-left-color:var(--blocking)}
   .matrix-ex.material{border-left-color:var(--material)}
+  /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
+  .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
+  .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
+  .ue-list{margin-top:.7rem}
+  .ue-hit{border:1px solid var(--rule);border-left:3px solid var(--note);border-radius:var(--r1);
+    background:var(--surface);box-shadow:var(--e1);padding:.75rem .9rem;margin:.55rem 0}
+  .ue-hit-head{display:flex;flex-wrap:wrap;gap:.35rem .7rem;align-items:baseline;margin-bottom:.25rem}
+  .ue-loc{font-family:var(--mono);color:var(--accent);font-size:.82rem}
+  .ue-title{font-weight:600}
+  .ue-frag{font-family:var(--mono);font-size:.82rem;line-height:1.55;margin:.4rem 0;
+    white-space:pre-wrap;word-break:break-word}
+  .ue-frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
+  .ue-meta{font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);display:flex;
+    flex-wrap:wrap;gap:.25rem .8rem}
+  .ue-meta a{font-weight:600}
   /* the roll of a division: who voted which way, grouped the way the chamber sits */
   .rol{margin:.3rem 0 .4rem .5rem;padding:.45rem .6rem;border-left:2px solid var(--rule);
     background:var(--surface);border-radius:0 var(--r1) var(--r1) 0}
@@ -940,6 +955,7 @@
     <button class="tab" id="tab-parlamentari" role="tab" aria-selected="false" aria-controls="pane-parlamentari">Parlamentari</button>
     <button class="tab" id="tab-domenii" role="tab" aria-selected="false" aria-controls="pane-domenii">Cine face legea</button>
     <button class="tab" id="tab-matrice" role="tab" aria-selected="false" aria-controls="pane-matrice">Matrice</button>
+    <button class="tab" id="tab-ue" role="tab" aria-selected="false" aria-controls="pane-ue">Drept UE</button>
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
@@ -1128,6 +1144,26 @@
         <div id="m-rezumat"></div>
         <div id="m-lista"><span class="spin"></span> încarc…</div>
         <div id="m-detalii" class="matrix-detail"></div>
+      </div>
+
+      <div id="pane-ue" role="tabpanel" aria-labelledby="tab-ue" hidden>
+        <p class="hint" style="margin:.2rem 0 .8rem">
+          Potriviri textuale în actele CELEX importate local. Rezultatele sunt prevederi candidate,
+          nu verdict că proiectul respectă sau încalcă dreptul UE.
+        </p>
+        <label for="ue-text">Text de comparat cu dreptul UE</label>
+        <textarea id="ue-text" placeholder="Lipește un articol, o expunere de motive sau folosește textul proiectului din fila Verifică."></textarea>
+        <div class="ue-tools">
+          <button class="go" id="ue-go">Caută în dreptul UE</button>
+          <button class="ghost" id="ue-draft">Folosește proiectul</button>
+          <select id="ue-limba" title="Limba actului UE">
+            <option value="">română sau engleză</option>
+            <option value="RON">română oficială</option>
+            <option value="ENG">engleză</option>
+          </select>
+          <span class="hint" id="ue-stat"></span>
+        </div>
+        <div id="ue-out"></div>
       </div>
 
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
@@ -1376,7 +1412,7 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","matrice","supraveghere"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","matrice","ue","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
@@ -1385,7 +1421,7 @@ function selectTab(which){
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   // #r-nr, not #r-act: the only #r-act in the page is #r-act-info, a hint div. Redactează's first
   // typed field is the number, the same as graf and supraveghere.
-  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",matrice:"#m-q",supraveghere:"#s-nr"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",matrice:"#m-q",ue:"#ue-text",supraveghere:"#s-nr"}[which];
   // Look the element up rather than assuming it exists: when this pointed at a missing id it threw
   // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
@@ -1429,7 +1465,7 @@ $(".app").dataset.pane = "lint";   // initial tab
     b.onclick=()=>{ el.value=""; el.dispatchEvent(new Event("input",{bubbles:true})); sync(); el.focus(); };
     el.addEventListener("input", sync); sync();
   }
-  ["#draft","#r-text","#q"].forEach(s=>{ const e=$(s); if(e) adaugaClear(e); });
+  ["#draft","#r-text","#q","#ue-text"].forEach(s=>{ const e=$(s); if(e) adaugaClear(e); });
 })();
 
 // ---- act picker: fill the year dropdown, keep the number numeric ----
@@ -3564,6 +3600,63 @@ function mArataRand(el){
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+
+// ---- Drept UE: candidate CELEX provisions for the draft text ----
+function markFragment(html){
+  return esc(html).replace(/&lt;mark&gt;/g,"<mark>").replace(/&lt;\/mark&gt;/g,"</mark>");
+}
+function urlSigur(u){
+  const s=String(u||"").trim();
+  return /^https?:\/\//i.test(s) ? s : "";
+}
+function renderUE(d){
+  const out=$("#ue-out"), stat=$("#ue-stat");
+  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[];
+  stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate` : "";
+  const note=lim.length ? lim.map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("") : "";
+  if(!rr.length){ out.innerHTML=empty("Nicio prevedere UE de arătat.")+note; return; }
+  out.innerHTML=`<div class="ue-list">`+rr.map(r=>{
+    const href=urlSigur(r.sursa_url||r.item_url);
+    const loc=[r.celex, r.locator].filter(Boolean).join(" · ");
+    return `<article class="ue-hit">`
+      +`<div class="ue-hit-head"><span class="ue-loc">${esc(loc)}</span>`
+      +`<span class="hint">${esc(r.fel||"")} · ${esc(r.limba||"")}</span></div>`
+      +`<div class="ue-title">${esc(r.act_titlu||r.titlu||"Act UE fără titlu")}</div>`
+      +(r.titlu&&r.titlu!==r.act_titlu?`<div class="hint">${esc(r.titlu)}</div>`:"")
+      +`<div class="ue-frag">${markFragment(r.fragment||"")}</div>`
+      +`<div class="ue-meta">`
+      +(href?`<a href="${esc(href)}" target="_blank" rel="noopener">sursa oficială</a>`:"")
+      +((r.termeni||[]).length?`<span>termeni: ${r.termeni.map(esc).join(", ")}</span>`:"")
+      +`</div></article>`;
+  }).join("")+`</div>`+note;
+}
+async function cautaUE(){
+  const text=($("#ue-text").value||"").trim();
+  if(!text){ $("#ue-out").innerHTML=empty("Lipește un text sau folosește proiectul."); return; }
+  const btn=$("#ue-go"), stat=$("#ue-stat");
+  btn.disabled=true; btn.innerHTML=`<span class="spin"></span> caut…`; stat.textContent="";
+  try{
+    const body={draft:text, limita:12};
+    const limba=$("#ue-limba").value;
+    if(limba) body.limba=limba;
+    const r=await fetch("/api/ue",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(body)});
+    if(!r.ok) throw new Error((await r.json()).error||r.statusText);
+    renderUE(await r.json());
+  }catch(e){
+    $("#ue-out").innerHTML=empty("Eroare: "+esc(e.message||e));
+  }finally{
+    btn.disabled=false; btn.textContent="Caută în dreptul UE";
+  }
+}
+$("#ue-go").onclick=cautaUE;
+$("#ue-draft").onclick=()=>{
+  $("#ue-text").value=$("#draft").value;
+  $("#ue-text").dispatchEvent(new Event("input",{bubbles:true}));
+  $("#ue-text").focus();
+};
+$("#ue-text").addEventListener("keydown",e=>{ if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)) cautaUE(); });
+$("#ue-limba").onchange=()=>{ if(($("#ue-text").value||"").trim()) cautaUE(); };
 
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));

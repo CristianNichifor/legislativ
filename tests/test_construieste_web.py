@@ -190,6 +190,30 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     assert "const BUCATA = 16384;" in text
     # Both backends must survive the build — offline reads the same pages from disk.
     assert "prinRange" in text and "dinOpfs" in text and "monteaza" in text
+    assert '"eu.db"' in text
+
+
+def test_eu_db_ships_as_schema_when_no_collected_celex(tmp_path, monkeypatch):
+    """The EU panel should have a real local database to open even before CELEX is imported."""
+    from scripts import cellar
+    from scripts import construieste_web as cw
+
+    root, data = tmp_path / "root", tmp_path / "web" / "data"
+    root.mkdir()
+    data.mkdir(parents=True)
+    monkeypatch.setattr(cw, "ROOT", root)
+    monkeypatch.setattr(cw, "DATA", data)
+
+    cw._slice_ue()
+
+    with cellar.deschide(str(data / "eu.db"), readonly=True) as con:
+        tabele = {
+            r[0]
+            for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE name IN ('eu_acte', 'eu_provizii')"
+            )
+        }
+    assert tabele == {"eu_acte", "eu_provizii"}
 
 
 def test_pagina_cu_depozit_incalzeste_banda_dupa_worker_ready(tmp_path, monkeypatch):

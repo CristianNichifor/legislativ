@@ -64,6 +64,7 @@ class Stare:
         corpus: str = "corpus.db",
         initiative: str = "initiative.db",
         graf: str = "graf.db",
+        eu: str = "eu.db",
         *,
         date_dir: str | None = None,
         corpus_intreg: bool = False,
@@ -71,6 +72,7 @@ class Stare:
         self.corpus = corpus
         self.initiative = initiative
         self.graf = graf
+        self.eu = eu
         self.date_dir = Path(date_dir) if date_dir else None
         self.corpus_intreg = corpus_intreg
         self._titluri: dict[str, str] | None = None
@@ -109,6 +111,9 @@ class Stare:
 
     def are_graf(self) -> bool:
         return Path(self.graf).is_file()
+
+    def are_ue(self) -> bool:
+        return Path(self.eu).is_file()
 
     # Built from the most recent acts only, not the whole corpus: definitions over a
     # quarter-million acts would take minutes, and the terminology check must answer instantly. The
@@ -867,6 +872,107 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "limitari": [
             "Axa «arie» este emitentul scris pe document, nu o clasificare materială inventată."
         ],
+    }
+
+
+LIMITARE_UE = (
+    "Potrivirile UE sunt căutare textuală în actele CELEX importate local; "
+    "nu sunt verdict de conformitate."
+)
+
+
+def _limita_ue(valoare) -> int:
+    try:
+        return max(1, min(int(valoare), 50))
+    except (TypeError, ValueError):
+        return 12
+
+
+def _limba_ue(valoare) -> str | None:
+    limba = str(valoare or "").strip().upper()
+    return limba if re.fullmatch(r"[A-Z]{3}", limba) else None
+
+
+def _schema_ue(con: sqlite3.Connection) -> bool:
+    tabele = {
+        r[0]
+        for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE name IN"
+            " ('eu_acte', 'eu_provizii', 'eu_provizii_fts')"
+        )
+    }
+    return {"eu_acte", "eu_provizii", "eu_provizii_fts"} <= tabele
+
+
+def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
+    """Candidate EU provisions, from the local CELEX database.
+
+    This is retrieval, not compatibility analysis: it finds official EU provisions that use the
+    same legal terms as the draft and sends every row back with a CELEX locator and source link.
+    The caller can then decide whether the draft conflicts, derogates or merely touches the same
+    matter.
+    """
+    text = (draft or "").strip()
+    limita_i = _limita_ue(limita)
+    limba_filtru = _limba_ue(limba)
+    if not text:
+        return {
+            "sursa": "eu.db",
+            "limba": limba_filtru,
+            "total": 0,
+            "rezultate": [],
+            "limitari": ["Textul proiectului este gol.", LIMITARE_UE],
+        }
+    if not stare.are_ue():
+        return {
+            "sursa": "absent",
+            "limba": limba_filtru,
+            "total": 0,
+            "rezultate": [],
+            "limitari": [
+                "Dreptul UE nu este încărcat local; importă acte CELEX în eu.db cu "
+                "`uv run python -m scripts.cellar 32018R1805 --db eu.db`.",
+                LIMITARE_UE,
+            ],
+        }
+
+    from scripts import cellar
+
+    try:
+        with cellar.deschide(stare.eu, readonly=True) as con:
+            if not _schema_ue(con):
+                return {
+                    "sursa": "eu.db",
+                    "limba": limba_filtru,
+                    "total": 0,
+                    "rezultate": [],
+                    "limitari": [
+                        "eu.db există, dar nu are indexul de prevederi UE; rulează importul CELEX "
+                        "sau reindexarea cu "
+                        "`uv run python -m scripts.cellar --indexeaza --db eu.db`.",
+                        LIMITARE_UE,
+                    ],
+                }
+            rezultate = cellar.cauta_ue(con, text, limita=limita_i, limba=limba_filtru)
+    except sqlite3.Error as e:
+        return {
+            "sursa": "eu.db",
+            "limba": limba_filtru,
+            "total": 0,
+            "rezultate": [],
+            "limitari": [f"eu.db nu a putut fi citit: {e}", LIMITARE_UE],
+        }
+
+    return {
+        "sursa": "eu.db",
+        "limba": limba_filtru,
+        "total": len(rezultate),
+        "rezultate": rezultate,
+        "limitari": (
+            [LIMITARE_UE]
+            if rezultate
+            else ["Nu s-au găsit prevederi UE candidate pentru termenii din text.", LIMITARE_UE]
+        ),
     }
 
 

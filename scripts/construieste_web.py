@@ -6,10 +6,10 @@ It produces, under `web/`:
 - `bundle.zip` — the `scripts/` package and the `sources/` fixtures, unpacked into Pyodide's
   filesystem at load; the engines run there unchanged, so the 218 tests still guard what the
   browser executes.
-- `data/corpus.db`, `data/initiative.db`, `data/graf.db` — a **slice** of the corpus (a few
-  hundred acts, plus a curated handful the demo cites) and the whole graph, which is small. The
-  full 4.5 GB corpus is not shippable to a browser; the real app fetches per act on demand. This
-  slice is enough to prove the wiring.
+- `data/corpus.db`, `data/initiative.db`, `data/graf.db`, `data/eu.db` — a **slice** of the corpus
+  (a few hundred acts, plus a curated handful the demo cites), the whole graph when small, and the
+  local CELEX source database. The full corpus is not shippable to a browser; the real app fetches
+  per act on demand. This slice is enough to prove the wiring.
 - `index.html` — the existing `app/index.html`, with one script prepended: it boots Pyodide,
   loads the bundle and the data into the virtual filesystem, and replaces `fetch('/api/…')` with a
   call into `scripts.servicii`. The rest of the page is untouched, so the whole UI runs client-side.
@@ -231,12 +231,13 @@ async function boot(){
   pyodide.unpackArchive(zip, "zip");
   try { pyodide.FS.mkdir("data"); } catch (e) {}
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
-  // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph and
-  // the initiatives. Search reads per-act shards over HTTP on demand; nothing pulls the corpus.
-  // Cu un depozit în spate, graf.db și initiative.db se montează de acolo întregi; nu are rost să
+  // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph,
+  // the initiatives and the optional EU index. Search reads per-act shards over HTTP on demand;
+  // nothing pulls the corpus.
+  // Cu un depozit în spate, graf.db, initiative.db și eu.db se montează de acolo întregi; nu are rost să
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
   const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json"];
-  for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db"].concat(catalog))) {
+  for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
     // manifest.json is the one that has to describe what is in the repository rather than what
     // the build happened to ship: it carries the headline counts, and counting 3,3 million
     // provisions over byte ranges to recompute them would read most of the corpus.
@@ -246,12 +247,12 @@ async function boot(){
     const buf = new Uint8Array(await fetch(url).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
   }
-  // Toate cele trei baze, fără a descărca niciuna. Textul legii stă în corpus.db, citările în
-  // graf.db, iar tot ce ține de Parlament în initiative.db — degeaba am 203.353 de acte dacă
-  // «cine citează legea asta» și «cum a votat deputatul» răspund dintr-o felie de câteva sute.
+  // Toate bazele mari, fără a descărca niciuna. Textul legii stă în corpus.db, citările în
+  // graf.db, Parlamentul în initiative.db, iar dreptul UE în eu.db — degeaba am 203.353 de acte
+  // dacă «cine citează legea asta», «cum a votat deputatul» și CELEX răspund din felii.
   if (DEPOZIT) {
     const baza = DEPOZIT.replace(/\\/$/, "");
-    for (const nume of ["corpus.db", "graf.db", "initiative.db"]) {
+    for (const nume of ["corpus.db", "graf.db", "initiative.db", "eu.db"]) {
       let sursa = null, deUnde = "";
       try { sursa = await copiaOffline(nume); deUnde = "offline"; }
       catch (e) {
@@ -274,8 +275,9 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _cronologie, _citari, _supraveghere,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
-                              _domenii, _matrice, _prevedere, _cine_citeaza)
-_stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', date_dir='data',
+                              _domenii, _matrice, _prevedere, _cine_citeaza, _ue)
+_stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
+               date_dir='data',
                corpus_intreg=__CORPUS_INTREG__)
 def _raspunde(path, query, body):
     qs = parse_qs(query or '')
@@ -330,6 +332,10 @@ def _raspunde(path, query, body):
     elif path == '/api/impact':
         draft = (json.loads(body or '{}').get('draft') or '').strip()
         out = _impact(draft, _stare) if draft else {'error':'draft gol'}
+    elif path == '/api/ue':
+        _b = json.loads(body or '{}')
+        draft = (_b.get('draft') or '').strip()
+        out = _ue(draft, _stare, limita=_b.get('limita', 12), limba=_b.get('limba')) if draft else {'error':'draft gol'}
     elif path == '/api/lint':
         draft = (json.loads(body or '{}').get('draft') or '').strip()
         out = _lint(draft, _stare) if draft else {'error':'draft gol'}
@@ -581,7 +587,7 @@ const CACHE = "legislativ-" + VERSIUNE;
 const NUCLEU = [
   "./", "./index.html", "./worker.js", "./bundle.zip",
   __FONTURI__,
-  "./data/graf.db", "./data/initiative.db",
+  "./data/graf.db", "./data/initiative.db", "./data/eu.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
   "./data/neconstitutional.json", "./data/norme_lovite.json", "./data/considerente.json"
 ];
@@ -758,6 +764,54 @@ def _slice_graf() -> None:
     print(f"  graf → {tinta} ({n:.1f} MB, doar muchiile care ating felia)")
 
 
+def _finalizeaza_un_db(db: Path) -> None:
+    con = sqlite3.connect(str(db))
+    try:
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        con.execute("PRAGMA journal_mode=DELETE")
+        con.commit()
+    finally:
+        con.close()
+    for sidecar in (db.with_suffix(db.suffix + "-wal"), db.with_suffix(db.suffix + "-shm")):
+        if sidecar.exists():
+            sidecar.unlink()
+
+
+def _initiative_goala(cale: Path) -> None:
+    with depozit.deschide(str(cale)):
+        pass
+    _finalizeaza_un_db(cale)
+
+
+def _ue_goala(cale: Path) -> None:
+    from scripts import cellar
+
+    with cellar.deschide(str(cale)):
+        pass
+    _finalizeaza_un_db(cale)
+
+
+def _slice_ue() -> None:
+    """Ship the local CELEX database where it exists; otherwise ship an empty searchable schema."""
+    tinta = DATA / "eu.db"
+    if tinta.exists():
+        tinta.unlink()
+    sursa = ROOT / "eu.db"
+    if sursa.is_file():
+        src = sqlite3.connect(f"file:{sursa}?mode=ro", uri=True)
+        dst = sqlite3.connect(str(tinta))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+        _finalizeaza_un_db(tinta)
+        print(f"  UE → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
+    else:
+        _ue_goala(tinta)
+        print(f"  UE (gol) → {tinta}")
+
+
 def _copiaza_daca_exista(con, tabel: str) -> None:
     """Copy a table from the attached corpus, or skip it where that corpus predates it.
 
@@ -776,6 +830,7 @@ def _date_din_corpus(*, tot_parlamentul: bool = False) -> None:
     _slice_corpus()
     _slice_initiative(tot_parlamentul=tot_parlamentul)
     _slice_graf()
+    _slice_ue()
 
 
 def _date_din_fixturi() -> None:
@@ -804,8 +859,7 @@ def _date_din_fixturi() -> None:
     ini = DATA / "initiative.db"
     if ini.exists():
         ini.unlink()
-    with depozit.deschide(str(ini)):
-        pass  # schema only — no committed initiative fixture, so the table stays honestly empty
+    _initiative_goala(ini)  # schema only — no committed initiative fixture, so it stays empty
     print(f"  initiative (gol) → {ini}")
 
     graf = DATA / "graf.db"
@@ -813,25 +867,15 @@ def _date_din_fixturi() -> None:
         graf.unlink()
     muchii = construieste_graf(str(corpus), str(graf), log=lambda *_: None)
     print(f"  graf din corpus → {graf} ({muchii} muchii)")
+    _slice_ue()
 
 
 def _finalizeaza_db() -> None:
     """Fold each DB's WAL back into one file and drop the sidecars, so a static host serves a
     single self-contained file per database (a browser cannot stitch `-wal`/`-shm` back together).
     """
-    import sqlite3
-
     for db in sorted(DATA.glob("*.db")):
-        con = sqlite3.connect(str(db))
-        try:
-            con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-            con.execute("PRAGMA journal_mode=DELETE")
-            con.commit()
-        finally:
-            con.close()
-        for sidecar in (db.with_suffix(db.suffix + "-wal"), db.with_suffix(db.suffix + "-shm")):
-            if sidecar.exists():
-                sidecar.unlink()
+        _finalizeaza_un_db(db)
 
 
 def _parlament_json() -> None:
@@ -945,9 +989,10 @@ def _versiune_si_sw() -> str:
     """
     # Hash the browser-facing catalog, not the monolithic corpus.db — the corpus is not shipped to
     # the client and need not even be present (a dataset release carries only the shards). index.json
-    # + manifest.json capture the act set and the counts; graf.db the amendment edges.
+    # + manifest.json capture the act set and the counts; graf.db the amendment edges; eu.db the
+    # optional CELEX source index.
     h = hashlib.sha256()
-    for name in ("index.json", "manifest.json", "graf.db"):
+    for name in ("index.json", "manifest.json", "graf.db", "eu.db"):
         p = DATA / name
         if p.is_file():
             h.update(p.read_bytes())
@@ -1110,9 +1155,12 @@ def main(
         # give them an empty one rather than let the open fail.
         ini = DATA / "initiative.db"
         if not ini.is_file():
-            with depozit.deschide(str(ini)):
-                pass
+            _initiative_goala(ini)
             print(f"  initiative (gol, lipsea din release) → {ini}")
+        eu = DATA / "eu.db"
+        if not eu.is_file():
+            _ue_goala(eu)
+            print(f"  UE (gol, lipsea din release) → {eu}")
         print(f"  folosesc datele deja prezente în {DATA}")
     else:
         if sursa == "fixturi":
