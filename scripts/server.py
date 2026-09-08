@@ -40,6 +40,8 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/matrice[?tip=&sort=]` — a corpus-wide risk matrix by issuing body: gaps, unrepaired
   constitutional hits, pending initiatives and amendment pressure, each derived from existing
   registers rather than a model.
+- `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
+  links and an explicit retrieval-not-verdict limitation.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -88,6 +90,7 @@ from scripts.servicii import (
     _sugereaza,
     _supraveghere,
     _termeni,
+    _ue,
     _vecini,
     rezumat,
 )
@@ -211,6 +214,7 @@ def face_handler(stare: Stare):
                 "/api/termeni",
                 "/api/regula",
                 "/api/impact",
+                "/api/ue",
                 "/api/importa",
                 "/api/docx",
             ):
@@ -260,6 +264,11 @@ def face_handler(stare: Stare):
             if not draft:
                 self._json({"error": "draft gol"}, 400)
                 return
+            if ruta == "/api/ue":
+                self._json(
+                    _ue(draft, stare, limita=cerere.get("limita", 12), limba=cerere.get("limba"))
+                )
+                return
             if ruta == "/api/impact":
                 self._json(_impact(draft, stare))
                 return
@@ -290,10 +299,12 @@ def serveste(
     initiative: str = "initiative.db",
     graf: str = "graf.db",
     deschide_browser: bool = True,
+    eu: str = "eu.db",
 ):
-    stare = Stare(corpus, initiative, graf)
+    stare = Stare(corpus, initiative, graf, eu)
     server = ThreadingHTTPServer(("127.0.0.1", port), face_handler(stare))
     grafic = "cu graf" if stare.are_graf() else "fără graf"
+    europa = "cu UE" if stare.are_ue() else "fără UE"
     url = f"http://127.0.0.1:{port}"
 
     # One throwaway lint before announcing the port. Measured on the full corpus, the first request
@@ -301,7 +312,7 @@ def serveste(
     # the passes and SQLite warming its page cache over a 9 GB file. Paid here it lands on a line
     # that says it is starting; paid on the first request it lands on somebody's first question.
     _incalzeste(stare)
-    print(f"legislativ pe {url}  ({len(stare.termeni)} termeni în dicționar, {grafic})")
+    print(f"legislativ pe {url}  ({len(stare.termeni)} termeni în dicționar, {grafic}, {europa})")
     print(
         "proiectul lipit nu părăsește această mașină."
     )  # localhost; lint face zero cereri externe
@@ -326,6 +337,7 @@ if __name__ == "__main__":
     ap.add_argument("--corpus", default="corpus.db")
     ap.add_argument("--initiative", default="initiative.db")
     ap.add_argument("--graf", default="graf.db")
+    ap.add_argument("--eu", default="eu.db")
     ap.add_argument("--fara-browser", action="store_true", help="nu deschide browserul")
     a = ap.parse_args()
-    serveste(a.port, a.corpus, a.initiative, a.graf, deschide_browser=not a.fara_browser)
+    serveste(a.port, a.corpus, a.initiative, a.graf, deschide_browser=not a.fara_browser, eu=a.eu)

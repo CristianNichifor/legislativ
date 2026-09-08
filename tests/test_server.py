@@ -12,7 +12,7 @@ import json
 from datetime import date
 from pathlib import Path
 
-from scripts import depozit
+from scripts import cellar, depozit
 from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
@@ -26,6 +26,7 @@ from scripts.servicii import (
     _redacteaza,
     _repealed,
     _targets,
+    _ue,
     _vecini,
 )
 
@@ -64,6 +65,69 @@ def _build(tmp_path: Path) -> Stare:
     with depozit.deschide(initiative) as con:
         depozit.scrie_initiativa(con, ini)
     return Stare(str(corpus), str(initiative))
+
+
+def _manifestare_ue() -> cellar.ManifestareUE:
+    return cellar.ManifestareUE(
+        celex="32018R1805",
+        work_uri="http://publications.europa.eu/resource/cellar/work",
+        expression_uri="http://publications.europa.eu/resource/cellar/work.0020",
+        manifestation_uri="http://publications.europa.eu/resource/cellar/work.0020.xhtml",
+        limba="RON",
+        format="xhtml",
+        item_url="https://cellar/ron.xhtml",
+        titlu="Română",
+        data_document="2018-11-14",
+        tip_uri="http://publications.europa.eu/type/regulation",
+        in_vigoare=True,
+    )
+
+
+def _eu_db(tmp_path: Path) -> Path:
+    db = tmp_path / "eu.db"
+    text = """REGULAMENTUL (UE) 2018/1805
+
+Articolul 1
+
+Obiectul
+
+Prezentul regulament stabilește norme privind ordine de indisponibilizare.
+
+Articolul 2
+
+Definiții
+
+În sensul prezentului regulament, ordin de indisponibilizare înseamnă o hotărâre.
+"""
+    m = _manifestare_ue()
+    with cellar.deschide(str(db)) as con:
+        cellar.scrie_celex(con, "32018R1805", [m], m, text)
+    return db
+
+
+def test_ue_reports_missing_local_celex_database(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(tmp_path / "lipsa.db")
+
+    out = _ue("ordin de indisponibilizare", stare)
+
+    assert out["sursa"] == "absent"
+    assert out["rezultate"] == []
+    assert any("nu este încărcat local" in limita for limita in out["limitari"])
+    assert any("nu sunt verdict" in limita for limita in out["limitari"])
+
+
+def test_ue_returns_local_celex_provision_candidates(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+
+    out = _ue("ordin de indisponibilizare în materie penală", stare, limba="RON")
+
+    assert out["sursa"] == "eu.db"
+    assert out["limba"] == "RON"
+    assert out["rezultate"]
+    assert out["rezultate"][0]["celex"] == "32018R1805"
+    assert "<mark>" in out["rezultate"][0]["fragment"]
 
 
 def test_lint_reports_normative_register_apart_from_operation_form(tmp_path):
