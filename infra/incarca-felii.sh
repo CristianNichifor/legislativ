@@ -38,9 +38,12 @@ for d in "${felii[@]}"; do
   echo "── $d → r2:$BUCKET/$PREFIX/$d ──"
   # Thousands of small fragments per slice: the cost is requests, not bytes, so transfers are
   # parallel and there is nothing worth chunking.
+  # `--stats-log-level NOTICE` because rclone emits periodic stats at INFO and defaults to NOTICE:
+  # without it the flags below print nothing at all, and a 25-minute upload looks like a hung shell.
   rclone copy "$d" "r2:$BUCKET/$PREFIX/$d" \
     --transfers 32 --checkers 32 \
-    --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line
+    --no-traverse --retries 5 --low-level-retries 20 \
+    --stats 30s --stats-one-line --stats-log-level NOTICE
 done
 
 echo

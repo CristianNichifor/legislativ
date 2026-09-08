@@ -80,7 +80,9 @@ echo "── 4/5 acreditări ─────────────────
 . infra/acreditari-r2.sh
 
 echo "── 5/5 încărcare în r2:$BUCKET/$PREFIX ──────────────────────────"
-r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line; }
+# `--stats-log-level NOTICE` or the stats flags print nothing: rclone logs them at INFO, and the
+# default level is NOTICE. An upload of several GB should not look like a hung shell.
+r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line --stats-log-level NOTICE; }
 r2 copyto "$LUCRU/publicat.db"            "r2:$BUCKET/$PREFIX/corpus.db"     --s3-chunk-size 100M --s3-upload-concurrency 4
 r2 copyto "$LUCRU/graf-publicat.db"       "r2:$BUCKET/$PREFIX/graf.db"       --s3-chunk-size 100M
 r2 copyto "$LUCRU/initiative-publicat.db" "r2:$BUCKET/$PREFIX/initiative.db" --s3-chunk-size 100M
