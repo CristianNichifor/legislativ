@@ -391,6 +391,65 @@ BOOT = """
 <script>
 (function(){
   const origFetch = window.fetch.bind(window);
+
+  // Căutarea nu trece prin worker. Motorul din worker citește SQLite sincron, deci N rezultate
+  // înseamnă întotdeauna N drumuri dus-întors, unul după altul: o pagină de 25 a măsurat 46,6 s.
+  // Pagefind ține fragmentul în index și le aduce în paralel — aceeași pagină, 0,1–0,35 s. Clientul
+  // e servit de la noi, ca `script-src 'self'` să rămână întreg; doar datele vin din depozit.
+  const DEPOZIT_CAUTARE = "__DEPOZIT__";
+  let pagefind = null;
+  async function motorulDeCautare(){
+    if (pagefind) return pagefind;
+    const m = await import("./pagefind/pagefind.js");
+    await m.options({
+      basePath: DEPOZIT_CAUTARE ? DEPOZIT_CAUTARE.replace(/\/$/, "") + "/pagefind/" : "./pagefind/",
+      language: "ro",
+    });
+    pagefind = m;
+    return m;
+  }
+
+  // Forma pe care o citește pagina, aceeași pe care o întorcea motorul din worker.
+  async function cauta(qs){
+    const q = (qs.get("q") || "").trim();
+    const limita = parseInt(qs.get("limita") || "25", 10) || 25;
+    const offset = parseInt(qs.get("offset") || "0", 10) || 0;
+    if (!q) return {results: [], total: 0, offset, limita};
+
+    const m = await motorulDeCautare();
+    const filtre = {};
+    const tip = qs.get("tip");
+    if (tip) filtre.tip = [tip];
+    // Pagefind filtrează pe valori exacte, nu pe intervale: un interval de ani devine lista lui.
+    const anMin = parseInt(qs.get("an_min") || "", 10);
+    const anMax = parseInt(qs.get("an_max") || "", 10);
+    if (!isNaN(anMin) || !isNaN(anMax)) {
+      const de = isNaN(anMin) ? 1800 : anMin, la = isNaN(anMax) ? new Date().getFullYear() : anMax;
+      if (la - de <= 200) {
+        filtre.an = [];
+        for (let a = de; a <= la; a++) filtre.an.push(String(a));
+      }
+    }
+
+    const r = await m.search(q, Object.keys(filtre).length ? {filters: filtre} : undefined);
+    const pagina = r.results.slice(offset, offset + limita);
+    // Aici e câștigul: fragmentele se aduc deodată, nu unul câte unul.
+    const date = await Promise.all(pagina.map(x => x.data()));
+    return {
+      results: date.map(d => ({
+        act_id: (d.meta && d.meta.id) || String(d.url || "").replace(/^#\/act\//, ""),
+        locator: "",
+        fragment: d.excerpt || "",
+        titlu: (d.meta && d.meta.title) || "",
+        sursa_url: "",
+        tip: (d.meta && d.meta.tip) || "",
+        an: d.meta && d.meta.an ? parseInt(d.meta.an, 10) : null,
+      })),
+      total: r.results.length,
+      offset, limita,
+    };
+  }
+
   let resolveReady, rejectReady;
   const ready = new Promise((res, rej)=>{ resolveReady=res; rejectReady=rej; });
   const worker = new Worker("worker.js");
@@ -416,6 +475,16 @@ BOOT = """
   }
   window.fetch = async function(url, opts){
     const u = (typeof url === "string") ? url : (url && url.url);
+    if (u && u.indexOf("/api/cauta") === 0) {
+      try {
+        const parsed = new URL(u, location.origin);
+        const out = await cauta(parsed.searchParams);
+        return new Response(JSON.stringify(out), {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
+      } catch (e) {
+        // Fără index publicat, căutarea rămâne cea din motor — mai lentă, dar prezentă.
+        console.warn("căutarea prin index a eșuat, revin la motor:", e && e.message);
+      }
+    }
     if (u && u.indexOf("/api/") === 0) {
       try { await ready; }
       catch(e){ return new Response(JSON.stringify({error:"motor indisponibil: "+e}), {status:503}); }
@@ -856,6 +925,38 @@ def _fonturi() -> None:
     print(f"  fonturi ({len(list(tinta.glob('*.woff2')))} fișiere, {kb:.0f} KB) → {tinta}")
 
 
+# Pagefind ships a client and an index. The client is small and comes from our own origin, so
+# `script-src \'self\'` stays as it is — only the index and the per-result fragments live in the
+# repository, and those are data the CSP already allows as connect targets.
+CLIENT_CAUTARE = (
+    "pagefind.js",
+    "pagefind-worker.js",
+    "pagefind-entry.json",
+    "wasm.ro.pagefind",
+    "wasm.unknown.pagefind",
+)
+
+
+def _client_cautare() -> None:
+    """Copy Pagefind's client next to the page, if an index has been built."""
+    sursa = ROOT / "pagefind"
+    if not sursa.is_dir():
+        return
+    tinta = WEB / "pagefind"
+    tinta.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for nume in CLIENT_CAUTARE:
+        f = sursa / nume
+        if f.is_file():
+            shutil.copy2(f, tinta / nume)
+            n += 1
+    # The language metadata is named with a content hash, so it is matched rather than listed.
+    for f in sursa.glob("pagefind.*.pf_meta"):
+        shutil.copy2(f, tinta / f.name)
+        n += 1
+    print(f"  client de căutare → {tinta} ({n} fișiere)")
+
+
 def _pagina(depozit: str = "") -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
@@ -863,7 +964,7 @@ def _pagina(depozit: str = "") -> None:
     csp = f'<meta http-equiv="Content-Security-Policy" content="{_csp(depozit)}">'
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
     # Prepend the manager block right after <body> so it runs before the app's own inline script.
-    pagina = pagina.replace("<body>", "<body>\n" + BOOT, 1)
+    pagina = pagina.replace("<body>", "<body>\n" + BOOT.replace("__DEPOZIT__", depozit), 1)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
@@ -906,6 +1007,7 @@ def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> Non
     _bundle()
     _worker(depozit)
     _fonturi()
+    _client_cautare()
     _pagina(depozit)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")

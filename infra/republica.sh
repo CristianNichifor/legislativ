@@ -31,7 +31,7 @@ IDX="$LUCRU/idx"
 [ -f "$CORPUS" ] || { echo "nu găsesc $CORPUS" >&2; exit 2; }
 mkdir -p "$LUCRU"
 
-echo "── 1/4 copiile publicate ────────────────────────────────────────"
+echo "── 1/5 copiile publicate ────────────────────────────────────────"
 # The corpus loses its build-time bulk; the companions only need the WAL folded in and a rebuild,
 # because `immutable=1` refuses a database with a `-wal` sidecar.
 uv run python -m scripts.publica --sursa "$CORPUS" --tinta "$LUCRU/publicat.db" --fel corpus
@@ -40,7 +40,7 @@ for pereche in "graf.db:graf-publicat.db" "initiative.db:initiative-publicat.db"
   [ -f "$sursa" ] && uv run python -m scripts.publica --sursa "$sursa" --tinta "$LUCRU/$tinta" --fel auxiliar
 done
 
-echo "── 2/4 indexul de căutare ───────────────────────────────────────"
+echo "── 2/5 indexul vechi (felii) ────────────────────────────────────"
 # Ranked search over the mounted corpus took 291 s — bm25 wants a document length per match. The
 # inverted index answers the same query in two fetches; the corpus supplies titles and snippets.
 rm -rf "$IDX"; mkdir -p "$IDX"
@@ -55,7 +55,18 @@ construieste_index(f"{lucru}/publicat.db", f"{lucru}/idx",
 construieste_index_titluri(f"{lucru}/publicat.db", f"{lucru}/idx", log=jurnal)
 PY
 
-echo "── 3/4 acreditări ───────────────────────────────────────────────"
+echo "── 3/5 indexul de căutare (Pagefind) ────────────────────────────"
+# Search no longer reads the corpus: the excerpt lives in the index and the client fetches
+# per-result fragments in parallel. A page of 25 went from 46,6 s to 1,24 s.
+if command -v node >/dev/null && [ -f infra/pagefind.mjs ]; then
+  uv run python -m scripts.export_cautare --db "$LUCRU/publicat.db" --tinta "$LUCRU/acte.jsonl"
+  node infra/pagefind.mjs "$LUCRU/acte.jsonl" pagefind
+  rm -f "$LUCRU/acte.jsonl"
+else
+  echo "  node sau infra/pagefind.mjs lipsesc — sar peste index; căutarea va cădea pe motor" >&2
+fi
+
+echo "── 4/5 acreditări ───────────────────────────────────────────────"
 [ -n "${CF_ACCOUNT:-}" ] || { echo "lipsește CF_ACCOUNT" >&2; exit 2; }
 if [ -z "${CF_R2_TOKEN:-}" ]; then
   [ -n "${CF_R2_TOKEN_OP:-}" ] || { echo "lipsește CF_R2_TOKEN sau CF_R2_TOKEN_OP" >&2; exit 2; }
@@ -80,7 +91,7 @@ export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf %s "$CF_R2_TOKEN" | sha256sum
 export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
 unset CF_R2_TOKEN
 
-echo "── 4/4 încărcare în r2:$BUCKET/$PREFIX ──────────────────────────"
+echo "── 5/5 încărcare în r2:$BUCKET/$PREFIX ──────────────────────────"
 r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line; }
 r2 copyto "$LUCRU/publicat.db"            "r2:$BUCKET/$PREFIX/corpus.db"     --s3-chunk-size 100M --s3-upload-concurrency 4
 r2 copyto "$LUCRU/graf-publicat.db"       "r2:$BUCKET/$PREFIX/graf.db"       --s3-chunk-size 100M
@@ -90,6 +101,7 @@ r2 copyto "$IDX/index.json"               "r2:$BUCKET/$PREFIX/index.json"
 r2 copyto "$IDX/termeni.json"             "r2:$BUCKET/$PREFIX/termeni.json"
 r2 copy   "$IDX/idx"                      "r2:$BUCKET/$PREFIX/idx"           --transfers 32 --checkers 32
 r2 copy   "$IDX/idx-titlu"                "r2:$BUCKET/$PREFIX/idx-titlu"     --transfers 32 --checkers 32
+[ -d pagefind ] && r2 copy "pagefind" "r2:$BUCKET/$PREFIX/pagefind" --transfers 32 --checkers 32
 
 echo
 echo "încărcat. Ultimul pas, un singur rând în .github/workflows/pages.yml:"
