@@ -19,6 +19,7 @@
 #   CORPUS          the collected corpus                        (default: ./corpus.db)
 #   BUCKET          R2 bucket                                   (default: legislativ)
 #   PREFIX          dated prefix                                (default: today)
+#   FELII           slices the search index is built in         (default: 8)
 
 set -euo pipefail
 
@@ -26,6 +27,7 @@ LUCRU=${LUCRU:-$HOME/.local/share/legislativ}
 CORPUS=${CORPUS:-corpus.db}
 BUCKET=${BUCKET:-legislativ}
 PREFIX=${PREFIX:-$(date +%F)}
+FELII=${FELII:-8}
 IDX="$LUCRU/idx"
 
 [ -f "$CORPUS" ] || { echo "nu găsesc $CORPUS" >&2; exit 2; }
@@ -60,39 +62,27 @@ echo "── 3/5 indexul de căutare (Pagefind) ──────────�
 # per-result fragments in parallel. A page of 25 went from 46,6 s to 1,24 s.
 if command -v node >/dev/null && [ -f infra/pagefind.mjs ]; then
   uv run python -m scripts.export_cautare --db "$LUCRU/publicat.db" --tinta "$LUCRU/acte.jsonl"
-  node infra/pagefind.mjs "$LUCRU/acte.jsonl" pagefind
+  # In slices, one process each: Pagefind keeps every record in memory until it writes, and this
+  # corpus costs ~345 KB of memory per act — all 203.353 at once wants far more than a workstation
+  # has. A machine with less does not stop, it swaps, and it took this one down mid-run. Eight
+  # slices peak around 9 GB each, and every process gives its memory back when it exits.
+  rm -rf pagefind pagefind-[0-9]*
+  for f in $(seq 0 $((FELII - 1))); do
+    echo "  felia $((f + 1))/$FELII"
+    node infra/pagefind.mjs "$LUCRU/acte.jsonl" "pagefind-$f" "$f" "$FELII"
+  done
   rm -f "$LUCRU/acte.jsonl"
 else
   echo "  node sau infra/pagefind.mjs lipsesc — sar peste index; căutarea va cădea pe motor" >&2
 fi
 
 echo "── 4/5 acreditări ───────────────────────────────────────────────"
-[ -n "${CF_ACCOUNT:-}" ] || { echo "lipsește CF_ACCOUNT" >&2; exit 2; }
-if [ -z "${CF_R2_TOKEN:-}" ]; then
-  [ -n "${CF_R2_TOKEN_OP:-}" ] || { echo "lipsește CF_R2_TOKEN sau CF_R2_TOKEN_OP" >&2; exit 2; }
-  CF_R2_TOKEN=$(op read "$CF_R2_TOKEN_OP")
-fi
-# R2's S3 credentials are derived, never stored: Access Key ID is the token's id, Secret Access
-# Key is the SHA-256 of its value. Retried, because one transient 401 is not a bad token.
-for i in 1 2 3 4 5; do
-  AKID=$(curl -s -H "Authorization: Bearer $CF_R2_TOKEN" \
-    https://api.cloudflare.com/client/v4/user/tokens/verify |
-    python3 -c "import json,sys; d=json.load(sys.stdin); print(d['result']['id'] if d.get('success') else '')" 2>/dev/null)
-  [ -n "$AKID" ] && break
-  sleep $((i * 3))
-done
-[ -n "$AKID" ] || { echo "tokenul nu se verifică la Cloudflare" >&2; exit 1; }
-
-export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_REGION=auto
-export RCLONE_CONFIG_R2_ENDPOINT="https://$CF_ACCOUNT.r2.cloudflarestorage.com"
-export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$AKID"
-export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf %s "$CF_R2_TOKEN" | sha256sum | cut -d' ' -f1)
-# The token is scoped to one bucket, so it cannot ListBuckets — which is correct, not a fault.
-export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
-unset CF_R2_TOKEN
+. infra/acreditari-r2.sh
 
 echo "── 5/5 încărcare în r2:$BUCKET/$PREFIX ──────────────────────────"
-r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line; }
+# `--stats-log-level NOTICE` or the stats flags print nothing: rclone logs them at INFO, and the
+# default level is NOTICE. An upload of several GB should not look like a hung shell.
+r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line --stats-log-level NOTICE; }
 r2 copyto "$LUCRU/publicat.db"            "r2:$BUCKET/$PREFIX/corpus.db"     --s3-chunk-size 100M --s3-upload-concurrency 4
 r2 copyto "$LUCRU/graf-publicat.db"       "r2:$BUCKET/$PREFIX/graf.db"       --s3-chunk-size 100M
 r2 copyto "$LUCRU/initiative-publicat.db" "r2:$BUCKET/$PREFIX/initiative.db" --s3-chunk-size 100M
@@ -101,7 +91,9 @@ r2 copyto "$IDX/index.json"               "r2:$BUCKET/$PREFIX/index.json"
 r2 copyto "$IDX/termeni.json"             "r2:$BUCKET/$PREFIX/termeni.json"
 r2 copy   "$IDX/idx"                      "r2:$BUCKET/$PREFIX/idx"           --transfers 32 --checkers 32
 r2 copy   "$IDX/idx-titlu"                "r2:$BUCKET/$PREFIX/idx-titlu"     --transfers 32 --checkers 32
-[ -d pagefind ] && r2 copy "pagefind" "r2:$BUCKET/$PREFIX/pagefind" --transfers 32 --checkers 32
+for d in pagefind pagefind-[0-9]*; do
+  [ -d "$d" ] && r2 copy "$d" "r2:$BUCKET/$PREFIX/$d" --transfers 32 --checkers 32
+done
 
 echo
 echo "încărcat. Ultimul pas, un singur rând în .github/workflows/pages.yml:"

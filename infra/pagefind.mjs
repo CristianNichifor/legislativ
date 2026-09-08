@@ -12,14 +12,30 @@
 //
 // Measured on 5.000 acts: 57,2 MB of index, and 0,1–0,35 s for a query including all 25 excerpts.
 //
-//   node infra/pagefind.mjs acte.jsonl web/pagefind
+// Why it is built in slices: Pagefind keeps every record in memory until `writeFiles`, and the
+// corpus costs ~200 KB of memory per act — measured 12 GB at 60.000 acts, which extrapolates to
+// ~40 GB for all 203.353. A machine with 30 GB does not fail there, it swaps, and a swapping
+// machine stops answering the keyboard. So each slice is its own index, built in its own process
+// that exits and gives the memory back; the client merges them at query time with `mergeIndex`.
+//
+//   node infra/pagefind.mjs acte.jsonl pagefind-0 0 5     # slice 0 of 5
+//   node infra/pagefind.mjs acte.jsonl web/pagefind       # everything, if it fits
 import * as pagefind from "pagefind";
 import fs from "node:fs";
 import readline from "node:readline";
 
-const [, , sursa, tinta] = process.argv;
+const [, , sursa, tinta, felieArg, feliiArg] = process.argv;
 if (!sursa || !tinta) {
-  console.error("folosire: node infra/pagefind.mjs <acte.jsonl> <director-iesire>");
+  console.error("folosire: node infra/pagefind.mjs <acte.jsonl> <director-iesire> [felie] [felii]");
+  process.exit(2);
+}
+
+// Sliced by position in the file rather than by id: the ids are not dense, and search must not
+// depend on how they happen to be distributed. Position splits 203.353 records into equal parts.
+const felii = feliiArg ? parseInt(feliiArg, 10) : 1;
+const felie = felieArg ? parseInt(felieArg, 10) : 0;
+if (!(felii >= 1) || !(felie >= 0) || felie >= felii) {
+  console.error(`felie/felii fără sens: ${felie}/${felii}`);
   process.exit(2);
 }
 
@@ -32,13 +48,16 @@ if (errors?.length) {
   process.exit(1);
 }
 
-let n = 0;
+let n = 0, citite = 0;
 const linii = readline.createInterface({
   input: fs.createReadStream(sursa),
   crlfDelay: Infinity,
 });
 for await (const linie of linii) {
   if (!linie.trim()) continue;
+  // The whole file is read by every slice — 4,5 GB of sequential reads costs seconds and keeps
+  // the split honest, where a pre-split file would be one more artefact to keep in step.
+  if (citite++ % felii !== felie) continue;
   const a = JSON.parse(linie);
   await index.addCustomRecord({
     // The app routes on the act id; the hash keeps it a same-page link.
@@ -59,5 +78,6 @@ for await (const linie of linii) {
 
 const tIndex = (Date.now() - t0) / 1000;
 await index.writeFiles({ outputPath: tinta });
-console.log(`${n} acte · indexare ${tIndex.toFixed(0)}s · scriere ${((Date.now() - t0) / 1000 - tIndex).toFixed(0)}s`);
+const felieText = felii > 1 ? `felia ${felie}/${felii}: ` : "";
+console.log(`${felieText}${n} acte din ${citite} · indexare ${tIndex.toFixed(0)}s · scriere ${((Date.now() - t0) / 1000 - tIndex).toFixed(0)}s`);
 console.log(`ieșire în ${tinta}`);

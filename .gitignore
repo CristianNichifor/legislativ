@@ -57,4 +57,7 @@ colector-4w.log
 
 # Generat de infra/pagefind.mjs; indexul se publică în depozit, nu în git.
 pagefind/
+pagefind-*/
 web/pagefind/
+# Doar pentru indexare: `pagefind` e adus din npm, nu e o dependență a aplicației.
+node_modules/
