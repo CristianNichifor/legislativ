@@ -37,6 +37,9 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/domenii[?emitent=&tip=]` — the corpus grouped by the body that issued it, or one
   body's acts. By issuer and not by subject: the portal publishes no classification of any kind,
   and inventing one would present a guess as something read.
+- `GET /api/matrice[?tip=&sort=]` — a corpus-wide risk matrix by issuing body: gaps, unrepaired
+  constitutional hits, pending initiatives and amendment pressure, each derived from existing
+  registers rather than a model.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -71,6 +74,7 @@ from scripts.servicii import (
     _impact,
     _importa,
     _lint,
+    _matrice,
     _norma,
     _opinie,
     _opinie_cerere,
@@ -184,6 +188,8 @@ def face_handler(stare: Stare):
                 self._json(_dezbateri(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/domenii":
                 self._json(_domenii(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice":
+                self._json(_matrice(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dictionar":

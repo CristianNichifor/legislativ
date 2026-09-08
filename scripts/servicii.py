@@ -530,6 +530,346 @@ def _supraveghere(act_id: str, stare: Stare) -> dict:
     return out
 
 
+def _raport_lista(raport) -> list[dict]:
+    """A prebuilt report if it is list-shaped; anything else is absent for this endpoint."""
+    return raport if isinstance(raport, list) else []
+
+
+def _numar_qs(qs: dict, cheie: str, implicit: int) -> int:
+    try:
+        return int((qs.get(cheie, [""])[0] or "").strip() or implicit)
+    except (TypeError, ValueError):
+        return implicit
+
+
+def _bucati(valori: set[str], marime: int = 400):
+    """SQLite's variable limit is finite; query report ids in small batches."""
+    lista = sorted(v for v in valori if v)
+    for i in range(0, len(lista), marime):
+        yield lista[i : i + marime]
+
+
+def _meta_acte(con: sqlite3.Connection, act_ids: set[str]) -> dict[str, list[dict]]:
+    """Map report/graph citation keys back to the issuing body and instrument the corpus states.
+
+    Report rows usually carry the citation key (`lege-98-2016`). After namesake support an `acte.id`
+    may be qualified (`hotarare-1-2016-senatul`), while `cheie_citare` stays what a reader writes.
+    So both are read; an exact id wins later, otherwise the bare citation remains a limited but
+    useful grouping.
+    """
+    gasite: dict[str, list[dict]] = {}
+    if not act_ids:
+        return gasite
+    for bucata in _bucati(act_ids):
+        cautate = set(bucata)
+        marci = ",".join("?" * len(bucata))
+        for r in con.execute(
+            "SELECT id, cheie_citare, tip, titlu, emitent, an, publicat FROM acte"
+            f" WHERE id IN ({marci}) OR cheie_citare IN ({marci})",
+            (*bucata, *bucata),
+        ):
+            meta = {
+                "id": r["id"],
+                "cheie_citare": r["cheie_citare"] or r["id"],
+                "tip": r["tip"],
+                "titlu": r["titlu"],
+                "emitent": r["emitent"] or "(emitent necunoscut)",
+                "an": r["an"],
+                "publicat": r["publicat"],
+            }
+            for cheie in {meta["id"], meta["cheie_citare"]} & cautate:
+                gasite.setdefault(cheie, []).append(meta)
+    return gasite
+
+
+def _alege_meta(act_id: str, meta: dict[str, list[dict]]) -> dict | None:
+    candidati = meta.get(act_id) or []
+    exact = [m for m in candidati if m["id"] == act_id]
+    return (exact or candidati or [None])[0]
+
+
+def _rand_matrice(emitent: str) -> dict:
+    return {
+        "emitent": emitent or "(emitent necunoscut)",
+        "acte": 0,
+        "de_la": None,
+        "pana_la": None,
+        "_tipuri": {},
+        "viduri": 0,
+        "viduri_blocking": 0,
+        "viduri_material": 0,
+        "neconstitutionale": 0,
+        "amendamente_primite": 0,
+        "acte_amendate": 0,
+        "initiative_in_lucru": 0,
+        "_vid_exemple": [],
+        "_neconst_exemple": [],
+    }
+
+
+def _pune_exemplu(lista: list[dict], exemplu: dict, *, fel: str) -> None:
+    lista.append(exemplu)
+    if fel == "vid":
+        lista.sort(
+            key=lambda e: (
+                -(e.get("zile_intarziere") or 0),
+                0 if e.get("severitate") == "blocking" else 1,
+                e.get("act_id", ""),
+            )
+        )
+    else:
+        lista.sort(key=lambda e: (-(e.get("zile_de_la_termen") or 0), e.get("act_id", "")))
+    del lista[3:]
+
+
+def _amendamente_pe_act(stare: Stare) -> dict[str, dict[str, int]]:
+    if not stare.are_graf():
+        return {}
+    from scripts.graf import _deschide_graf
+
+    try:
+        graf = _deschide_graf(stare.graf, readonly=True)
+    except sqlite3.OperationalError:
+        return {}
+    try:
+        try:
+            return {
+                r["catre_act"]: {"muchii": r["muchii"], "surse": r["surse"]}
+                for r in graf.execute(
+                    "SELECT catre_act, count(*) muchii, count(DISTINCT din_act) surse"
+                    " FROM muchii"
+                    " WHERE fel != 'refera' AND catre_act IS NOT NULL AND catre_act != ''"
+                    " GROUP BY catre_act"
+                )
+            }
+        except sqlite3.OperationalError:
+            return {}
+    finally:
+        graf.close()
+
+
+def _initiative_matrice(stare: Stare) -> dict[str, int]:
+    """Pending initiatives per target act, from the precomputed reverse index when it exists."""
+    try:
+        from scripts.dublura import STADII_MOARTE
+        from scripts.text import cheie
+
+        gasite: dict[str, set[str]] = {}
+        with depozit.deschide(stare.initiative, readonly=True) as con:
+            for r in con.execute(
+                "SELECT t.act_id, t.plx_id, i.stadiu FROM initiative_tinta t"
+                " JOIN initiative i ON i.plx_id = t.plx_id"
+            ):
+                stadiu = cheie(r["stadiu"] or "")
+                if any(m in stadiu for m in STADII_MOARTE):
+                    continue
+                gasite.setdefault(r["act_id"], set()).add(r["plx_id"])
+        return {act_id: len(plx) for act_id, plx in gasite.items()}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def _matrice(qs: dict, stare: Stare) -> dict:
+    """A deterministic risk matrix by legally stated issuing body and instrument.
+
+    It is deliberately not a subject taxonomy. The row axis is the issuer written on the document;
+    the columns are counts the corpus, graph, initiative index and prebuilt reports can defend.
+    """
+    tip = (qs.get("tip", [""])[0] or "").strip() or None
+    sortare = (qs.get("sort", ["semnale"])[0] or "semnale").strip()
+    limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
+    viduri = _raport_lista(stare.vid)
+    neconst = _raport_lista(stare.neconstitutional)
+    amendamente = _amendamente_pe_act(stare)
+    initiative = _initiative_matrice(stare)
+    act_ids = (
+        {v.get("act_id", "") for v in viduri}
+        | {n.get("act_id", "") for n in neconst}
+        | set(amendamente)
+        | set(initiative)
+    )
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            randuri: dict[str, dict] = {}
+            conditie = " AND tip = ?" if tip else ""
+            params = (tip,) if tip else ()
+            for r in con.execute(
+                "SELECT COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent,"
+                " tip, count(*) acte, min(an) de_la, max(an) pana_la FROM acte"
+                f" WHERE 1 = 1{conditie} GROUP BY emitent, tip",
+                params,
+            ):
+                rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
+                rand["acte"] += r["acte"]
+                rand["_tipuri"][r["tip"]] = rand["_tipuri"].get(r["tip"], 0) + r["acte"]
+                ani = [x for x in (r["de_la"], r["pana_la"]) if x]
+                if ani:
+                    rand["de_la"] = (
+                        min([rand["de_la"], *ani]) if rand["de_la"] is not None else min(ani)
+                    )
+                    rand["pana_la"] = (
+                        max([rand["pana_la"], *ani]) if rand["pana_la"] is not None else max(ani)
+                    )
+            meta = _meta_acte(con, act_ids)
+    except sqlite3.OperationalError:
+        return {
+            "tip": tip,
+            "sort": sortare,
+            "limita": limita,
+            "total": 0,
+            "rezumat": {
+                "emitenti": 0,
+                "acte": 0,
+                "viduri": len(viduri),
+                "neconstitutionale": len(neconst),
+                "amendamente_primite": 0,
+                "initiative_in_lucru": 0,
+            },
+            "randuri": [],
+            "limitari": ["Corpusul nu este disponibil; matricea nu poate grupa pe emitent."],
+        }
+
+    def rand_pentru(act_id: str) -> dict | None:
+        m = _alege_meta(act_id, meta)
+        tip_act = (m or {}).get("tip")
+        if tip and (tip_act or act_id.split("-", 1)[0]) != tip:
+            return None
+        emitent = (m or {}).get("emitent") or "(act negăsit în corpus)"
+        return randuri.setdefault(emitent, _rand_matrice(emitent))
+
+    for v in viduri:
+        act_id = v.get("act_id") or ""
+        rand = rand_pentru(act_id)
+        if rand is None:
+            continue
+        rand["viduri"] += 1
+        if v.get("severitate") == "blocking":
+            rand["viduri_blocking"] += 1
+        else:
+            rand["viduri_material"] += 1
+        _pune_exemplu(
+            rand["_vid_exemple"],
+            {
+                "act_id": act_id,
+                "locator": v.get("locator", ""),
+                "text": v.get("text", ""),
+                "instrument": v.get("instrument", ""),
+                "scadenta": v.get("scadenta"),
+                "zile_intarziere": v.get("zile_intarziere"),
+                "severitate": v.get("severitate", ""),
+            },
+            fel="vid",
+        )
+
+    for n in neconst:
+        act_id = n.get("act_id") or ""
+        rand = rand_pentru(act_id)
+        if rand is None:
+            continue
+        rand["neconstitutionale"] += 1
+        _pune_exemplu(
+            rand["_neconst_exemple"],
+            {
+                "act_id": act_id,
+                "locator": n.get("locator", ""),
+                "text": n.get("text", ""),
+                "decizie": n.get("decizie", ""),
+                "termen": n.get("termen"),
+                "zile_de_la_termen": n.get("zile_de_la_termen"),
+                "severitate": n.get("severitate", ""),
+            },
+            fel="neconst",
+        )
+
+    for act_id, cnt in amendamente.items():
+        rand = rand_pentru(act_id)
+        if rand is not None:
+            rand["amendamente_primite"] += cnt["muchii"]
+            rand["acte_amendate"] += 1
+
+    for act_id, cnt in initiative.items():
+        rand = rand_pentru(act_id)
+        if rand is not None:
+            rand["initiative_in_lucru"] += cnt
+
+    iesire = []
+    for rand in randuri.values():
+        scor = (
+            rand["viduri_blocking"] * 80
+            + rand["viduri_material"] * 55
+            + rand["neconstitutionale"] * 70
+            + rand["initiative_in_lucru"] * 8
+            + min(rand["amendamente_primite"], 200)
+        )
+        if rand["neconstitutionale"] or rand["viduri_blocking"]:
+            nivel = "blocking"
+        elif rand["viduri_material"] or rand["initiative_in_lucru"]:
+            nivel = "material"
+        elif rand["amendamente_primite"]:
+            nivel = "note"
+        else:
+            nivel = "ok"
+        iesire.append(
+            {
+                "emitent": rand["emitent"],
+                "acte": rand["acte"],
+                "tipuri": [
+                    {"tip": t, "acte": n}
+                    for t, n in sorted(rand["_tipuri"].items(), key=lambda x: (-x[1], x[0]))[:8]
+                ],
+                "de_la": rand["de_la"],
+                "pana_la": rand["pana_la"],
+                "semnale": {
+                    "viduri": rand["viduri"],
+                    "viduri_blocking": rand["viduri_blocking"],
+                    "viduri_material": rand["viduri_material"],
+                    "neconstitutionale": rand["neconstitutionale"],
+                    "amendamente_primite": rand["amendamente_primite"],
+                    "acte_amendate": rand["acte_amendate"],
+                    "initiative_in_lucru": rand["initiative_in_lucru"],
+                },
+                "scor": scor,
+                "nivel": nivel,
+                "exemple": {
+                    "viduri": rand["_vid_exemple"],
+                    "neconstitutionale": rand["_neconst_exemple"],
+                },
+            }
+        )
+
+    chei = {
+        "acte": lambda r: (-r["acte"], -r["scor"], r["emitent"]),
+        "viduri": lambda r: (-r["semnale"]["viduri"], -r["scor"], r["emitent"]),
+        "neconstitutionale": lambda r: (
+            -r["semnale"]["neconstitutionale"],
+            -r["scor"],
+            r["emitent"],
+        ),
+        "initiative": lambda r: (-r["semnale"]["initiative_in_lucru"], -r["scor"], r["emitent"]),
+        "amendamente": lambda r: (-r["semnale"]["amendamente_primite"], -r["scor"], r["emitent"]),
+    }
+    iesire.sort(key=chei.get(sortare, lambda r: (-r["scor"], -r["acte"], r["emitent"])))
+    rez = {
+        "emitenti": len(iesire),
+        "acte": sum(r["acte"] for r in iesire),
+        "viduri": sum(r["semnale"]["viduri"] for r in iesire),
+        "neconstitutionale": sum(r["semnale"]["neconstitutionale"] for r in iesire),
+        "amendamente_primite": sum(r["semnale"]["amendamente_primite"] for r in iesire),
+        "initiative_in_lucru": sum(r["semnale"]["initiative_in_lucru"] for r in iesire),
+    }
+    return {
+        "tip": tip,
+        "sort": sortare,
+        "limita": limita,
+        "total": len(iesire),
+        "rezumat": rez,
+        "randuri": iesire[:limita],
+        "limitari": [
+            "Axa «arie» este emitentul scris pe document, nu o clasificare materială inventată."
+        ],
+    }
+
+
 def _vid_dict(v) -> dict:
     """One `vid.Vid` finding as a plain dict for the UI / the shipped report."""
     ob = v.obligatie

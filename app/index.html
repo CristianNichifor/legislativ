@@ -324,6 +324,38 @@
   .init-sursa{font-size:.72rem}
   .dom-act{font-size:.78rem;margin:.15rem 0;line-height:1.45}
   .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
+  /* Matrice: a dense corpus-level risk surface, not another explanatory card stack */
+  .matrix-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.4rem 0 .7rem}
+  .matrix-tools input{flex:1 1 18rem}
+  .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
+  .matrix-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.45rem;
+    margin:.5rem 0 .7rem}
+  .matrix-stat{border:1px solid var(--rule);border-radius:var(--r1);background:var(--surface);
+    padding:.45rem .6rem}
+  .matrix-stat b{display:block;font-family:var(--mono);font-size:1rem;color:var(--ink)}
+  .matrix-stat span{font-size:.68rem;color:var(--ink-mute)}
+  .matrix-table{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r1);
+    background:var(--surface)}
+  .matrix-head,.matrix-row{display:grid;grid-template-columns:minmax(17rem,1.8fr) 5.5rem 5.5rem 5.5rem 5.5rem 6rem;
+    gap:.55rem;align-items:center;min-width:54rem}
+  .matrix-head{font-family:var(--sans);font-size:.64rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);background:var(--sunk);padding:.45rem .65rem}
+  .matrix-row{font-size:.78rem;padding:.5rem .65rem;border-top:1px solid var(--rule-soft);
+    cursor:pointer}
+  .matrix-row:hover{background:var(--accent-wash)}
+  .matrix-row[aria-expanded="true"]{background:var(--sunk)}
+  .matrix-row.blocking{box-shadow:inset 3px 0 0 var(--blocking)}
+  .matrix-row.material{box-shadow:inset 3px 0 0 var(--material)}
+  .matrix-row.note{box-shadow:inset 3px 0 0 var(--note)}
+  .matrix-name{font-weight:600}
+  .matrix-years{font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-left:.35rem}
+  .matrix-cell{font-family:var(--mono);white-space:nowrap}
+  .matrix-zero{color:var(--ink-mute)}
+  .matrix-detail{margin-top:.7rem}
+  .matrix-ex{font-size:.78rem;margin:.25rem 0;padding-left:.55rem;border-left:2px solid var(--rule);
+    line-height:1.45}
+  .matrix-ex.blocking{border-left-color:var(--blocking)}
+  .matrix-ex.material{border-left-color:var(--material)}
   /* the roll of a division: who voted which way, grouped the way the chamber sits */
   .rol{margin:.3rem 0 .4rem .5rem;padding:.45rem .6rem;border-left:2px solid var(--rule);
     background:var(--surface);border-radius:0 var(--r1) var(--r1) 0}
@@ -907,6 +939,7 @@
     <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
     <button class="tab" id="tab-parlamentari" role="tab" aria-selected="false" aria-controls="pane-parlamentari">Parlamentari</button>
     <button class="tab" id="tab-domenii" role="tab" aria-selected="false" aria-controls="pane-domenii">Cine face legea</button>
+    <button class="tab" id="tab-matrice" role="tab" aria-selected="false" aria-controls="pane-matrice">Matrice</button>
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
@@ -1063,6 +1096,38 @@
         </p>
         <div id="dom-lista"><span class="spin"></span> încarc…</div>
         <div id="dom-acte"></div>
+      </div>
+
+      <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
+        <p class="hint" style="margin:.2rem 0 .8rem">
+          Matrice deterministă pe emitent și tip de act: lacune legislative, prevederi lovite de
+          Curte rămase nereparate, inițiative pendinte și presiune de amendare. Nu clasifică pe
+          domenii materiale inventate — arată numai axele pe care corpusul le poate apăra.
+        </p>
+        <div class="matrix-tools">
+          <input type="search" id="m-q" placeholder="filtrează emitent, instrument sau act">
+          <select id="m-tip" title="Filtrează după tipul actului">
+            <option value="">toate tipurile</option>
+            <option value="lege">lege</option>
+            <option value="oug">ordonanță de urgență</option>
+            <option value="og">ordonanță</option>
+            <option value="hg">hotărâre de Guvern</option>
+            <option value="ordin">ordin</option>
+            <option value="decizie">decizie</option>
+            <option value="decret">decret</option>
+          </select>
+          <select id="m-sort" title="Ordonează matricea">
+            <option value="semnale">semnale</option>
+            <option value="viduri">lacune</option>
+            <option value="neconstitutionale">neconstituționalitate</option>
+            <option value="initiative">inițiative</option>
+            <option value="amendamente">amendamente</option>
+            <option value="acte">acte</option>
+          </select>
+        </div>
+        <div id="m-rezumat"></div>
+        <div id="m-lista"><span class="spin"></span> încarc…</div>
+        <div id="m-detalii" class="matrix-detail"></div>
       </div>
 
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
@@ -1311,7 +1376,7 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","supraveghere"];
+const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","matrice","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
@@ -1320,7 +1385,7 @@ function selectTab(which){
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   // #r-nr, not #r-act: the only #r-act in the page is #r-act-info, a hint div. Redactează's first
   // typed field is the number, the same as graf and supraveghere.
-  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",supraveghere:"#s-nr"}[which];
+  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",matrice:"#m-q",supraveghere:"#s-nr"}[which];
   // Look the element up rather than assuming it exists: when this pointed at a missing id it threw
   // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
@@ -1328,6 +1393,7 @@ function selectTab(which){
   if(which==="consolidat") loadConsAsezari();
   if(which==="parlamentari"){ loadGrupuri(); loadToti(); }
   if(which==="domenii") loadDomenii();
+  if(which==="matrice") loadMatrice();
   if(which==="supraveghere") renderSupraveghere();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
@@ -3408,6 +3474,96 @@ async function aratraEmitent(rand){
       +`${esc((a.titlu||"").slice(0,120))}</div>`).join("")
     +(acte.length?``:`<span class="hint">Niciun act colectat pentru acest emitent.</span>`)+`</div>`;
 }
+
+// ---- Matrice legislativă ----
+let MATRICE=null, MATRIX_ROWS=[];
+function mNum(n, cls){
+  return `<span class="matrix-cell ${n?"":"matrix-zero"} ${cls||""}">${nf(n)}</span>`;
+}
+function mTextCautare(r){
+  const ex=r.exemple||{};
+  const vid=(ex.viduri||[]).map(x=>`${x.act_id} ${x.instrument||""} ${x.text||""}`).join(" ");
+  const nec=(ex.neconstitutionale||[]).map(x=>`${x.act_id} ${x.decizie||""} ${x.text||""}`).join(" ");
+  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${vid} ${nec}`);
+}
+async function loadMatrice(forta){
+  if(MATRICE && !forta){ renderMatrice(); return; }
+  const tip=$("#m-tip")?.value||"", sort=$("#m-sort")?.value||"semnale";
+  $("#m-lista").innerHTML=`<span class="spin"></span> încarc…`;
+  $("#m-detalii").innerHTML="";
+  const qs=new URLSearchParams({limita:"120",sort});
+  if(tip) qs.set("tip",tip);
+  MATRICE=await fetch("/api/matrice?"+qs.toString()).then(r=>r.json()).catch(()=>null);
+  renderMatrice();
+}
+function renderMatrice(){
+  const gazda=$("#m-lista"), rez=$("#m-rezumat"), det=$("#m-detalii");
+  const d=MATRICE||{}, rr=d.rezumat||{};
+  rez.innerHTML=`<div class="matrix-stats">`
+    +`<div class="matrix-stat"><b>${nf(rr.emitenti)}</b><span>emitenți / arii</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.acte)}</b><span>acte în filtru</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.viduri)}</b><span>lacune legislative</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.neconstitutionale)}</b><span>nereparate după Curte</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.initiative_in_lucru)}</b><span>inițiative pendinte</span></div>`
+    +`</div>`;
+  const q=fold($("#m-q")?.value||"").trim();
+  MATRIX_ROWS=(d.randuri||[]).filter(r=>!q||mTextCautare(r).includes(q));
+  if(!MATRIX_ROWS.length){
+    gazda.innerHTML=empty("Nu există rânduri pentru filtrul ales.");
+    det.innerHTML=(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
+    return;
+  }
+  gazda.innerHTML=`<div class="matrix-table">`
+    +`<div class="matrix-head"><span>emitent / arie</span><span>acte</span><span>lacune</span>`
+    +`<span>Curte</span><span>inițiative</span><span>amendări</span></div>`
+    +MATRIX_ROWS.map((r,i)=>{
+      const s=r.semnale||{}, ani=r.de_la?`<span class="matrix-years">${esc(r.de_la)}–${esc(r.pana_la||r.de_la)}</span>`:"";
+      const tipuri=(r.tipuri||[]).map(t=>`${esc(t.tip)} ${nf(t.acte)}`).join(" · ");
+      return `<div class="matrix-row ${esc(r.nivel||"")}" role="button" tabindex="0" aria-expanded="false" data-i="${i}">`
+        +`<span><span class="matrix-name">${esc(r.emitent)}</span>${ani}<br><span class="dom-tipuri">${tipuri}</span></span>`
+        +mNum(r.acte)+mNum(s.viduri,"dep-nu")+mNum(s.neconstitutionale,"dep-nu")
+        +mNum(s.initiative_in_lucru,"dep-pend")+mNum(s.amendamente_primite)+"</div>";
+    }).join("")+`</div>`
+    +(d.total>MATRIX_ROWS.length?`<p class="hint" style="margin:.45rem 0">Se afișează ${nf(MATRIX_ROWS.length)} din ${nf(d.total)} rânduri pentru sortarea curentă.</p>`:"")
+    +(d.limitari||[]).map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("");
+  gazda.querySelectorAll(".matrix-row").forEach(r=>{
+    r.onclick=()=>mArataRand(r);
+    r.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); mArataRand(r); } };
+  });
+}
+function mArataRand(el){
+  const r=MATRIX_ROWS[+el.dataset.i]; if(!r) return;
+  $("#m-lista").querySelectorAll(".matrix-row").forEach(x=>x.setAttribute("aria-expanded","false"));
+  el.setAttribute("aria-expanded","true");
+  const s=r.semnale||{}, ex=r.exemple||{};
+  let h=`<div class="parc"><div class="parc-h">${esc(r.emitent)} — semnale verificabile</div>`
+    +`<div class="watch-meta">${nf(r.acte)} acte · ${nf(s.viduri)} lacune · `
+    +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
+    +`${nf(s.amendamente_primite)} amendări primite</div>`;
+  const vid=ex.viduri||[];
+  if(vid.length){
+    h+=`<div class="parc-h">Exemple de lacune</div>`+vid.map(v=>
+      `<div class="matrix-ex ${esc(v.severitate||"material")}"><span class="dom-cheie">${esc(v.act_id)}</span> `
+      +(v.locator?`${esc(locRo(v.locator))} `:"")
+      +(v.instrument?`· <b>${esc(v.instrument)}</b> `:"")
+      +(v.zile_intarziere?`· ${nf(v.zile_intarziere)} zile întârziere `:"")
+      +`<br><span class="hint">${esc(v.text||"")}</span></div>`).join("");
+  }
+  const nec=ex.neconstitutionale||[];
+  if(nec.length){
+    h+=`<div class="parc-h">Exemple nereparate după Curte</div>`+nec.map(n=>
+      `<div class="matrix-ex blocking"><span class="dom-cheie">${esc(n.act_id)}</span> `
+      +(n.locator?`${esc(locRo(n.locator))} `:"")
+      +(n.decizie?`· ${esc(n.decizie)} `:"")
+      +(n.zile_de_la_termen?`· ${nf(n.zile_de_la_termen)} zile de la termen `:"")
+      +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
+  }
+  if(!vid.length&&!nec.length) h+=`<p class="hint">Rândul are semnale de mișcare legislativă, dar nu are exemple de lacune sau neconstituționalitate în registrul publicat.</p>`;
+  $("#m-detalii").innerHTML=h+`</div>`;
+}
+$("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
+$("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));
