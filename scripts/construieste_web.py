@@ -397,14 +397,21 @@ BOOT = """
   // Pagefind ține fragmentul în index și le aduce în paralel — aceeași pagină, 0,1–0,35 s. Clientul
   // e servit de la noi, ca `script-src 'self'` să rămână întreg; doar datele vin din depozit.
   const DEPOZIT_CAUTARE = "__DEPOZIT__";
+  // Indexul e tăiat în felii pentru că indexarea ține tot în memorie: ~200 KB pe act, adică ~40 GB
+  // pentru tot corpusul. Feliile se construiesc separat și se lipesc aici, la interogare.
+  const FELII_CAUTARE = __FELII_CAUTARE__;
   let pagefind = null;
   async function motorulDeCautare(){
     if (pagefind) return pagefind;
+    const baza = DEPOZIT_CAUTARE ? DEPOZIT_CAUTARE.replace(/\\/$/, "") + "/" : "./";
+    const cale = i => FELII_CAUTARE > 1 ? `${baza}pagefind-${i}/` : `${baza}pagefind/`;
     const m = await import("./pagefind/pagefind.js");
-    await m.options({
-      basePath: DEPOZIT_CAUTARE ? DEPOZIT_CAUTARE.replace(/\/$/, "") + "/pagefind/" : "./pagefind/",
-      language: "ro",
-    });
+    await m.options({basePath: cale(0), language: "ro"});
+    // `mergeIndex` cere aceleași opțiuni pentru fiecare felie; altfel felia adusă e căutată cu
+    // limba dedusă din propriul ei `pagefind-entry.json`, nu cu româna pe care am forțat-o.
+    for (let i = 1; i < FELII_CAUTARE; i++) {
+      await m.mergeIndex(cale(i), {language: "ro"});
+    }
     pagefind = m;
     return m;
   }
@@ -937,11 +944,30 @@ CLIENT_CAUTARE = (
 )
 
 
+def _felii_cautare() -> list[Path]:
+    """The search index directories, in the order the client merges them.
+
+    An index built in one piece is `pagefind/`; one built in slices is `pagefind-0/`, `pagefind-1/`
+    and so on, because Pagefind holds every record in memory until it writes and the whole corpus
+    does not fit. Both shapes are read here, so nothing else has to know which one was built.
+    """
+    felii = sorted(
+        (d for d in ROOT.glob("pagefind-*") if d.is_dir()),
+        key=lambda d: int(d.name.split("-")[-1]),
+    )
+    if felii:
+        return felii
+    intreg = ROOT / "pagefind"
+    return [intreg] if intreg.is_dir() else []
+
+
 def _client_cautare() -> None:
     """Copy Pagefind's client next to the page, if an index has been built."""
-    sursa = ROOT / "pagefind"
-    if not sursa.is_dir():
+    felii = _felii_cautare()
+    if not felii:
         return
+    # The client is one and the same in every slice — it is the data beside it that differs.
+    sursa = felii[0]
     tinta = WEB / "pagefind"
     tinta.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -964,7 +990,11 @@ def _pagina(depozit: str = "") -> None:
     csp = f'<meta http-equiv="Content-Security-Policy" content="{_csp(depozit)}">'
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
     # Prepend the manager block right after <body> so it runs before the app's own inline script.
-    pagina = pagina.replace("<body>", "<body>\n" + BOOT.replace("__DEPOZIT__", depozit), 1)
+    # The slice count is baked in rather than discovered: the client would otherwise have to probe
+    # for a directory that is not there, and a 404 on every load is a worse answer than a number.
+    felii = len(_felii_cautare()) or 1
+    boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
+    pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 

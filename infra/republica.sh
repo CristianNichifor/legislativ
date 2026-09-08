@@ -19,6 +19,7 @@
 #   CORPUS          the collected corpus                        (default: ./corpus.db)
 #   BUCKET          R2 bucket                                   (default: legislativ)
 #   PREFIX          dated prefix                                (default: today)
+#   FELII           slices the search index is built in         (default: 5)
 
 set -euo pipefail
 
@@ -26,6 +27,7 @@ LUCRU=${LUCRU:-$HOME/.local/share/legislativ}
 CORPUS=${CORPUS:-corpus.db}
 BUCKET=${BUCKET:-legislativ}
 PREFIX=${PREFIX:-$(date +%F)}
+FELII=${FELII:-5}
 IDX="$LUCRU/idx"
 
 [ -f "$CORPUS" ] || { echo "nu găsesc $CORPUS" >&2; exit 2; }
@@ -60,7 +62,14 @@ echo "── 3/5 indexul de căutare (Pagefind) ──────────�
 # per-result fragments in parallel. A page of 25 went from 46,6 s to 1,24 s.
 if command -v node >/dev/null && [ -f infra/pagefind.mjs ]; then
   uv run python -m scripts.export_cautare --db "$LUCRU/publicat.db" --tinta "$LUCRU/acte.jsonl"
-  node infra/pagefind.mjs "$LUCRU/acte.jsonl" pagefind
+  # In slices, one process each: Pagefind keeps every record in memory until it writes, ~200 KB per
+  # act, so all 203.353 at once wants ~40 GB. A machine with less does not stop, it swaps, and it
+  # took this one down mid-run. Each slice peaks around 8 GB and gives the memory back on exit.
+  rm -rf pagefind pagefind-[0-9]*
+  for f in $(seq 0 $((FELII - 1))); do
+    echo "  felia $((f + 1))/$FELII"
+    node infra/pagefind.mjs "$LUCRU/acte.jsonl" "pagefind-$f" "$f" "$FELII"
+  done
   rm -f "$LUCRU/acte.jsonl"
 else
   echo "  node sau infra/pagefind.mjs lipsesc — sar peste index; căutarea va cădea pe motor" >&2
@@ -101,7 +110,9 @@ r2 copyto "$IDX/index.json"               "r2:$BUCKET/$PREFIX/index.json"
 r2 copyto "$IDX/termeni.json"             "r2:$BUCKET/$PREFIX/termeni.json"
 r2 copy   "$IDX/idx"                      "r2:$BUCKET/$PREFIX/idx"           --transfers 32 --checkers 32
 r2 copy   "$IDX/idx-titlu"                "r2:$BUCKET/$PREFIX/idx-titlu"     --transfers 32 --checkers 32
-[ -d pagefind ] && r2 copy "pagefind" "r2:$BUCKET/$PREFIX/pagefind" --transfers 32 --checkers 32
+for d in pagefind pagefind-[0-9]*; do
+  [ -d "$d" ] && r2 copy "$d" "r2:$BUCKET/$PREFIX/$d" --transfers 32 --checkers 32
+done
 
 echo
 echo "încărcat. Ultimul pas, un singur rând în .github/workflows/pages.yml:"
