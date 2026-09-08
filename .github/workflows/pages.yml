@@ -55,7 +55,13 @@ jobs:
             echo "no dataset release yet — building the 4-act fixtures demo"
           fi
       - name: Build the browser bundle
-        run: uv run python -m scripts.construieste_web --sursa ${{ steps.date.outputs.sursa }}
+        # The corpus itself is not in the build: the browser mounts it from object storage
+        # over byte-range requests. The prefix is dated, so publishing new data means
+        # uploading under a new prefix and changing this line — the old one stays readable.
+        run: >-
+          uv run python -m scripts.construieste_web
+          --sursa ${{ steps.date.outputs.sursa }}
+          --depozit https://date.cnwebify.dev/2026-09-08
       - uses: actions/upload-pages-artifact@v5
         with:
           path: web

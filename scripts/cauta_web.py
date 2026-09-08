@@ -66,13 +66,20 @@ def _fragment(act: dict, toks: list[str]) -> dict:
     return {"locator": prima.get("loc", ""), "fragment": prima.get("text", "")[:140]}
 
 
+# Shards are immutable — they live under a dated prefix and a republish writes a new one — so a
+# shard fetched once is good for the rest of the session. Without this every query re-downloaded
+# the same index files, which is most of what a search spends its time on.
+_CACHE: dict[str, object] = {}
+
+
 async def _json(url: str):
+    if url in _CACHE:
+        return _CACHE[url]
     from pyodide.http import pyfetch  # browser only; lazy so CPython can import this module
 
     r = await pyfetch(url)
-    if r.status != 200:
-        return None
-    return await r.json()
+    _CACHE[url] = None if r.status != 200 else await r.json()
+    return _CACHE[url]
 
 
 def _trece_filtru(meta: dict, tip: str | None, an_min: int | None, an_max: int | None) -> bool:
@@ -271,10 +278,11 @@ async def cauta_montat(
             act = con.execute(
                 "SELECT titlu, sursa_url, id_act_portal FROM acte WHERE id = ?", (meta["id"],)
             ).fetchone()
-            # Bounded on purpose: reading every provision of a large act to cut one snippet would
-            # undo the point of the split.
+            # Bounded hard, because this is per result and each read is a round trip: at 200
+            # provisions a page of three cost 23 s, almost all of it here. Forty finds the quote
+            # in nearly every act, and the ones it misses simply show no quote.
             provizii = con.execute(
-                "SELECT locator, text FROM provizii WHERE act_id = ? ORDER BY ord LIMIT 200",
+                "SELECT locator, text FROM provizii WHERE act_id = ? ORDER BY ord LIMIT 40",
                 (meta["id"],),
             ).fetchall()
             frag = _fragment(
