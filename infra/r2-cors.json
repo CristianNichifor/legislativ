@@ -1,0 +1,13 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://cristiannichifor.github.io",
+      "http://127.0.0.1:8000",
+      "http://localhost:8000"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["range"],
+    "ExposeHeaders": ["content-length", "content-range", "accept-ranges", "etag"],
+    "MaxAgeSeconds": 86400
+  }
+]
