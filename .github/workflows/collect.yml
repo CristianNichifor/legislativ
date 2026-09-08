@@ -8,13 +8,13 @@ name: collect
 #
 # Bounded on purpose: a full walk is ~25 000 pages and would exceed a runner's time budget. Dispatch
 # it with a page range; run it again with the next range to go further. The published archive is
-# `date.tar.gz` (the web/data tree, minus the big corpus.db the browser never fetches) on the rolling
-# `date-latest` release.
+# `date.tar.gz` (the web/data tree, minus the big corpus.db the browser never fetches) on a dated
+# `date-YYYY-MM-DD` release; the Pages build takes the newest by tag order.
 #
 # IMPORTANT: legislatie.just.ro's SOAP service refuses GitHub-hosted runner IPs (the token call is
 # dropped mid-connection). This job therefore only works on a **self-hosted runner** on an IP the
 # portal accepts (e.g. the maintainer's box). Until one is registered, build the dataset on a machine
-# that can reach the portal and upload it to the `date-latest` release by hand — that is exactly what
+# that can reach the portal and publish it as a dated release by hand — that is exactly what
 # the Pages build consumes.
 
 on:
@@ -48,7 +48,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release download date-latest --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
+          SEED=$(gh release list --limit 100 --json tagName \
+            -q '[.[].tagName | select(test("^date-[0-9]{4}-[0-9]{2}-[0-9]{2}"))] | sort | reverse | .[0] // ""')
+          if [ -n "$SEED" ] && gh release download "$SEED" --pattern date.tar.gz -O date.tar.gz 2>/dev/null; then
             mkdir -p web && tar xzf date.tar.gz -C web
             [ -f web/data/corpus.db ] && cp web/data/corpus.db corpus.db || true
             echo "seeded from previous release"
@@ -78,10 +80,14 @@ jobs:
         run: |
           rm -f web/data/corpus.db web/data/corpus.db-*   # browser reads the shards, not the corpus
           tar czf date.tar.gz -C web data
-          if gh release view date-latest >/dev/null 2>&1; then
-            gh release upload date-latest date.tar.gz --clobber
-          else
-            gh release create date-latest date.tar.gz \
-              --title "Dataset (rolling)" \
-              --notes "Sharded corpus for the browser build. Rebuilt by the collect workflow."
+          # One release per build, dated, rather than one rolling tag. GitHub releases are
+          # immutable — `--clobber` against an existing asset fails with 422 — and for a legal
+          # corpus that is the right default anyway: a snapshot somebody cited stays as it was,
+          # and the Pages build picks the newest by tag order.
+          TAG="date-$(date -u +%Y-%m-%d)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            TAG="$TAG-$(date -u +%H%M)"
           fi
+          gh release create "$TAG" date.tar.gz \
+            --title "Dataset $TAG" \
+            --notes "Sharded corpus for the browser build. Rebuilt by the collect workflow."
