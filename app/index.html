@@ -359,6 +359,14 @@
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
+  .ue-dosare{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:.55rem;
+    margin:.65rem 0 .8rem}
+  .ue-dosar{border:1px solid var(--rule);border-left:3px solid var(--accent);
+    border-radius:var(--r1);background:var(--surface);box-shadow:var(--e1);padding:.65rem .8rem}
+  .ue-dosar-title{font-weight:600;line-height:1.35;margin:.15rem 0}
+  .ue-dosar-stat{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute);
+    display:flex;flex-wrap:wrap;gap:.25rem .65rem;margin:.2rem 0}
+  .ue-locatori{font-family:var(--mono);font-size:.72rem;color:var(--ink-mid);margin-top:.25rem}
   .ue-list{margin-top:.7rem}
   .ue-hit{border:1px solid var(--rule);border-left:3px solid var(--note);border-radius:var(--r1);
     background:var(--surface);box-shadow:var(--e1);padding:.75rem .9rem;margin:.55rem 0}
@@ -1401,6 +1409,9 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
   const structurate = d.acte_structurate || 0, normative = d.acte_normative || 0;
   const proc = normative ? (structurate * 100 / normative) : 0;
   const cls = proc < 50 ? "stat-slab" : "";
+  const ue = d.ue_disponibil ? ` · <span title="Acte CELEX importate local în eu.db; `
+      + `prevederile sunt unitățile citabile indexate pentru căutare UE.">UE `
+      + `<b>${nf(d.ue_acte)}</b> acte · <b>${nf(d.ue_prevederi)}</b> prevederi</span>` : "";
   $("#stat").innerHTML = `<b>${nf(d.acte)}</b> acte · <b>${nf(d.initiative)}</b> inițiative · `
     + `<b>${nf(d.provizii)}</b> prevederi`
     + (normative ? ` · <span class="${cls}" title="Acte normative cu arborele de articole parsat,`
@@ -1408,7 +1419,8 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
       + ` așa că alineatele și literele nu pot fi citate separat. Deciziile Curții și rapoartele nu`
       + ` intră în socoteală — nu au articole de parsat.">`
       + `<b>${nf(structurate)}</b> cu articole `
-      + `(${proc > 0 && proc < 1 ? "&lt;1" : Math.round(proc)}%)</span>` : ``);
+      + `(${proc > 0 && proc < 1 ? "&lt;1" : Math.round(proc)}%)</span>` : ``)
+    + ue;
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
@@ -3642,19 +3654,42 @@ function ueHitsHtml(rr){
       +`</div></article>`;
   }).join("")+`</div>`;
 }
+function ueDosareHtml(dosare, limita){
+  const toate=dosare||[], dd=toate.slice(0, limita||toate.length);
+  if(!dd.length) return "";
+  return `<div class="ue-dosare">`+dd.map(d=>{
+    const href=urlSigur(d.sursa_url||d.item_url);
+    const stats=[
+      `${nf(d.prevederi)} prevederi`,
+      d.articole?`${nf(d.articole)} articole`:"",
+      d.considerente?`${nf(d.considerente)} considerente`:"",
+      d.anexe?`${nf(d.anexe)} anexe`:"",
+      d.limba||"",
+    ].filter(Boolean).join(" · ");
+    return `<article class="ue-dosar">`
+      +`<div class="ue-loc">${esc(d.celex||"")}</div>`
+      +`<div class="ue-dosar-title">${esc(d.titlu||"Act UE fără titlu")}</div>`
+      +`<div class="ue-dosar-stat">${esc(stats)}</div>`
+      +((d.termeni||[]).length?`<div class="ue-dosar-stat">termeni: ${d.termeni.map(esc).join(", ")}</div>`:"")
+      +((d.locatori||[]).length?`<div class="ue-locatori">${d.locatori.map(esc).join(" · ")}</div>`:"")
+      +(href?`<div class="ue-meta" style="margin-top:.35rem"><a href="${esc(href)}" target="_blank" rel="noopener">sursa oficială</a></div>`:"")
+      +`</article>`;
+  }).join("")+`</div>`;
+}
 function renderUE(d){
   const out=$("#ue-out"), stat=$("#ue-stat");
-  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[];
+  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], dosare=(d&&d.dosare)||[];
   stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate` : "";
   const note=ueLimitariHtml(lim);
   if(!rr.length){ out.innerHTML=empty("Nicio prevedere UE de arătat.")+note; return; }
-  out.innerHTML=ueHitsHtml(rr)+note;
+  out.innerHTML=ueDosareHtml(dosare)+ueHitsHtml(rr)+note;
 }
 function renderUEInline(d){
   if(!d || d.error) return "";
-  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], primele=rr.slice(0,5);
+  const rr=d.rezultate||[], lim=d.limitari||[], dosare=d.dosare||[];
+  const primele=rr.slice(0,5);
   const corp=rr.length
-    ? ueHitsHtml(primele)
+    ? ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
       +(rr.length>primele.length?`<p class="hint" style="margin:.25rem 0">Se afișează primele ${primele.length} din ${rr.length}; fila «Drept UE» poate căuta separat același text.</p>`:"")
       +ueLimitariHtml(lim)
     : empty(esc(lim[0]||"Nicio prevedere UE de arătat."))+ueLimitariHtml(lim,1);
