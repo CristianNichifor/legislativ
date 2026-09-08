@@ -3686,7 +3686,7 @@ function renderUE(d){
 }
 function renderUEInline(d){
   if(!d || d.error) return "";
-  const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], dosare=(d&&d.dosare)||[];
+  const rr=d.rezultate||[], lim=d.limitari||[], dosare=d.dosare||[];
   const primele=rr.slice(0,5);
   const corp=rr.length
     ? ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
