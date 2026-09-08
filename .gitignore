@@ -54,3 +54,7 @@ corpus-final.db
 graf-vechi.db
 graf-build.log
 colector-4w.log
+
+# Generat de infra/pagefind.mjs; indexul se publică în depozit, nu în git.
+pagefind/
+web/pagefind/
