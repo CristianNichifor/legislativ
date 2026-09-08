@@ -91,6 +91,91 @@ PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
 WORKER = """
 importScripts("__PYODIDE__");
 let raspunde, cautaJson;
+
+// De unde se citește corpusul întreg. Gol = comportamentul vechi (doar catalogul mic + felii).
+const DEPOZIT = "__DEPOZIT__";
+// SQLite citește pagini de 4 KB. Bucăți mai mari aduc pagini pe care nu le cere nimeni: la 1 MiB
+// (implicitul Emscripten) o lege costă 94 MB, la 16 KB costă 3 MB — adică exact textul ei.
+const BUCATA = 16384;
+
+// Un cititor cu memorie pe bucăți. Nimic nu descarcă fișierul întreg: SQLite cere o pagină, noi
+// aducem bucata care o conține și o ținem. Aceeași interfață peste două surse — rețea sau disc.
+function cuMemorie(adu, lungime){
+  const bucati = new Map();
+  return {
+    lungime,
+    citeste(dest, la, poz, cati){
+      let scrisi = 0;
+      while (scrisi < cati) {
+        const idx = ((poz + scrisi) / BUCATA) | 0;
+        let b = bucati.get(idx);
+        if (!b) {
+          b = adu(idx * BUCATA, Math.min((idx + 1) * BUCATA, lungime) - 1);
+          bucati.set(idx, b);
+        }
+        const inceput = (poz + scrisi) % BUCATA;
+        const acum = Math.min(b.length - inceput, cati - scrisi);
+        if (acum <= 0) break;
+        dest.set(b.subarray(inceput, inceput + acum), la + scrisi);
+        scrisi += acum;
+      }
+      return scrisi;
+    },
+  };
+}
+
+// Online: cereri Range către R2. Sincrone — permise doar în worker, care e exact unde suntem.
+function prinRange(url){
+  const cap = new XMLHttpRequest();
+  cap.open("HEAD", url, false);
+  cap.send();
+  if (cap.status >= 400) throw new Error("depozitul nu răspunde: " + cap.status);
+  return cuMemorie((de, la) => {
+    const x = new XMLHttpRequest();
+    x.open("GET", url, false);
+    x.responseType = "arraybuffer";
+    x.setRequestHeader("Range", `bytes=${de}-${la}`);
+    x.send();
+    return new Uint8Array(x.response);
+  }, Number(cap.getResponseHeader("Content-Length")));
+}
+
+// Offline: aceleași pagini, citite de pe disc. Copia descărcată o dată nu mai cere nimic rețelei.
+function dinOpfs(maner){
+  return cuMemorie((de, la) => {
+    const b = new Uint8Array(la - de + 1);
+    maner.read(b, { at: de });
+    return b;
+  }, maner.getSize());
+}
+
+// Îl legăm de sistemul de fișiere al Pyodide, ca SQLite să-l vadă ca pe orice fișier obișnuit.
+function monteaza(pyodide, sursa){
+  const FS = pyodide.FS;
+  const nod = FS.createFile("data", "corpus.db", {}, true, false);
+  nod.usedBytes = sursa.lungime;
+  nod.stream_ops = {
+    llseek(flux, deplasare, dinCe){
+      let p = deplasare;
+      if (dinCe === 1) p += flux.position;
+      else if (dinCe === 2) p = sursa.lungime + deplasare;
+      if (p < 0) throw new FS.ErrnoError(28);
+      return p;
+    },
+    read(flux, tampon, deplasare, cati, pozitie){
+      if (pozitie >= sursa.lungime) return 0;
+      return sursa.citeste(tampon, deplasare, pozitie, Math.min(sursa.lungime - pozitie, cati));
+    },
+  };
+}
+
+// Copia offline, dacă utilizatorul a cerut-o vreodată. O singură cerere pentru tot corpusul.
+async function copiaOffline(){
+  const dir = await navigator.storage.getDirectory();
+  const f = await dir.getFileHandle("corpus.db");   // aruncă dacă nu există; atunci mergem online
+  return dinOpfs(await (await f).createSyncAccessHandle());
+}
+
 async function boot(){
   const pyodide = await loadPyodide();
   await pyodide.loadPackage("sqlite3");  // unvendored in Pyodide; the corpus is SQLite
@@ -103,6 +188,20 @@ async function boot(){
   for (const name of ["graf.db","initiative.db","index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json"]) {
     const buf = new Uint8Array(await fetch("data/"+name).then(r=>r.arrayBuffer()));
     pyodide.FS.writeFile("data/"+name, buf);
+  }
+  // Corpusul întreg — 203.353 de acte — fără a-l descărca. Preferăm copia offline dacă există,
+  // fiindcă atunci aplicația merge fără rețea; altfel citim din depozit, pagină cu pagină.
+  if (DEPOZIT) {
+    let sursa = null, deUnde = "";
+    try { sursa = await copiaOffline(); deUnde = "offline"; }
+    catch (e) {
+      try { sursa = prinRange(DEPOZIT.replace(/\\/$/, "") + "/corpus.db"); deUnde = "depozit"; }
+      catch (e2) { console.warn("corpusul nu e disponibil:", e2.message); }
+    }
+    if (sursa) {
+      monteaza(pyodide, sursa);
+      console.log(`corpus montat (${deUnde}): ${(sursa.lungime/1e9).toFixed(2)} GB`);
+    }
   }
   raspunde = pyodide.runPython(`
 import sys, json
@@ -591,9 +690,11 @@ def _bundle() -> None:
     print(f"  bundle → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
-def _worker() -> None:
-    (WEB / "worker.js").write_text(WORKER.replace("__PYODIDE__", PYODIDE), encoding="utf-8")
-    print(f"  worker → {WEB / 'worker.js'}")
+def _worker(depozit: str = "") -> None:
+    text = WORKER.replace("__PYODIDE__", PYODIDE).replace("__DEPOZIT__", depozit)
+    (WEB / "worker.js").write_text(text, encoding="utf-8")
+    unde = depozit or "fără depozit — doar catalogul și feliile"
+    print(f"  worker → {WEB / 'worker.js'} ({unde})")
 
 
 def _versiune_si_sw() -> str:
@@ -655,7 +756,7 @@ def _pagina() -> None:
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
 
-def main(sursa: str, *, tot_parlamentul: bool = False) -> None:
+def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
     if sursa == "gata":
@@ -678,18 +779,19 @@ def main(sursa: str, *, tot_parlamentul: bool = False) -> None:
         else:
             _date_din_corpus(tot_parlamentul=tot_parlamentul)
         _finalizeaza_db()
-        # Sharded from the slice, and that is a hosting limit rather than a design one. The shards
-        # are built so a browser can reach an act without holding the corpus, and pointing them at
-        # all 203 353 acts does work — it just does not fit a static site. Measured while trying:
-        # `index.json` alone reached **91 MB**, downloaded on every first visit, and the per-act
-        # files ran at **36 KB each**, about **7,3 GB** for the corpus. GitHub Pages tops out near
-        # a gigabyte. Serving the whole corpus needs object storage and a different deploy, not a
-        # bigger tarball.
+        # Sharded from the slice, because a static site cannot hold the corpus: `index.json` alone
+        # reached **91 MB** on every first visit, and the per-act files ran **36 KB each**, about
+        # **7,3 GB**. GitHub Pages tops out near a gigabyte.
+        #
+        # `--depozit` is the way out, and it does not need the shards at all. The browser mounts
+        # `corpus.db` from object storage and SQLite reads the pages it wants over Range requests:
+        # measured at **3,0 MB to open a 1.455-provision law** — the text itself — and **0,1 MB to
+        # fetch an act by id**. The shards stay for builds without a repository behind them.
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
         _vid_json()
         _neconstitutional_json()
     _bundle()
-    _worker()
+    _worker(depozit)
     _fonturi()
     _pagina()
     _versiune_si_sw()
@@ -716,5 +818,15 @@ if __name__ == "__main__":
             "sau 'gata' (datele sunt deja în web/data, dintr-un release descărcat)"
         ),
     )
+    ap.add_argument(
+        "--depozit",
+        default="",
+        metavar="URL",
+        help=(
+            "adresa depozitului de obiecte care ține corpus.db (ex. https://date.exemplu.ro). "
+            "Cu ea, browserul citește tot corpusul prin cereri Range, fără să-l descarce; "
+            "fără ea, rămâne pe catalogul mic și pe felii."
+        ),
+    )
     a = ap.parse_args()
-    main(a.sursa, tot_parlamentul=a.tot_parlamentul)
+    main(a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit)
