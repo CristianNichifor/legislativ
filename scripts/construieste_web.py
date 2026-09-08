@@ -419,9 +419,22 @@ BOOT = """
     return m;
   }
 
-  // Câte acte intră în bandă și cât o așteptăm. Motorul stă în worker, deci prima căutare o
-  // așteaptă pe Pyodide; peste termen, pagina răspunde din Pagefind singur, cum răspundea și ieri.
-  const BANDA_TITLURI = 8, RABDARE_BANDA = 5000;
+  // Câte acte intră în bandă și cât o așteptăm. Motorul stă în worker, deci o căutare făcută
+  // înainte să fie cald nu blochează pagina: peste termen, răspunde Pagefind singur.
+  const BANDA_TITLURI = 8, RABDARE_BANDA = 8000;
+  const INCALZIRE_BANDA = "achizitii publice";
+  let incalzireBanda = null;
+  function incalzesteBanda(){
+    if (!DEPOZIT_CAUTARE) return ready;
+    if (!incalzireBanda) {
+      // Interogarea nu poate fi goală: Python iese înainte să citească `index.json`.
+      const p = new URLSearchParams({q: INCALZIRE_BANDA, limita: "1", doar_titluri: "1"});
+      incalzireBanda = ready.then(() => call("/api/cauta", p.toString(), "").catch(e=>{
+        console.warn("încălzirea benzii de titluri a eșuat:", e && e.message);
+      }));
+    }
+    return incalzireBanda;
+  }
   async function bandaTitluri(qs){
     const q = (qs.get("q") || "").trim();
     if (!q) return [];
@@ -429,8 +442,9 @@ BOOT = """
     // Aceleași filtre ca restul căutării, altfel banda ar contrazice ce a cerut utilizatorul.
     for (const k of ["tip", "an_min", "an_max"]) if (qs.get(k)) p.set(k, qs.get(k));
     try {
+      const pregatire = DEPOZIT_CAUTARE ? incalzesteBanda() : ready;
       const raspuns = await Promise.race([
-        ready.then(() => call("/api/cauta", p.toString(), "")),
+        pregatire.then(() => call("/api/cauta", p.toString(), "")),
         new Promise(res => setTimeout(() => res(null), RABDARE_BANDA)),
       ]);
       if (!raspuns) return [];
@@ -515,6 +529,7 @@ BOOT = """
       worker.postMessage({id, path, query, body});
     });
   }
+  if (DEPOZIT_CAUTARE) incalzesteBanda().catch(()=>{});
   window.fetch = async function(url, opts){
     const u = (typeof url === "string") ? url : (url && url.url);
     if (u && u.indexOf("/api/cauta") === 0) {
