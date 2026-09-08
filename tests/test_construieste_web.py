@@ -190,3 +190,20 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     assert "const BUCATA = 16384;" in text
     # Both backends must survive the build — offline reads the same pages from disk.
     assert "prinRange" in text and "dinOpfs" in text and "monteaza" in text
+
+
+def test_pagina_cu_depozit_incalzeste_banda_dupa_worker_ready(tmp_path, monkeypatch):
+    """The first visible search must not be the call that pays for the mounted title engine."""
+    from scripts import construieste_web as cw
+
+    monkeypatch.setattr(cw, "WEB", tmp_path)
+    cw._pagina("https://date.exemplu.ro/2026-09-08", felii_cautare=8)
+    text = (tmp_path / "index.html").read_text(encoding="utf-8")
+
+    assert "let incalzireBanda = null;" in text
+    assert 'const INCALZIRE_BANDA = "achizitii publice";' in text
+    assert 'new URLSearchParams({q: INCALZIRE_BANDA, limita: "1", doar_titluri: "1"})' in text
+    assert 'incalzireBanda = ready.then(() => call("/api/cauta", p.toString(), "")' in text
+    assert "const pregatire = DEPOZIT_CAUTARE ? incalzesteBanda() : ready;" in text
+    assert "incalzesteBanda().catch(()=>{});" in text
+    assert "const BANDA_TITLURI = 8, RABDARE_BANDA = 8000;" in text
