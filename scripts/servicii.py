@@ -1282,6 +1282,9 @@ def _deputati(qs: dict, stare: Stare) -> dict:
     leg = (qs.get("leg", [""])[0] or "").strip() or None
     camera = (qs.get("camera", [""])[0] or "").strip() or None
     doar_grupuri = (qs.get("grupuri", [""])[0] or "").strip()
+    grup = (qs.get("grup", [""])[0] or "").strip()
+    toti = (qs.get("toti", [""])[0] or "").strip()
+    rezultat = (qs.get("rezultat", [""])[0] or "").strip() or None
 
     from scripts import deputati as dep
 
@@ -1301,6 +1304,27 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                     "initiative": dep.initiative(con, idm, leg, camera),
                     "interventii": _spuse(con, idm, leg, camera),
                     "voturi": _cum_a_votat(con, idm, leg, camera),
+                    # Whether this store *carries* the roll and the transcripts at all. A member
+                    # who cast no recorded vote and a build that ships no votes are different
+                    # facts, and a panel that simply disappeared for both would report the first
+                    # while meaning the second — the published build omits them for size.
+                    "are_voturi": _are_tabel(con, "vot_nominal"),
+                    "are_dezbateri": _are_tabel(con, "interventie"),
+                }
+            if toti:
+                # The directory, for a reader who has no name to type — which is most readers.
+                return {
+                    "leg": leg,
+                    "persoane": [_persoana_dict(dep, p) for p in dep.toti(con, leg=leg)],
+                }
+            if grup:
+                # The bills behind a group's counts. A card that says 466 adopted and cannot show
+                # which 466 is a number a reader has to take on trust.
+                return {
+                    "grup": dep.grup_afisat(grup),
+                    "leg": leg,
+                    "rezultat": rezultat,
+                    "initiative": dep.initiative_grup(con, grup, leg=leg, rezultat=rezultat),
                 }
             if q:
                 # One entry per person, each carrying every term they served. The search used to
@@ -1308,24 +1332,7 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                 # so.
                 return {
                     "cautare": q,
-                    "persoane": [
-                        {
-                            "nume": p.nume,
-                            "legislaturi": list(p.legislaturi),
-                            "initiative": p.initiative,
-                            "mandate": [
-                                {
-                                    "idm": m.idm,
-                                    "leg": m.leg,
-                                    "camera": m.camera,
-                                    "grupuri": [dep.grup_afisat(g) for g in m.grupuri],
-                                    "initiative": m.initiative,
-                                }
-                                for m in p.mandate
-                            ],
-                        }
-                        for p in dep.persoane(con, q)
-                    ],
+                    "persoane": [_persoana_dict(dep, p) for p in dep.persoane(con, q)],
                     "semnatari": [
                         {
                             "idm": x.idm,
@@ -1459,6 +1466,42 @@ def _parcurs(qs: dict, stare: Stare) -> dict:
         "voturi": voturi,
         "initiatori": initiatori,
     }
+
+
+def _persoana_dict(dep, p) -> dict:
+    """One person as the page reads them. Shared by the search and the directory so the two cannot
+    drift into describing the same person differently."""
+    return {
+        "nume": p.nume,
+        "legislaturi": list(p.legislaturi),
+        "initiative": p.initiative,
+        "mandate": [
+            {
+                "idm": m.idm,
+                "leg": m.leg,
+                "camera": m.camera,
+                "grupuri": [dep.grup_afisat(g) for g in m.grupuri],
+                "initiative": m.initiative,
+            }
+            for m in p.mandate
+        ],
+    }
+
+
+def _are_tabel(con: sqlite3.Connection, nume: str) -> bool:
+    """Whether this store carries any rows of `nume`.
+
+    Asking `sqlite_master` whether the table exists answers nothing: `depozit.deschide` runs the
+    schema on every open, so every table exists in every store from the moment it is opened. The
+    question is whether anything was ever put in it — and the published build leaves the roll and
+    the transcripts out for size, so a profile there must say so rather than draw nothing.
+
+    `LIMIT 1` rather than a count: the roll is 484 596 rows and this runs on every profile.
+    """
+    try:
+        return bool(con.execute(f"SELECT 1 FROM {nume} LIMIT 1").fetchone())
+    except sqlite3.OperationalError:
+        return False
 
 
 def _grup_afisat(grup):

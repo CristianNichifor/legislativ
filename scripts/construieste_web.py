@@ -37,6 +37,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import sqlite3
 import zipfile
 from pathlib import Path
 
@@ -52,7 +53,10 @@ SOURCES = ROOT / "sources"
 # Acts the demo cites, kept in the slice no matter where they fall in the corpus, plus the first
 # N by insertion order so search has a body to work against.
 CURATE = ["lege-98-2016", "lege-99-2016", "lege-100-2016", "lege-24-2000", "oug-57-2019"]
-N_ACTE = 200
+# The demo's corpus. Every act here carries its full article tree, which is what makes the
+# linter and the impact view demonstrate themselves — a flat act cannot. Measured: about
+# 150 KB an act once structured, so this is the size dial for the published build.
+N_ACTE = 400
 N_INITIATIVE = 300
 
 # The privacy guarantee, made a rule the page obeys rather than a claim it makes. `connect-src` is
@@ -406,6 +410,46 @@ def _slice_initiative(*, tot_parlamentul: bool = False) -> None:
     print(f"  initiative slice → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
+def _slice_graf() -> None:
+    """The edges that touch an act in the slice, rather than the whole graph.
+
+    The graph used to be copied whole because it was 2,4 MB. Rebuilt over the collected corpus it
+    is **203 MB** — 926 759 edges over 203 353 acts — and a visitor would download all of it once,
+    to ask about the few hundred acts the build actually carries. 1,6% of the edges touch those
+    acts; the rest answer questions this build cannot ask.
+
+    Both directions are kept, and that is the point of the filter rather than an accident: an edge
+    *into* a sliced act is "what depends on this", which is the question the impact view exists to
+    answer, and it comes from acts that are not themselves shipped.
+    """
+    tinta = DATA / "graf.db"
+    if tinta.exists():
+        tinta.unlink()
+    surse = ROOT / "graf.db"
+    if not surse.is_file():
+        return
+    # `uri=True` on the connection, or `ATTACH 'file:…?mode=ro'` is read as a filename with a
+    # question mark in it and fails to open.
+    con = sqlite3.connect(str(tinta), uri=True)
+    try:
+        con.execute("ATTACH DATABASE ? AS plin", (f"file:{surse}?mode=ro",))
+        # The acts actually shipped, read from the slice this build just wrote.
+        con.execute("ATTACH DATABASE ? AS felie", (f"file:{DATA / 'corpus.db'}?mode=ro",))
+        con.execute(
+            "CREATE TABLE muchii AS SELECT m.* FROM plin.muchii m"
+            " WHERE m.din_act IN (SELECT id FROM felie.acte)"
+            "    OR m.catre_act IN (SELECT id FROM felie.acte)"
+        )
+        con.execute("CREATE INDEX idx_muchii_catre ON muchii(catre_act)")
+        con.execute("CREATE INDEX idx_muchii_din ON muchii(din_act)")
+        con.execute("CREATE INDEX idx_muchii_din_loc ON muchii(din_act, din_locator)")
+        con.commit()
+    finally:
+        con.close()
+    n = tinta.stat().st_size / 1e6
+    print(f"  graf → {tinta} ({n:.1f} MB, doar muchiile care ating felia)")
+
+
 def _copiaza_daca_exista(con, tabel: str) -> None:
     """Copy a table from the attached corpus, or skip it where that corpus predates it.
 
@@ -423,8 +467,7 @@ def _date_din_corpus(*, tot_parlamentul: bool = False) -> None:
     """The slice path: a few hundred acts out of the collected corpus, plus the whole graph."""
     _slice_corpus()
     _slice_initiative(tot_parlamentul=tot_parlamentul)
-    shutil.copy(ROOT / "graf.db", DATA / "graf.db")
-    print(f"  graf → {DATA / 'graf.db'} (întreg)")
+    _slice_graf()
 
 
 def _date_din_fixturi() -> None:
@@ -635,6 +678,13 @@ def main(sursa: str, *, tot_parlamentul: bool = False) -> None:
         else:
             _date_din_corpus(tot_parlamentul=tot_parlamentul)
         _finalizeaza_db()
+        # Sharded from the slice, and that is a hosting limit rather than a design one. The shards
+        # are built so a browser can reach an act without holding the corpus, and pointing them at
+        # all 203 353 acts does work — it just does not fit a static site. Measured while trying:
+        # `index.json` alone reached **91 MB**, downloaded on every first visit, and the per-act
+        # files ran at **36 KB each**, about **7,3 GB** for the corpus. GitHub Pages tops out near
+        # a gigabyte. Serving the whole corpus needs object storage and a different deploy, not a
+        # bigger tarball.
         shard.construieste(str(DATA / "corpus.db"), str(DATA))
         _vid_json()
         _neconstitutional_json()

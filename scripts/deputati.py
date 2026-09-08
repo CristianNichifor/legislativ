@@ -142,6 +142,43 @@ def cauta(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Semnatar
     return [_semnatar(con, r[0], r[1], r[2], r[3], r[4]) for r in gasiti]
 
 
+def toti(con: sqlite3.Connection, *, leg: str | None = None) -> list[Persoana]:
+    """Every member the store knows, one entry each.
+
+    The search answers "how did this person vote"; this answers "who are they" — the question of a
+    reader who has no name to type, which is most readers. 1 052 terms group to 818 people, so the
+    whole directory is one modest list rather than something that needs paging.
+    """
+    randuri = con.execute(
+        "SELECT idm, leg, camera, nume, count(DISTINCT plx_id) n FROM initiativa_initiator"
+        " WHERE idm IS NOT NULL" + (" AND leg = ?" if leg else "") + " GROUP BY leg, camera, idm",
+        ([leg] if leg else []),
+    ).fetchall()
+    oameni = _grupeaza(con, [_semnatar(con, r[0], r[1], r[2], r[3], r[4]) for r in randuri])
+    # Sorted diacritic-folded, so `Șovăială` files under Ș where a reader looks for it rather than
+    # after Z, which is where a byte comparison puts it.
+    return sorted(oameni, key=lambda p: _fara_diacritice(p.nume))
+
+
+def _grupeaza(con: sqlite3.Connection, semnatari: list[Semnatar]) -> list[Persoana]:
+    """Terms into people. See `Persoana` for why the key is the folded name, and why confining
+    that guess to navigation is what makes it safe."""
+    grupat: dict[str, list[Mandat]] = {}
+    for s in semnatari:
+        grupat.setdefault(_fara_diacritice(s.nume), []).append(
+            Mandat(s.idm, s.leg, s.camera, s.nume, s.grupuri, s.initiative)
+        )
+    return [
+        Persoana(
+            # The name as the most recent term spells it: the Fișe change their spelling over the
+            # years and the newest is the one a reader will recognise.
+            nume=max(m, key=lambda x: (x.leg or "", x.idm)).nume,
+            mandate=tuple(sorted(m, key=lambda x: x.leg or "", reverse=True)),
+        )
+        for m in grupat.values()
+    ]
+
+
 def persoane(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Persoana]:
     """Members matching a name, one entry each, with every term they served.
 
@@ -152,21 +189,7 @@ def persoane(con: sqlite3.Connection, q: str, *, limita: int = 20) -> list[Perso
     Ordered by the most recent legislature first, then by how much the person signed, so a search
     for a common surname puts the sitting member above one who left in 2016.
     """
-    grupat: dict[str, list[Mandat]] = {}
-    for s in cauta(con, q, limita=limita * 4):
-        cheie_nume = _fara_diacritice(s.nume)
-        grupat.setdefault(cheie_nume, []).append(
-            Mandat(s.idm, s.leg, s.camera, s.nume, s.grupuri, s.initiative)
-        )
-    iesire = [
-        Persoana(
-            # The name as the most recent term spells it: the Fișe change their spelling over the
-            # years and the newest is the one a reader will recognise.
-            nume=max(m, key=lambda x: (x.leg or "", x.idm)).nume,
-            mandate=tuple(sorted(m, key=lambda x: x.leg or "", reverse=True)),
-        )
-        for m in grupat.values()
-    ]
+    iesire = _grupeaza(con, cauta(con, q, limita=limita * 4))
     return sorted(iesire, key=lambda p: (p.legislaturi[0] if p.legislaturi else "", p.initiative))[
         ::-1
     ][:limita]
@@ -259,6 +282,52 @@ def legislaturi(con: sqlite3.Connection) -> list[str]:
             "SELECT DISTINCT leg FROM initiativa_initiator WHERE leg IS NOT NULL ORDER BY leg DESC"
         )
     ]
+
+
+def initiative_grup(
+    con: sqlite3.Connection,
+    grup: str,
+    *,
+    leg: str | None = None,
+    rezultat: str | None = None,
+    limita: int = 1000,
+) -> list[dict]:
+    """The bills a group's members signed, newest first, optionally by outcome.
+
+    A group's row says 466 adopted and 975 with no recorded vote; those are counts of *bills* and
+    a reader who sees them wants the list behind them. Counted and listed the same way, off the
+    same query, so the number on the card and the length of the list cannot drift apart.
+
+    `rezultat` is `adoptat`, `respins`, or `nedecis` — the last meaning no division was recorded,
+    which is not a defeat and is why it is a third value rather than the absence of the first two.
+    """
+    unde_leg = " AND leg = ?" if leg else ""
+    argumente: list = [grup] + ([leg] if leg else [])
+    randuri = con.execute(
+        "SELECT ii.plx_id, i.titlu, i.stadiu, i.data_inreg,"
+        "  (SELECT count(*) FROM initiativa_initiator x WHERE x.plx_id = ii.plx_id),"
+        "  (SELECT v.rezultat FROM initiativa_vot v WHERE v.plx_id = ii.plx_id"
+        "   AND v.rezultat IS NOT NULL ORDER BY v.data DESC LIMIT 1)"
+        " FROM (SELECT DISTINCT plx_id, leg FROM initiativa_initiator"
+        f"       WHERE grup = ?{unde_leg}) ii"
+        " LEFT JOIN initiative i ON i.plx_id = ii.plx_id"
+        " ORDER BY i.data_inreg DESC",
+        argumente,
+    ).fetchall()
+    iesire = [
+        {
+            "plx_id": r[0],
+            "titlu": r[1],
+            "stadiu": r[2],
+            "data": r[3],
+            "semnatari": r[4],
+            "rezultat": r[5] or "nedecis",
+        }
+        for r in randuri
+    ]
+    if rezultat:
+        iesire = [x for x in iesire if x["rezultat"] == rezultat]
+    return iesire[:limita]
 
 
 def grupuri(con: sqlite3.Connection, leg: str | None = None) -> list[dict]:
