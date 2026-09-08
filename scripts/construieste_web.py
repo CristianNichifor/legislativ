@@ -115,7 +115,9 @@ function cuMemorie(adu, lungime){
         }
         const inceput = (poz + scrisi) % BUCATA;
         const acum = Math.min(b.length - inceput, cati - scrisi);
-        if (acum <= 0) break;
+        // Ieșirea tăcută de aici ar returna o citire scurtă, iar SQLite ar lua restul paginii
+        // drept date. Mai bine o eroare pe care o vede cineva decât un articol inventat.
+        if (acum <= 0) throw new Error(`bucata ${idx} e prea scurtă: ${b.length} octeți`);
         dest.set(b.subarray(inceput, inceput + acum), la + scrisi);
         scrisi += acum;
       }
@@ -124,20 +126,44 @@ function cuMemorie(adu, lungime){
   };
 }
 
-// Online: cereri Range către R2. Sincrone — permise doar în worker, care e exact unde suntem.
-function prinRange(url){
-  const cap = new XMLHttpRequest();
-  cap.open("HEAD", url, false);
-  cap.send();
-  if (cap.status >= 400) throw new Error("depozitul nu răspunde: " + cap.status);
-  return cuMemorie((de, la) => {
+// Online: cereri Range către depozit. Sincrone — permise doar în worker, care e exact unde suntem.
+//
+// O bucată scurtă nu e o bucată: SQLite ar primi o pagină ciuntită și ar citi din ea numere care
+// arată ca niște numere. De aceea nimic sub lungimea cerută nu e acceptat, iar un 429 (depozitul
+// public are limită de ritm) se reîncearcă în loc să treacă drept date.
+function aduBucata(url, de, la, incercari){
+  const cati = la - de + 1;
+  let ultima = "";
+  for (let i = 0; i < incercari; i++) {
+    if (i) {
+      // Worker-ul e oricum blocat de XHR-ul sincron; așteptarea asta doar rărește reîncercările.
+      const pana = Date.now() + 250 * Math.pow(2, i - 1);
+      while (Date.now() < pana) { /* pauză înainte de următoarea încercare */ }
+    }
     const x = new XMLHttpRequest();
     x.open("GET", url, false);
     x.responseType = "arraybuffer";
     x.setRequestHeader("Range", `bytes=${de}-${la}`);
-    x.send();
-    return new Uint8Array(x.response);
-  }, Number(cap.getResponseHeader("Content-Length")));
+    try { x.send(); } catch (e) { ultima = e.message; continue; }
+    if (x.status !== 206 && x.status !== 200) { ultima = "HTTP " + x.status; continue; }
+    const b = new Uint8Array(x.response || 0);
+    if (b.length !== cati) { ultima = `${b.length} din ${cati} octeți`; continue; }
+    return b;
+  }
+  throw new Error(`nu am putut citi octeții ${de}-${la}: ${ultima}`);
+}
+
+function prinRange(url, incercari){
+  const cap = new XMLHttpRequest();
+  cap.open("HEAD", url, false);
+  cap.send();
+  if (cap.status >= 400) throw new Error("depozitul nu răspunde: " + cap.status);
+  if (cap.getResponseHeader("Accept-Ranges") !== "bytes") {
+    throw new Error("depozitul nu servește intervale de octeți; corpusul nu poate fi citit pe bucăți");
+  }
+  const lungime = Number(cap.getResponseHeader("Content-Length"));
+  if (!lungime) throw new Error("depozitul nu spune cât e de mare fișierul");
+  return cuMemorie((de, la) => aduBucata(url, de, la, incercari || 4), lungime);
 }
 
 // Offline: aceleași pagini, citite de pe disc. Copia descărcată o dată nu mai cere nimic rețelei.
