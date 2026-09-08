@@ -292,6 +292,11 @@
   .an-chip:hover{border-color:var(--accent);color:var(--ink)}
   .an-chip-activ{border-color:var(--accent);color:var(--accent);background:var(--accent-wash)}
   /* the directory: grouped by initial so it can be scanned rather than read */
+  .az-leg{margin:.4rem 0;border-bottom:1px solid var(--rule-soft);padding-bottom:.3rem}
+  .az-leg>summary{cursor:pointer;list-style:none}
+  .az-leg>summary::-webkit-details-marker{display:none}
+  .az-leg>summary::before{content:"▸ ";color:var(--ink-mute)}
+  .az-leg[open]>summary::before{content:"▾ "}
   .az-grup{display:grid;grid-template-columns:1.6rem 1fr;gap:.4rem;margin:.35rem 0}
   .az-litera{font-family:var(--sans);font-weight:600;color:var(--accent);font-size:.82rem}
   .az-nume{display:flex;flex-wrap:wrap;gap:.2rem .5rem}
@@ -2659,26 +2664,36 @@ async function loadToti(){
 function deseneazaToti(lista, leg){
   const box=$("#p-toti");
   if(!lista.length){ box.innerHTML=`<span class="hint">Nu s-au colectat încă semnături.</span>`; return; }
-  // Grouped by initial, so the list can be scanned rather than read. The heading letter is the
-  // folded one — `Șovăială` belongs under Ș, and a reader looking for it does not care that a
-  // byte comparison would file it after Z.
-  const pe_litera={};
+  // Grouped by legislature, because that is the shape Parliament actually has: a reader asking
+  // "who was in the 2020 chamber" is asking about a body that no longer exists. Somebody who
+  // served twice appears under each of their terms — that is not a duplicate, it is two mandates,
+  // and each carries the group they sat in *then*.
+  const pe_leg={};
   lista.forEach((p,i)=>{
-    const l=(p.nume||"?").normalize("NFD").replace(/[\u0300-\u036f]/g,"").charAt(0).toUpperCase();
-    (pe_litera[l]=pe_litera[l]||[]).push({p,i});
+    (p.mandate||[]).forEach(m=>{
+      const l=m.leg||"?";
+      (pe_leg[l]=pe_leg[l]||[]).push({p,i,m});
+    });
   });
+  const ani=Object.keys(pe_leg).sort().reverse();
+  const fold=t=>(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
   box.innerHTML=`<p class="hint" style="margin:.3rem 0">${nf(lista.length)} parlamentari`
-    +(leg?` în legislatura ${esc(leg)}`:` în tot ce s-a colectat`)+` · apasă un nume</p>`
-    +Object.keys(pe_litera).sort().map(l=>
-      `<div class="az-grup"><div class="az-litera">${esc(l)}</div><div class="az-nume">`
-      +pe_litera[l].map(({p,i})=>
-        `<button type="button" class="az-p" data-i="${i}" data-leg="${esc(leg)}">${esc(p.nume)}`
-        +`<span class="az-ani">${esc((p.legislaturi||[]).join("/"))}</span></button>`).join("")
-      +`</div></div>`).join("");
+    +(leg?` în legislatura ${esc(leg)}`:` în ${ani.length} legislaturi`)+` · apasă un nume</p>`
+    +ani.map(an=>{
+      const oameni=pe_leg[an].sort((a,b)=>fold(a.p.nume)<fold(b.p.nume)?-1:1);
+      return `<details class="az-leg"${an===ani[0]?" open":""}>`
+        +`<summary><span class="az-litera">${esc(an)}</span>`
+        +`<span class="hint"> · ${nf(oameni.length)} parlamentari</span></summary>`
+        +`<div class="az-nume">`
+        +oameni.map(({p,i,m})=>
+          `<button type="button" class="az-p" data-i="${i}" data-leg="${esc(leg)}">${esc(p.nume)}`
+          +(m.grupuri&&m.grupuri.length?`<span class="az-ani">${esc(m.grupuri.join("/"))}</span>`:``)
+          +`</button>`).join("")
+        +`</div></details>`;
+    }).join("");
   box.querySelectorAll(".az-p").forEach(b=>{
     b.onclick=()=>{
       const p=TOTI[b.dataset.leg][+b.dataset.i];
-      // Straight to the record when there is one term, and to the choice when there are several.
       $("#p-q").value=p.nume;
       cautaParlamentar();
       $("#p-q").scrollIntoView({block:"center"});
