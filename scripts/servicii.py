@@ -82,6 +82,9 @@ class Stare:
         self.vid: list[dict] = self._incarca_raport("vid.json")
         self.neconstitutional: list[dict] = self._incarca_raport("neconstitutional.json")
         self.norme_lovite: list[dict] = self._incarca_raport("norme_lovite.json")
+        # The groups and the directory, settled at publish time. See `construieste_parlament`.
+        parlament = self._incarca_raport("parlament.json")
+        self.parlament: dict = parlament if isinstance(parlament, dict) else {}
         # Lazy: only the model pass reads the reasoning, and that pass needs a model. Loading it
         # eagerly would make every offline session pay for a feature it is not using.
         self._considerente: dict[str, str] | None = None
@@ -131,7 +134,9 @@ class Stare:
     # obligations (`vid.py`) and the struck-but-unrepaired register (`neconstitutional.py`).
     # Absent (a localhost that has not been built) → the pass is silently empty, like every other
     # data-gated pass. The linter filters each to what the current draft touches.
-    def _incarca_raport(self, nume: str) -> list[dict]:
+    def _incarca_raport(self, nume: str):
+        """A prebuilt report. Returns whatever the file holds — the older ones are lists, the
+        Parliament one is an object keyed by legislature."""
         cai = [self.date_dir / nume] if self.are_rapoarte else [Path("web/data") / nume, Path(nume)]
         for cale in cai:
             if cale.is_file():
@@ -1334,6 +1339,9 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                 }
             if toti:
                 # The directory, for a reader who has no name to type — which is most readers.
+                gata = (stare.parlament.get("persoane") or {}).get(leg or "")
+                if gata is not None:
+                    return {"leg": leg, "persoane": gata}
                 return {
                     "leg": leg,
                     "persoane": [_persoana_dict(dep, p) for p in dep.toti(con, leg=leg)],
@@ -1368,6 +1376,13 @@ def _deputati(qs: dict, stare: Stare) -> dict:
                 }
             # `leg` narrows a group's record to one parliament. A sum across parliaments it was
             # differently composed in reads as one continuous record and is not.
+            gata = (stare.parlament.get("grupuri") or {}).get(leg or "")
+            if gata is not None:
+                return {
+                    "legislaturi": stare.parlament.get("legislaturi", []),
+                    "leg": leg if doar_grupuri or leg else None,
+                    "grupuri": gata,
+                }
             return {
                 "legislaturi": dep.legislaturi(con),
                 "leg": leg if doar_grupuri or leg else None,
@@ -2065,3 +2080,33 @@ def _vecini(act_id: str, stare: Stare, *, limita: int = 10) -> dict:
     finally:
         graf.close()
     return {"act": act_id, "inbound": inb, "outbound": outb}
+
+
+def construieste_parlament(initiative_db: str) -> dict:
+    """The whole-Parliament answers, settled once at publish time.
+
+    `/api/deputati` with no name asks for the groups and the legislatures; with `toti` it asks for
+    the directory. Both aggregate the signature tables — 68.783 initiator rows — and neither
+    depends on anything the reader types beyond `leg`, whose values are the handful of
+    legislatures. Computed per request that is fine against a local file and ruinous against a
+    mounted one: measured on the published build, the groups panel took **54,2 s**, which the page
+    shows as an empty panel rather than a slow one.
+
+    Keyed by legislature, with `""` for "across all of them".
+    """
+    from scripts import deputati as dep
+
+    with depozit.deschide(initiative_db, readonly=True) as con:
+        try:
+            legi = dep.legislaturi(con)
+            return {
+                "legislaturi": legi,
+                "grupuri": {(leg or ""): dep.grupuri(con, leg) for leg in [None, *legi]},
+                "persoane": {
+                    (leg or ""): [_persoana_dict(dep, p) for p in dep.toti(con, leg=leg)]
+                    for leg in [None, *legi]
+                },
+            }
+        except sqlite3.OperationalError:
+            # A store that predates the signature tables: nothing collected yet.
+            return {"legislaturi": [], "grupuri": {}, "persoane": {}}
