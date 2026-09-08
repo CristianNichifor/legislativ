@@ -353,10 +353,13 @@ async def _cauta_json(query):
         limita=_int(qs, 'limita') or 25, offset=_int(qs, 'offset') or 0,
         tip=(qs.get('tip', [''])[0] or None),
         an_min=_int(qs, 'an_min'), an_max=_int(qs, 'an_max'))
+    # Only the mounted path knows about the title band; the standalone shards rank titles first
+    # already, so there is nothing to ask them for.
+    doar_titluri = qs.get('doar_titluri', [''])[0] == '1'
     # The index shards live in the repository; the titles and snippets come from the mounted
     # corpus, so nothing has to ship the 7,3 GB of per-act files the standalone shards needed.
     if _DEPOZIT:
-        r = await _cauta_montat(q, _DEPOZIT, 'data/corpus.db', **filtre)
+        r = await _cauta_montat(q, _DEPOZIT, 'data/corpus.db', doar_titluri=doar_titluri, **filtre)
     else:
         r = await _cauta_shard(q, 'data', **filtre)
     return _json.dumps(r, ensure_ascii=False)
@@ -416,6 +419,30 @@ BOOT = """
     return m;
   }
 
+  // Câte acte intră în bandă și cât o așteptăm. Motorul stă în worker, deci prima căutare o
+  // așteaptă pe Pyodide; peste termen, pagina răspunde din Pagefind singur, cum răspundea și ieri.
+  const BANDA_TITLURI = 8, RABDARE_BANDA = 5000;
+  async function bandaTitluri(qs){
+    const q = (qs.get("q") || "").trim();
+    if (!q) return [];
+    const p = new URLSearchParams({q, limita: String(BANDA_TITLURI), doar_titluri: "1"});
+    // Aceleași filtre ca restul căutării, altfel banda ar contrazice ce a cerut utilizatorul.
+    for (const k of ["tip", "an_min", "an_max"]) if (qs.get(k)) p.set(k, qs.get(k));
+    try {
+      const raspuns = await Promise.race([
+        ready.then(() => call("/api/cauta", p.toString(), "")),
+        new Promise(res => setTimeout(() => res(null), RABDARE_BANDA)),
+      ]);
+      if (!raspuns) return [];
+      const o = (typeof raspuns === "string") ? JSON.parse(raspuns) : raspuns;
+      return (o && o.results) || [];
+    } catch (e) {
+      // Banda e un plus, nu o condiție: dacă motorul nu pornește, căutarea rămâne întreagă.
+      console.warn("banda de titluri a eșuat:", e && e.message);
+      return [];
+    }
+  }
+
   // Forma pe care o citește pagina, aceeași pe care o întorcea motorul din worker.
   async function cauta(qs){
     const q = (qs.get("q") || "").trim();
@@ -438,23 +465,31 @@ BOOT = """
       }
     }
 
-    const r = await m.search(q, Object.keys(filtre).length ? {filters: filtre} : undefined);
+    // Două întrebări diferite pun aceleași cuvinte: „despre ce act e vorba" și „unde apare
+    // sintagma". Pagefind răspunde la a doua și nu poate fi învățat că titlul valorează mai mult:
+    // „achiziții publice" apare undeva în 20.367 de acte, iar Legea 98/2016 iese pe locul 172.
+    // Indexul de titluri răspunde la prima, e mic, și e deja publicat lângă corpus.
+    const [r, banda] = await Promise.all([
+      m.search(q, Object.keys(filtre).length ? {filters: filtre} : undefined),
+      offset === 0 ? bandaTitluri(qs) : Promise.resolve([]),
+    ]);
     const pagina = r.results.slice(offset, offset + limita);
     // Aici e câștigul: fragmentele se aduc deodată, nu unul câte unul.
     const date = await Promise.all(pagina.map(x => x.data()));
-    return {
-      results: date.map(d => ({
-        act_id: (d.meta && d.meta.id) || String(d.url || "").replace(/^#\/act\//, ""),
-        locator: "",
-        fragment: d.excerpt || "",
-        titlu: (d.meta && d.meta.title) || "",
-        sursa_url: "",
-        tip: (d.meta && d.meta.tip) || "",
-        an: d.meta && d.meta.an ? parseInt(d.meta.an, 10) : null,
-      })),
-      total: r.results.length,
-      offset, limita,
-    };
+    const corp = date.map(d => ({
+      act_id: (d.meta && d.meta.id) || String(d.url || "").replace(/^#\/act\//, ""),
+      locator: "",
+      fragment: d.excerpt || "",
+      titlu: (d.meta && d.meta.title) || "",
+      sursa_url: "",
+      tip: (d.meta && d.meta.tip) || "",
+      an: d.meta && d.meta.an ? parseInt(d.meta.an, 10) : null,
+    }));
+    // Banda intră deasupra, iar dublurile cad din corp — un act al cărui titlu se potrivește nu
+    // trebuie să apară de două ori doar fiindcă sintagma e și în text.
+    const dinBanda = new Set(banda.map(x => x.act_id));
+    const rezultate = banda.concat(corp.filter(x => !dinBanda.has(x.act_id))).slice(0, limita);
+    return {results: rezultate, total: r.results.length, offset, limita};
   }
 
   let resolveReady, rejectReady;
