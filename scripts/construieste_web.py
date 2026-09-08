@@ -935,6 +935,9 @@ def _fonturi() -> None:
 # Pagefind ships a client and an index. The client is small and comes from our own origin, so
 # `script-src \'self\'` stays as it is — only the index and the per-result fragments live in the
 # repository, and those are data the CSP already allows as connect targets.
+# The client kept in git, for builds that have no index to take it from — CI, above all.
+CLIENT_COMIS = ROOT / "app" / "pagefind"
+
 CLIENT_CAUTARE = (
     "pagefind.js",
     "pagefind-worker.js",
@@ -961,13 +964,43 @@ def _felii_cautare() -> list[Path]:
     return [intreg] if intreg.is_dir() else []
 
 
-def _client_cautare() -> None:
-    """Copy Pagefind's client next to the page, if an index has been built."""
-    felii = _felii_cautare()
-    if not felii:
+def _verifica_versiunea_clientului() -> None:
+    """Refuse a committed client that no longer matches the indexer that writes the index.
+
+    Pagefind's client and its index files are one version. Drift between them does not announce
+    itself: the client loads, the query runs, and the answers are wrong or absent.
+    """
+    fisier = CLIENT_COMIS / "VERSIUNE"
+    if not fisier.is_file():
         return
+    comis = fisier.read_text(encoding="utf-8").strip()
+    pin = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["dependencies"][
+        "pagefind"
+    ]
+    if comis != pin:
+        raise SystemExit(
+            f"clientul din app/pagefind/ e Pagefind {comis}, dar indexul se face cu {pin}. "
+            f"Reînnoiește-l dintr-o felie proaspătă și scrie {pin} în app/pagefind/VERSIUNE."
+        )
+
+
+def _client_cautare() -> None:
+    """Copy Pagefind's client next to the page.
+
+    The page imports the client from its own origin — `script-src 'self'` is what makes "the draft
+    never leaves the tab" a rule, and loading a script from the repository would widen it. So the
+    client has to be in the build.
+
+    It comes from a freshly built index when there is one, and otherwise from `app/pagefind/`,
+    which is in git for exactly this reason: CI has no index — it is git-ignored and lives in the
+    object store — so a build there would otherwise ship a page whose first search 404s.
+    """
+    _verifica_versiunea_clientului()
+    felii = _felii_cautare()
     # The client is one and the same in every slice — it is the data beside it that differs.
-    sursa = felii[0]
+    sursa = felii[0] if felii else CLIENT_COMIS
+    if not sursa.is_dir():
+        return
     tinta = WEB / "pagefind"
     tinta.mkdir(parents=True, exist_ok=True)
     n = 0
