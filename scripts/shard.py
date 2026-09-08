@@ -214,8 +214,8 @@ def _postari_felie(arg: tuple) -> str:
         out.close()
 
 
-def construieste_index(corpus_db: str, out: str, *, log=print) -> dict:
-    """Write `idx/`, a slim `index.json` and `termeni.json`. No per-act files."""
+def construieste_index(corpus_db: str, out: str, *, graf_db: str = "", log=print) -> dict:
+    """Write `idx/`, `idx-titlu/`, a slim `index.json` and `termeni.json`. No per-act files."""
     import concurrent.futures as cf
     import os
     import sqlite3
@@ -228,6 +228,22 @@ def construieste_index(corpus_db: str, out: str, *, log=print) -> dict:
         acte = con.execute(
             "SELECT id, tip, numar, an, titlu, republicat_din FROM acte ORDER BY an DESC, numar"
         ).fetchall()
+        # How often the rest of the corpus cites an act is the closest thing to "which one did
+        # they mean": Codul civil 2.180, Legea 33/1994 on expropriation 209, the 1941
+        # expropriation law none. Without it, ties fell back to recency and a 2026 ordin
+        # outranked the law it applies.
+        citari: dict[str, int] = {}
+        if graf_db and Path(graf_db).is_file():
+            g = sqlite3.connect(f"file:{graf_db}?mode=ro", uri=True)
+            try:
+                citari = dict(
+                    g.execute(
+                        "SELECT catre_act, count(DISTINCT din_act) FROM muchii GROUP BY catre_act"
+                    )
+                )
+            finally:
+                g.close()
+            log(f"  citări: {len(citari)} acte citate de altele")
         # Slim on purpose: no titles, no URLs. Carrying those is what made the full index 91 MB on
         # every first visit, and the mounted corpus has them for the few acts a page shows.
         index = [
@@ -239,6 +255,7 @@ def construieste_index(corpus_db: str, out: str, *, log=print) -> dict:
                 # Title length in tokens: two acts matching the same words are not equally about
                 # them, and the shorter title is the more specific act.
                 "lt": len(_tokenuri(r["titlu"] or "")),
+                **({"c": citari[r["id"]]} if citari.get(r["id"]) else {}),
                 **({"republicat_din": r["republicat_din"]} if r["republicat_din"] else {}),
             }
             for r in acte
@@ -314,3 +331,38 @@ def construieste_index(corpus_db: str, out: str, *, log=print) -> dict:
     octeti = sum(p.stat().st_size for p in (baza / "idx").glob("*.json"))
     log(f"  idx: {scrise} shard-uri · {pastrate} tokeni · {octeti / 1e6:.1f} MB")
     return {"acte": n_acte, "tokeni": pastrate, "shard_uri": scrise, "idx_octeti": octeti}
+
+
+def construieste_index_titluri(corpus_db: str, out: str, *, log=print) -> dict:
+    """The second, tiny index: act titles only.
+
+    Dropping titles from `index.json` took it from 91 MB to 16,8 MB and took the best ranking
+    signal with it — a law about public procurement says so in its title, and the words appear
+    *somewhere* in 79.073 acts, which tells you almost nothing. 203.353 titles are a few megabytes,
+    so they get their own index and their matches outrank body matches.
+    """
+    import sqlite3
+
+    baza = Path(out) / "idx-titlu"
+    baza.mkdir(parents=True, exist_ok=True)
+    for vechi in baza.glob("*.json"):
+        vechi.unlink()
+
+    con = sqlite3.connect(f"file:{corpus_db}?mode=ro", uri=True)
+    try:
+        acte = con.execute("SELECT id, titlu FROM acte ORDER BY an DESC, numar").fetchall()
+    finally:
+        con.close()
+
+    galeti: dict[str, dict[str, list[int]]] = {}
+    for n, (_id, titlu) in enumerate(acte):
+        for t in set(_tokenuri(titlu or "")):
+            galeti.setdefault(t[:_PREFIX], {}).setdefault(t, []).append(n)
+
+    for prefix, continut in galeti.items():
+        (baza / f"{prefix}.json").write_text(
+            json.dumps(continut, ensure_ascii=False), encoding="utf-8"
+        )
+    octeti = sum(p.stat().st_size for p in baza.glob("*.json"))
+    log(f"  idx-titlu: {len(galeti)} shard-uri · {octeti / 1e6:.1f} MB")
+    return {"shard_uri": len(galeti), "octeti": octeti}
