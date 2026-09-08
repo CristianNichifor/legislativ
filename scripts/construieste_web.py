@@ -983,7 +983,7 @@ def _client_cautare() -> None:
     print(f"  client de căutare → {tinta} ({n} fișiere)")
 
 
-def _pagina(depozit: str = "") -> None:
+def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
@@ -992,14 +992,26 @@ def _pagina(depozit: str = "") -> None:
     # Prepend the manager block right after <body> so it runs before the app's own inline script.
     # The slice count is baked in rather than discovered: the client would otherwise have to probe
     # for a directory that is not there, and a 404 on every load is a worse answer than a number.
-    felii = len(_felii_cautare()) or 1
+    #
+    # It cannot always be counted here. This runs in CI too, where the index is absent — it is not
+    # in git — so a count taken from disk would silently come back 1 and the page would be built
+    # against `pagefind/`, an index that may hold a fraction of the corpus and would answer every
+    # query as if that fraction were the law. Rather than guess, refuse.
+    felii = felii_cautare or len(_felii_cautare())
+    if depozit and not felii:
+        raise SystemExit(
+            "nu știu în câte felii e indexul din depozit și nu găsesc niciun director pagefind* "
+            "aici — dă --felii-cautare N. Fără el aș construi pagina pentru un singur index, "
+            "care poate acoperi o mică parte din corpus fără să se vadă."
+        )
+    felii = felii or 1
     boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
     pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
 
-def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> None:
+def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "", felii_cautare: int = 0) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
     if sursa == "gata":
@@ -1038,7 +1050,7 @@ def main(sursa: str, *, tot_parlamentul: bool = False, depozit: str = "") -> Non
     _worker(depozit)
     _fonturi()
     _client_cautare()
-    _pagina(depozit)
+    _pagina(depozit, felii_cautare)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
 
@@ -1073,5 +1085,16 @@ if __name__ == "__main__":
             "fără ea, rămâne pe catalogul mic și pe felii."
         ),
     )
+    ap.add_argument(
+        "--felii-cautare",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "în câte felii e tăiat indexul de căutare din depozit. Implicit: câte directoare "
+            "pagefind* sunt aici. În CI nu e niciunul — indexul nu stă în git — deci acolo "
+            "numărul trebuie dat, altfel construcția se oprește."
+        ),
+    )
     a = ap.parse_args()
-    main(a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit)
+    main(a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit, felii_cautare=a.felii_cautare)
