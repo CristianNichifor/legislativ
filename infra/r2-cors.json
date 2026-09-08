@@ -1,13 +1,17 @@
-[
-  {
-    "AllowedOrigins": [
-      "https://cristiannichifor.github.io",
-      "http://127.0.0.1:8000",
-      "http://localhost:8000"
-    ],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["range"],
-    "ExposeHeaders": ["content-length", "content-range", "accept-ranges", "etag"],
-    "MaxAgeSeconds": 86400
-  }
-]
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://cristiannichifor.github.io",
+          "http://127.0.0.1:8000",
+          "http://localhost:8000"
+        ],
+        "methods": ["GET", "HEAD"],
+        "headers": ["range"]
+      },
+      "exposeHeaders": ["content-length", "content-range", "accept-ranges", "etag"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

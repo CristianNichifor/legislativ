@@ -91,7 +91,7 @@ def publica(sursa: Path, tinta: Path) -> Path:
     tinta.parent.mkdir(parents=True, exist_ok=True)
 
     inceput = time.time()
-    print(f"copiez {_gb(sursa):.2f} GB → {tinta}")
+    print(f"copiez {_gb(sursa):.2f} GB → {tinta}", flush=True)
     shutil.copyfile(sursa, tinta)
     # A live corpus may have uncheckpointed pages sitting in its WAL; without them the copy is
     # stale, so bring the sidecars along and let SQLite fold them in below.
@@ -99,7 +99,7 @@ def publica(sursa: Path, tinta: Path) -> Path:
         vecin = sursa.with_name(sursa.name + coada)
         if vecin.is_file():
             shutil.copyfile(vecin, tinta.with_name(tinta.name + coada))
-    print(f"  copiat în {time.time() - inceput:.0f}s")
+    print(f"  copiat în {time.time() - inceput:.0f}s", flush=True)
 
     con = sqlite3.connect(tinta)
     try:
@@ -114,13 +114,13 @@ def publica(sursa: Path, tinta: Path) -> Path:
         for tabel in DE_ARUNCAT:
             if tabel in prezente:
                 con.execute(f"DROP TABLE {tabel}")
-                print(f"  aruncat {tabel}")
+                print(f"  aruncat {tabel}", flush=True)
         con.commit()
 
-        print("VACUUM (rescrie fișierul, grupează proviziile fiecărui act) …")
+        print("VACUUM (rescrie fișierul, grupează proviziile fiecărui act) …", flush=True)
         inceput = time.time()
         con.execute("VACUUM")
-        print(f"  vacuum în {time.time() - inceput:.0f}s")
+        print(f"  vacuum în {time.time() - inceput:.0f}s", flush=True)
     finally:
         con.close()
 
