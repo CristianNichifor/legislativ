@@ -19,7 +19,7 @@
 #   CORPUS          the collected corpus                        (default: ./corpus.db)
 #   BUCKET          R2 bucket                                   (default: legislativ)
 #   PREFIX          dated prefix                                (default: today)
-#   FELII           slices the search index is built in         (default: 5)
+#   FELII           slices the search index is built in         (default: 8)
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ LUCRU=${LUCRU:-$HOME/.local/share/legislativ}
 CORPUS=${CORPUS:-corpus.db}
 BUCKET=${BUCKET:-legislativ}
 PREFIX=${PREFIX:-$(date +%F)}
-FELII=${FELII:-5}
+FELII=${FELII:-8}
 IDX="$LUCRU/idx"
 
 [ -f "$CORPUS" ] || { echo "nu găsesc $CORPUS" >&2; exit 2; }
@@ -62,9 +62,10 @@ echo "── 3/5 indexul de căutare (Pagefind) ──────────�
 # per-result fragments in parallel. A page of 25 went from 46,6 s to 1,24 s.
 if command -v node >/dev/null && [ -f infra/pagefind.mjs ]; then
   uv run python -m scripts.export_cautare --db "$LUCRU/publicat.db" --tinta "$LUCRU/acte.jsonl"
-  # In slices, one process each: Pagefind keeps every record in memory until it writes, ~200 KB per
-  # act, so all 203.353 at once wants ~40 GB. A machine with less does not stop, it swaps, and it
-  # took this one down mid-run. Each slice peaks around 8 GB and gives the memory back on exit.
+  # In slices, one process each: Pagefind keeps every record in memory until it writes, and this
+  # corpus costs ~345 KB of memory per act — all 203.353 at once wants far more than a workstation
+  # has. A machine with less does not stop, it swaps, and it took this one down mid-run. Eight
+  # slices peak around 9 GB each, and every process gives its memory back when it exits.
   rm -rf pagefind pagefind-[0-9]*
   for f in $(seq 0 $((FELII - 1))); do
     echo "  felia $((f + 1))/$FELII"
@@ -76,29 +77,7 @@ else
 fi
 
 echo "── 4/5 acreditări ───────────────────────────────────────────────"
-[ -n "${CF_ACCOUNT:-}" ] || { echo "lipsește CF_ACCOUNT" >&2; exit 2; }
-if [ -z "${CF_R2_TOKEN:-}" ]; then
-  [ -n "${CF_R2_TOKEN_OP:-}" ] || { echo "lipsește CF_R2_TOKEN sau CF_R2_TOKEN_OP" >&2; exit 2; }
-  CF_R2_TOKEN=$(op read "$CF_R2_TOKEN_OP")
-fi
-# R2's S3 credentials are derived, never stored: Access Key ID is the token's id, Secret Access
-# Key is the SHA-256 of its value. Retried, because one transient 401 is not a bad token.
-for i in 1 2 3 4 5; do
-  AKID=$(curl -s -H "Authorization: Bearer $CF_R2_TOKEN" \
-    https://api.cloudflare.com/client/v4/user/tokens/verify |
-    python3 -c "import json,sys; d=json.load(sys.stdin); print(d['result']['id'] if d.get('success') else '')" 2>/dev/null)
-  [ -n "$AKID" ] && break
-  sleep $((i * 3))
-done
-[ -n "$AKID" ] || { echo "tokenul nu se verifică la Cloudflare" >&2; exit 1; }
-
-export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare RCLONE_CONFIG_R2_REGION=auto
-export RCLONE_CONFIG_R2_ENDPOINT="https://$CF_ACCOUNT.r2.cloudflarestorage.com"
-export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$AKID"
-export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf %s "$CF_R2_TOKEN" | sha256sum | cut -d' ' -f1)
-# The token is scoped to one bucket, so it cannot ListBuckets — which is correct, not a fault.
-export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
-unset CF_R2_TOKEN
+. infra/acreditari-r2.sh
 
 echo "── 5/5 încărcare în r2:$BUCKET/$PREFIX ──────────────────────────"
 r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line; }

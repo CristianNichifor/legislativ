@@ -18,49 +18,41 @@
 #   CF_R2_TOKEN     the API token value                        (or CF_R2_TOKEN_OP)
 #   CF_R2_TOKEN_OP  an op:// reference to read it from         (needs the 1Password CLI)
 #   BUCKET          bucket name                                (default: legislativ)
-#   FISIER          the file to upload                         (default: publicat.db)
+#   FISIER          the file or directory to upload            (default: publicat.db)
 #   PREFIX          dated prefix for the object                (default: today)
+#   CHEIE           key under the bucket                       (default: $PREFIX/corpus.db)
 
 set -euo pipefail
 
 BUCKET=${BUCKET:-legislativ}
 FISIER=${FISIER:-publicat.db}
 PREFIX=${PREFIX:-$(date +%F)}
-CHEIE="$PREFIX/corpus.db"
+CHEIE=${CHEIE:-$PREFIX/corpus.db}
 
 [ -n "${CF_ACCOUNT:-}" ] || { echo "lipsește CF_ACCOUNT" >&2; exit 2; }
-[ -f "$FISIER" ] || { echo "nu găsesc $FISIER — rulează întâi scripts/publica.py" >&2; exit 2; }
+[ -e "$FISIER" ] || { echo "nu găsesc $FISIER — rulează întâi scripts/publica.py" >&2; exit 2; }
 
-if [ -z "${CF_R2_TOKEN:-}" ]; then
-  [ -n "${CF_R2_TOKEN_OP:-}" ] || { echo "lipsește CF_R2_TOKEN sau CF_R2_TOKEN_OP" >&2; exit 2; }
-  command -v op >/dev/null || { echo "CF_R2_TOKEN_OP cere CLI-ul 1Password (op)" >&2; exit 2; }
-  CF_R2_TOKEN=$(op read "$CF_R2_TOKEN_OP")
-fi
-
-AKID=$(curl -fsS -H "Authorization: Bearer $CF_R2_TOKEN" \
-  https://api.cloudflare.com/client/v4/user/tokens/verify |
-  python3 -c "import json,sys; print(json.load(sys.stdin)['result']['id'])") ||
-  { echo "tokenul nu se verifică la Cloudflare" >&2; exit 1; }
-
-export RCLONE_CONFIG_R2_TYPE=s3
-export RCLONE_CONFIG_R2_PROVIDER=Cloudflare
-export RCLONE_CONFIG_R2_REGION=auto
-export RCLONE_CONFIG_R2_ENDPOINT="https://$CF_ACCOUNT.r2.cloudflarestorage.com"
-export RCLONE_CONFIG_R2_ACCESS_KEY_ID="$AKID"
-export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY=$(printf %s "$CF_R2_TOKEN" | sha256sum | cut -d' ' -f1)
-# The token is scoped to one bucket, so rclone must not try to check for the bucket's existence.
-export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
-unset CF_R2_TOKEN
+. "$(dirname "$0")/acreditari-r2.sh"
 
 echo "încarc $FISIER → r2:$BUCKET/$CHEIE"
-# 100 MiB parts: ~67 for a 6,7 GB file, well inside the 10.000-part ceiling and the 1M free
-# class A operations per month. --no-traverse skips listing a bucket we are only writing to.
-rclone copyto "$FISIER" "r2:$BUCKET/$CHEIE" \
-  --s3-chunk-size 100M --s3-upload-concurrency 4 \
-  --no-traverse --stats 30s --stats-one-line --progress
+if [ -d "$FISIER" ]; then
+  # A directory is a search index slice: thousands of small fragments, where the cost is the number
+  # of requests rather than the number of bytes. Parallel transfers, and no chunking to speak of.
+  rclone copy "$FISIER" "r2:$BUCKET/$CHEIE" \
+    --transfers 32 --checkers 32 \
+    --no-traverse --stats 30s --stats-one-line --progress
+else
+  # 100 MiB parts: ~67 for a 6,7 GB file, well inside the 10.000-part ceiling and the 1M free
+  # class A operations per month. --no-traverse skips listing a bucket we are only writing to.
+  rclone copyto "$FISIER" "r2:$BUCKET/$CHEIE" \
+    --s3-chunk-size 100M --s3-upload-concurrency 4 \
+    --no-traverse --stats 30s --stats-one-line --progress
+fi
 
 echo
-echo "în bucket:"
-rclone ls "r2:$BUCKET"
+echo "sub r2:$BUCKET/$PREFIX:"
+# Scoped to the prefix and summarised: a published index is thousands of fragments, and listing
+# them one by one says less than their count and their weight.
+rclone size "r2:$BUCKET/$PREFIX"
 echo
 echo "acum construiește cu:  --depozit https://<domeniu>/$PREFIX"
