@@ -158,3 +158,35 @@ def test_the_slice_does_not_select_acts_by_rowid(tmp_path, monkeypatch):
         assert con.execute("SELECT count(*) FROM acte").fetchone()[0] == 10
     finally:
         con.close()
+
+
+def test_worker_fara_depozit_nu_cere_corpusul(tmp_path, monkeypatch):
+    """Without `--depozit` the worker must not reach for a corpus that was never published.
+
+    The mount is guarded by `if (DEPOZIT)`, so an empty string has to stay empty: a stray
+    placeholder would make the guard truthy and every visit would fetch a URL that is not there.
+    """
+    from scripts import construieste_web as cw
+
+    monkeypatch.setattr(cw, "WEB", tmp_path)
+    cw._worker()
+    text = (tmp_path / "worker.js").read_text(encoding="utf-8")
+
+    assert 'const DEPOZIT = "";' in text
+    assert "__DEPOZIT__" not in text
+    assert "__PYODIDE__" not in text
+
+
+def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
+    from scripts import construieste_web as cw
+
+    monkeypatch.setattr(cw, "WEB", tmp_path)
+    cw._worker("https://date.exemplu.ro/2026-09-08")
+    text = (tmp_path / "worker.js").read_text(encoding="utf-8")
+
+    assert 'const DEPOZIT = "https://date.exemplu.ro/2026-09-08";' in text
+    # SQLite pages are 4 KB. A larger chunk fetches pages nobody asked for: measured against the
+    # real corpus, 1 MiB cost 94 MB to open one law where 16 KB cost 1,19 MB.
+    assert "const BUCATA = 16384;" in text
+    # Both backends must survive the build — offline reads the same pages from disk.
+    assert "prinRange" in text and "dinOpfs" in text and "monteaza" in text
