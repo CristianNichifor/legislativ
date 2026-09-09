@@ -100,7 +100,7 @@ metadata and imported document bytes. Static clients reject persistent dossier
 operations explicitly. No hosted authentication or multi-user isolation is provided;
 this is a local single-user workspace.
 
-First creation initializes schema 4 and the SQLite application ID in one write
+First creation initializes schema 7 and the SQLite application ID in one write
 transaction. Reads do not create or migrate files. An unrelated nonempty database
 or incompatible application/schema version is rejected, not reset. A failure during
 initialization rolls back tables and version markers together. Future migrations
@@ -461,7 +461,7 @@ versions reject schema 5. SQLite backups include every proposal revision. The lo
 database owner can bypass triggers; this is not a tamper-proof audit trail.
 
 The route uses the existing local Host/Origin restrictions and `no-store` responses.
-Only this POST endpoint permits an 80 KB body; other dossier endpoints retain 16 KB.
+Proposal save and structured preview permit an 80 KB body; other dossier endpoints retain 16 KB.
 Static deployments cannot store proposals. There are no AI checks, automatic legal
 classification or cross-run carryover. Existing review exports do not include
 proposals; dedicated proposal exports and SQLite backups do.
@@ -503,7 +503,8 @@ Additional modes of `GET /api/dosare/propuneri`:
   revision metadata, `total`, `offset`, `limita=20`.
 - `?id=<dossier>&rulare_id=<run>&constatare_id=<finding>&revizie=<n>`: exact saved revision.
 - `?mod=export&id=<dossier>&rulare_id=<run>&constatare_id=<finding>&revizie=<n>`:
-  version-1 export envelope plus `markdown`. The browser omits the duplicate Markdown
+  version-2 export envelope plus `markdown` and revision-specific `analiza` (or null).
+  The browser omits the duplicate Markdown
   member from JSON downloads. An explicit positive revision is mandatory for exports.
 
 These are read-only operations using the existing local Host/Origin and `no-store`
@@ -568,4 +569,74 @@ exports retain snapshots. Existing reports/reviews/context and old free-text pro
 responses are unchanged. Preview and save use local Host/Origin controls, no-store
 responses and an 80 KB request ceiling; static deployments cannot perform them.
 
-The remaining seven v1 milestones are tracked in [RELEASE_V1.md](RELEASE_V1.md).
+### Revision-linked analysis (v1 milestone 2)
+
+`Analiza propunerii` reads saved history on opening; only `Verifica aceasta revizie`
+runs checks. It accepts an explicit positive saved revision, not editor text. Blank
+saved text cannot be checked. Unsaved proposal/review/context edits remain untouched.
+Results never transfer to newer revisions, including title/rationale-only revisions
+with identical text. An older selection is visibly historical; an unchecked new
+revision has no result. Composer round-trip checking remains a separate operation.
+
+The `analiza-propunere-v1` engine reuses deterministic drafting-form/language checks,
+internal operation conflicts, deadline/obligation extraction, exact local citation
+coverage and terminology heuristics against definitions in explicitly cited acts.
+Deadline/citation rows are inventories, not counts of violations. `verificat` means
+that this bounded check ran, **not** legal validity or complete statutory coverage.
+`partial`, `indisponibil` and `nesuportat` remain separate states. No overall legal
+verdict is generated. Unresolved internal citations are not assigned an implicit act.
+Empty/duplicate provision rows and capture limits cannot produce complete coverage.
+
+Whole-corpus/EU compatibility, implementation-gap assessment, CCR analysis and
+parliamentary-version overlaps are explicitly unsupported by this revision adapter.
+Their existing separate workflows are not silently presented as proposal checks.
+No AI, reviewer identity, source download or corpus mutation is required or performed.
+
+Sources are captured in one read-only local SQLite transaction at check time. The
+snapshot retains exact act IDs, source URLs, collection timestamps, ordered provision
+rows, dates and text. It is separate from both the original finding evidence and any
+structured proposal target captured earlier. Snapshot hashing uses SHA-256 of canonical
+UTF-8 JSON (sorted keys, compact separators, unescaped Unicode); each source hash excludes
+its own `sha256` field, and `surse_sha256` covers the complete ordered source list. The
+basis records the full saved proposal hash, exact text hash, proposal ID/revision, run,
+finding and original report hash. This is reproducibility metadata, not a freshness,
+applicability or tamper-proofness certificate.
+
+Limits: first 20 recognized act IDs in sorted order; 500 indexed rows per act; 400 KB
+of canonical provision rows across the capture; 100 displayed results per check;
+4 MB total saved analysis. Terminology compares at most 40 distinct act/term/definition
+tuples, further bounded by `floor(120000 / saved_text_characters)`. The applied limit
+and compared count are retained; truncation is partial. Missing corpus/table/act/text
+is never interpreted as no legal problem. Extra unsupported rules remain visible.
+
+`POST /api/dosare/propuneri/analize` accepts exactly `id` (32-character retry UUID),
+`dosar_id`, `rulare_id`, `constatare_id`, `revizie` (the revision to check, not an optimistic
+edit counter). All membership and basis checks are server-side; client text, hashes and
+computed results are rejected. Each new ID creates an append-only analysis. Exact retries
+return the committed result without reading changed sources or recomputing checks;
+the same ID cannot be reused for another revision. Concurrent retries commit once.
+Pending/failed retry identity survives finding navigation within the displayed run.
+Late responses do not replace another finding or an explicitly selected historical check.
+
+`GET /api/dosare/propuneri/analize?id=<dossier>&rulare_id=<run>&constatare_id=<finding>&revizie=<n>`
+returns the latest analysis of **that revision only**, or `selectata: null`, plus history
+metadata across the finding's proposal revisions (20 per page, `offset`). Optional
+`analiza_id` selects an exact check belonging to that same revision; mismatches fail.
+History/exports never execute analysis or migrate a store. Both methods enforce local
+Host/Origin restrictions, `no-store`, and static refusal. POST has a 16 KB ceiling.
+
+Proposal JSON/Markdown exports now include the exact revision's latest saved analysis,
+or null/unchecked text. Optional `analiza_id` selects a specific historical check.
+The analysis panel's download action exports its selected check and matching revision;
+the existing revision-export action chooses the latest check of its requested revision.
+Both preserve analysis statuses, source snapshots, hashes and limitations separately
+from author wording and original evidence. JSON export schema is now **2**. Exports
+may disclose the complete saved run and captured local sources, not just visible rows.
+
+Schema **7** adds `analize_propuneri`, linked to immutable proposal revision IDs, with
+UPDATE/DELETE rejection triggers. Schemas 1-6 remain readable without migration;
+the next explicit write upgrades atomically and failed writes roll back. **Back up
+dossiers before upgrading; older app versions reject schema 7.** SQLite backups
+retain every analysis and source snapshot. A local database owner can bypass triggers.
+
+The remaining six v1 milestones are tracked in [RELEASE_V1.md](RELEASE_V1.md).

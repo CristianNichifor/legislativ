@@ -303,6 +303,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
+                "/api/dosare/propuneri/analize",
             ):
                 from scripts import dosare
 
@@ -312,7 +313,11 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/propuneri":
+                    if ruta.path == "/api/dosare/propuneri/analize":
+                        from scripts.analize_propuneri import citeste_cerere
+
+                        out = citeste_cerere(path, qs)
+                    elif ruta.path == "/api/dosare/propuneri":
                         from scripts.propuneri import citeste_cerere
 
                         out = citeste_cerere(path, qs)
@@ -409,6 +414,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
+                "/api/dosare/propuneri/analize",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -470,6 +476,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
+                "/api/dosare/propuneri/analize",
             ):
                 from scripts import dosare
 
@@ -477,7 +484,11 @@ def face_handler(stare: Stare):
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/propuneri/previzualizare":
+                    if ruta == "/api/dosare/propuneri/analize":
+                        from scripts.analize_propuneri import salveaza
+
+                        out = salveaza(stare, cerere)
+                    elif ruta == "/api/dosare/propuneri/previzualizare":
                         from scripts.propuneri import previzualizeaza
 
                         out = previzualizeaza(stare, cerere)

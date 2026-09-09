@@ -135,17 +135,24 @@ def _json_block(value):
     return _block(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2), "json")
 
 
-def exporta(path, dossier_id, run_id, finding_id, revision):
+def exporta(path, dossier_id, run_id, finding_id, revision, analysis_id=None):
+    from scripts.analize_propuneri import istoric as analize
+
     _number(revision, 1)
     data = citeste(path, dossier_id, run_id, finding_id, revision)
     run = dosare.rulari(path, dossier_id, run_id)
     proposal = data["propunere"]
+    analysis = analize(path, dossier_id, run_id, finding_id, revision, analysis_id=analysis_id)[
+        "selectata"
+    ]
     limitations = [
         "Text propus de autor, nu legislatie in vigoare si nu concluzie juridica verificata.",
         "Exportul contine numai revizia salvata selectata, nu modificarile nesalvate.",
         "Dovezile sunt cele pastrate in rularea originala, nu surse actualizate la export.",
         "Referintele UE ale rularii sunt contextuale, nu constatari de incompatibilitate.",
         "Absenta unei dovezi nu dovedeste absenta unei norme sau a unei exceptii.",
+        "Analiza apartine exclusiv reviziei exportate; "
+        "sursele ei sunt separate de dovada originala.",
     ]
     sections = [
         "# Propunere de modificare",
@@ -172,9 +179,16 @@ def exporta(path, dossier_id, run_id, finding_id, revision):
                 _json_block(proposal["interventie"]),
             ]
         )
+    sections.extend(
+        [
+            "## Analiza reviziei salvate (nu verdict juridic)",
+            _json_block(analysis) if analysis else "Revizie fara analiza salvata.",
+        ]
+    )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         **data,
+        "analiza": analysis,
         "rulare": run,
         "limitari": limitations,
         "markdown": "\n\n".join(sections) + "\n",
@@ -190,7 +204,7 @@ def citeste_cerere(path, qs):
     if mode == "istoric":
         return istoric(*params, int(qs.get("offset", ["0"])[0]))
     if mode == "export":
-        return exporta(*params, int(qs.get("revizie", ["0"])[0]))
+        return exporta(*params, int(qs.get("revizie", ["0"])[0]), qs.get("analiza_id", [None])[0])
     if mode:
         raise ValueError("Operatie de propunere necunoscuta.")
     return citeste(*params, int(qs["revizie"][0]) if "revizie" in qs else None)
