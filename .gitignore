@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .ruff_cache/
+/.context-fixture/
 
 # Fetched pages. The parser's fixtures are the exception and are un-ignored by name in
 # sources/README.md's terms — a parser test against a page nobody else can fetch is not a test.
