@@ -211,6 +211,22 @@ def citeste(stare, plx: str, id: str) -> dict:
     return dict(row)
 
 
+def diferente(stare, plx: str, inainte: str, dupa: str) -> dict:
+    from scripts.diferente_versiuni import compara
+
+    return compara(citeste(stare, plx, inainte), citeste(stare, plx, dupa))
+
+
+def verifica_actualizari(stare, plx: str, id: str) -> dict:
+    original = citeste(stare, plx, id)
+    current = importa(stare, plx, original["url"])
+    return {
+        "schimbat": original["sha256"] != current["sha256"],
+        "verificat_la": datetime.now(UTC).isoformat(),
+        "versiune": current,
+    }
+
+
 def _worker(source: Path, result: Path):
     # Limits are set in a fresh child, never via preexec_fn in the threaded HTTP server.
     import resource

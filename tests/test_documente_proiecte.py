@@ -111,6 +111,28 @@ def test_download_is_bounded(monkeypatch):
         dp.descarca(URL, 10)
 
 
+def test_update_check_preserves_history_and_revalidates_source(stare, monkeypatch):
+    data = catre_docx("", "Art. 1. Text inițial")
+    page = f'<a href="{URL}">Proiect</a>'.encode()
+    monkeypatch.setattr(dp, "descarca", lambda url, *args: page if "idp=" in url else data)
+    first = dp.importa(stare, "plx-1", URL)
+    unchanged = dp.verifica_actualizari(stare, "plx-1", first["id"])
+    assert not unchanged["schimbat"] and unchanged["versiune"] == first
+    assert unchanged["verificat_la"]
+    data = catre_docx("", "Art. 1. Text modificat")
+    changed = dp.verifica_actualizari(stare, "plx-1", first["id"])
+    second = changed["versiune"]
+    assert changed["schimbat"] and second["id"] != first["id"]
+    assert dp.citeste(stare, "plx-1", first["id"]) == first
+    assert len(dp.versiuni(stare, "plx-1")) == 2
+    assert dp.diferente(stare, "plx-1", first["id"], second["id"])["schimbari"]
+    with pytest.raises(ValueError):
+        dp.diferente(stare, "other", first["id"], second["id"])
+    page = b"No longer listed"
+    with pytest.raises(ValueError):
+        dp.verifica_actualizari(stare, "plx-1", first["id"])
+
+
 def test_discovery_keeps_adjacent_official_document_description():
     html = '<table><tr><td><a href="/a.pdf"><img alt="PDF"></a></td>'
     html += "<td>Forma adoptată de Senat</td></tr></table>"

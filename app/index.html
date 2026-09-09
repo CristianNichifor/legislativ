@@ -3770,6 +3770,61 @@ async function mArataActe(buton){
     out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
   }
 }
+function mVersiuni(panel, plx, initial, valid){
+  let versions=[...initial];
+  panel.innerHTML=`<div class="parc-h">Versiuni importate</div><div data-version-controls></div><p data-check-status role="status"></p><div data-diff-result></div>`;
+  const controls=panel.querySelector('[data-version-controls]'), status=panel.querySelector('[data-check-status]'), result=panel.querySelector('[data-diff-result]');
+  let revision=0;
+  const post=async(path,body)=>{
+    const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plx,...body})});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.error||"Cererea nu a reușit."); return d;
+  };
+  const render=(before,after)=>{
+    revision++; result.innerHTML="";
+    const options=versions.map(v=>`<option value="${esc(v.id)}">${esc(v.preluat_la+" · "+v.label+" · "+v.sha256.slice(0,12))}</option>`).join("");
+    controls.innerHTML=[['before','Înainte'],['after','După']].map(([id,label])=>`<label>${label}<select data-${id} style="width:100%;min-width:0">${options}</select></label>`).join("")
+      +`<button type="button" class="ghost mini" data-compare ${versions.length<2?'disabled':''}>Compară versiunile</button> <button type="button" class="ghost mini" data-check ${versions.length?'':'disabled'}>Verifică actualizări pentru „După”</button>`;
+    const a=controls.querySelector('[data-before]'), b=controls.querySelector('[data-after]');
+    if(before) a.value=before; else if(versions.length>1) a.selectedIndex=1;
+    if(after) b.value=after;
+    a.onchange=b.onchange=()=>{revision++;result.innerHTML="";status.textContent="";};
+    controls.querySelector('[data-compare]').onclick=async e=>{
+      const button=e.currentTarget, token=++revision; button.disabled=true; result.textContent="Compar versiunile…";
+      try{
+        const d=await post('/api/diferente-versiuni',{inainte:a.value,dupa:b.value});
+        if(!valid()||token!==revision) return;
+        const source=(doc,label)=>{const url=urlSigur(doc.url);return `<p style="overflow-wrap:anywhere"><b>${label}</b>: ${esc(doc.label)} · ${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(doc.url)}</a>`:''} · ${esc(doc.preluat_la)} · SHA-256: ${esc(doc.sha256)}</p>`;};
+        const side=(c,key)=>c.detaliu_limitat?esc(c[key]):c.fragmente.map(f=>f.fel==='equal'?esc(f[key]):`<${key==='a'?'del':'ins'}>${esc(f[key])}</${key==='a'?'del':'ins'}>`).join('');
+        result.innerHTML=source(d.a,'Înainte')+source(d.b,'După')
+          +`<p>Adăugate: ${d.rezumat.adaugat} · Eliminate: ${d.rezumat.eliminat} · Modificate: ${d.rezumat.modificat}</p>`
+          +d.limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')
+          +(d.trunchiat?'<p>Rezultate parțiale: maximum 100 de unități schimbate.</p>':'')
+          +d.semnale.map(s=>`<p><b>${esc(s.tip)}</b><br>Înainte: ${esc(s.a.join('; ')||'—')}<br>După: ${esc(s.b.join('; ')||'—')}</p>`).join('')
+          +(d.schimbari.length?d.schimbari.map(c=>`<section><h4>${esc(locRo(c.locator))} · ${esc(c.fel)}</h4><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px">${['a','b'].map(key=>`<div style="min-width:0"><b>${key==='a'?'Înainte':'După'}</b><div style="white-space:pre-wrap;overflow-wrap:anywhere">${side(c,key)}</div></div>`).join('')}</div>${c.detaliu_limitat?'<p class="hint">Text integral; evidențierea fragmentelor depășește limita.</p>':''}</section>`).join(''):'<p>Nicio schimbare textuală detectată (spațiile sunt ignorate).</p>')
+          +'<button type="button" class="ghost mini" data-copy-diff>Copiază raportul Markdown</button><span role="status" data-copy-status></span>';
+        result.querySelector('[data-copy-diff]').onclick=async()=>{
+          const label=result.querySelector('[data-copy-status]');
+          try{await navigator.clipboard.writeText(d.markdown);label.textContent=' Raport copiat.';}
+          catch{label.textContent=' Copierea nu a reușit.';}
+        };
+      }catch(err){if(valid()&&token===revision) result.textContent=err.message;}
+      finally{button.disabled=false;}
+    };
+    controls.querySelector('[data-check]').onclick=async e=>{
+      const button=e.currentTarget, selected=b.value, token=++revision;button.disabled=true;status.textContent='Verific sursa…';
+      try{
+        const d=await post('/api/actualizare-proiect',{versiune:selected});
+        if(!valid()||token!==revision) return;
+        if(!versions.some(v=>v.id===d.versiune.id)) versions.unshift(d.versiune);
+        render(selected,d.versiune.id);
+        status.textContent=`Verificat: ${d.verificat_la}. ${d.schimbat?'Conținut diferit păstrat ca versiune.':'Conținut neschimbat.'} Textul din editor nu a fost înlocuit.`;
+      }catch(err){if(valid()&&token===revision) status.textContent=err.message;}
+      finally{button.disabled=false;}
+    };
+  };
+  render();
+  return doc=>{if(!versions.some(v=>v.id===doc.id)) versions.unshift(doc);render();};
+}
 async function mArataProiecte(buton){
   const out=$("#m-proiecte-rand"); if(!out) return;
   const filtre={...mFiltreCurente(),emitent:buton.dataset.emitent||""};
@@ -3778,8 +3833,8 @@ async function mArataProiecte(buton){
     const response=await fetch("/api/matrice-proiecte?"+new URLSearchParams(filtre));
     if(!response.ok) throw new Error("HTTP "+response.status);
     const d=await response.json(); if(!out.isConnected) return;
-    if((d.initiative||[]).length<2){
-      out.textContent="Nu sunt două inițiative eligibile în selecția disponibilă. "+(d.limitari||[]).join(" "); return;
+    if(!(d.initiative||[]).length){
+      out.textContent="Nu sunt inițiative eligibile în selecția disponibilă. "+(d.limitari||[]).join(" "); return;
     }
     const options=d.initiative.map(i=>`<option value="${esc(i.plx_id)}">${esc(i.plx_id+" · "+i.stadiu)}</option>`).join("");
     out.innerHTML=`<form class="matrix-draft-form"><div class="parc-h">Compară două proiecte</div>`
@@ -3789,8 +3844,8 @@ async function mArataProiecte(buton){
         +`<label>Text proiect ${p.toUpperCase()}<textarea name="text_${p}" maxlength="60000" rows="7" required style="width:100%;box-sizing:border-box"></textarea></label><p class="hint" data-version="${p}" style="overflow-wrap:anywhere">Text furnizat de utilizator.</p>`).join("")
       +`<p class="hint">Versiunea oficială a textelor nu este verificată automat.</p>`
       +(d.trunchiat?`<p class="hint">Lista inițiativelor este parțială.</p>`:"")
-      +`<button type="submit">Compară proiectele</button></form><div class="matrix-draft-result"></div>`;
-    out.querySelector('[name="plx_b"]').selectedIndex=1;
+      +`<button type="submit" ${d.initiative.length<2?'disabled':''}>Compară proiectele</button></form><div class="matrix-draft-result"></div>`;
+    out.querySelector('[name="plx_b"]').selectedIndex=d.initiative.length>1?1:0;
     for(const p of ["a","b"]){
       const select=out.querySelector(`[name="plx_${p}"]`), meta=out.querySelector(`[data-meta="${p}"]`);
       const textarea=out.querySelector(`[name="text_${p}"]`), version=out.querySelector(`[name="versiune_${p}"]`), versionLabel=out.querySelector(`[data-version="${p}"]`), docs=out.querySelector(`[data-docs="${p}"]`);
@@ -3815,6 +3870,8 @@ async function mArataProiecte(buton){
           if(!choices.length){docs.textContent="Niciun document PDF/DOCX disponibil."; return;}
           docs.innerHTML=`<label>Document / versiune<select style="width:100%;min-width:0">${choices.map((c,i)=>`<option value="${i}">${esc(c.label)}</option>`).join("")}</select></label><button type="button" class="ghost mini">Importă versiunea selectată</button><p class="hint" data-import-status></p>`;
           const button=docs.querySelector("button"), status=docs.querySelector("[data-import-status]");
+          const history=document.createElement('div'); docs.append(history);
+          const addVersion=mVersiuni(history,plx,data.versiuni||[],()=>docs.isConnected&&generation===requestGeneration);
           if(data.avertisment) status.textContent=data.avertisment;
           button.onclick=async()=>{
             button.disabled=true; status.textContent="Import în curs…";
@@ -3823,6 +3880,7 @@ async function mArataProiecte(buton){
               const doc=await fetch("/api/importa-proiect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({plx,...choice})}).then(r=>r.json());
               if(!docs.isConnected||generation!==requestGeneration) return;
               if(doc.error){status.textContent=doc.error; return;}
+              addVersion(doc);
               if(doc.status!=="extras"){status.textContent="Document păstrat; necesită OCR sau verificare manuală. Textul nu a fost înlocuit."; return;}
               if(doc.text.length>60000){status.textContent="Document păstrat, dar depășește limita de comparație de 60000 caractere.";return;}
               textarea.value=doc.text; version.value=doc.id;
