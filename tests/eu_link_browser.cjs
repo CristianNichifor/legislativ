@@ -53,6 +53,8 @@ const root=path.resolve(__dirname,'..'),base=process.env.EU_LINK_BASE_URL||'http
     await button('history').selectOption(ids[0]);
     await page.waitForFunction(id=>document.querySelector('[data-eu-link-history]').value===id,ids[0]);
     await button('saved-result').filter({hasText:'Potential coverage, fixture only'}).waitFor();
+    await button('saved-result').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(root,`.eu-link-fixture/eu-link-saved-${width}.png`)});
     // Remounting the same host and ordinary review reloads must leave exactly one EU panel.
     await page.evaluate(identity=>{
       const state=EU_LINK_VIEWS.get(JSON.stringify(identity));
@@ -62,17 +64,23 @@ const root=path.resolve(__dirname,'..'),base=process.env.EU_LINK_BASE_URL||'http
     const previousSection=await section.elementHandle();
     await page.click('[data-review-refresh]');
     await page.waitForFunction(el=>!el.isConnected,previousSection);
-    await page.waitForLoadState('networkidle');await section.waitFor();
+    // Evidence-history loading performs a second finding render after the review response.
+    await page.locator('[data-check-select]').waitFor({state:'attached'});
+    await section.waitFor();
     assert.equal(await page.locator('[data-eu-proposal-links]').count(),1);
     const proposalForm=page.locator('[data-proposal-editor] > form');
     await proposalForm.locator('[name=titlu]').fill('Fixture revised title');
+    const revisionSave=page.waitForResponse(r=>r.url().endsWith('/api/dosare/propuneri')&&r.request().method()==='POST');
     await proposalForm.locator('[type=submit]').click();
+    const revisionResponse=await revisionSave;
+    assert.equal(revisionResponse.status(),200,await revisionResponse.text());
     await page.waitForLoadState('networkidle');
     await section.locator('[data-eu-link-revision-label]').filter({hasText:'disponibilă: 2'}).waitFor();
     assert.equal(await page.locator('[data-eu-proposal-links]').count(),1);
     assert.equal(await field('revizie').inputValue(),'1');
     await field('revizie').fill('2');await field('revizie').press('Tab');
     await button('saved-result').filter({hasText:'Nicio bază'}).waitFor();
+    assert.ok(!(await button('status').innerText()).includes('Ipoteză salvată'));
     assert.ok(await section.locator('[data-eu-link-export=json]').isDisabled());
     await button('cancel').click();
     await section.scrollIntoViewIfNeeded();await page.screenshot({path:path.join(root,`.eu-link-fixture/eu-link-${width}.png`)});

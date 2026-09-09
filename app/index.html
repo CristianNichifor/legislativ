@@ -5653,7 +5653,7 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
       +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-prev ${!state.offset?'disabled':''} title="Pagina precedentă">←</button><button type="button" class="ghost mini" data-eu-link-next ${state.offset+20>=state.total?'disabled':''} title="Pagina următoare">→</button></div><p class="hint">${state.total} legături · offset ${state.offset}</p><div data-eu-link-saved-result>${euProposalLinkResult(state.saved)}</div>`
       +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-export="json" ${state.saved?'':'disabled'}>Exportă legătura JSON</button><button type="button" class="ghost mini" data-eu-link-export="md" ${state.saved&&state.markdown?'':'disabled'}>Exportă legătura Markdown</button></div>`;
     const get=name=>section.querySelector('[data-eu-link-'+name+']');
-    const invalidate=()=>{state.preview=null;state.retry=null;state.confirmed=false;get('confirm').disabled=true;get('preview-result').textContent='Bază neconfirmată.';};
+    const invalidate=()=>{state.preview=null;state.retry=null;state.confirmed=false;state.status='';state.error='';get('status').textContent='';get('confirm').disabled=true;get('preview-result').textContent='Bază neconfirmată.';};
     section.querySelectorAll('[data-eu-link-field]').forEach(input=>{
       input.oninput=()=>{
         const name=input.dataset.euLinkField;v[name]=input.value;

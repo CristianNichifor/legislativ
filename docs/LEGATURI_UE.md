@@ -130,9 +130,12 @@ The runner seeds each width independently and uses no downloads. An existing
 integrated preview can set `EU_LINK_INITIATIVE_DB` to its absolute `--initiative`
 path, using a disposable valid initiative DB copy. Its `--eu` must point to this
 checkout's `.eu-link-fixture/eu.db` so it sees the synthetic retained snapshots.
-The preview may use an actual corpus: national targets are historical fixture
-captures, and the seeder writes source fixtures only in this checkout. Do not
-point the fixture at working research dossiers. Artifacts under
+Its `--corpus` must point to this checkout's `.eu-link-fixture/corpus.db` for
+the complete browser regression, which saves a subsequent structured proposal
+revision. An unrelated corpus correctly rejects that save as a changed target;
+historical link reads alone do not require the original corpus. The seeder writes
+source fixtures only in this checkout. Do not point the fixture at working
+research dossiers. Artifacts under
 `.eu-link-fixture/` are ignored and never committed.
 
 Verification on the integrated schema-8 base plus this unit: 1,316 pytest tests
