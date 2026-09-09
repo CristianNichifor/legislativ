@@ -380,6 +380,16 @@
   .finding-review [data-proposal] form{grid-template-columns:minmax(0,1fr)}
   [data-proposal] textarea{min-height:8rem;resize:vertical}
   [data-proposal] pre{max-height:18rem;overflow:auto}
+  .proposal-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem 1rem;border-bottom:1px solid var(--rule);padding:.6rem 0}
+  .proposal-row button{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:100%}
+  .proposal-row small{grid-column:1/-1;overflow-wrap:anywhere}
+  .proposal-row>span{min-width:0;overflow-wrap:anywhere}
+  [data-proposal-history-list]{max-height:16rem;overflow:auto}
+  [data-proposal-history] pre{max-height:18rem;overflow:auto}
+  .proposal-versions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+  .proposal-versions>section{min-width:0;margin-top:.5rem}
+  .proposal-versions pre{white-space:pre-wrap;overflow-wrap:anywhere}
+  @media(max-width:700px){.proposal-versions,.proposal-row{grid-template-columns:minmax(0,1fr)}}
   @media(max-width:1000px){.finding-authoring:has([data-proposal][open]){grid-template-columns:minmax(0,1fr)}}
   .review-checks{border-block:1px solid var(--rule);padding:.6rem 0;margin:.6rem 0}
   .review-checks>summary{font-size:.85rem}
@@ -1273,7 +1283,7 @@
               <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
               <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
-            <div id="dossier-meta"></div><div id="dossier-runs"></div><div id="dossier-saved"></div>
+            <div id="dossier-meta"></div><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
         </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
@@ -3904,7 +3914,7 @@ function dossierTime(value){
   const date=new Date(value);
   return Number.isNaN(date.getTime())?'Dată necunoscută':new Intl.DateTimeFormat('ro-RO',{dateStyle:'short',timeStyle:'medium',timeZone:'UTC'}).format(date)+' UTC';
 }
-async function openDossierRun(id,runId,token,checkId=null){
+async function openDossierRun(id,runId,token,checkId=null,findingId=null){
   DOSARE_UI.runId=runId;
   const out=$('#dossier-saved');out.textContent='Încarc analiza salvată…';
   try{
@@ -3912,6 +3922,12 @@ async function openDossierRun(id,runId,token,checkId=null){
     if(token!==DOSARE_UI.sequence) return;
     out.innerHTML='<details data-saved-report><summary>Raport complet și surse salvate</summary>'+dossierSnapshotHtml(run)+'</details>';
     const reviews=document.createElement('section');reviews.className='finding-reviews';out.prepend(reviews);
+    reviews.onProposalSaved=()=>loadProposalList(id);
+    if(findingId){
+      const key=id+':'+runId,view=DOSSIER_VIEWS.get(key)||{};
+      DOSSIER_VIEWS.set(key,{...view,filter:'all',query:'',selected:findingId});
+      reviews.proposalOpen=new Set([findingId]);
+    }
     loadFindingReviews(reviews,id,runId,token,checkId);
     out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
     const copy=out.querySelector('.matrix-copy-dosar');
@@ -3978,6 +3994,76 @@ function reviewFindingHtml(f){
     +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Înregistrează decizia</button><button type="button" class="ghost mini" data-review-cancel>Renunță la notele deciziei</button></div></form><p class="hint review-status" role="status"></p>'
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
 }
+let proposalListSequence=0;
+async function loadProposalList(dossierId,offset=0){
+  const host=$('#dossier-proposals'),seq=++proposalListSequence;
+  const valid=()=>seq===proposalListSequence&&DOSARE_UI.selected?.id===dossierId;
+  host.innerHTML='<h4>Propuneri salvate</h4><p role="status">Încarc propunerile…</p>';
+  try{
+    const data=await dossierApi('/api/dosare/propuneri?'+new URLSearchParams({mod:'lista',id:dossierId,offset:String(offset)}));if(!valid())return;
+    host.innerHTML='<h4>Propuneri salvate</h4><div data-proposal-rows>'+data.propuneri.map((p,i)=>`<div class="proposal-row"><button type="button" class="ghost mini" data-open-proposal="${i}">${esc(p.titlu)}</button><span>Revizia ${p.revizie}</span><small>Salvată: ${esc(dossierTime(p.creat_la))} · Analiză: ${esc(dossierTime(p.rulare_creata_la))}<br>Constatare: ${esc(p.constatare_id)}</small></div>`).join('')+'</div><p class="hint" data-proposal-list-status role="status">'+(data.total?`${offset+1}–${Math.min(offset+data.propuneri.length,data.total)} din ${data.total}`:'Nicio propunere salvată.')+'</p><div class="dossier-actions"><button type="button" class="ghost mini" data-proposals-prev title="Propuneri mai noi">←</button><button type="button" class="ghost mini" data-proposals-next title="Propuneri mai vechi">→</button><button type="button" class="ghost mini" data-proposals-refresh title="Reîncarcă propunerile">↻</button></div>';
+    host.querySelector('[data-proposals-prev]').disabled=offset===0;host.querySelector('[data-proposals-next]').disabled=offset+data.propuneri.length>=data.total;
+    host.querySelector('[data-proposals-prev]').onclick=()=>loadProposalList(dossierId,Math.max(0,offset-50));
+    host.querySelector('[data-proposals-next]').onclick=()=>loadProposalList(dossierId,offset+50);
+    host.querySelector('[data-proposals-refresh]').onclick=()=>loadProposalList(dossierId,offset);
+    host.querySelectorAll('[data-open-proposal]').forEach(button=>button.onclick=async()=>{
+      if(!dossierMayNavigate())return;
+      const p=data.propuneri[Number(button.dataset.openProposal)];
+      await selectDossier(dossierId,p.rulare_id,null,p.constatare_id);
+      if(DOSARE_UI.selected?.id===dossierId&&DOSARE_UI.runId===p.rulare_id)$('#dossier-saved').scrollIntoView({block:'start'});
+    });
+  }catch(err){if(valid()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă propunerile';retry.onclick=()=>loadProposalList(dossierId,offset);host.append(retry);}}
+}
+function proposalVersionHtml(p){
+  return `<section><h4>Revizia ${p.revizie}</h4><p class="hint">${esc(dossierTime(p.creat_la))}</p>`+[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].map(([k,label])=>`<h5>${label}</h5><pre>${esc(p[k])}</pre>`).join('')+'</section>';
+}
+function bindProposalHistory(host,query,saved,alive){
+  if(!saved)return;
+  const section=document.createElement('details');section.dataset.proposalHistory='';
+  section.innerHTML='<summary>Istoric și export · revizii salvate</summary><div class="dossier-actions"><label>Revizia A<input type="number" data-revision-a min="1" step="1"></label><label>Revizia B<input type="number" data-revision-b min="1" step="1"></label><button type="button" class="ghost mini" data-compare-revisions>Compară</button></div><div data-proposal-history-list></div><div class="dossier-actions"><button type="button" class="ghost mini" data-history-prev title="Revizii mai noi">←</button><button type="button" class="ghost mini" data-history-next title="Revizii mai vechi">→</button><button type="button" class="ghost mini" data-history-refresh title="Reîncarcă istoricul">↻</button></div><p class="hint" data-history-status role="status"></p><div data-revision-comparison></div><div class="dossier-actions"><label>Revizia de exportat<input type="number" data-export-revision min="1" step="1"></label><label>Format<select data-export-format><option value="md">Markdown</option><option value="json">JSON</option></select></label><button type="button" class="ghost mini" data-export-proposal>Descarcă revizia salvată</button></div><p class="hint" data-export-status role="status"></p>';
+  host.closest('.finding-authoring').after(section);
+  const a=section.querySelector('[data-revision-a]'),b=section.querySelector('[data-revision-b]'),exportRevision=section.querySelector('[data-export-revision]');
+  a.value=Math.max(1,saved.revizie-1);b.value=saved.revizie;exportRevision.value=saved.revizie;
+  const valid=()=>alive()&&section.isConnected,status=section.querySelector('[data-history-status]');
+  let offset=0,historySequence=0,comparisonSequence=0,loaded=false;
+  const history=async(next=0)=>{
+    const seq=++historySequence;status.textContent='Încarc istoricul…';
+    try{
+      const data=await dossierApi(query+'&mod=istoric&offset='+next);if(!valid()||seq!==historySequence)return;offset=next;
+      section.querySelector('[data-proposal-history-list]').innerHTML=data.revizii.map(p=>`<div class="proposal-row"><span>Revizia ${p.revizie} · ${esc(p.titlu)}</span><span>${esc(dossierTime(p.creat_la))}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-pick-a="${p.revizie}" title="Alege revizia ${p.revizie} pentru A">A</button><button type="button" class="ghost mini" data-pick-b="${p.revizie}" title="Alege revizia ${p.revizie} pentru B">B</button></div></div>`).join('');
+      section.querySelectorAll('[data-pick-a]').forEach(button=>button.onclick=()=>{a.value=button.dataset.pickA;});
+      section.querySelectorAll('[data-pick-b]').forEach(button=>button.onclick=()=>{b.value=button.dataset.pickB;exportRevision.value=button.dataset.pickB;});
+      section.querySelector('[data-history-prev]').disabled=offset===0;section.querySelector('[data-history-next]').disabled=offset+data.revizii.length>=data.total;
+      status.textContent=`${data.total} revizii salvate · ${data.total?offset+1:0}–${Math.min(offset+data.revizii.length,data.total)}`;
+    }catch(err){if(valid()&&seq===historySequence)status.textContent=err.message;}
+  };
+  section.ontoggle=()=>{if(section.open&&!loaded){loaded=true;history();}};
+  section.querySelector('[data-history-prev]').onclick=()=>history(Math.max(0,offset-20));
+  section.querySelector('[data-history-next]').onclick=()=>history(offset+20);
+  section.querySelector('[data-history-refresh]').onclick=()=>history(offset);
+  const number=input=>{const n=Number(input.value);if(!Number.isInteger(n)||n<1||n>1000001)throw Error('Revizie invalidă.');return n;};
+  section.querySelector('[data-compare-revisions]').onclick=async()=>{
+    const seq=++comparisonSequence,area=section.querySelector('[data-revision-comparison]');area.textContent='Încarc reviziile…';
+    try{
+      const left=number(a),right=number(b);
+      const first=await dossierApi(query+'&revizie='+left);if(!valid()||seq!==comparisonSequence)return;
+      const second=await dossierApi(query+'&revizie='+right);if(!valid()||seq!==comparisonSequence)return;
+      const changed=[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].filter(([k])=>first.propunere[k]!==second.propunere[k]).map(([,label])=>label);
+      area.innerHTML='<p class="hint">'+(changed.length?'Câmpuri diferite: '+changed.join(', '):'Conținut identic.')+'</p><div class="proposal-versions">'+proposalVersionHtml(first.propunere)+proposalVersionHtml(second.propunere)+'</div>';
+    }catch(err){if(valid()&&seq===comparisonSequence)area.textContent=err.message;}
+  };
+  section.querySelector('[data-export-proposal]').onclick=async()=>{
+    const button=section.querySelector('[data-export-proposal]'),message=section.querySelector('[data-export-status]');button.disabled=true;message.textContent='Pregătesc exportul…';
+    try{
+      const revision=number(exportRevision),format=section.querySelector('[data-export-format]').value;
+      const data=await dossierApi(query+'&mod=export&revizie='+revision);if(!valid())return;
+      const {markdown,...json}=data,content=format==='md'?markdown:JSON.stringify(json,null,2);
+      const url=URL.createObjectURL(new Blob([content],{type:format==='md'?'text/markdown;charset=utf-8':'application/json;charset=utf-8'}));
+      const link=document.createElement('a');link.href=url;link.download='propunere-'+data.propunere.id+'-r'+revision+'.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      message.textContent='Exportată: revizia salvată '+revision+'. Modificările nesalvate nu sunt incluse.';
+    }catch(err){if(valid())message.textContent=err.message;}finally{button.disabled=false;}
+  };
+}
 function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
   const drafts=panel.reviewDrafts,key='proposal:'+f.id;
   const opened=panel.proposalOpen||(panel.proposalOpen=new Set());
@@ -3995,6 +4081,7 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       const revision=previous?.revision??saved?.revizie??0;
       host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
       host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;
+      bindProposalHistory(host,query,saved,alive);
       const form=host.querySelector('form'),message=host.querySelector('[data-proposal-status]');
       const values=()=>Object.fromEntries(new FormData(form));
       const controls=[...form.elements];
@@ -4027,7 +4114,7 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
         if(record.retry?.fingerprint!==fingerprint)record.retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
         record.saving=true;record.error='';drafts.set(key,record);mark();controls.forEach(c=>c.disabled=true);message.textContent='Salvare în curs…';
         try{
-          await dossierApi('/api/dosare/propuneri',{...payload,id:record.retry.id});drafts.delete(key);
+          await dossierApi('/api/dosare/propuneri',{...payload,id:record.retry.id});drafts.delete(key);panel.onProposalSaved?.();
         }catch(err){record.error=err.message;}
         finally{record.saving=false;if(valid())render();}
       };
@@ -4252,15 +4339,17 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
     panel.querySelector('[data-review-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.markdown+(panel.evidenceCheck?'\n\n# Verificarea dovezilor locale\n\n'+JSON.stringify(panel.evidenceCheck,null,2):'')+'\n\n# Recalculări\n\n'+JSON.stringify({origini:panel.runOrigins||[],origini_trunchiate:!!panel.runOriginsTruncated},null,2));status.textContent='Revizuire copiată: toate constatările, indiferent de filtru.';}catch{status.textContent='Copierea nu a reușit.';}};
   }catch(err){if(valid()){panel.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncarcă revizuirile';retry.onclick=()=>loadFindingReviews(panel,dossierId,runId,token);panel.append(retry);}}
 }
-async function selectDossier(id,runId,checkId=null){
+async function selectDossier(id,runId,checkId=null,findingId=null){
   if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
   DOSARE_UI.selected=null;DOSARE_UI.runId=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  $('#dossier-proposals').textContent='';++proposalListSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
   try{
     const meta=await dossierApi('/api/dosare?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
+    loadProposalList(id);
     const picker=$('#dossier-select');
     if(![...picker.options].some(option=>option.value===id)) picker.add(new Option(meta.titlu,id));
     picker.value=id;
@@ -4275,7 +4364,7 @@ async function selectDossier(id,runId,checkId=null){
     if(runId){
       const picker=$('#dossier-run-select');
       if(![...picker.options].some(o=>o.value===runId)) picker.add(new Option('Rulare din coadă · '+runId,runId));
-      picker.value=runId;await openDossierRun(id,runId,token,checkId);
+      picker.value=runId;await openDossierRun(id,runId,token,checkId,findingId);
     }
   }catch(err){if(token===DOSARE_UI.sequence) $('#dossier-status').textContent=err.message;}
 }

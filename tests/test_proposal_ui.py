@@ -16,6 +16,7 @@ def test_proposal_draft_retry_conflict_and_independent_cancel():
     code = (
         r"""
 const assert=require('node:assert/strict');
+const bindProposalHistory=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }
 const panel={reviewDrafts:new Map(),proposalOpen:new Set(['finding']),querySelector:()=>({})};
@@ -70,5 +71,27 @@ function mount(){
   assert.equal(panel.reviewDrafts.has('proposal:finding'),false);
 })().catch(e=>{console.error(e);process.exit(1)});
 """
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_revision_comparison_renderer_escapes_all_author_text():
+    source = (
+        (Path(__file__).parents[1] / "app/index.html")
+        .read_text()
+        .split("function proposalVersionHtml", 1)[1]
+        .split("function bindProposalHistory", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;function proposalVersionHtml"
+        + source
+        + "const h=proposalVersionHtml({revizie:2,creat_la:'<iframe>',titlu:'<script>',"
+        "text:'<img>',motiv:'<svg>'});"
+        "assert.ok(h.includes('Revizia 2')&&h.includes('Text propus')&&h.includes('Motivare'));"
+        "assert.ok(!/<(script|img|svg|iframe)>/.test(h));"
+        "assert.ok(h.includes('&lt;script&gt;')&&h.includes('&lt;img&gt;'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

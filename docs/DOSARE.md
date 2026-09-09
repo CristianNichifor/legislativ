@@ -462,6 +462,53 @@ database owner can bypass triggers; this is not a tamper-proof audit trail.
 
 The route uses the existing local Host/Origin restrictions and `no-store` responses.
 Only this POST endpoint permits an 80 KB body; other dossier endpoints retain 16 KB.
-Static deployments cannot store proposals. This batch has no proposal exports,
-revision-history browser, AI checks, automatic legal classification or cross-run
-carryover. Existing review exports do not include proposals; backups do.
+Static deployments cannot store proposals. There are no AI checks, automatic legal
+classification or cross-run carryover. Existing review exports do not include
+proposals; dedicated proposal exports and SQLite backups do.
+
+### Proposal list, comparison and export
+
+Selecting a dossier loads `Propuneri salvate`: one row per saved finding/run,
+showing the latest title, revision, last saved time, original run time and finding
+ID. The list spans all of that dossier's runs, with 50 rows per page, including runs
+outside the ordinary last-100 run selector. Opening a row selects the exact run and
+finding, clears hiding filters and opens its proposal. Unsaved review/context/proposal
+drafts block this navigation. Saving a proposal refreshes the list without replacing
+the current editor or its other drafts. Empty/error states and reload controls are
+independent of the saved-run workspace.
+
+`Istoric si export` provides a paginated list of saved revision metadata (20 per page)
+and A/B selection. Any two positive saved revision numbers can be compared, including
+revisions on different history pages or the same revision. Comparison displays title,
+proposed text and rationale side by side (stacked on mobile), with changed fields
+identified. It is a textual comparison, not a legal or semantic assessment. It does
+not restore a revision, alter the editor or rebase unsaved text. Missing revisions
+fail explicitly. Late responses from abandoned comparisons/findings are ignored.
+
+Downloads select an explicit saved revision and Markdown or JSON. Neither includes
+unsaved edits. JSON includes the selected proposal, finding, basis, limitations and
+the **complete original saved run**, including other retained findings and contextual
+sources. This preserves the report behind the run hash; it is not a minimal/redacted
+sharing package. Markdown separates author title/text/rationale from original finding
+evidence, run identity/hash and the complete retained source/reference context. It
+does not include the full report JSON. Source availability/language/truncation metadata
+is retained as stored; missing evidence is never described as legal absence. Contextual
+EU references are not labeled incompatibility findings. Source/user text is fenced so
+it cannot escape into active Markdown/HTML. Review exports remain unchanged.
+
+Additional modes of `GET /api/dosare/propuneri`:
+
+- `?mod=lista&id=<dossier>&offset=0`: latest proposal metadata, `total`, `offset`, `limita=50`.
+- `?mod=istoric&id=<dossier>&rulare_id=<run>&constatare_id=<finding>&offset=0`:
+  revision metadata, `total`, `offset`, `limita=20`.
+- `?id=<dossier>&rulare_id=<run>&constatare_id=<finding>&revizie=<n>`: exact saved revision.
+- `?mod=export&id=<dossier>&rulare_id=<run>&constatare_id=<finding>&revizie=<n>`:
+  version-1 export envelope plus `markdown`. The browser omits the duplicate Markdown
+  member from JSON downloads. An explicit positive revision is mandatory for exports.
+
+These are read-only operations using the existing local Host/Origin and `no-store`
+rules. No source fetch, AI call, schema migration or additional database is introduced;
+schema remains **5**. Older stores return empty lists/history without being migrated.
+API ownership and finding-membership checks apply to history, revision reads and
+export just as they do to proposal editing. Pagination bounds limit metadata responses;
+full export size is bounded by the existing saved-report and proposal limits.

@@ -313,14 +313,9 @@ def face_handler(stare: Stare):
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
                     if ruta.path == "/api/dosare/propuneri":
-                        from scripts.propuneri import citeste
+                        from scripts.propuneri import citeste_cerere
 
-                        out = citeste(
-                            path,
-                            ident,
-                            qs.get("rulare_id", [None])[0],
-                            qs.get("constatare_id", [None])[0],
-                        )
+                        out = citeste_cerere(path, qs)
                     elif ruta.path == "/api/dosare/context":
                         from scripts.revizuiri import context_istoric
 
