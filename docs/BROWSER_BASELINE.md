@@ -24,10 +24,49 @@ Node 20 or newer is required for the development tooling.
 ## Limits
 
 This verifies the local Python mode with a small synthetic corpus, not the full
-published corpus or legal correctness. The independently generated Pyodide worker,
-service worker cache, Pagefind index and cold/warm offline static modes are not
-covered here. They remain unchanged and need their own integration baseline before
-shared-control adoption in the static build. Browser-only request blocking does not
+published corpus or legal correctness. The static-mode baseline below separately
+exercises the generated Pyodide worker and Pagefind index. Browser-only request blocking does not
 claim to sandbox the backend; this fixture uses no collector or online AI service.
 Existing Python tests remain the domain contract. This is not a full accessibility
 or visual-diff certification.
+
+## Static Worker Baseline
+
+Run `npm run test:browser:static` with the same Node, Python and browser prerequisites.
+The fixture server copies only Git-tracked files to a temporary directory, builds
+the real `--sursa fixturi` application, exports its public four-act corpus and builds
+a real Pagefind 1.5.2 index. It does not read a local corpus, publish data, contact an
+object store, replace Pyodide, or change the application HTML. Initial boot fetches
+the real pinned Pyodide 0.27.2 runtime and SQLite package from the existing CDN.
+
+Chromium, Firefox and WebKit test both `/` and `/nested/` deployments:
+
+- Real worker boot and lint results; the main thread has no `loadPyodide`.
+- Successful Pagefind index/fragment responses and search, without silent fallback.
+- Service-worker control and actual CacheStorage shell/search entries.
+- No outgoing `/api/` requests or full `corpus.db` download in the tested workflow.
+- New lint results and a repeated search while the already-loaded tab is offline.
+- In Chromium, an offline reload with CDN requests explicitly aborted: the cached shell loads,
+  but the new worker reports the unavailable runtime instead of completing lint.
+- A fresh offline context cannot load a shell it has never cached.
+
+The unavailable-CDN reload is a deliberately forced boundary, not a claim that
+every warm reload fails: ordinary browser HTTP caching can retain external runtime
+assets. The site's service worker does not cache those assets, so a completely
+offline restart is not guaranteed. The tests do not certify cache eviction, updates
+between versions, arbitrary uncached searches, OPFS database downloads or production
+object-store Range behavior. Search remains covered against a small public fixture,
+not the production corpus. CI uploads screenshots/traces and fails on CDN errors;
+there are no mocked runtimes or committed browser caches.
+
+Firefox and WebKit cover real online boot, search, lint, CacheStorage and same-tab
+offline use, but Playwright offline navigation fails (`NS_ERROR_OFFLINE` and an
+internal browser error respectively); restart coverage is not claimed for those
+engines. Worker readiness is observed by a test-only
+transparent constructor wrapper that returns the native Worker and records its real
+ready message. Detailed external worker-request tracing is asserted in Chromium;
+the other engines still execute the actual generated worker and Python code.
+
+This baseline found and guards a no-object-store Pagefind base-path bug: a relative
+`./pagefind/` resolved from the client module to `/pagefind/pagefind/`. Resolving the
+index base against the document URL preserves root and nested deployments.

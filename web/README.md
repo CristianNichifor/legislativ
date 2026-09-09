@@ -15,15 +15,24 @@ draft, `performance.getEntriesByType('resource')` shows **zero** `/api/` request
 `fetch('https://example.com', {method:'POST', body:'DRAFT'})` is **blocked** by the policy. The
 only network calls are Pyodide (runtime + the `sqlite3` package) and the static public-law data.
 
-## Instant on repeat, offline, and it resyncs itself
+## Cached Data and Offline Boundaries
 
-A service worker (`sw.js`) caches this origin's shell and data cache-first, so a second visit and a
-repeat query are instant and the whole tool works offline once loaded. The cache name carries a
+A service worker (`sw.js`) caches this origin's data cache-first and serves the shell
+network-first with a cache fallback. An already-loaded worker can lint offline and
+repeat a warmed search. The service worker does **not** cache the external Pyodide
+runtime: an offline reload needs those assets to survive in the browser's separate
+HTTP cache, so an offline restart is not guaranteed. A fresh offline browser cannot
+load an uncached shell. The cache name carries a
 **content hash of the corpus and graph** (`versiune` in `manifest.json`); when the data changes the
 hash changes, the browser sees a different `sw.js`, installs it, and `activate` deletes every older
 cache. That is the resync — the client follows the server's data with no manual clear. Verified in a
 browser: the page is SW-controlled, the shell and databases are cached on first load, and per-act
 shards join the cache the moment a search first touches them.
+
+The automated [static browser baseline](../docs/BROWSER_BASELINE.md#static-worker-baseline)
+uses the real worker and Pagefind at root and nested URLs. It checks a deliberately
+unavailable-CDN reload separately from already-loaded offline use; it does not
+certify cache eviction, production object storage or every uncached query.
 
 ## Where the data comes from — fixtures now, a collected release as it grows
 

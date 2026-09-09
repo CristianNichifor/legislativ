@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "description": "Instrumente pentru indexarea Pagefind și testele de browser. Aplicația nu are dependențe npm.",
-  "scripts": { "test:browser": "playwright test" },
+  "scripts": {
+    "test:browser": "playwright test",
+    "test:browser:static": "playwright test --config playwright.static.config.js"
+  },
   "devDependencies": { "@playwright/test": "1.63.0" },
   "dependencies": {
     "pagefind": "1.5.2"
