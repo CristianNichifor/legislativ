@@ -127,3 +127,26 @@ def test_eu_snapshot_renderer_escapes_text_provenance_and_labels_unknown():
         "assert.ok(dossierEuSnapshotsHtml(run).includes('Limită de captură depășită'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_check_renderer_keeps_unknown_and_language_change_distinct():
+    source = (
+        APP.read_text()
+        .split("function euCheckHtml", 1)[1]
+        .split("function reviewEvidenceHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "function euCheckHtml" + source + "assert.equal(euCheckHtml(null,false),'');"
+        "assert.ok(euCheckHtml({},true).includes('fără verificare'));"
+        "const h=euCheckHtml({surse_ue:{manifest_disponibil:true,comparatie_incompleta:true,"
+        "surse:[{celex:'<img>',stare:'schimbat',limba_schimbata:true,text_schimbat:null,"
+        "metadate_schimbate:false,salvat:{id:'<script>'}}]}},true);"
+        "assert.ok(h.includes('Text: necomparabil')&&h.includes('Limbă: schimbat'));"
+        "assert.ok(h.includes('Metadate: neschimbat')&&h.includes('Comparație incompletă'));"
+        "assert.ok(!h.includes('<img>')&&!h.includes('<script>'));"
+        "assert.ok(h.includes('nu este o comparație a sensului'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

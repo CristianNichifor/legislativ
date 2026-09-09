@@ -3827,6 +3827,15 @@ async function openDossierRun(id,runId,token){
 }
 const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
 const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
+function euCheckHtml(check,hasSources){
+  const eu=check?.surse_ue;
+  if(!eu) return hasSources?'<p class="hint">Surse UE contextuale fără verificare salvată.</p>':'';
+  const flag=v=>typeof v!=='boolean'?'necomparabil':v?'schimbat':'neschimbat';
+  return '<section class="eu-snapshots"><h4>Verificarea surselor UE contextuale</h4><p class="hint">Comparație locală, fără descărcare. Nu stabilește incompatibilitatea și nu modifică deciziile sau coada constatărilor.</p>'
+    +(!eu.manifest_disponibil?'<p>Instantanee inițiale necapturate sau incompatibile.</p>':'')
+    +(eu.comparatie_incompleta?'<p>Comparație incompletă.</p>':'')
+    +(eu.surse||[]).map(s=>`<details><summary>${esc(s.celex||'UE')} · ${s.stare==='schimbat'?'Sursă schimbată':s.stare==='neschimbat'?'Text și limbă neschimbate':'Comparație indisponibilă'}</summary><p>Text: ${flag(s.text_schimbat)} · Limbă: ${flag(s.limba_schimbata)} · Metadate: ${flag(s.metadate_schimbate)}</p>${s.limba_schimbata?'<p>Limba s-a schimbat; nu este o comparație a sensului textelor.</p>':''}<pre>${esc(JSON.stringify({salvat:s.salvat,curent:s.curent},null,2))}</pre></details>`).join('')+'</section>';
+}
 function reviewEvidenceHtml(f){
   if(!f.verificare) return '';
   const flag=value=>value===null||value===undefined?'indisponibil':value?'schimbat':'neschimbat';
@@ -3864,13 +3873,15 @@ async function loadFindingReviews(panel,dossierId,runId,token){
     picker.add(new Option('Comparație indisponibilă','evidence_unknown'));
     picker.value=filter;
     const evidenceStatus=panel.querySelector('[data-evidence-status]');
+    const euStatus=document.createElement('div');euStatus.dataset.euCheck='';evidenceStatus.after(euStatus);
     const applyCheck=()=>{
       const check=panel.evidenceCheck;
+      euStatus.innerHTML=euCheckHtml(check,!!d.rulare.dovezi.referinte_ue?.length);
       for(const f of d.constatari){
         f.verificare=check?.constatari.find(c=>c.constatare_id===f.id);
         f.dependente_verificate=check?.dependente.filter(c=>f.verificare?.dependente.includes(c.id));
       }
-      if(check) evidenceStatus.textContent=`Verificare salvată: ${dossierTime(check.verificat_la)} · Schimbate: ${check.totaluri.schimbat} · Neschimbate: ${check.totaluri.neschimbat} · Indisponibile: ${check.totaluri.indisponibil}. Rezultatul descrie momentul verificării.`;
+      if(check) evidenceStatus.textContent=`Verificare salvată: ${dossierTime(check.verificat_la)} · Constatări · Schimbate: ${check.totaluri.schimbat} · Neschimbate: ${check.totaluri.neschimbat} · Indisponibile: ${check.totaluri.indisponibil}. Rezultatul descrie momentul verificării.`;
     };
     applyCheck();
     const render=()=>{
