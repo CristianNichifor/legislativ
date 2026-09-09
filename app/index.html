@@ -339,6 +339,14 @@
   .source-inventory dd{font-family:var(--mono)}
   .source-inventory .source-warning{color:var(--material)}
   .source-inventory .source-note{color:var(--ink-mute)}
+  .dossier-library{font-family:var(--sans);border-bottom:1px solid var(--rule);padding:.6rem 0;margin-bottom:1rem}
+  .dossier-library summary{cursor:pointer;font-size:.9rem;font-weight:600}
+  .dossier-library form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.6rem;margin:.6rem 0}
+  .dossier-library label{display:block;min-width:0}
+  .dossier-library input,.dossier-library textarea,.dossier-library select{width:100%;min-width:0;box-sizing:border-box}
+  .dossier-library .dossier-actions{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.5rem 0}
+  .dossier-library p,.dossier-library h4{overflow-wrap:anywhere}
+  #dossier-run-select{font-family:var(--sans);font-size:.8rem}
   .matrix-tools input{flex:1 1 18rem}
   .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
   .matrix-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.45rem;
@@ -1179,6 +1187,24 @@
           <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
           <div id="source-content"></div>
         </section>
+        <details class="dossier-library" id="dossier-library">
+          <summary>Dosare salvate</summary>
+          <p class="hint" id="dossier-status" role="status">Niciun dosar selectat.</p>
+          <button type="button" class="ghost mini" id="dossier-reload">Reîncarcă lista</button>
+          <div id="dossier-local" hidden>
+            <details><summary>Dosar nou</summary><form id="dossier-create">
+              <label>Titlu<input name="titlu" required maxlength="200"></label>
+              <label>Întrebarea de cercetare<textarea name="intrebare" maxlength="4000" rows="2"></textarea></label>
+              <label>Domeniu declarat<input name="domeniu" maxlength="200"></label>
+              <div><button type="submit" class="ghost mini">Creează dosarul</button></div>
+            </form></details>
+            <div class="dossier-actions">
+              <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
+              <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
+            <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
+            <div id="dossier-meta"></div><div id="dossier-runs"></div><div id="dossier-saved"></div>
+          </div>
+        </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
           Matrice deterministă pe emitent, tip și rang normativ: lacune legislative, prevederi
           lovite de Curte rămase nereparate, inițiative pendinte și presiune de amendare. Domeniul
@@ -3701,6 +3727,108 @@ function mTextCautare(r){
   const problema=mProblemaEt(MATRICE&&MATRICE.problema);
   return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${det} ${dom} ${vid} ${nec}`);
 }
+const DOSARE_UI={offset:0,selected:null,sequence:0,listSequence:0,request:null,supported:false};
+async function dossierApi(path,body){
+  const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const data=await response.json();
+  if(!response.ok||data.error) throw new Error(data.error||'Cererea nu a reușit.');
+  return data;
+}
+async function loadDossiers(offset=DOSARE_UI.offset){
+  const token=++DOSARE_UI.listSequence, status=$('#dossier-status');
+  status.textContent='Încarc dosarele…';
+  try{
+    const d=await dossierApi('/api/dosare?offset='+offset);
+    if(token!==DOSARE_UI.listSequence) return;
+    if(!Array.isArray(d.dosare)) throw new Error('Răspuns invalid.');
+    DOSARE_UI.offset=offset;DOSARE_UI.supported=true;$('#dossier-local').hidden=false;
+    const selected=DOSARE_UI.selected, items=[...d.dosare];
+    if(selected&&!items.some(x=>x.id===selected.id)) items.unshift(selected);
+    $('#dossier-select').innerHTML='<option value="">Alege un dosar</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.titlu)}</option>`).join('');
+    $('#dossier-select').value=selected?.id||'';
+    $('#dossier-prev').disabled=offset===0;$('#dossier-next').disabled=offset+50>=d.total;
+    $('#dossier-page').textContent=d.total?`${Math.min(offset+1,d.total)}–${Math.min(offset+50,d.total)} din ${d.total}`:'Niciun dosar salvat.';
+    status.textContent=selected?'Dosar ales: '+selected.titlu:'Alege sau creează un dosar.';
+  }catch(err){if(token===DOSARE_UI.listSequence){DOSARE_UI.supported=false;$('#dossier-local').hidden=true;status.textContent=err.message;}}
+}
+function dossierSnapshotHtml(run){
+  return `<h4>Analiză salvată</h4><p class="hint">Salvată: ${esc(run.creat_la)} · Motor: ${esc(run.engine_version)}<br>SHA-256 raport: ${esc(run.sha256)}</p>`
+    +'<p class="hint">Raport istoric, nu recalculare. Legăturile și butoanele „Text curent” consultă sursa actuală, nu o versiune arhivată.</p>'
+    +mDosarHtml(run.raport);
+}
+function dossierTime(value){
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?'Dată necunoscută':new Intl.DateTimeFormat('ro-RO',{dateStyle:'short',timeStyle:'medium',timeZone:'UTC'}).format(date)+' UTC';
+}
+async function openDossierRun(id,runId,token){
+  const out=$('#dossier-saved');out.textContent='Încarc analiza salvată…';
+  try{
+    const run=await dossierApi('/api/dosare/rulari?'+new URLSearchParams({id,rulare_id:runId}));
+    if(token!==DOSARE_UI.sequence) return;
+    out.innerHTML=dossierSnapshotHtml(run);
+    out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
+    const copy=out.querySelector('.matrix-copy-dosar');
+    if(copy) copy.onclick=async()=>{try{await navigator.clipboard.writeText(`Analiză salvată: ${run.creat_la}\nSHA-256 raport: ${run.sha256}\n\n${run.raport.markdown||''}`);$('#dossier-status').textContent='Raport copiat.';}catch{$('#dossier-status').textContent='Copierea nu a reușit.';}};
+    const print=out.querySelector('.matrix-print-dosar');if(print) print.onclick=()=>window.print();
+  }catch(err){if(token===DOSARE_UI.sequence) out.textContent=err.message;}
+}
+async function selectDossier(id,runId){
+  const token=++DOSARE_UI.sequence;
+  DOSARE_UI.selected=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
+  try{
+    const meta=await dossierApi('/api/dosare?id='+encodeURIComponent(id));
+    if(token!==DOSARE_UI.sequence) return;
+    DOSARE_UI.selected=meta;
+    const picker=$('#dossier-select');
+    if(![...picker.options].some(option=>option.value===id)) picker.add(new Option(meta.titlu,id));
+    picker.value=id;
+    $('#dossier-meta').innerHTML=`<h4>${esc(meta.titlu)}</h4><p>${esc(meta.intrebare)}</p><p class="hint">Domeniu declarat: ${esc(meta.domeniu||'neprecizat')} · Creat: ${esc(meta.creat_la)}</p>`;
+    $('#dossier-status').textContent='Dosar ales: '+meta.titlu;
+    const history=await dossierApi('/api/dosare/rulari?id='+encodeURIComponent(id));
+    if(token!==DOSARE_UI.sequence) return;
+    const runs=$('#dossier-runs');
+    if(!history.rulari.length){runs.textContent='Nicio analiză salvată.';return;}
+    runs.innerHTML=`<label>Analize salvate<select id="dossier-run-select"><option value="">Alege o analiză</option>${history.rulari.map((r,i)=>`<option value="${esc(r.id)}">${esc((i+1)+' · '+dossierTime(r.creat_la))}</option>`).join('')}</select></label>`+(history.trunchiat?'<p class="hint">Sunt afișate ultimele 100 de analize.</p>':'');
+    $('#dossier-run-select').onchange=e=>{const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);};
+    if(runId){$('#dossier-run-select').value=runId;await openDossierRun(id,runId,token);}
+  }catch(err){if(token===DOSARE_UI.sequence) $('#dossier-status').textContent=err.message;}
+}
+$('#dossier-library').ontoggle=()=>{if($('#dossier-library').open) loadDossiers();};
+$('#dossier-reload').onclick=()=>loadDossiers();
+$('#dossier-prev').onclick=()=>loadDossiers(Math.max(0,DOSARE_UI.offset-50));
+$('#dossier-next').onclick=()=>loadDossiers(DOSARE_UI.offset+50);
+$('#dossier-select').onchange=e=>selectDossier(e.target.value);
+$('#dossier-create').onsubmit=async e=>{
+  e.preventDefault();const form=e.currentTarget, button=form.querySelector('button');button.disabled=true;
+  const fields=Object.fromEntries(new FormData(form)), fingerprint=JSON.stringify(fields);
+  const inputs=[...form.querySelectorAll('input,textarea')], selectionAtStart=DOSARE_UI.sequence;
+  inputs.forEach(input=>input.disabled=true);
+  try{
+    if(DOSARE_UI.request?.fingerprint!==fingerprint) DOSARE_UI.request={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
+    const saved=await dossierApi('/api/dosare',{...fields,id:DOSARE_UI.request.id});
+    if(selectionAtStart===DOSARE_UI.sequence) await selectDossier(saved.id);
+    await loadDossiers(0);form.reset();DOSARE_UI.request=null;
+  }catch(err){$('#dossier-status').textContent=err.message;}
+  finally{button.disabled=false;inputs.forEach(input=>input.disabled=false);}
+};
+function dossierSaveControls(out,filters){
+  const area=document.createElement('div');area.className='dossier-actions';
+  area.innerHTML='<button type="button" class="ghost mini">Recalculează și salvează în dosarul ales</button><p class="hint" role="status"></p>';
+  out.prepend(area);
+  const button=area.querySelector('button'), status=area.querySelector('p');
+  button.onclick=async()=>{
+    const selected=DOSARE_UI.selected;
+    if(!selected||!DOSARE_UI.supported){$('#dossier-library').open=true;status.textContent='Alege sau creează un dosar în „Dosare salvate”.';return;}
+    button.disabled=true;status.textContent='Recalculez și salvez în: '+selected.titlu;
+    try{
+      const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters});
+      status.textContent='Analiză salvată în: '+selected.titlu+'. '+run.creat_la;
+      if(DOSARE_UI.selected?.id===selected.id) await selectDossier(selected.id,run.id);
+    }catch(err){status.textContent=err.message;}
+    finally{button.disabled=false;}
+  };
+}
 const SOURCE_LABELS={
   corpus:['Legislație română','acte'],initiative:['Inițiative parlamentare','initiative'],
   ue:['Drept UE','acte'],importuri:['Documente importate','versiuni']
@@ -4123,7 +4251,9 @@ async function mArataDosar(buton){
   if(f.problema) qs.set("problema",f.problema);
   try{
     const d=await fetch("/api/matrice-dosar?"+qs.toString()).then(r=>r.json());
+    if(!out.isConnected||buton.dataset.deschis!=="1") return;
     out.innerHTML=mDosarHtml(d);
+    if(d.gasit){const filters=Object.fromEntries(qs);delete filters.limita;dossierSaveControls(out,filters);}
     out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
     const copy=out.querySelector(".matrix-copy-dosar");
     if(copy) copy.onclick=()=>{ navigator.clipboard?.writeText(d.markdown||""); copy.textContent="copiat"; };

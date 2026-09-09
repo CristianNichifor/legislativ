@@ -1,7 +1,31 @@
 # Persistent local dossiers (B1)
 
-B1 supplies storage and APIs. The save/reopen UI and review decisions are later
-batches. Existing transient matrix dossiers are unchanged.
+B1 supplies storage and APIs; B2 adds the save/reopen UI. Review decisions and
+append-only reviewer events remain later batches.
+
+## Interface (B2)
+
+The matrix tab's `Dosare salvate` section supports creating a dossier with a title,
+research question and declared domain, browsing 50 dossiers per page and selecting
+a saved analysis. Selecting a dossier keeps it as the save destination while
+browsing another page. No metadata or report is kept in browser localStorage.
+
+Open a matrix row's working dossier and use `Recalculează și salvează în dosarul
+ales` to persist a fresh server-generated report. A destination must be selected
+first. The button does not imply that the previously displayed transient report
+is saved verbatim. Identical reports reuse the existing run. Failed dossier creation
+retains its retry ID while the form contents are unchanged.
+
+Reopened reports are labeled historical and show saved time, detector contract
+version and report SHA-256. Copy includes the saved timestamp/hash and Markdown.
+Provision buttons are labeled `Text curent`: they open current corpus evidence,
+not an archived historical provision. The saved report itself is not recalculated.
+Run lists retain B1's latest-100 limit and partial-list warning.
+
+Stale run/dossier responses are ignored after selection changes. Failed requests
+show an error; the library can be reloaded. Static clients display the local-only
+limitation and do not expose the creation form. This is a single-user local
+workspace, not a shared review or authenticated collaboration feature.
 
 ## Store and migration
 
