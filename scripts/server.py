@@ -40,6 +40,8 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/matrice[?tip=&rang=&domeniu=&sort=]` — a corpus-wide risk matrix by issuing body:
   gaps, unrepaired constitutional hits, pending initiatives and amendment pressure, each derived
   from existing registers rather than a model.
+- `GET /api/matrice-acte?emitent=&tip=&rang=&domeniu=` — the concrete acts behind one matrix row,
+  narrowed by the same filters.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET /api/ue/acoperire` — which CELEX ids cited by local laws/initiatives are already imported.
@@ -79,6 +81,7 @@ from scripts.servicii import (
     _importa,
     _lint,
     _matrice,
+    _matrice_acte,
     _norma,
     _opinie,
     _opinie_cerere,
@@ -195,6 +198,8 @@ def face_handler(stare: Stare):
                 self._json(_domenii(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice":
                 self._json(_matrice(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice-acte":
+                self._json(_matrice_acte(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/ue/acoperire":

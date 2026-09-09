@@ -363,6 +363,8 @@
     border-radius:var(--r1);background:var(--sunk)}
   .matrix-prev-h{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute);margin-bottom:.25rem}
   .matrix-prev-text{white-space:pre-wrap;overflow-wrap:break-word}
+  .matrix-acte{margin-top:.45rem}
+  .matrix-act-meta{font-family:var(--sans);font-size:.7rem;color:var(--ink-mute)}
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -3628,6 +3630,53 @@ function mDomeniuExemple(lista){
     +`${esc((x.titlu||"").slice(0,160))}<br><span class="hint">${(x.dovezi||[]).map(esc).join(" · ")}</span></div>`
   ).join("");
 }
+function mFiltreCurente(){
+  return {
+    tip: $("#m-tip")?.value||"",
+    rang: $("#m-rang")?.value||"",
+    domeniu: $("#m-domeniu")?.value||"",
+  };
+}
+function mActeHtml(d){
+  const acte=(d&&d.acte)||[];
+  if(!acte.length) return empty("Niciun act nu corespunde filtrelor curente pentru acest rând.");
+  return `<div class="matrix-acte">`+acte.map(a=>{
+    const href=urlSigur(a.sursa_url);
+    const key=href
+      ? `<a class="dom-cheie" href="${esc(href)}" target="_blank" rel="noopener">${esc(a.cheie_citare||a.act_id)}</a>`
+      : `<span class="dom-cheie">${esc(a.cheie_citare||a.act_id)}</span>`;
+    const rang=a.rang&&a.rang.eticheta ? a.rang.eticheta : "";
+    const dom=a.domeniu&&a.domeniu.eticheta ? a.domeniu.eticheta : "";
+    const dovezi=a.domeniu&&a.domeniu.dovezi&&a.domeniu.dovezi.length
+      ? ` · ${a.domeniu.dovezi.map(esc).join(" · ")}` : "";
+    return `<div class="dom-act">${key} <span class="parc-data">${esc(String(a.an||""))}</span> `
+      +`${esc((a.titlu||"").slice(0,180))}<br><span class="matrix-act-meta">${esc(rang)}`
+      +(dom?` · ${esc(dom)}`:"")+dovezi+`</span></div>`;
+  }).join("")+(d.total>acte.length?`<p class="hint">Se afișează ${nf(acte.length)} din ${nf(d.total)} acte.</p>`:"")+`</div>`;
+}
+async function mArataActe(buton){
+  const out=$("#m-acte-rand"); if(!out) return;
+  if(buton.dataset.deschis==="1"){
+    out.innerHTML="";
+    buton.dataset.deschis="";
+    buton.textContent="arată actele din rând";
+    return;
+  }
+  buton.dataset.deschis="1";
+  buton.textContent="ascunde actele";
+  out.innerHTML=`<div class="parc"><span class="spin"></span> încarc actele…</div>`;
+  const f=mFiltreCurente();
+  const qs=new URLSearchParams({emitent:buton.dataset.emitent||"",limita:"40"});
+  if(f.tip) qs.set("tip",f.tip);
+  if(f.rang) qs.set("rang",f.rang);
+  if(f.domeniu) qs.set("domeniu",f.domeniu);
+  try{
+    const d=await fetch("/api/matrice-acte?"+qs.toString()).then(r=>r.json());
+    out.innerHTML=mActeHtml(d);
+  }catch(e){
+    out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
+  }
+}
 async function mPrevedere(buton){
   const gazda=buton.closest(".matrix-ex"); if(!gazda) return;
   const veche=gazda.querySelector(".matrix-prev");
@@ -3709,7 +3758,9 @@ function mArataRand(el){
     +(r.domeniu?` · ${esc(r.domeniu.eticheta)}`:"")
     +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
-    +`${nf(s.amendamente_primite)} amendări primite</div>`;
+    +`${nf(s.amendamente_primite)} amendări primite</div>`
+    +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button></div>`
+    +`<div id="m-acte-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){
@@ -3734,6 +3785,7 @@ function mArataRand(el){
   if(!vid.length&&!nec.length) h+=`<p class="hint">Rândul are semnale de mișcare legislativă, dar nu are exemple de lacune sau neconstituționalitate în registrul publicat.</p>`;
   $("#m-detalii").innerHTML=h+`</div>`;
   $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+  $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
