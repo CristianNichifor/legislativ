@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 ENGINE_VERSION = "matrice-dosar-v2"
 MAX_REPORT_BYTES = 4_000_000
 
@@ -77,7 +77,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, 4, 5, 6, 7, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, 3, 4, 5, 6, 7, 8, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -168,6 +168,11 @@ def _open(path, *, write=False):
                 "rulare_id TEXT REFERENCES rulari(id), continut_json TEXT, "
                 "revizie INTEGER NOT NULL, modificat_la TEXT NOT NULL)"
             )
+            version = 8
+        if write and version == 8:
+            from scripts.legaturi_ue_schema import migreaza
+
+            migreaza(con)
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
         con.commit()

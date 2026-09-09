@@ -95,11 +95,12 @@ def test_run_recovery_ownership_and_metadata_backup(state, tmp_path):
     assert dosare.lista_ciorne(copy)["ciorne"][0]["titlu"] == "Archived"
 
 
-@pytest.mark.parametrize("version", range(1, 8))
+@pytest.mark.parametrize("version", range(1, 9))
 def test_old_schema_readonly_upgrade_and_rollback(state, version):
     path = dosare.cale(state)
     create(state)
     introduced = {
+        9: ["legaturi_ue"],
         8: ["ciorne", "dosare_stare"],
         7: ["analize_propuneri"],
         6: ["interventii_propuneri"],
@@ -125,7 +126,7 @@ def test_old_schema_readonly_upgrade_and_rollback(state, version):
     assert path.read_bytes() == before
     dosare.salveaza_ciorna(path, editor())
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
         assert con.execute("PRAGMA foreign_key_check").fetchall() == []
     assert dosare.citeste(path, ID)["titlu"] == "Cercetare"
 

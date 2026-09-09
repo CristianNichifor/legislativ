@@ -81,6 +81,7 @@ def test_read_modes_on_old_schema_do_not_migrate(case):
     _, path, run, req = case
     with sqlite3.connect(path) as con:
         con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE legaturi_ue")
         con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")

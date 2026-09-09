@@ -143,6 +143,7 @@ def test_old_schemas_read_without_migration(state, version):
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE legaturi_ue")
         con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")

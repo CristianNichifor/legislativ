@@ -1,9 +1,10 @@
 # Proposed Romanian/EU evidence-linking contract v1
 
-Status: implementation handoff for milestone 5, **not an implemented endpoint or
-completed assessment workflow**. M4 introduces no persistence changes. Integrate
-this interface after agreement with the proposal/source and dossier owners;
-do not add schema 8 writes from the context branch.
+Status: historical design handoff, superseded for implemented behavior by
+[LEGATURI_UE.md](LEGATURI_UE.md). Schema 9 implements a bounded saved structured
+proposal / retained EU article workflow with exact body quotes. The illustrative
+wire shapes, arbitrary offsets and direct corpus selectors below are not the
+implemented API. M4 itself introduces no persistence changes.
 
 ## Existing inputs
 

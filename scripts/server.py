@@ -307,6 +307,8 @@ def face_handler(stare: Stare):
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
                 "/api/dosare/propuneri/surse",
+                "/api/dosare/propuneri/legaturi-ue",
+                "/api/dosare/propuneri/legaturi-ue/obligatii",
             ):
                 from scripts import dosare
 
@@ -328,6 +330,19 @@ def face_handler(stare: Stare):
                             if ident
                             else dosare.lista_ciorne(path, int(qs.get("offset", ["0"])[0]))
                         )
+                    elif ruta.path == "/api/dosare/propuneri/legaturi-ue/obligatii":
+                        from scripts.legaturi_ue import obligatii
+
+                        out = obligatii(
+                            stare,
+                            qs.get("celex", [None])[0],
+                            qs.get("instantanee", [""])[0],
+                            int(qs.get("offset", ["0"])[0]),
+                        )
+                    elif ruta.path == "/api/dosare/propuneri/legaturi-ue":
+                        from scripts.legaturi_ue_store import citeste_cerere
+
+                        out = citeste_cerere(path, qs)
                     elif ruta.path == "/api/dosare/propuneri/analize":
                         from scripts.analize_propuneri import citeste_cerere
 
@@ -434,6 +449,8 @@ def face_handler(stare: Stare):
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
+                "/api/dosare/propuneri/legaturi-ue",
+                "/api/dosare/propuneri/legaturi-ue/previzualizare",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -500,6 +517,8 @@ def face_handler(stare: Stare):
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
+                "/api/dosare/propuneri/legaturi-ue",
+                "/api/dosare/propuneri/legaturi-ue/previzualizare",
             ):
                 from scripts import dosare
 
@@ -511,6 +530,14 @@ def face_handler(stare: Stare):
                         out = dosare.modifica(path, cerere)
                     elif ruta == "/api/dosare/ciorne":
                         out = dosare.salveaza_ciorna(path, cerere)
+                    elif ruta == "/api/dosare/propuneri/legaturi-ue/previzualizare":
+                        from scripts.legaturi_ue import preview
+
+                        out = preview(stare, cerere)
+                    elif ruta == "/api/dosare/propuneri/legaturi-ue":
+                        from scripts.legaturi_ue_store import salveaza
+
+                        out = salveaza(stare, cerere)
                     elif ruta == "/api/dosare/propuneri/analize":
                         from scripts.analize_propuneri import salveaza
 
