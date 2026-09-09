@@ -1,6 +1,6 @@
 # Matrix contradiction candidates
 
-`GET /api/matrice-contradictii?emitent=Parlamentul` compares definitions and deadlines
+`GET /api/matrice-contradictii?emitent=Parlamentul` compares definitions, deadlines and competences
 from the selected matrix row. It accepts the matrix `tip`, `rang`, and `domeniu`
 filters and a result `limita` (default 40, maximum 100).
 
@@ -51,4 +51,28 @@ prompts for scope, exceptions, event identity and counting rules. Coverage count
 `termene_analizate` counts accepted comparable deadlines, not every deadline in
 the corpus. Both detector types share the response limit.
 
-Further detectors for authority competence and amendment conflicts remain separate work.
+## Authority overlap candidates
+
+`competenta_suprapusa` compares different named authorities assigned the same
+action and complete object wording in different acts of the same known domain
+and selected matrix row. It accepts a narrow, single-sentence present-tense
+grammar. Original provision text, authority names and source drilldowns appear
+in the matrix and copied dossier, with status `candidat_neconfirmat`.
+
+Joint actions, explicit consultation/approval/delegation clauses, exceptions and
+conditional/permissive wording are excluded. Generic roles such as the competent
+authority are excluded, as are local/regional/territorial names (including names
+using `din`). Territorial qualifiers in the object remain part of the matching
+key: different territories do not match. Same authority or same-act pairs are
+excluded. Institutional aliases and historical renamings are not resolved.
+
+Only explicit wording in the analyzed provision is checked. Scope, shared roles,
+delegations or territorial divisions defined elsewhere can still make a candidate
+legitimate. Review prompts cover those cases and effective versions. No inference
+of exclusive jurisdiction or final contradiction is made. The detector can miss
+equivalent duties expressed differently and named institutions outside its grammar.
+
+`atributii_analizate` counts accepted comparable competences, capped at 5000.
+All detector types share the result limit and `trunchiat` partial-coverage flag.
+
+Amendment and repeal conflicts remain separate work.

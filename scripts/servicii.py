@@ -1198,9 +1198,10 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
 
 
 def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
-    """Bounded, same-domain definition/deadline differences; never a legal verdict."""
+    """Bounded, same-domain definition/deadline/authority candidates; never a legal verdict."""
     from scripts.contradictii_termene import termen_comparabil, termene_diferite
     from scripts.definitii import definitii
+    from scripts.suprapuneri_autoritati import atributie_comparabila
     from scripts.text import cheie
 
     selectie = _matrice_acte({**qs, "limita": ["100"]}, stare)
@@ -1213,11 +1214,12 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
         "prevederi_analizate": 0,
         "definitii_analizate": 0,
         "termene_analizate": 0,
+        "atributii_analizate": 0,
         "trunchiat": selectie["total"] > len(acte),
         "limitari": [
             "Candidați neconfirmați; necesită jurist. "
             + "Diferența textuală nu dovedește contradicția.",
-            "Se compară definiții și termene din maximum 100 de acte ale rândului, "
+            "Se compară definiții, termene și atribuții din maximum 100 de acte ale rândului, "
             + "în același domeniu "
             + "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
             "Limite: 1000 prevederi per act, 5000 definiții și 5000 termene comparabile; "
@@ -1225,6 +1227,8 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
             "Termenele se compară doar pentru formulări identice ale obligației și "
             + "evenimentului explicit. Lunile și anii nu sunt convertiți în zile. "
             + "Excepțiile explicite și ancorele ambigue sunt excluse.",
+            "Atribuții: maximum 5000 formulări comparabile; sunt excluse rolurile comune, "
+            + "delegate și autoritățile locale/teritoriale. Sfera de aplicare necesită verificare.",
             "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
             + "absența candidaților nu dovedește compatibilitatea.",
             *selectie["limitari"],
@@ -1232,6 +1236,7 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
     }
     grupe = {}
     grupe_termene = {}
+    grupe_atributii = {}
     try:
         with depozit.deschide(stare.corpus, readonly=True) as con:
             for act in acte:
@@ -1245,6 +1250,48 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
                 out["trunchiat"] |= len(rows) > 1000
                 for row in rows[:1000]:
                     out["prevederi_analizate"] += 1
+                    atributie = atributie_comparabila(row["text"])
+                    if atributie:
+                        if out["atributii_analizate"] >= 5000:
+                            out["trunchiat"] = True
+                            return out
+                        out["atributii_analizate"] += 1
+                        grup_atributii = grupe_atributii.setdefault(
+                            (domeniu, atributie.pop("cheie")), []
+                        )
+                        dovada_atributie = {
+                            **atributie,
+                            "act_id": act["act_id"],
+                            "locator": row["locator"],
+                            "rang": act["rang"],
+                            "actiuni": _actiuni_prevedere(act["act_id"], row["locator"]),
+                        }
+                        for anterior in grup_atributii:
+                            if anterior["act_id"] == act["act_id"] or (
+                                anterior["autoritate"] == atributie["autoritate"]
+                            ):
+                                continue
+                            if len(out["candidati"]) == limita:
+                                out["trunchiat"] = True
+                                return out
+                            out["candidati"].append(
+                                {
+                                    "tip": "competenta_suprapusa",
+                                    "status": "candidat_neconfirmat",
+                                    "termen": atributie["actiune"] + " " + atributie["obiect"],
+                                    "domeniu": act["domeniu"],
+                                    "a": anterior,
+                                    "b": dovada_atributie,
+                                    "verificari": [
+                                        "Verifică dacă responsabilitatea comună este intenționată.",
+                                        "Verifică teritoriul, obiectul și sfera de aplicare.",
+                                        "Verifică delegările, excepțiile și eventualele "
+                                        + "redenumiri ale autorităților în formele în vigoare.",
+                                    ],
+                                }
+                            )
+                        if dovada_atributie not in grup_atributii:
+                            grup_atributii.append(dovada_atributie)
                     termen_limita = termen_comparabil(row["text"])
                     if termen_limita:
                         if out["termene_analizate"] >= 5000:
@@ -1418,6 +1465,8 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
             )
             if c["tip"] == "termen_divergent":
                 linii.append(f"    Termen: {d['termen_text']} (bază: {d['baza']})")
+            if c["tip"] == "competenta_suprapusa":
+                linii.append(f"    Autoritate: {d['autoritate']}")
         linii.extend(f"  - {v}" for v in c.get("verificari", []))
     if contradictii.get("trunchiat"):
         linii.append("Rezultate parțiale: limita de analiză sau afișare a fost atinsă.")
