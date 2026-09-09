@@ -63,7 +63,7 @@ def test_export_selected_revision_complete_original_basis_and_safe_markdown(case
     assert "Retained A" in data["markdown"] and "Retained B" in data["markdown"]
     assert "nu text legal in vigoare" in data["markdown"]
     assert "nu modificarile nesalvate" in data["markdown"]
-    assert data["schema_version"] == 1 and data["limitari"]
+    assert data["schema_version"] == 2 and data["limitari"]
     assert path.read_bytes() == before
 
 
@@ -80,6 +80,7 @@ def test_invalid_or_missing_revision(case, revision):
 def test_read_modes_on_old_schema_do_not_migrate(case):
     _, path, run, req = case
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")
         con.execute("DROP TABLE propuneri")
         con.execute("PRAGMA user_version=4")

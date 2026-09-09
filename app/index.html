@@ -387,6 +387,12 @@
   .proposal-row>span{min-width:0;overflow-wrap:anywhere}
   [data-proposal-history-list]{max-height:16rem;overflow:auto}
   [data-proposal-history] pre{max-height:18rem;overflow:auto}
+  [data-proposal-analysis]{margin:.7rem 0;overflow-wrap:anywhere}
+  [data-proposal-analysis] pre{max-height:18rem;overflow:auto}
+  .proposal-check{border-top:1px solid var(--rule);padding:.6rem 0}
+  .proposal-check h5{font-size:.85rem;margin:0 0 .3rem}
+  .proposal-check p{margin:.3rem 0;font-size:.85rem}
+  .proposal-check summary{font-size:.85rem}
   .proposal-versions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
   .proposal-versions>section{min-width:0;margin-top:.5rem}
   .proposal-versions pre{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -4066,6 +4072,69 @@ function bindProposalHistory(host,query,saved,alive){
     }catch(err){if(valid())message.textContent=err.message;}finally{button.disabled=false;}
   };
 }
+function proposalAnalysisHtml(data){
+  const a=data.selectata;
+  if(!a)return '<p>Revizia '+data.revizie_selectata+' · fără analiză salvată.</p>';
+  const labels={verificat:'Verificat în limita acoperirii',partial:'Parțial',indisponibil:'Indisponibil',nesuportat:'Nesuportat'};
+  return '<h4>Revizia '+a.baza.revizie+(data.istorica?' · analiză istorică':' · revizia curentă')+'</h4><p class="hint">'+esc(dossierTime(a.creat_la))+' · '+esc(a.engine_version)+'</p>'+a.controale.map(c=>'<section class="proposal-check"><h5>'+esc(c.eticheta)+' · '+esc(labels[c.stare]||c.stare)+'</h5><p class="hint">'+esc(c.limitare)+'</p><p>'+c.total+' '+(c.tip_rezultate==='inventar'?'elemente inventariate':'semnale')+(c.trunchiat?' · afișare limitată':'')+'</p>'+c.rezultate.map(r=>'<details><summary>'+esc(r.fragment||r.explicatie||r.fel||'Detalii')+'</summary><pre>'+esc(JSON.stringify(r,null,2))+'</pre></details>').join('')+'</section>').join('')+'<ul>'+a.limitari.map(s=>'<li>'+esc(s)+'</li>').join('')+'<details><summary>Text analizat și identificatori</summary><pre>'+esc(a.text_analizat)+'</pre><pre>'+esc(JSON.stringify(a.baza,null,2))+'</pre></details><details><summary>Surse locale capturate · separat de dovada originală</summary><pre>'+esc(JSON.stringify({sha256:a.surse_sha256,acoperire:a.acoperire,surse:a.surse},null,2))+'</pre></details>';
+}
+function bindProposalAnalysis(host,panel,saved,identity,alive){
+  if(!saved)return;
+  const section=document.createElement('details');section.dataset.proposalAnalysis='';
+  section.innerHTML='<summary>Analiza propunerii · revizii salvate</summary><div class="dossier-actions"><label>Revizia<input type="number" data-analysis-revision min="1" max="1000001" step="1"></label><button type="button" class="ghost mini" data-analysis-run>Verifică această revizie</button><button type="button" class="ghost mini" data-analysis-refresh title="Reîncarcă analizele">↻</button></div><p class="hint" data-analysis-status role="status"></p><label>Istoric analize<select data-analysis-history><option value="">Ultima analiză a reviziei selectate</option></select></label><div class="dossier-actions"><button type="button" class="ghost mini" data-analysis-prev title="Analize mai noi">←</button><button type="button" class="ghost mini" data-analysis-next title="Analize mai vechi">→</button></div><p class="hint" data-analysis-page></p><div data-analysis-result></div><div class="dossier-actions"><label>Format<select data-analysis-format><option value="md">Markdown</option><option value="json">JSON</option></select></label><button type="button" class="ghost mini" data-analysis-export disabled>Descarcă revizia și analiza selectată</button></div>';
+  host.closest('.finding-authoring').after(section);
+  const input=section.querySelector('[data-analysis-revision]'),message=section.querySelector('[data-analysis-status]'),run=section.querySelector('[data-analysis-run]'),history=section.querySelector('[data-analysis-history]'),area=section.querySelector('[data-analysis-result]'),download=section.querySelector('[data-analysis-export]');input.value=saved.revizie;
+  const transactions=panel.proposalAnalysisTransactions||(panel.proposalAnalysisTransactions=new Map());
+  const key=revision=>[identity.dosar_id,identity.rulare_id,identity.constatare_id,revision].join(':');
+  const valid=()=>alive()&&section.isConnected;
+  const revision=()=>{const n=Number(input.value);if(!Number.isInteger(n)||n<1||n>1000001)throw Error('Revizie invalidă.');return n;};
+  const query='/api/dosare/propuneri/analize?'+new URLSearchParams({id:identity.dosar_id,rulare_id:identity.rulare_id,constatare_id:identity.constatare_id});
+  let sequence=0,offset=0,selected=null,loaded=false;
+  const pending=()=>{const record=transactions.get(key(Number(input.value)));run.disabled=!!record?.promise;run.textContent=record?.promise?'Verificare în curs…':record?.error?'Reîncearcă verificarea':'Verifică această revizie';return record;};
+  const load=async(next=0,id=null)=>{
+    const seq=++sequence;selected=null;download.disabled=true;area.textContent='';message.textContent='Încarc analiza salvată…';pending();
+    try{
+      const rev=revision(),data=await dossierApi(query+'&revizie='+rev+'&offset='+next+(id?'&analiza_id='+encodeURIComponent(id):''));if(!valid()||seq!==sequence)return;
+      offset=next;selected=data.selectata;area.innerHTML=proposalAnalysisHtml(data);download.disabled=!selected;
+      history.innerHTML='<option value="">Ultima analiză a reviziei selectate</option>'+data.analize.map(a=>'<option value="'+esc(a.id)+'" data-revision="'+a.revizie+'">Revizia '+a.revizie+' · '+esc(dossierTime(a.creat_la))+'</option>').join('');
+      if(selected&&!data.analize.some(a=>a.id===selected.id)){const option=document.createElement('option');option.value=selected.id;option.dataset.revision=selected.baza.revizie;option.textContent='Revizia '+selected.baza.revizie+' · '+dossierTime(selected.creat_la);history.append(option);}
+      history.value=selected?.id||'';
+      section.querySelector('[data-analysis-prev]').disabled=offset===0;section.querySelector('[data-analysis-next]').disabled=offset+data.analize.length>=data.total;
+      section.querySelector('[data-analysis-page]').textContent=`${data.total?offset+1:0}–${Math.min(offset+data.analize.length,data.total)} din ${data.total} analize`;
+      const record=pending();message.textContent=record?.error|| (record?.promise?'Verificare în curs…':'Revizia salvată '+rev+'. Modificările nesalvate nu sunt incluse. Nu este un verdict juridic.');
+    }catch(err){if(valid()&&seq===sequence)message.textContent=err.message;}
+  };
+  const observe=async(record,rev,id=null)=>{
+    const seq=sequence;
+    await record.promise;
+    if(valid()&&Number(input.value)===rev){pending();if(seq===sequence)await load(offset,id);}
+  };
+  const choose=()=>{load();const rev=Number(input.value),record=transactions.get(key(rev));if(record?.promise)observe(record,rev);};
+  input.oninput=()=>{++sequence;selected=null;download.disabled=true;area.textContent='';pending();};
+  input.onchange=choose;
+  history.onchange=()=>{const option=history.selectedOptions[0];if(option?.dataset.revision)input.value=option.dataset.revision;const id=history.value||null;load(offset,id);const rev=Number(input.value),record=transactions.get(key(rev));if(record?.promise)observe(record,rev,id);};
+  section.ontoggle=()=>{if(section.open&&!loaded){loaded=true;choose();}};
+  section.querySelector('[data-analysis-refresh]').onclick=choose;
+  section.querySelector('[data-analysis-prev]').onclick=()=>load(Math.max(0,offset-20),selected?.id);
+  section.querySelector('[data-analysis-next]').onclick=()=>load(offset+20,selected?.id);
+  run.onclick=()=>{
+    try{
+      const rev=revision(),k=key(rev);let record=transactions.get(k);if(record?.promise)return;
+      record=record||{id:crypto.randomUUID().replaceAll('-','')};record.error='';transactions.set(k,record);
+      record.promise=dossierApi('/api/dosare/propuneri/analize',{...identity,revizie:rev,id:record.id}).then(()=>{transactions.delete(k);},err=>{record.error=err.message;}).finally(()=>{record.promise=null;});
+      pending();message.textContent='Verific revizia salvată '+rev+'…';observe(record,rev);
+    }catch(err){message.textContent=err.message;}
+  };
+  download.onclick=async()=>{
+    const chosen=selected,seq=sequence;if(!chosen)return;download.disabled=true;
+    try{
+      const format=section.querySelector('[data-analysis-format]').value;
+      const data=await dossierApi('/api/dosare/propuneri?'+new URLSearchParams({mod:'export',id:identity.dosar_id,rulare_id:identity.rulare_id,constatare_id:identity.constatare_id,revizie:chosen.baza.revizie,analiza_id:chosen.id}));if(!valid()||seq!==sequence)return;
+      const {markdown,...json}=data,url=URL.createObjectURL(new Blob([format==='md'?markdown:JSON.stringify(json,null,2)],{type:format==='md'?'text/markdown;charset=utf-8':'application/json;charset=utf-8'}));
+      const link=document.createElement('a');link.href=url;link.download='propunere-'+data.propunere.id+'-analiza-'+chosen.id+'.'+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);message.textContent='Exportată revizia '+chosen.baza.revizie+' și analiza selectată.';
+    }catch(err){if(valid()&&seq===sequence)message.textContent=err.message;}finally{if(valid()&&seq===sequence)download.disabled=!selected;}
+  };
+}
 function bindStructuredProposal(form,saved,f,drafts,key,revision,initial,identity,alive){
   const section=document.createElement('details');section.dataset.structuredProposal='';
   section.innerHTML='<summary>Intervenție structurată</summary><label>Act țintă<input type="text" data-intent="act_id" maxlength="100" placeholder="lege-98-2016"></label><label>Prevedere țintă<input type="text" data-intent="locator" maxlength="100" placeholder="art1"></label><label>Operație<select data-intent="operatie"><option value="modifica">Înlocuiește textul</option><option value="introduce">Introdu un articol după țintă</option><option value="abroga">Abrogă prevederea</option></select></label><label data-new-article-label hidden>Număr articol nou<input type="text" data-intent="articol_nou" maxlength="100" placeholder="1^1"></label><label data-new-text-label>Text nou<textarea data-intent="text_nou" maxlength="11000" rows="5"></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-intent-preview>Previzualizează</button><button type="button" class="ghost mini" data-intent-apply disabled>Aplică formularea în propunere</button><button type="button" class="ghost mini" data-intent-discard>Renunță la intervenție</button></div><p class="hint" data-intent-status role="status"></p><div data-intent-result></div>';
@@ -4135,6 +4204,7 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
       host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;
       bindProposalHistory(host,query,saved,alive);
+      bindProposalAnalysis(host,panel,saved,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
       const form=host.querySelector('form'),message=host.querySelector('[data-proposal-status]');
       const values=()=>Object.fromEntries(new FormData(form));
       const controls=[...form.elements];

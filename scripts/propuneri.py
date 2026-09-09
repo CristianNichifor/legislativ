@@ -1,5 +1,6 @@
 """Editable proposal revisions linked to one immutable saved finding, without review gates."""
 
+import hashlib
 import json
 import re
 from datetime import UTC, datetime
@@ -135,17 +136,74 @@ def _json_block(value):
     return _block(json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2), "json")
 
 
-def exporta(path, dossier_id, run_id, finding_id, revision):
+def analize(path, dossier_id, run_id, finding_id, revision, offset=0, analysis_id=None):
+    _number(revision, 1)
+    _number(offset)
+    proposal = citeste(path, dossier_id, run_id, finding_id, revision)["propunere"]
+    current = citeste(path, dossier_id, run_id, finding_id)["propunere"]
+    if analysis_id is not None:
+        dosare._id(analysis_id)
+    out = {
+        "analize": [],
+        "total": 0,
+        "offset": offset,
+        "limita": 20,
+        "selectata": None,
+        "revizie_selectata": revision,
+        "revizie_curenta": current["revizie"],
+        "istorica": revision != current["revizie"],
+    }
+    with dosare._open(path) as con:
+        if con.execute("PRAGMA user_version").fetchone()[0] >= 7:
+            where = (
+                " FROM analize_propuneri a JOIN propuneri p ON p.id=a.propunere_id "
+                "WHERE p.rulare_id=? AND p.constatare_id=?"
+            )
+            params = (run_id, finding_id)
+            out["analize"] = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT a.id,a.creat_la,p.revizie"
+                    + where
+                    + " ORDER BY a.seq DESC LIMIT 20 OFFSET ?",
+                    (*params, offset),
+                )
+            ]
+            out["total"] = con.execute("SELECT count(*)" + where, params).fetchone()[0]
+            row = con.execute(
+                "SELECT * FROM analize_propuneri WHERE propunere_id=? "
+                + ("AND id=? " if analysis_id else "")
+                + "ORDER BY seq DESC LIMIT 1",
+                (proposal["id"], analysis_id) if analysis_id else (proposal["id"],),
+            ).fetchone()
+            if row:
+                out["selectata"] = {"id": row["id"], **json.loads(row["rezultat_json"])}
+                expected = hashlib.sha256(dosare._json(proposal).encode()).hexdigest()
+                if out["selectata"]["baza"]["propunere_sha256"] != expected:
+                    raise ValueError("Baza analizei nu corespunde propunerii.")
+        if analysis_id and out["selectata"] is None:
+            raise ValueError("Analiza inexistenta pentru aceasta revizie.")
+    return out
+
+
+def exporta(path, dossier_id, run_id, finding_id, revision, analysis_id=None):
     _number(revision, 1)
     data = citeste(path, dossier_id, run_id, finding_id, revision)
     run = dosare.rulari(path, dossier_id, run_id)
     proposal = data["propunere"]
+    analysis = analize(path, dossier_id, run_id, finding_id, revision, analysis_id=analysis_id)[
+        "selectata"
+    ]
     limitations = [
         "Text propus de autor, nu legislatie in vigoare si nu concluzie juridica verificata.",
         "Exportul contine numai revizia salvata selectata, nu modificarile nesalvate.",
         "Dovezile sunt cele pastrate in rularea originala, nu surse actualizate la export.",
         "Referintele UE ale rularii sunt contextuale, nu constatari de incompatibilitate.",
         "Absenta unei dovezi nu dovedeste absenta unei norme sau a unei exceptii.",
+        (
+            "Analiza apartine exclusiv reviziei exportate; "
+            "sursele ei sunt separate de dovada originala."
+        ),
     ]
     sections = [
         "# Propunere de modificare",
@@ -172,9 +230,16 @@ def exporta(path, dossier_id, run_id, finding_id, revision):
                 _json_block(proposal["interventie"]),
             ]
         )
+    sections.extend(
+        [
+            "## Analiza reviziei salvate (nu verdict juridic)",
+            _json_block(analysis) if analysis else "Revizie fara analiza salvata.",
+        ]
+    )
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         **data,
+        "analiza": analysis,
         "rulare": run,
         "limitari": limitations,
         "markdown": "\n\n".join(sections) + "\n",
@@ -190,7 +255,7 @@ def citeste_cerere(path, qs):
     if mode == "istoric":
         return istoric(*params, int(qs.get("offset", ["0"])[0]))
     if mode == "export":
-        return exporta(*params, int(qs.get("revizie", ["0"])[0]))
+        return exporta(*params, int(qs.get("revizie", ["0"])[0]), qs.get("analiza_id", [None])[0])
     if mode:
         raise ValueError("Operatie de propunere necunoscuta.")
     return citeste(*params, int(qs["revizie"][0]) if "revizie" in qs else None)

@@ -17,6 +17,7 @@ def test_proposal_draft_retry_conflict_and_independent_cancel():
         r"""
 const assert=require('node:assert/strict');
 const bindProposalHistory=()=>{};
+const bindProposalAnalysis=()=>{};
 const bindStructuredProposal=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }
@@ -116,5 +117,36 @@ def test_rationale_edits_preserve_structure_but_manual_text_detachment_is_respec
         + source
         + "edit();assert.deepEqual(drafts.get(key).interventie,saved.interventie.cerere);"
         "drafts.get(key).interventie=null;edit();assert.equal(drafts.get(key).interventie,null);"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_analysis_renderer_escapes_sources_and_keeps_statuses_distinct():
+    source = (
+        (Path(__file__).parents[1] / "app/index.html")
+        .read_text()
+        .split("function proposalAnalysisHtml", 1)[1]
+        .split("function bindProposalAnalysis", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;function proposalAnalysisHtml"
+        + source
+        + r"""
+const statuses=['verificat','partial','indisponibil','nesuportat'];
+const a={baza:{revizie:1,text_sha256:'<img>'},creat_la:'<svg>',engine_version:'<script>',
+  text_analizat:'<iframe>',surse:[{text:'<script>'}],surse_sha256:'hash',acoperire:{},
+  limitari:['<img>'],controale:statuses.map(stare=>({stare,eticheta:'<svg>',limitare:'<script>',
+    total:0,tip_rezultate:'inventar',rezultate:[{fragment:'<iframe>'}]}))};
+const html=proposalAnalysisHtml({selectata:a,istorica:true});
+assert.ok(!/<(script|img|svg|iframe)>/.test(html));
+for(const s of ['istorică','Verificat','Parțial','Indisponibil','Nesuportat','inventariate'])
+  assert.ok(html.includes(s));
+const empty=proposalAnalysisHtml({selectata:null,revizie_selectata:2});
+assert.ok(empty.includes('Revizia 2')&&empty.includes('fără analiză'));
+assert.ok(!empty.includes('Verificat'));
+"""
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
