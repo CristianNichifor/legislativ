@@ -173,3 +173,27 @@ def test_eu_queue_renderer_escapes_titles_and_separates_unchecked():
         "assert.ok(h.includes('Comparație incompletă'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_context_renderer_escapes_values_and_citations_and_labels_unknown():
+    source = (
+        APP.read_text().split("const CONTEXT_FIELDS=", 1)[1].split("function euCheckHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const CONTEXT_FIELDS="
+        + source
+        + "assert.ok(legalContextEventHtml(null).includes('Context necunoscut'));"
+        "const event={revizie:1,evaluator:'<script>',motiv:'<img>',"
+        "context:{teritoriu:{valoare:'<svg>',citare:'<iframe>'}}};"
+        "const h=legalContextEventHtml(event);"
+        "assert.ok(!/<(script|img|svg|iframe)>/.test(h));"
+        "assert.ok(h.includes('Citare: &lt;iframe&gt;')&&h.includes('Necunoscut'));"
+        "assert.ok(legalContextFormHtml().includes('Necunoscută'));"
+        "const f={dovada:{a:{act_id:'A',locator:'art1'}},"
+        "context_juridic:{a:{curent:null,istoric:[]}}};"
+        "assert.ok(legalContextHtml(f).includes('Context juridic · A'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

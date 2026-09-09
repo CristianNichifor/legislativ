@@ -257,6 +257,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/verificari",
                 "/api/dosare/coada",
                 "/api/dosare/coada-ue",
+                "/api/dosare/context",
             ):
                 from scripts import dosare
 
@@ -266,7 +267,18 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/verificari":
+                    if ruta.path == "/api/dosare/context":
+                        from scripts.revizuiri import context_istoric
+
+                        out = context_istoric(
+                            path,
+                            ident,
+                            qs.get("rulare_id", [None])[0],
+                            qs.get("constatare_id", [None])[0],
+                            qs.get("tinta", [None])[0],
+                            int(qs.get("offset", ["0"])[0]),
+                        )
+                    elif ruta.path == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import istoric
 
                         out = istoric(
@@ -343,6 +355,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
+                "/api/dosare/context",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -371,6 +384,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
+                "/api/dosare/context",
             ):
                 from scripts import dosare
 
@@ -378,7 +392,11 @@ def face_handler(stare: Stare):
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/verificari":
+                    if ruta == "/api/dosare/context":
+                        from scripts.revizuiri import context_salveaza
+
+                        out = context_salveaza(path, cerere)
+                    elif ruta == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import salveaza
 
                         out = salveaza(stare, cerere)
