@@ -357,6 +357,12 @@
   .eu-snapshots pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem;max-height:28rem;overflow:auto}
   .finding-review form{margin:.5rem 0;grid-template-columns:repeat(2,minmax(0,1fr))}
   .finding-review form label:nth-child(3),.finding-review form>div{grid-column:1/-1}
+  .legal-context{margin:.6rem 0;border-top:1px solid var(--rule);padding-top:.5rem;overflow-wrap:anywhere}
+  .legal-context form{display:block}
+  .legal-context form label{display:block;margin:.5rem 0}
+  .legal-context fieldset{min-width:0;margin:.7rem 0;padding:.5rem;border:1px solid var(--rule)}
+  .legal-context input,.legal-context textarea,.legal-context select{width:100%;box-sizing:border-box}
+  .legal-context [data-context-editor]{max-width:46rem}
   @media(max-width:600px){.finding-review form{grid-template-columns:minmax(0,1fr)}}
   .matrix-tools input{flex:1 1 18rem}
   .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -3859,6 +3865,22 @@ async function openDossierRun(id,runId,token,checkId=null){
 }
 const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
 const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
+const CONTEXT_FIELDS={aplicabil_de_la:'Aplicabil de la',aplicabil_pana_la:'Aplicabil până la',teritoriu:'Teritoriu',destinatari:'Destinatari',exceptii:'Excepții',tranzitorii:'Dispoziții tranzitorii',clasificare:'Clasificare normativă'};
+const CONTEXT_CLASSES={'':'Necunoscută',organica:'Organică',ordinara:'Ordinară',alta:'Altă clasificare'};
+function legalContextEventHtml(event){
+  if(!event) return '<p class="hint">Context necunoscut.</p>';
+  return `<p class="hint">Revizia ${esc(event.revizie)} · ${esc(event.evaluator)} · ${esc(event.creat_la)}</p>`
+    +Object.entries(CONTEXT_FIELDS).map(([k,label])=>{const entry=event.context[k];return `<p><b>${esc(label)}</b>: ${esc(entry?.valoare?(k==='clasificare'?CONTEXT_CLASSES[entry.valoare]:entry.valoare):'Necunoscut')} ${entry?.citare?`<br><span class="hint">Citare: ${esc(entry.citare)}</span>`:''}</p>`;}).join('')+`<p>${esc(event.motiv)}</p>`;
+}
+function legalContextHtml(f){
+  return Object.entries(f.context_juridic||{}).map(([target,data])=>{
+    const evidence=target==='constatare'?f.dovada:f.dovada[target]||{};
+    return `<details class="legal-context" data-context-target="${esc(target)}"><summary>Context juridic${target==='constatare'?'':' · '+target.toUpperCase()} · Revizia ${data.curent?.revizie||0}</summary><p class="hint">${esc(evidence.act_id||evidence.act_tinta||'')} ${esc(evidence.locator||'')} · Evaluare declarată, citări neverificate automat.</p>${legalContextEventHtml(data.curent)}<button type="button" class="ghost mini" data-context-edit>Editează contextul</button><div data-context-editor></div><details><summary>Istoricul contextului</summary><div data-context-events>${data.istoric.map(legalContextEventHtml).join('')||'<p>Nicio revizie.</p>'}</div>${data.istoric_trunchiat?'<button type="button" class="ghost mini" data-context-older>Revizii mai vechi</button>':''}</details><p class="hint" data-context-status role="status"></p></details>`;
+  }).join('');
+}
+function legalContextFormHtml(){
+  return '<form>'+Object.entries(CONTEXT_FIELDS).map(([k,label])=>`<fieldset><legend>${esc(label)}</legend><label>Valoare${k==='clasificare'?`<select name="${k}">${Object.entries(CONTEXT_CLASSES).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select>`:k.startsWith('aplicabil_')?`<input type="date" name="${k}">`:`<textarea name="${k}" rows="2" maxlength="500" placeholder="Necunoscut"></textarea>`}</label><label>Citare (act și prevedere)<input name="${k}_citare" maxlength="300"></label></fieldset>`).join('')+'<label>Evaluator declarat<input name="evaluator" maxlength="120" required></label><label>Motivarea reviziei<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează contextul</button><button type="button" class="ghost mini" data-context-cancel>Renunță</button></div></form>';
+}
 function euCheckHtml(check,hasSources){
   const eu=check?.surse_ue;
   if(!eu) return hasSources?'<p class="hint">Surse UE contextuale fără verificare salvată.</p>':'';
@@ -3883,6 +3905,7 @@ function reviewFindingHtml(f){
     +reviewEvidenceHtml(f)
     +(f.dovada.text?`<p>${esc(f.dovada.text)}</p>`:'')
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
+    +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
     +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div><button type="submit" class="ghost mini">Înregistrează decizia</button></div></form><p class="hint review-status" role="status"></p>'
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
@@ -3920,7 +3943,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       filter=picker.value;
       const findings=d.constatari.filter(f=>filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter||filter==='evidence_changed'&&f.verificare?.stare==='schimbat'||filter==='evidence_unknown'&&(f.verificare?.stare==='indisponibil'||f.verificare?.comparatie_incompleta));
       list.innerHTML=findings.map(reviewFindingHtml).join('')||(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p>':'<p>Nicio constatare în această selecție.</p>');
-      list.querySelectorAll('form').forEach(form=>{
+      list.querySelectorAll('.finding-review > form').forEach(form=>{
         const f=findings.find(f=>f.id===form.closest('[data-finding]').dataset.finding);
         form.parentElement.querySelectorAll('[data-draft-versions]').forEach(button=>button.onclick=()=>{
           const dep=f.dependente_verificate[Number(button.dataset.draftVersions)];
@@ -3957,6 +3980,54 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
             if(valid()) await loadFindingReviews(panel,dossierId,runId,token);
           }catch(err){if(valid()) message.textContent=err.message;}
           finally{controls.forEach(c=>c.disabled=false);}
+        };
+      });
+      list.querySelectorAll('[data-context-target]').forEach(section=>{
+        const f=findings.find(f=>f.id===section.closest('[data-finding]').dataset.finding),target=section.dataset.contextTarget,data=f.context_juridic[target];
+        const key='context:'+f.id+':'+target,message=section.querySelector('[data-context-status]');
+        const edit=()=>{
+          section.open=true;section.querySelector('[data-context-edit]').hidden=true;
+          const editor=section.querySelector('[data-context-editor]');editor.innerHTML=legalContextFormHtml();
+          const form=editor.querySelector('form'),initial={evaluator:'',motiv:''};
+          for(const k of Object.keys(CONTEXT_FIELDS)){initial[k]=data.curent?.context[k].valoare||'';initial[k+'_citare']=data.curent?.context[k].citare||'';}
+          const previous=drafts.get(key),revision=previous?.revision??data.curent?.revizie??0;
+          message.textContent=previous?.error||'';
+          for(const [k,v] of Object.entries(previous?.values||initial)) form.elements.namedItem(k).value=v;
+          const values=()=>Object.fromEntries(new FormData(form));
+          const remember=()=>{
+            const current=values();
+            if(Object.keys(initial).every(k=>current[k]===initial[k])) drafts.delete(key);
+            else drafts.set(key,{values:current,revision,retry:drafts.get(key)?.retry});
+          };
+          form.oninput=remember;
+          if(previous?.saving) [...form.elements].forEach(c=>c.disabled=true);
+          form.querySelector('[data-context-cancel]').onclick=()=>{drafts.delete(key);render();};
+          form.onsubmit=async e=>{
+            e.preventDefault();remember();const record=drafts.get(key)||{values:values(),revision};
+            const context=Object.fromEntries(Object.keys(CONTEXT_FIELDS).map(k=>[k,{valoare:record.values[k],citare:record.values[k+'_citare']}]));
+            const payload={dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,tinta:target,revizie:revision,evaluator:record.values.evaluator,motiv:record.values.motiv,context};
+            const fingerprint=JSON.stringify(payload);
+            if(record.retry?.fingerprint!==fingerprint) record.retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
+            record.saving=true;record.error='';message.textContent='';drafts.set(key,record);const controls=[...form.elements];controls.forEach(c=>c.disabled=true);
+            try{
+              await dossierApi('/api/dosare/context',{...payload,id:record.retry.id});
+              drafts.delete(key);if(valid()) await loadFindingReviews(panel,dossierId,runId,token);
+            }catch(err){record.error=err.message;if(valid()) message.textContent=err.message;}
+            finally{record.saving=false;controls.forEach(c=>c.disabled=false);if(valid()&&!form.isConnected) render();}
+          };
+        };
+        section.querySelector('[data-context-edit]').onclick=edit;
+        if(drafts.has(key)) edit();
+        const older=section.querySelector('[data-context-older]');let offset=20;
+        if(older) older.onclick=async()=>{
+          older.disabled=true;
+          try{
+            const page=await dossierApi('/api/dosare/context?'+new URLSearchParams({id:dossierId,rulare_id:runId,constatare_id:f.id,tinta:target,offset:String(offset)}));
+            if(!valid()||!older.isConnected) return;
+            section.querySelector('[data-context-events]').insertAdjacentHTML('beforeend',page.evenimente.map(legalContextEventHtml).join(''));
+            offset+=page.evenimente.length;older.hidden=!page.mai_multe;
+          }catch(err){if(valid()) message.textContent=err.message;}
+          finally{older.disabled=false;}
         };
       });
     };

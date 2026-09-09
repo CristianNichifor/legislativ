@@ -35,11 +35,12 @@ a write transaction, and UPDATE/DELETE triggers reject modification of old event
 An authorized local database owner can still bypass these controls by changing the
 database schema; this is not cryptographic immutability.
 
-Schema 2 added `revizuiri`; schema 3 adds evidence-check history and recalculation
-links. Version-1/2 stores remain readable without migration; absent history is
+Schema 2 added `revizuiri`; schema 3 added evidence-check history and recalculation
+links; schema 4 adds reviewer-supplied legal context. Version-1/2/3 stores remain
+readable without migration; absent history is
 shown as uncaptured, never backfilled. The next explicit dossier/review write upgrades them
 transactionally; failed writes roll back the migration. Backup before upgrading;
-older application code rejects schema 3. Reviews belong to a saved run and never
+older application code rejects schema 4. Reviews belong to a saved run and never
 transfer automatically to a different run, even with similar evidence.
 
 Unsaved review text is retained while filtering or reloading reviews within the
@@ -78,7 +79,7 @@ metadata and imported document bytes. Static clients reject persistent dossier
 operations explicitly. No hosted authentication or multi-user isolation is provided;
 this is a local single-user workspace.
 
-First creation initializes schema 3 and the SQLite application ID in one write
+First creation initializes schema 4 and the SQLite application ID in one write
 transaction. Reads do not create or migrate files. An unrelated nonempty database
 or incompatible application/schema version is rejected, not reset. A failure during
 initialization rolls back tables and version markers together. Future migrations
@@ -225,7 +226,8 @@ existing recalculation link. It fails on unavailable extraction; it does not fet
 sources or overwrite draft input. Existing reports and review decisions remain
 unchanged. Directly choosing another attachment requires a new explicit comparison.
 
-No dossier schema migration is needed beyond schema 3. Back up both the dossier
+Parliamentary dependencies required no migration beyond schema 3; the current store
+version is 4 for legal context. Back up both the dossier
 database and the imported-document database using SQLite's backup mechanism.
 The dossier backup alone preserves reports/checks/links but cannot restore original
 snapshot bytes or full imported text. Missing restored imports remain unavailable.
@@ -269,7 +271,7 @@ include them. Backup preserves every link.
 Schema-3 tables have no-update/no-delete triggers. They prevent accidental changes
 through ordinary SQL, not tampering by the local database owner. Reads never
 migrate version-1/2 stores. New writes migrate atomically; failed migrations roll
-back. Back up before upgrading because older application versions reject schema 3.
+back. Back up before upgrading because older application versions reject schema 4.
 New routes retain local Host/Origin guards, no-store responses and static-mode
 rejection. Stores and backups remain private, unencrypted local research data.
 
@@ -364,3 +366,39 @@ backup/restore endpoint or automatic destructive replacement is provided.
 The tests restore a backup into a fresh database and verify metadata plus complete
 saved run/evidence equality. They also cover concurrent duplicate creation, schema
 rollback, incompatible schemas, bounds, ownership and HTTP origin/Host checks.
+## Context juridic declarat
+
+Constatările salvate pot avea context juridic declarat de evaluator. Pentru comparații,
+contextul este separat pentru țintele A și B din dovada salvată; pentru celelalte constatări se
+referă la constatarea individuală. Nu este un registru global de clasificare a actelor.
+
+Fiecare câmp are o valoare și o citare textuală (act și prevedere): începutul/sfârșitul
+aplicabilității, teritoriul, destinatarii, excepțiile, dispozițiile tranzitorii și clasificarea
+organică/ordinară/altă clasificare. Valoarea și citarea goale înseamnă **necunoscut**, nu lipsa
+unei excepții sau aplicabilitate nelimitată. Valorile completate necesită citare; nu sunt
+deduse din titlu, domeniu, model AI sau rangul euristic. Datele trebuie să fie ISO YYYY-MM-DD,
+iar un interval complet trebuie să fie ordonat. Nu se calculează efecte juridice din aceste date.
+
+Citările sunt furnizate de evaluator și **nu sunt verificate sau descărcate automat**. Nu
+constituie o nouă arhivă de surse, nu sunt dependente urmărite automat și nu certifică încadrarea
+juridică. Evaluatorul este o etichetă declarată, nu o identitate autentificată. Pentru corectarea
+unei afirmații se salvează o nouă revizie, inclusiv revenirea explicită la necunoscut.
+
+Salvarea cere evaluator și motivarea reviziei. Contextul are istoric append-only, control optimist
+al concurenței și cheie de retry, independente de deciziile asupra constatărilor. Contextul nu
+modifică detectorii, rezultatul analizei, deciziile sau cozile de verificare și nu se transferă
+automat la alte rulări. Notele de context nesalvate sunt păstrate la filtrare/reîncărcare și
+blochează navigarea din cozi și recalcularea, la fel ca notele de revizuire. După un conflict,
+reîncărcarea păstrează textul nesalvat; renunțarea explicită permite pornirea de la noua revizie.
+
+Schema dosarelor este acum **4**. Citirea schemelor 1–3 nu migrează baza; următoarea scriere o
+actualizează tranzacțional. Tabelul `contexte_juridice` este inclus în backup-ul SQLite al dosarelor.
+Trigger-ele append-only nu protejează împotriva proprietarului local al bazei de date.
+
+`GET /api/dosare/context` citește istoricul unei ținte, în pagini de 20; `POST` adaugă o revizie.
+Se aplică aceleași restricții locale Host/Origin, cache `no-store` și limita de 16 KB pe cerere.
+Valorile au maximum 500 de caractere, citările 300, evaluatorul 120 și motivarea 2.000; limita de
+octeți a cererii se aplică separat. Interfața încarcă editorul la cerere, lângă dovezile constatării.
+Exporturile revizuirii includ contextul curent și ultimele 20 de revizii per țintă, cu marcarea
+trunchierii; istoricul complet rămâne în bază și poate fi parcurs prin API. Varianta statică nu
+oferă scriere sau stocare de context juridic.

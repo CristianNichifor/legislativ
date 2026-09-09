@@ -35,7 +35,7 @@ def test_create_read_retry_and_isolation(state):
         dosare.creeaza(path, {"id": ID, "titlu": "Different"})
     assert dosare.lista(path)["total"] == 1
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert con.execute("PRAGMA user_version").fetchone()[0] == 4
         assert con.execute("PRAGMA application_id").fetchone()[0] == dosare.APPLICATION_ID
 
 
@@ -68,7 +68,7 @@ def test_foreign_future_schema_and_atomic_migration(state):
         assert con.execute("SELECT name FROM sqlite_master").fetchall() == []
     create(state)
     with sqlite3.connect(path) as con:
-        con.execute("PRAGMA user_version=4")
+        con.execute("PRAGMA user_version=5")
     for operation in (lambda: create(state), lambda: dosare.lista(path)):
         with pytest.raises(ValueError, match="compatibil"):
             operation()
