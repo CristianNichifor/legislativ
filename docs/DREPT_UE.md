@@ -63,6 +63,34 @@ Importatorul păstrează actul, manifestările găsite și prevederile împărț
 `preambul`, `considerent-1`, `art1`, `anexa-i`. Acestea sunt unitățile pe care interfața le poate
 cita.
 
+## Instantanee locale și dosare
+
+Importurile noi păstrează în `eu_instantanee` textul extras și proveniența fiecărei observații:
+CELEX, URI de work/expression/manifestation, limba, formatul, URL-ul principal, metadatele actului,
+data colectării și SHA-256 al textului. Identitatea instantaneei include aceste metadate; o nouă
+colectare poate produce alt identificator chiar dacă textul este identic. Nu este un identificator
+oficial al unei versiuni juridice. Observațiile nu sunt suprascrise la import.
+
+La primul import după actualizare, rândul local anterior este arhivat înainte de înlocuire.
+Nu se recuperează versiuni dispărute înainte de această actualizare. O arhivare invalidă sau peste
+8 MB oprește importul și păstrează actul și indexul anterior. Tranzacția include textul, indexul
+și instantaneele; trigger-ele append-only nu protejează împotriva proprietarului bazei SQLite.
+
+O rulare nouă de dosar capturează separat sursele UE **contextuale**, fără a crea constatări
+juridice sau dependențe de reevaluat. Citește o singură tranzacție locală, fără rețea sau migrare.
+Păstrează maximum 20 de referințe și 2 MB de instantanee serializate; sursele lipsă, corupte sau
+prea mari au stări explicite, fără text ori amprentă parțială. Limita totală de 4 MB a rulării
+rămâne aplicabilă. Datele sunt vizibile în analiza salvată și în exporturile revizuirii JSON și
+Markdown. Dosarele vechi nu primesc retrospectiv textul curent drept dovadă istorică.
+
+Capturile rețin textul extras, **nu octeții originali descărcați**, și URL-ul principal al
+manifestării, nu o dovadă completă a extragerii fiecărui flux din documentele multipart.
+Româna și alternativa engleză rămân distincte; schimbarea limbii nu dovedește modificarea sensului.
+Verificările existente ale constatărilor nu compară încă aceste surse UE.
+
+Backup-ul SQLite al dosarelor include textul UE capturat în rulări, dar nu tot istoricul de import.
+Pentru acesta trebuie salvat și `eu.db`, folosind API-ul SQLite de backup pentru a include WAL.
+
 ## Ce nu decide
 
 `Drept UE` nu spune singur că un proiect este compatibil sau incompatibil cu dreptul UE.

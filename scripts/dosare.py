@@ -264,6 +264,10 @@ def salveaza_rulare(stare, request):
     from scripts.dependente_dovezi import captureaza
 
     evidence["manifest"] = captureaza(stare, report)
+    if evidence["referinte_ue"]:
+        from scripts.instantanee_ue import captureaza as capture_eu
+
+        evidence["surse_ue"] = capture_eu(stare, evidence["referinte_ue"])
     engine_version = "matrice-proiecte-v1" if projects else ENGINE_VERSION
     payload = _json(
         {"engine_version": engine_version, "filtre": filters, "raport": report, "dovezi": evidence}

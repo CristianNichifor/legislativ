@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 
+from scripts import instantanee_ue
 from scripts.text import cheie, normalizeaza
 
 SPARQL_ENDPOINT = "https://publications.europa.eu/webapi/rdf/sparql"
@@ -196,6 +197,7 @@ def deschide(cale: str = "eu.db", *, readonly: bool = False) -> Iterator[sqlite3
     con.execute("PRAGMA busy_timeout = 30000")
     try:
         con.executescript(SCHEMA)
+        con.executescript(instantanee_ue.SCHEMA)
         yield con
         con.commit()
     except Exception:
@@ -715,6 +717,32 @@ def cauta_ue(
 
 
 def scrie_celex(
+    con: sqlite3.Connection,
+    celex: str,
+    manifestari: Sequence[ManifestareUE],
+    aleasa: ManifestareUE,
+    text: str,
+) -> int:
+    """Atomically preserve old/new local observations and update the searchable act."""
+    celex = normalizeaza_celex(celex)
+    if aleasa.celex != celex:
+        raise ValueError("Manifestarea nu apartine actului CELEX selectat.")
+    if not con.in_transaction:
+        con.execute("BEGIN")
+    con.execute("SAVEPOINT import_ue")
+    try:
+        instantanee_ue.arhiveaza_curenta(con, celex)
+        count = _scrie_celex(con, celex, manifestari, aleasa, text)
+        instantanee_ue.arhiveaza_curenta(con, celex)
+        con.execute("RELEASE import_ue")
+        return count
+    except Exception:
+        con.execute("ROLLBACK TO import_ue")
+        con.execute("RELEASE import_ue")
+        raise
+
+
+def _scrie_celex(
     con: sqlite3.Connection,
     celex: str,
     manifestari: Sequence[ManifestareUE],

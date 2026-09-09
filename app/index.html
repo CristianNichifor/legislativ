@@ -352,6 +352,8 @@
   #dossier-run-select{font-family:var(--sans);font-size:.8rem}
   .finding-review{border-top:1px solid var(--rule);padding:.7rem 0}
   .finding-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem}
+  .eu-snapshots{border-top:1px solid var(--rule);padding:.7rem 0;overflow-wrap:anywhere}
+  .eu-snapshots pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem;max-height:28rem;overflow:auto}
   .finding-review form{margin:.5rem 0;grid-template-columns:repeat(2,minmax(0,1fr))}
   .finding-review form label:nth-child(3),.finding-review form>div{grid-column:1/-1}
   @media(max-width:600px){.finding-review form{grid-template-columns:minmax(0,1fr)}}
@@ -3790,7 +3792,20 @@ async function loadDossiers(offset=DOSARE_UI.offset){
 function dossierSnapshotHtml(run){
   return `<h4>Analiză salvată</h4><p class="hint">Salvată: ${esc(run.creat_la)} · Motor: ${esc(run.engine_version)}<br>SHA-256 raport: ${esc(run.sha256)}</p>`
     +'<p class="hint">Raport istoric, nu recalculare. Legăturile și butoanele „Text curent” consultă sursa actuală, nu o versiune arhivată.</p>'
-    +mDosarHtml(run.raport);
+    +mDosarHtml(run.raport)+dossierEuSnapshotsHtml(run);
+}
+function dossierEuSnapshotsHtml(run){
+  const evidence=run.dovezi||{}, saved=evidence.surse_ue;
+  if(!saved) return evidence.referinte_ue?.length?'<p class="hint">Instantanee UE necapturate pentru această rulare.</p>':'';
+  const states={act_negasit:'Act neimportat',sursa_indisponibila:'Sursă indisponibilă',limita_depasita:'Limită de captură depășită',integritate_invalida:'Integritate invalidă',text_indisponibil:'Text indisponibil',provenienta_incompleta:'Proveniență incompletă',referinta_invalida:'Referință invalidă'};
+  return '<section class="eu-snapshots"><h4>Surse UE contextuale salvate</h4><p class="hint">Text extras local, nu octeți originali. Aceste referințe nu sunt constatări de incompatibilitate și nu intră în verificarea dovezilor constatărilor.</p>'
+    +(saved.trunchiat?'<p class="hint">Lista surselor capturate este parțială.</p>':'')
+    +(saved.instantanee||[]).map(s=>{
+      if(s.stare!=='capturat') return `<p>${esc(s.celex||'UE')} · ${esc(states[s.stare]||'Captură indisponibilă')}</p>`;
+      const d=s.sursa, language=d.limba==='RON'?'Română':d.limba==='ENG'?'Engleză · text alternativ':'Limba: '+d.limba;
+      const {text,...metadata}=d;
+      return `<details><summary>${esc(s.celex)} · ${esc(language)}</summary><p>${esc(d.titlu||'')}</p><p class="hint">Colectat: ${esc(d.citit_la)}<br>Data documentului: ${esc(d.data_document||'Necunoscută')}<br>SHA-256 text extras: ${esc(d.text_sha256)}</p><details><summary>Proveniență · ${esc(s.id)}</summary><pre>${esc(JSON.stringify(metadata,null,2))}</pre></details><details><summary>Text extras salvat</summary><pre>${esc(text)}</pre></details></details>`;
+    }).join('')+'</section>';
 }
 function dossierTime(value){
   const date=new Date(value);
