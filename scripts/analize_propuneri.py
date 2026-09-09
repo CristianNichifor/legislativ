@@ -284,8 +284,10 @@ def executa(stare, proposal):
             "Analiza determinista a reviziei salvate, fara AI sau descarcari.",
             "Surse locale capturate la verificare, separat de dovada istorica si tinta propunerii.",
             "Niciun semnal nu inseamna validitate juridica. Acoperirea este limitata.",
-            "Modificarile nesalvate nu sunt analizate. "
-            "Rezultatul nu certifica actualitatea ulterioara.",
+            (
+                "Modificarile nesalvate nu sunt analizate. "
+                "Rezultatul nu certifica actualitatea ulterioara."
+            ),
         ],
     }
 
@@ -347,54 +349,7 @@ def salveaza(stare, request):
 
 
 def istoric(path, dossier_id, run_id, finding_id, revision, offset=0, analysis_id=None):
-    propuneri._number(revision, 1)
-    propuneri._number(offset)
-    proposal = propuneri.citeste(path, dossier_id, run_id, finding_id, revision)["propunere"]
-    current = propuneri.citeste(path, dossier_id, run_id, finding_id)["propunere"]
-    if analysis_id is not None:
-        dosare._id(analysis_id)
-    out = {
-        "analize": [],
-        "total": 0,
-        "offset": offset,
-        "limita": 20,
-        "selectata": None,
-        "revizie_selectata": revision,
-        "revizie_curenta": current["revizie"],
-        "istorica": revision != current["revizie"],
-    }
-    with dosare._open(path) as con:
-        if _supported(con):
-            where = (
-                " FROM analize_propuneri a JOIN propuneri p ON p.id=a.propunere_id "
-                "WHERE p.rulare_id=? AND p.constatare_id=?"
-            )
-            params = (run_id, finding_id)
-            out["analize"] = [
-                dict(r)
-                for r in con.execute(
-                    "SELECT a.id,a.creat_la,p.revizie"
-                    + where
-                    + " ORDER BY a.seq DESC LIMIT 20 OFFSET ?",
-                    (*params, offset),
-                )
-            ]
-            out["total"] = con.execute("SELECT count(*)" + where, params).fetchone()[0]
-            row = con.execute(
-                "SELECT * FROM analize_propuneri WHERE propunere_id=? "
-                + ("AND id=? " if analysis_id else "")
-                + "ORDER BY seq DESC LIMIT 1",
-                (proposal["id"], analysis_id) if analysis_id else (proposal["id"],),
-            ).fetchone()
-            if row:
-                out["selectata"] = _result(row)
-                if row["propunere_id"] != proposal["id"] or out["selectata"]["baza"][
-                    "propunere_sha256"
-                ] != _sha(proposal):
-                    raise ValueError("Baza analizei nu corespunde propunerii.")
-        if analysis_id and out["selectata"] is None:
-            raise ValueError("Analiza inexistenta pentru aceasta revizie.")
-    return out
+    return propuneri.analize(path, dossier_id, run_id, finding_id, revision, offset, analysis_id)
 
 
 def citeste_cerere(path, qs):

@@ -283,8 +283,12 @@ def test_schema6_reads_without_migration_and_failed_write_rolls_back(case):
     before = path.read_bytes()
     assert history(path, req)["selectata"] is None
     assert path.read_bytes() == before
-    with pytest.raises(RuntimeError), dosare._open(path, write=True):
-        raise RuntimeError("Interrupted migration")
+
+    def interrupt():
+        with dosare._open(path, write=True):
+            raise RuntimeError("Interrupted migration")
+
+    pytest.raises(RuntimeError, interrupt)
     with sqlite3.connect(path) as con:
         assert con.execute("PRAGMA user_version").fetchone()[0] == 6
         assert not con.execute(
