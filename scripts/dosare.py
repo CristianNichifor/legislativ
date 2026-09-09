@@ -13,7 +13,7 @@ from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
 SCHEMA_VERSION = 2
-ENGINE_VERSION = "matrice-dosar-v1"
+ENGINE_VERSION = "matrice-dosar-v2"
 MAX_REPORT_BYTES = 4_000_000
 
 
@@ -216,7 +216,12 @@ def salveaza_rulare(stare, request):
         "candidati": report.get("contradictii", {}).get("candidati", []),
         "limitare": "Dovezi din raport; nu arhivă integrală a versiunilor surselor oficiale.",
     }
-    payload = _json({"engine_version": ENGINE_VERSION, "filtre": filters, "raport": report})
+    from scripts.dependente_dovezi import captureaza
+
+    evidence["manifest"] = captureaza(stare, report)
+    payload = _json(
+        {"engine_version": ENGINE_VERSION, "filtre": filters, "raport": report, "dovezi": evidence}
+    )
     if len(payload.encode("utf-8")) > MAX_REPORT_BYTES:
         raise ValueError("Raportul depășește limita de 4 MB; restrânge selecția.")
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()

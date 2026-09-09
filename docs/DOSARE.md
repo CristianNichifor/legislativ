@@ -95,6 +95,47 @@ instructions to reconstruct the historical corpus. Stored reports preserve their
 existing coverage limits, candidate status and Markdown. No legal conclusion is
 introduced by saving them.
 
+## Evidence Dependencies
+
+New runs use the `matrice-dosar-v2` contract and store a version-1 dependency
+manifest at `dovezi.manifest`. Each retained gap, CCR example or contradiction
+candidate links its existing finding ID to deduplicated corpus dependencies.
+Contradictions retain both sides. Only exact `act_id` matches are used; an absent
+locator means an act-level dependency, never a guessed article. Repeated locators
+include every matching provision ordered by `ord`.
+
+Captured dependencies contain source URL, portal IDs, collection timestamp,
+provision count and `sha256_continut`. The `sha256-json-prevederi-v1` algorithm
+hashes the UTF-8 encoding of canonical JSON (sorted keys, compact separators,
+unescaped Unicode) for the ordered list of `locator`, `ord`, `text`,
+`vigoare_de_la` and `vigoare_pana_la` records. This fingerprints parsed corpus
+content, not official document bytes. Source metadata is kept separately from
+that fingerprint. Full source text is not archived in the manifest.
+
+Missing references, missing acts/provisions, unavailable sources and limits are
+explicit states without a content hash. Reads are local, read-only and use one
+SQLite snapshot without migrations or network access. Capture is limited to
+2,000 provisions and 2 MB of canonical provision content per dependency; exceeding
+either limit emits no partial fingerprint. The 4 MB saved-payload limit also
+includes the manifest and retained evidence.
+
+The report and dependency capture are separate reads. The manifest therefore
+records the corpus observed at save time, not a certified snapshot of the source
+used earlier by every detector. It does not establish current legal applicability
+or freshness. EU references, CCR decision documents and parliamentary drafts are
+not source dependencies in this first contract. Aggregate counts without retained
+examples also have no finding dependencies.
+
+The v2 run hash covers canonical `{engine_version, filtre, raport, dovezi}`.
+Unchanged content deduplicates; a changed dependency or source metadata produces a
+new run even when the report is unchanged. There is no per-capture clock value in
+the hash; the run's existing `creat_la` records save time. Older v1 runs retain
+their original hash contract and are never backfilled from current sources.
+Review JSON and Markdown exports include the manifest; legacy Markdown explicitly
+states that it was not captured. No review decisions are changed or transferred.
+No database migration or new endpoint is required. Changed-evidence comparisons
+and re-review queues are a separate, subsequent batch.
+
 ## API
 
 Requests use the local server's `localhost:<port>` or `127.0.0.1:<port>` Host.
