@@ -16,7 +16,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: PDF extraction dependency
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+        run: |
+          if ! command -v pdftotext >/dev/null 2>&1; then
+            source=/etc/apt/sources.list.d/ubuntu.sources
+            if [ ! -s "$source" ]; then source=/etc/apt/sources.list; fi
+            test -s "$source"
+            apt_options=(-o "Dir::Etc::sourcelist=$source" -o "Dir::Etc::sourceparts=-")
+            sudo apt-get "${apt_options[@]}" update
+            sudo apt-get "${apt_options[@]}" install -y poppler-utils
+          fi
+          pdftotext -v
       - name: Checks
         env:
           # Determinism is a hard requirement: a test that depends on set iteration order or

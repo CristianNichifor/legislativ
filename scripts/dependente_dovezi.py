@@ -1,4 +1,4 @@
-"""Versioned, read-only corpus dependencies captured when saving a research run."""
+"""Versioned, read-only source dependencies captured when saving a research run."""
 
 import hashlib
 import sqlite3
@@ -19,11 +19,16 @@ def verifica(stare, dossier_id, run_id):
     dosare._id(run_id)
     run = dosare.rulari(dosare.cale(stare), dossier_id, run_id)
     baseline = run["dovezi"].get("manifest") or {}
-    supported = baseline.get("schema_version") == 1
+    supported = baseline.get("schema_version") in (1, 2)
     current = captureaza(stare, run["raport"]) if supported else {}
     now = {d["id"]: d for d in current.get("dependente", [])}
     compared = {}
     for old in baseline.get("dependente", []) if supported else []:
+        if old.get("sursa") == "proiect_importat":
+            from scripts.dependente_proiecte import compara
+
+            compared[old["id"]] = compara(stare, old)
+            continue
         new = now.get(old["id"])
         comparable = (
             new is not None
@@ -75,7 +80,8 @@ def verifica(stare, dossier_id, run_id):
             for state in ("schimbat", "neschimbat", "indisponibil")
         },
         "limitari": [
-            "Comparatie explicita cu corpusul local, fara actualizare de la sursele oficiale.",
+            "Comparatie cu datele locale, fara actualizare de la sursele oficiale.",
+            "Importuri: ultima versiune locala distincta la acelasi URL, nu actualitate oficiala.",
             "Neschimbat inseamna aceeasi amprenta, nu actualitate sau validitate juridica.",
             "Lipsa sursei sau a amprentei inseamna comparatie indisponibila, nu abrogare.",
             "Metadatele schimbate singure nu invalideaza continutul sau deciziile.",
@@ -145,10 +151,23 @@ def captureaza(stare, report):
     from scripts.revizuiri import constatari
 
     findings = constatari({"raport": report})
-    dependencies, links = {}, []
+    dependencies, links, drafts = {}, [], {}
     for finding in findings:
         identifiers = []
-        for source in _references(finding):
+        sources = _references(finding)
+        if finding["tip"] == "proiect":
+            from scripts.dependente_proiecte import citeste
+
+            sources = []
+            for side in ("a", "b"):
+                source = finding["dovada"][side]
+                sources.append({"act_id": source["act_tinta"], "locator": source.get("locator")})
+                plx, version = source["act_id"], source.get("versiune_id")
+                ident = _digest(["proiect_importat", plx, version])[:32]
+                if ident not in drafts:
+                    drafts[ident] = {"id": ident, **citeste(stare, plx, version)}
+                identifiers.append(ident)
+        for source in sources:
             reference = (source.get("act_id") or None, source.get("locator") or None)
             ident = _digest(["corpus", *reference])[:32]
             dependencies.setdefault(ident, reference)
@@ -180,8 +199,8 @@ def captureaza(stare, report):
     except (OSError, sqlite3.Error):
         records = capture(None)
     return {
-        "schema_version": 1,
-        "dependente": records,
+        "schema_version": 2 if drafts else 1,
+        "dependente": records + list(drafts.values()),
         "constatari": links,
         "limitari": [
             "Amprente ale corpusului la salvare, nu ale octetilor documentelor oficiale.",
@@ -189,6 +208,13 @@ def captureaza(stare, report):
             "Identificare exacta dupa act_id; fara rezolvare aproximativa a citarilor.",
             "Fara locator se amprenteaza toate prevederile actului, nu un articol dedus.",
             "Numai dependentele corpus ale exemplelor pastrate; nu dovada exhaustivitatii.",
-            "Referintele UE, deciziile CCR si proiectele nu au dependente sursa capturate aici.",
+            (
+                "Importuri la nivel de document; referintele UE si deciziile CCR sunt excluse."
+                if drafts
+                else (
+                    "Referintele UE, deciziile CCR si proiectele nu au dependente "
+                    + "sursa capturate aici."
+                )
+            ),
         ],
     }

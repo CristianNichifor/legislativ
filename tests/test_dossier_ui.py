@@ -95,5 +95,11 @@ def test_review_form_escapes_evidence_and_history():
         "assert.ok(evidence.includes('de reevaluat')&&evidence.includes('Comparație incompletă'));"
         "assert.ok(!evidence.includes('<script>')&&!evidence.includes('<img>'));"
         "assert.equal(reviewEvidenceHtml({}),'');"
+        "const draft=reviewEvidenceHtml({verificare:{stare:'schimbat'},"
+        "dependente_verificate:[{salvat:{sursa:'proiect_importat',plx_id:'<script>'},"
+        "stare:'schimbat',octeti_schimbati:true,text_schimbat:false}]});"
+        "assert.ok(draft.includes('Document: schimbat'));"
+        "assert.ok(draft.includes('Text extras: neschimbat'));"
+        "assert.ok(draft.includes('data-draft-versions')&&!draft.includes('<script>'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

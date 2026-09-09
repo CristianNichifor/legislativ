@@ -20,6 +20,7 @@ def constatari(run):
         "lacuna": examples.get("viduri", []),
         "ccr": examples.get("neconstitutionale", []),
         "contradictie": (report.get("contradictii") or {}).get("candidati", []),
+        "proiect": (report.get("conflicte_proiecte") or {}).get("candidati", []),
     }
     found = {}
     for kind, entries in groups.items():

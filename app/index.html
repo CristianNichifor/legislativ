@@ -3814,7 +3814,9 @@ const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',c
 const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
 function reviewEvidenceHtml(f){
   if(!f.verificare) return '';
+  const flag=value=>value===null||value===undefined?'indisponibil':value?'schimbat':'neschimbat';
   return `<p class="hint"><b>${esc(EVIDENCE_STATES[f.verificare.stare]||EVIDENCE_STATES.indisponibil)}</b>${f.verificare.comparatie_incompleta?' · Comparație incompletă':''}</p>`
+    +(f.dependente_verificate||[]).map((dep,i)=>dep.salvat?.sursa==='proiect_importat'?`<p class="hint">${esc(dep.salvat.plx_id)} · Document: ${flag(dep.octeti_schimbati)} · Text extras: ${flag(dep.text_schimbat)}<br>Ultimul import local distinct la aceeași adresă, nu verificare oficială.</p>${dep.stare!=='indisponibil'?`<button type="button" class="ghost mini" data-draft-versions="${i}">Compară versiunile importate</button>`:''}`:'').join('')
     +`<details><summary>Amprente salvate și curente</summary><pre>${esc(JSON.stringify(f.dependente_verificate,null,2))}</pre></details>`;
 }
 function reviewEventHtml(e){return `<p><b>${esc(REVIEW_STATES[e.stare])}</b> · Revizia ${e.revizie} · ${esc(e.evaluator)} · ${esc(e.creat_la)}<br>${esc(e.motiv)}</p>`;}
@@ -3862,6 +3864,13 @@ async function loadFindingReviews(panel,dossierId,runId,token){
       list.innerHTML=findings.map(reviewFindingHtml).join('')||(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p>':'<p>Nicio constatare în această selecție.</p>');
       list.querySelectorAll('form').forEach(form=>{
         const f=findings.find(f=>f.id===form.closest('[data-finding]').dataset.finding);
+        form.parentElement.querySelectorAll('[data-draft-versions]').forEach(button=>button.onclick=()=>{
+          const dep=f.dependente_verificate[Number(button.dataset.draftVersions)];
+          const versions=[dep.curent.metadate,dep.salvat.metadate].filter((v,i,a)=>a.findIndex(x=>x.id===v.id)===i);
+          let detail=button.nextElementSibling;
+          if(!detail?.matches('[data-draft-detail]')){detail=document.createElement('div');detail.dataset.draftDetail='';button.after(detail);}
+          mVersiuni(detail,dep.salvat.plx_id,versions,()=>valid()&&button.isConnected);
+        });
         const older=form.parentElement.querySelector('[data-older-events]');let offset=20;
         if(older) older.onclick=async()=>{
           older.disabled=true;
@@ -3933,6 +3942,7 @@ async function loadFindingReviews(panel,dossierId,runId,token){
       finally{checkButton.disabled=false;}
     };
     const rerunButton=panel.querySelector('[data-evidence-rerun]');
+    if(d.rulare.raport.selectie_proiecte) rerunButton.textContent='Recalculează cu ultimele importuri locale →';
     rerunButton.onclick=async()=>{
       if(drafts.size){evidenceStatus.textContent='Există note nesalvate. Înregistrează deciziile înainte de a schimba rularea.';return;}
       rerunButton.disabled=true;
@@ -3993,7 +4003,7 @@ $('#dossier-create').onsubmit=async e=>{
   }catch(err){$('#dossier-status').textContent=err.message;}
   finally{button.disabled=false;inputs.forEach(input=>input.disabled=false);}
 };
-function dossierSaveControls(out,filters){
+function dossierSaveControls(out,filters,projects=null){
   const area=document.createElement('div');area.className='dossier-actions';
   area.innerHTML='<button type="button" class="ghost mini">Recalculează și salvează în dosarul ales</button><p class="hint" role="status"></p>';
   out.prepend(area);
@@ -4003,7 +4013,7 @@ function dossierSaveControls(out,filters){
     if(!selected||!DOSARE_UI.supported){$('#dossier-library').open=true;status.textContent='Alege sau creează un dosar în „Dosare salvate”.';return;}
     button.disabled=true;status.textContent='Recalculez și salvez în: '+selected.titlu;
     try{
-      const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters});
+      const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters,...(projects?{proiecte:projects}:{})});
       status.textContent='Analiză salvată în: '+selected.titlu+'. '+run.creat_la;
       if(DOSARE_UI.selected?.id===selected.id) await selectDossier(selected.id,run.id);
     }catch(err){status.textContent=err.message;}
@@ -4297,11 +4307,16 @@ async function mArataProiecte(buton){
       e.preventDefault(); const submit=form.querySelector('[type="submit"]'); submit.disabled=true;
       result.textContent="Compar proiectele…";
       try{
-        const response=await fetch("/api/conflicte-proiecte",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...filtre,...Object.fromEntries(new FormData(form))})});
+        const selected=Object.fromEntries(new FormData(form));
+        const response=await fetch("/api/conflicte-proiecte",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...filtre,...selected})});
         if(!response.ok) throw new Error("HTTP "+response.status);
         const dosar=await response.json(); if(!result.isConnected) return;
         if(dosar.error){ result.textContent=dosar.error; return; }
         result.innerHTML=mDosarHtml(dosar);
+        if(selected.versiune_a&&selected.versiune_b) dossierSaveControls(result,filtre,{
+          a:{plx_id:selected.plx_a,versiune_id:selected.versiune_a},
+          b:{plx_id:selected.plx_b,versiune_id:selected.versiune_b}
+        });
         result.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
         result.querySelector(".matrix-copy-dosar").onclick=async()=>{
           try{await navigator.clipboard.writeText(dosar.markdown);}
