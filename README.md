@@ -157,6 +157,12 @@ model look like a quiet one.
 
 ## What is measured
 
+For a read-only inventory of the databases actually available locally, run
+`uv run python -m scripts.inventar_surse` or open `/api/inventar-surse` on the local
+server. Missing data and unknown dates are not reported as measured zero. See
+[`docs/INVENTAR_SURSE.md`](docs/INVENTAR_SURSE.md) for populations and limitations;
+this inventory does not certify corpus completeness or legal compatibility.
+
 `data/etalon.json` is 36 hand-annotated cases; `uv run python -m scripts.etalon` scores the deterministic
 extractors against it and names every case that fails.
 

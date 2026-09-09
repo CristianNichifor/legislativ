@@ -288,6 +288,9 @@ def _raspunde(path, query, body):
         try: return int(v) if v not in ('', None) else None
         except ValueError: return None
     if path == '/api/rezumat': out = rezumat(_stare)
+    elif path == '/api/inventar-surse':
+        from scripts.servicii import _inventar_surse
+        out = _inventar_surse(_stare)
     elif path == '/api/cauta':
         # The same filters the shard path accepts. Dropping them here would give the UI a type
         # selector and a year range that quietly do nothing.
