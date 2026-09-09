@@ -1,5 +1,50 @@
 # Source inventory: A1 contract
 
+## Parliamentary acquisition workspace
+
+The Matrice tab now has a separate `Surse parlamentare` workspace. Local search
+by PL-x or title returns 25 initiatives per page. Opening a row reads only local
+metadata, import versions and recorded attempts; it never consults an official
+website. Missing imports, inaccessible storage and unknown freshness are distinct.
+The latest 100 retained versions are selectable, with explicit truncation.
+
+`Consultă documentele oficiale` explicitly fetches the parliamentary sheet.
+Import and update actions reuse the existing allowlisted PDF/DOCX importer, its
+size/extraction limits, membership validation and immutable content hashes.
+Users can inspect extracted text separately, including OCR-needed/empty states.
+An import date is the first retention date for those bytes, not the date of every
+successful check. Language remains unknown because this importer does not verify
+or record it. Importing does not replace editor text, recalculate analyses, or
+change dossier evidence, decisions or context notes.
+
+`GET /api/surse-proiecte` supports `q` (literal substring, max 200 characters),
+`offset` (0..100000), or `plx` for detail; `plx` plus `versiune` returns retained
+text with ownership validation. The read endpoints use escaped, read-only SQLite
+URIs and do not create or migrate stores. List/detail inventory reads have a
+bounded query budget. `POST /api/surse-proiecte` accepts `plx` and `operatie`:
+`descopera`, `importa` (with `url`), or `actualizeaza` (with `versiune`). Requests
+are limited to 16 KB, localhost Host/matching Origin, and no-store responses.
+The static browser build explicitly reports acquisition as unavailable.
+
+Explicit actions in this workspace lazily create an `achizitii` table beside
+`documente` in `initiative.documente.db`. Each (initiative, action, URL) retains
+the latest attempt, bounded error category, previous successful date, and the
+selected version for update retries. This is not a full audit log. A failed
+attempt never clears the previous successful date or deletes imported versions.
+Repeated imports of identical bytes reuse the existing immutable version. A
+successful download with OCR-needed text is distinct from a failed request.
+Offline discovery is recorded as failed, even when local imports remain readable.
+If recording fails after a successful import, the response reports that warning
+rather than claiming the import failed. Interrupted processes may leave a stored
+version without a recorded attempt; local reload and explicit retry are available.
+
+Attempt tracking starts with this new workspace. Older imports and actions in
+the existing comparison UI have no retrospectively invented attempt history.
+Only the latest 100 source/action entries are displayed. Search uses SQLite's
+literal LIKE matching; Romanian diacritic folding is not provided here.
+EU/Cellar and national-corpus acquisition remain on their existing separate paths;
+this batch does not add remote EU imports or bulk corpus synchronization.
+
 ## Coverage panel (A2)
 
 The Matrice tab loads a global inventory above its filters, independently of the

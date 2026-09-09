@@ -320,6 +320,8 @@ def _raspunde(path, query, body):
     elif path == '/api/matrice-dosar': out = _matrice_dosar(qs, _stare)
     elif path == '/api/matrice-contradictii': out = _matrice_contradictii(qs, _stare)
     elif path == '/api/matrice-proiecte': out = _matrice_proiecte(qs, _stare)
+    elif path == '/api/surse-proiecte':
+        out = {'mod': 'static', 'error': 'Achizitia surselor este disponibila numai in aplicatia locala.'}
     elif path in ('/api/documente-proiect', '/api/importa-proiect',
                   '/api/diferente-versiuni', '/api/actualizare-proiect'):
         out = {'error': 'Importul oficial este disponibil în aplicația locală.'}

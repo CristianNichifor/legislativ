@@ -42,3 +42,38 @@ assert.ok(!s.includes('Acte stocate'));
 """
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, text=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_acquisition_renderers_distinguish_states_and_escape_sources():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("const IMPORT_STATES=", 1)[1].split("function acquisitionBusy", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "const dossierTime=s=>s,ACQUISITION={selected:'plx-1'};const IMPORT_STATES="
+        + source
+        + "const row={plx_id:'plx-1',titlu:'<script>',stare:'metadate'};"
+        "let h=acquisitionRowHtml(row);assert.ok(h.includes('Doar metadate'));"
+        "assert.ok(h.includes('aria-current=\"true\"')&&!h.includes('<script>'));"
+        "assert.ok(acquisitionState({...row,stare:'indisponibil'}).includes('indisponibile'));"
+        "assert.ok(acquisitionState({...row,ultima_incercare:{stare:'eroare'}}).includes('eșuată'));"
+        "h=acquisitionVersionHtml({label:'<img>',status:'ocr_necesar',url:'javascript:alert(1)',"
+        "preluat_la:'date',sha256:'<svg>'});"
+        "assert.ok(h.includes('OCR')&&h.includes('Limbă: necunoscută'));"
+        "assert.ok(!h.includes('<img>')&&!h.includes('<svg>')&&!h.includes('href='));"
+        "h=acquisitionAttemptsHtml([{operatie:'importa',stare:'eroare',incercat_la:'date',"
+        "reusit_la:null,url:'https://www.cdep.ro/a.pdf',eroare:'<script>'}]);"
+        "assert.ok(h.includes('Reîncearcă')&&h.includes('Necunoscută'));"
+        "assert.ok(!h.includes('<script>'));"
+        "assert.ok(acquisitionAttemptsHtml([]).includes('Nicio încercare'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+def test_static_worker_explicitly_rejects_source_acquisition():
+    source = (Path(__file__).parents[1] / "scripts/construieste_web.py").read_text()
+    branch = source.split("elif path == '/api/surse-proiecte':", 1)[1].split("elif path", 1)[0]
+    assert "'mod': 'static'" in branch and "'error':" in branch

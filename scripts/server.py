@@ -145,7 +145,7 @@ def face_handler(stare: Stare):
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corp)))
-            if urlparse(self.path).path.startswith("/api/dosare"):
+            if urlparse(self.path).path.startswith(("/api/dosare", "/api/surse-proiecte")):
                 self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(corp)
@@ -249,6 +249,29 @@ def face_handler(stare: Stare):
                 from scripts.servicii import _inventar_surse
 
                 self._json(_inventar_surse(stare))
+            elif ruta.path == "/api/surse-proiecte":
+                from scripts import achizitii_proiecte
+
+                if not self._dosare_permis():
+                    return
+                qs = parse_qs(ruta.query)
+                try:
+                    plx = qs.get("plx", [""])[0]
+                    if plx and "versiune" in qs:
+                        from scripts.documente_proiecte import citeste
+
+                        out = citeste(stare, plx, qs["versiune"][0])
+                    elif plx:
+                        out = achizitii_proiecte.detaliu(stare, plx)
+                    else:
+                        out = achizitii_proiecte.lista(
+                            stare, qs.get("q", [""])[0], int(qs.get("offset", ["0"])[0])
+                        )
+                    self._json(out)
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Sursele locale nu sunt disponibile."}, 503)
             elif ruta.path in (
                 "/api/dosare",
                 "/api/dosare/rulari",
@@ -351,6 +374,7 @@ def face_handler(stare: Stare):
                 "/api/importa-proiect",
                 "/api/diferente-versiuni",
                 "/api/actualizare-proiect",
+                "/api/surse-proiecte",
                 "/api/dosare",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
@@ -371,13 +395,27 @@ def face_handler(stare: Stare):
             if lung < 0:
                 self._json({"error": "content-length invalid"}, 400)
                 return
-            if lung > (16000 if ruta.startswith("/api/dosare") else MAX_CERERE):
+            if lung > (
+                16000 if ruta.startswith(("/api/dosare", "/api/surse-proiecte")) else MAX_CERERE
+            ):
                 self._json({"error": "cerere prea mare"}, 413)
                 return
             try:
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._json({"error": "json invalid"}, 400)
+                return
+            if ruta == "/api/surse-proiecte":
+                from scripts.achizitii_proiecte import executa
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(executa(stare, cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Sursele locale nu sunt disponibile."}, 503)
                 return
             if ruta in (
                 "/api/dosare",
