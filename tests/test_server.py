@@ -19,6 +19,7 @@ from scripts.colector import act_din_inregistrare
 from scripts.graf import construieste
 from scripts.servicii import (
     Stare,
+    _acoperire_ue,
     _cauta,
     _lint,
     _norma,
@@ -193,6 +194,22 @@ Prezentul regulament stabilește norme privind ordine de indisponibilizare și c
     assert {d["celex"] for d in out["dosare"]} == {"32018R1805", "32019R1111"}
     assert all(d["prevederi"] >= 1 for d in out["dosare"])
     assert all(d["locatori"] for d in out["dosare"])
+
+
+def test_acoperire_ue_reports_corpus_references_against_eu_db(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+    with depozit.deschide(stare.corpus) as con:
+        con.execute(
+            "UPDATE provizii SET text = text || ? WHERE act_id = ?",
+            (" Potrivit Regulamentului (UE) 2018/1805.", "lege-98-2016"),
+        )
+
+    out = _acoperire_ue({"limita": ["5"]}, stare)
+
+    assert out["total"] == 1
+    assert out["importate"] == 1
+    assert out["referinte"][0]["celex"] == "32018R1805"
 
 
 def test_rezumat_reports_local_eu_coverage(tmp_path):
