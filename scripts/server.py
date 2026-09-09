@@ -233,6 +233,10 @@ def face_handler(stare: Stare):
                 self._json(_dictionar(stare))
             elif ruta.path == "/api/rezumat":
                 self._json(rezumat(stare))
+            elif ruta.path == "/api/inventar-surse":
+                from scripts.servicii import _inventar_surse
+
+                self._json(_inventar_surse(stare))
             else:
                 self._json({"error": "not found"}, 404)
 

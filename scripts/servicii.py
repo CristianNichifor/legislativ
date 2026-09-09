@@ -270,6 +270,20 @@ class Stare:
             return con.execute("SELECT 1 FROM acte WHERE id = ?", (act_id,)).fetchone() is not None
 
 
+def _inventar_surse(stare: Stare) -> dict:
+    if stare.date_dir is not None:
+        return {
+            "schema_version": 1,
+            "mod": "static",
+            "acoperire_juridica": "necunoscuta",
+            "surse": {},
+            "limitari": ["Inventarul bazei locale nu este disponibil în versiunea statică."],
+        }
+    from scripts.inventar_surse import raport
+
+    return raport(stare.corpus, stare.initiative, stare.eu)
+
+
 def rezumat(stare: Stare) -> dict:
     """The corpus headline the page opens with: how much law, how many bills.
 
