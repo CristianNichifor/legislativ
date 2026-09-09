@@ -81,7 +81,9 @@ uv run python -m scripts.stenograme --db initiative.db --paralel 12 --rata 8
 Dreptul UE intră separat, prin Cellar / CELEX. Primul pas doar aduce sursa oficială: caută
 manifestările Cellar, preferă textul românesc (`RON`) și cade pe engleză (`ENG`) dacă româna nu e
 disponibilă, apoi împarte textul în prevederi căutabile (`considerent-1`, `art1`, `anexa-i`).
-Nu decide încă dacă un proiect contrazice dreptul UE:
+Verificarea arată referințe UE explicite și potriviri textuale în ce este importat local; nu decide
+încă dacă un proiect contrazice dreptul UE. Fluxul complet este în
+[`docs/DREPT_UE.md`](docs/DREPT_UE.md):
 
 ```bash
 uv run python -m scripts.cellar 32018R1805 --db eu.db
