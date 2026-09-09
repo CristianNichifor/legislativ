@@ -7,7 +7,8 @@
 # A new prefix is a new dataset; the old one keeps working until nothing points at it.
 #
 # The last line of output is the change to make in `.github/workflows/pages.yml`. Nothing here
-# touches the live site: the site follows `--depozit`, and that is a one-line commit.
+# edits the live site configuration: the site follows `--depozit`, a one-line commit.
+# Optional --latest advances /channel.json only after remote release verification.
 #
 #   CF_ACCOUNT=… CF_R2_TOKEN_OP=op://vault/item/credential ./infra/republica.sh
 #
@@ -23,15 +24,26 @@
 
 set -euo pipefail
 
+LATEST=0
+case "${1:-}" in
+  "") ;;
+  --latest) LATEST=1; shift ;;
+  *) echo "usage: $0 [--latest]" >&2; exit 2 ;;
+esac
+[ "$#" -eq 0 ] || { echo "usage: $0 [--latest]" >&2; exit 2; }
+
 LUCRU=${LUCRU:-$HOME/.local/share/legislativ}
 CORPUS=${CORPUS:-corpus.db}
 BUCKET=${BUCKET:-legislativ}
 PREFIX=${PREFIX:-$(date +%F)}
 FELII=${FELII:-8}
-IDX="$LUCRU/idx"
+uv run python -c 'import sys; from scripts.dataset_release import validate_release_id; validate_release_id(sys.argv[1])' "$PREFIX"
 
 [ -f "$CORPUS" ] || { echo "nu găsesc $CORPUS" >&2; exit 2; }
 mkdir -p "$LUCRU"
+# Every run builds fresh copies; missing companions must never reuse an older release.
+LUCRU=$(mktemp -d "$LUCRU/release-$PREFIX.XXXXXX")
+IDX="$LUCRU/idx"
 
 echo "── 1/5 copiile publicate ────────────────────────────────────────"
 # The corpus loses its build-time bulk; the companions only need the WAL folded in and a rebuild,
@@ -76,6 +88,15 @@ else
   echo "  node sau infra/pagefind.mjs lipsesc — sar peste index; căutarea va cădea pe motor" >&2
 fi
 
+STAGE="$LUCRU/payload"
+mkdir "$STAGE"
+for name in graf initiative; do
+  [ ! -f "$LUCRU/$name-publicat.db" ] || cp "$LUCRU/$name-publicat.db" "$STAGE/$name.db"
+done
+cp "$LUCRU/manifest.json" "$STAGE/manifest.json"
+cp "$IDX/index.json" "$IDX/termeni.json" "$STAGE/"
+uv run python -m scripts.dataset_release build "$STAGE" --release "$PREFIX" --published-corpus "$LUCRU/publicat.db"
+
 echo "── 4/5 acreditări ───────────────────────────────────────────────"
 . infra/acreditari-r2.sh
 
@@ -83,17 +104,31 @@ echo "── 5/5 încărcare în r2:$BUCKET/$PREFIX ─────────�
 # `--stats-log-level NOTICE` or the stats flags print nothing: rclone logs them at INFO, and the
 # default level is NOTICE. An upload of several GB should not look like a hung shell.
 r2() { rclone "$@" --no-traverse --retries 5 --low-level-retries 20 --stats 30s --stats-one-line --stats-log-level NOTICE; }
-r2 copyto "$LUCRU/publicat.db"            "r2:$BUCKET/$PREFIX/corpus.db"     --s3-chunk-size 100M --s3-upload-concurrency 4
-r2 copyto "$LUCRU/graf-publicat.db"       "r2:$BUCKET/$PREFIX/graf.db"       --s3-chunk-size 100M
-r2 copyto "$LUCRU/initiative-publicat.db" "r2:$BUCKET/$PREFIX/initiative.db" --s3-chunk-size 100M
-r2 copyto "$LUCRU/manifest.json"          "r2:$BUCKET/$PREFIX/manifest.json"
-r2 copyto "$IDX/index.json"               "r2:$BUCKET/$PREFIX/index.json"
-r2 copyto "$IDX/termeni.json"             "r2:$BUCKET/$PREFIX/termeni.json"
+# Fail closed on listing errors and refuse any occupied immutable prefix.
+r2 lsf "r2:$BUCKET/$PREFIX" > "$LUCRU/remote-prefix.txt"
+[ ! -s "$LUCRU/remote-prefix.txt" ] || { echo "prefix already exists: $PREFIX" >&2; exit 2; }
+for payload in "$STAGE"/*; do
+  [ "${payload##*/}" = dataset-release.json ] && continue
+  r2 copyto "$payload" "r2:$BUCKET/$PREFIX/${payload##*/}" --immutable --s3-chunk-size 100M
+done
 r2 copy   "$IDX/idx"                      "r2:$BUCKET/$PREFIX/idx"           --transfers 32 --checkers 32
 r2 copy   "$IDX/idx-titlu"                "r2:$BUCKET/$PREFIX/idx-titlu"     --transfers 32 --checkers 32
 for d in pagefind pagefind-[0-9]*; do
   [ -d "$d" ] && r2 copy "$d" "r2:$BUCKET/$PREFIX/$d" --transfers 32 --checkers 32
 done
+
+# Download verification compares actual bytes, including multipart S3 objects without MD5.
+r2 check "$STAGE" "r2:$BUCKET/$PREFIX" --one-way --download --exclude dataset-release.json
+uv run python -m scripts.dataset_release verify "$STAGE"
+r2 copyto "$STAGE/dataset-release.json" "r2:$BUCKET/$PREFIX/dataset-release.json" --immutable
+r2 check "$STAGE" "r2:$BUCKET/$PREFIX" --one-way --download --include dataset-release.json
+uv run python -m scripts.dataset_release channel "$STAGE" \
+  --manifest-url "https://date.cnwebify.dev/$PREFIX/dataset-release.json" \
+  --output "$LUCRU/channel.json"
+if [ "$LATEST" -eq 1 ]; then
+  r2 copyto "$LUCRU/channel.json" "r2:$BUCKET/channel.json"
+fi
+echo "channel proposal: $LUCRU/channel.json (publish only with explicit --latest)"
 
 echo
 echo "încărcat. Ultimul pas, un singur rând în .github/workflows/pages.yml:"
