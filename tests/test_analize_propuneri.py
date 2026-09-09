@@ -278,6 +278,8 @@ def test_schema6_reads_without_migration_and_failed_write_rolls_back(case):
     state, path, _, req = case
     save_text(path, req)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("PRAGMA user_version=6")
     before = path.read_bytes()
@@ -296,7 +298,7 @@ def test_schema6_reads_without_migration_and_failed_write_rolls_back(case):
         ).fetchone()
     analyses.salveaza(state, request(req))
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 7
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 def test_http_protections_explicit_revision_and_export(case):

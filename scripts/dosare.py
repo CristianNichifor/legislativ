@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 ENGINE_VERSION = "matrice-dosar-v2"
 MAX_REPORT_BYTES = 4_000_000
 
@@ -77,7 +77,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, 4, 5, 6, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, 3, 4, 5, 6, 7, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -156,6 +156,18 @@ def _open(path, *, write=False):
                     "ON analize_propuneri BEGIN "
                     "SELECT RAISE(ABORT,'Proposal analyses are append-only'); END"
                 )
+            version = 7
+        if write and version == 7:
+            con.execute(
+                "CREATE TABLE dosare_stare (id TEXT PRIMARY KEY REFERENCES dosare(id), "
+                "titlu_initial TEXT NOT NULL, arhivat INTEGER NOT NULL CHECK(arhivat IN (0,1)), "
+                "revizie INTEGER NOT NULL)"
+            )
+            con.execute(
+                "CREATE TABLE ciorne (id TEXT PRIMARY KEY, dosar_id TEXT REFERENCES dosare(id), "
+                "rulare_id TEXT REFERENCES rulari(id), continut_json TEXT, "
+                "revizie INTEGER NOT NULL, modificat_la TEXT NOT NULL)"
+            )
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
         con.commit()
@@ -188,7 +200,15 @@ def creeaza(path, request):
     with _open(path, write=True) as con:
         old = con.execute("SELECT * FROM dosare WHERE id=?", (ident,)).fetchone()
         if old:
-            if tuple(old[k] for k in ("titlu", "intrebare", "domeniu", "data_analizei")) != fields:
+            initial = con.execute(
+                "SELECT titlu_initial FROM dosare_stare WHERE id=?", (ident,)
+            ).fetchone()
+            if (
+                initial[0] if initial else old["titlu"],
+                old["intrebare"],
+                old["domeniu"],
+                old["data_analizei"],
+            ) != fields:
                 raise ValueError("Identificator reutilizat cu un conținut diferit.")
             return dict(old)
         con.execute(
@@ -198,18 +218,26 @@ def creeaza(path, request):
         return dict(con.execute("SELECT * FROM dosare WHERE id=?", (ident,)).fetchone())
 
 
-def lista(path, offset=0):
+def lista(path, offset=0, stare="active"):
     if not isinstance(offset, int) or not 0 <= offset <= 1_000_000:
         raise ValueError("Offset invalid.")
+    if stare not in ("active", "arhivate", "toate"):
+        raise ValueError("Filtru invalid.")
     if not Path(path).exists():
         return {"dosare": [], "total": 0, "offset": offset, "limita": 50}
     with _open(path) as con:
+        modern = con.execute("PRAGMA user_version").fetchone()[0] >= 8
+        source = "dosare d LEFT JOIN dosare_stare s ON d.id=s.id" if modern else "dosare d"
+        archived = "coalesce(s.arhivat,0)" if modern else "0"
+        where = "1" if stare == "toate" else f"{archived}={int(stare == 'arhivate')}"
         rows = con.execute(
-            "SELECT * FROM dosare ORDER BY creat_la DESC,id LIMIT 50 OFFSET ?", (offset,)
+            f"SELECT d.*, {archived} AS arhivat FROM {source} WHERE {where} "
+            "ORDER BY d.creat_la DESC,d.id LIMIT 50 OFFSET ?",
+            (offset,),
         ).fetchall()
         return {
             "dosare": [dict(r) for r in rows],
-            "total": con.execute("SELECT count(*) FROM dosare").fetchone()[0],
+            "total": con.execute(f"SELECT count(*) FROM {source} WHERE {where}").fetchone()[0],
             "offset": offset,
             "limita": 50,
         }
@@ -224,6 +252,145 @@ def citeste(path, ident):
         if not row:
             raise ValueError("Dosar inexistent.")
         return dict(row)
+
+
+def metadata(path, ident):
+    ident = _id(ident)
+    if not Path(path).exists():
+        raise ValueError("Dosar inexistent.")
+    with _open(path) as con:
+        dossier = con.execute("SELECT * FROM dosare WHERE id=?", (ident,)).fetchone()
+        if not dossier:
+            raise ValueError("Dosar inexistent.")
+        result = {**dict(dossier), "arhivat": False, "revizie": 0}
+        if con.execute("PRAGMA user_version").fetchone()[0] >= 8:
+            row = con.execute(
+                "SELECT arhivat,revizie FROM dosare_stare WHERE id=?", (ident,)
+            ).fetchone()
+            if row:
+                result.update(arhivat=bool(row[0]), revizie=row[1])
+    return result
+
+
+def modifica(path, request):
+    if not isinstance(request, dict) or set(request) != {"id", "titlu", "arhivat", "revizie"}:
+        raise ValueError("Cerere invalidă.")
+    ident, title = _id(request["id"]), _text(request["titlu"], 200, True)
+    if (
+        type(request["arhivat"]) is not bool
+        or type(request["revizie"]) is not int
+        or request["revizie"] < 0
+    ):
+        raise ValueError("Stare sau revizie invalidă.")
+    with _open(path, write=True) as con:
+        old = con.execute("SELECT titlu FROM dosare WHERE id=?", (ident,)).fetchone()
+        if not old:
+            raise ValueError("Dosar inexistent.")
+        state = con.execute("SELECT * FROM dosare_stare WHERE id=?", (ident,)).fetchone()
+        revision = state["revizie"] if state else 0
+        archived = bool(state["arhivat"]) if state else False
+        # Exact lost-response retries are harmless; stale differing edits must reload.
+        if (old[0], archived) != (title, request["arhivat"]):
+            if request["revizie"] != revision:
+                raise ValueError(
+                    "Dosarul a fost modificat. Reîncarcă metadatele înainte de a reîncerca."
+                )
+            con.execute("UPDATE dosare SET titlu=? WHERE id=?", (title, ident))
+            con.execute(
+                "INSERT INTO dosare_stare VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                "arhivat=excluded.arhivat,revizie=excluded.revizie",
+                (
+                    ident,
+                    state["titlu_initial"] if state else old[0],
+                    int(request["arhivat"]),
+                    revision + 1,
+                ),
+            )
+    return metadata(path, ident)
+
+
+def citeste_ciorna(path, ident):
+    if ident != "editor":
+        _id(ident)
+    empty = {"id": ident, "revizie": 0, "continut": None}
+    if not Path(path).exists():
+        return empty
+    with _open(path) as con:
+        if con.execute("PRAGMA user_version").fetchone()[0] < 8:
+            return empty
+        row = con.execute("SELECT * FROM ciorne WHERE id=?", (ident,)).fetchone()
+        if not row:
+            return empty
+        result = dict(row)
+        result["continut"] = json.loads(result.pop("continut_json"))
+        return result
+
+
+def lista_ciorne(path, offset=0):
+    if type(offset) is not int or not 0 <= offset <= 1_000_000:
+        raise ValueError("Offset invalid.")
+    if not Path(path).exists():
+        return {"ciorne": [], "total": 0}
+    with _open(path) as con:
+        if con.execute("PRAGMA user_version").fetchone()[0] < 8:
+            return {"ciorne": [], "total": 0}
+        rows = con.execute(
+            "SELECT c.id,c.dosar_id,c.modificat_la,d.titlu FROM ciorne c "
+            "LEFT JOIN dosare d ON d.id=c.dosar_id WHERE c.continut_json != 'null' "
+            "ORDER BY c.modificat_la DESC,c.id LIMIT 50 OFFSET ?",
+            (offset,),
+        ).fetchall()
+        total = con.execute("SELECT count(*) FROM ciorne WHERE continut_json != 'null'").fetchone()[
+            0
+        ]
+        return {"ciorne": [dict(row) for row in rows], "total": total}
+
+
+def salveaza_ciorna(path, request):
+    if not isinstance(request, dict) or set(request) != {"id", "dosar_id", "revizie", "continut"}:
+        raise ValueError("Cerere invalidă.")
+    ident = request["id"]
+    if ident != "editor":
+        _id(ident)
+        _id(request["dosar_id"])
+    elif request["dosar_id"] is not None:
+        raise ValueError("Editorul nu aparține unui dosar.")
+    content = request["continut"]
+    if content is not None and (not isinstance(content, dict) or content.get("versiune") != 1):
+        raise ValueError("Format de ciornă incompatibil.")
+    encoded = _json(content)
+    if len(encoded.encode("utf-8")) > 200_000:
+        raise ValueError("Ciorna depășește limita de 200 KB.")
+    if type(request["revizie"]) is not int or request["revizie"] < 0:
+        raise ValueError("Revizie invalidă.")
+    with _open(path, write=True) as con:
+        if (
+            ident != "editor"
+            and not con.execute(
+                "SELECT 1 FROM rulari WHERE id=? AND dosar_id=?", (ident, request["dosar_id"])
+            ).fetchone()
+        ):
+            raise ValueError("Rulare inexistentă în acest dosar.")
+        old = con.execute("SELECT * FROM ciorne WHERE id=?", (ident,)).fetchone()
+        revision = old["revizie"] if old else 0
+        if not old or old["continut_json"] != encoded:
+            if revision != request["revizie"]:
+                raise ValueError(
+                    "Ciorna a fost modificată. Reîncarcă copia locală înainte de a reîncerca."
+                )
+            con.execute(
+                "INSERT INTO ciorne VALUES (?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                "continut_json=excluded.continut_json,revizie=excluded.revizie,modificat_la=excluded.modificat_la",
+                (
+                    ident,
+                    request["dosar_id"],
+                    None if ident == "editor" else ident,
+                    encoded,
+                    revision + 1,
+                    datetime.now(UTC).isoformat(),
+                ),
+            )
+    return citeste_ciorna(path, ident)
 
 
 def rulari(path, ident, run_id=None):
@@ -333,6 +500,9 @@ def salveaza_rulare(stare, request):
         raise ValueError("Raportul depășește limita de 4 MB; restrânge selecția.")
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     with _open(path, write=True) as con:
+        archived = con.execute("SELECT arhivat FROM dosare_stare WHERE id=?", (ident,)).fetchone()
+        if archived and archived[0]:
+            raise ValueError("Dosarul este arhivat. Restaurează-l înainte de a salva analize noi.")
         con.execute(
             "INSERT OR IGNORE INTO rulari VALUES (?,?,?,?,?,?,?,?)",
             (

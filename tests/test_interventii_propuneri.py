@@ -131,6 +131,8 @@ def test_v5_failed_save_rolls_back_migration_and_legacy_remains_readable(structu
     state, path, _, req, intent = structured
     propuneri.salveaza(path, req)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")
         con.execute("PRAGMA user_version=5")
