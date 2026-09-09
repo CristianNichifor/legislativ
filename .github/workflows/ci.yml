@@ -18,8 +18,12 @@ jobs:
       - name: PDF extraction dependency
         run: |
           if ! command -v pdftotext >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y poppler-utils
+            source=/etc/apt/sources.list.d/ubuntu.sources
+            if [ ! -s "$source" ]; then source=/etc/apt/sources.list; fi
+            test -s "$source"
+            apt_options=(-o "Dir::Etc::sourcelist=$source" -o "Dir::Etc::sourceparts=-")
+            sudo apt-get "${apt_options[@]}" update
+            sudo apt-get "${apt_options[@]}" install -y poppler-utils
           fi
           pdftotext -v
       - name: Checks
