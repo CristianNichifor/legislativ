@@ -326,6 +326,19 @@
   .dom-cheie{font-family:var(--mono);font-size:.72rem;color:var(--accent)}
   /* Matrice: a dense corpus-level risk surface, not another explanatory card stack */
   .matrix-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.4rem 0 .7rem}
+  .source-inventory{font-family:var(--sans);border-block:1px solid var(--rule);padding:.7rem 0;margin-bottom:1rem}
+  .source-inventory h3{font-size:1rem;margin:0}
+  .source-inventory .source-heading{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+  .source-inventory .source-total{display:inline-block}
+  .source-inventory .source-actions{display:flex;gap:.4rem;flex-wrap:wrap}
+  .source-inventory details{border-top:1px solid var(--rule-soft);padding:.5rem 0}
+  .source-inventory summary{cursor:pointer;font-size:.84rem;overflow-wrap:anywhere}
+  .source-inventory summary strong{margin-right:.5rem}
+  .source-inventory dl{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.4rem 1rem;font-size:.8rem;margin:.6rem 0}
+  .source-inventory dt,.source-inventory dd{margin:0;overflow-wrap:anywhere}
+  .source-inventory dd{font-family:var(--mono)}
+  .source-inventory .source-warning{color:var(--material)}
+  .source-inventory .source-note{color:var(--ink-mute)}
   .matrix-tools input{flex:1 1 18rem}
   .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
   .matrix-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.45rem;
@@ -1158,6 +1171,14 @@
       </div>
 
       <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
+        <section class="source-inventory" aria-labelledby="source-title">
+          <div class="source-heading"><h3 id="source-title">Acoperirea surselor</h3><div class="source-actions">
+            <button type="button" class="ghost mini" id="source-refresh">Reîncarcă inventarul</button>
+            <button type="button" class="ghost mini" id="source-export" disabled>Exportă JSON</button>
+          </div></div>
+          <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
+          <div id="source-content"></div>
+        </section>
         <p class="hint" style="margin:.2rem 0 .8rem">
           Matrice deterministă pe emitent, tip și rang normativ: lacune legislative, prevederi
           lovite de Curte rămase nereparate, inițiative pendinte și presiune de amendare. Domeniul
@@ -3680,7 +3701,76 @@ function mTextCautare(r){
   const problema=mProblemaEt(MATRICE&&MATRICE.problema);
   return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${det} ${dom} ${vid} ${nec}`);
 }
+const SOURCE_LABELS={
+  corpus:['Legislație română','acte'],initiative:['Inițiative parlamentare','initiative'],
+  ue:['Drept UE','acte'],importuri:['Documente importate','versiuni']
+};
+const SOURCE_METRICS={
+  acte:'Acte stocate',documente:'Documente-sursă stocate',prevederi:'Prevederi stocate',
+  acte_cu_prevederi:'Acte cu text de prevedere',acte_cu_structura:'Acte cu locatori structurați',
+  surse_incercate:'Surse HTML cu încercare înregistrată',surse_reusite:'Surse HTML reușite',
+  surse_esuate:'Surse HTML eșuate',documente_fara_sursa_reusita:'Documente fără sursă HTML reușită',
+  ultima_incercare_sursa:'Ultima încercare HTML (UTC)',ultima_reusita_sursa:'Ultima reușită HTML păstrată (UTC)',
+  ultima_pagina_colectata:'Ultima pagină colectată (UTC)',ultimul_document_stocat:'Ultimul document stocat (UTC)',
+  initiative:'Inițiative stocate',initiative_cu_tinte:'Inițiative cu ținte indexate',
+  ultima_inregistrare_stocata:'Ultima înregistrare stocată (UTC)',acte_romana:'Acte în română',
+  acte_engleza:'Acte în engleză',versiuni:'Versiuni stocate',extrase:'Text extras',
+  ocr_necesar:'Necesită OCR / verificare',fara_text:'Fără text',status_necunoscut:'Status de extragere necunoscut'
+};
+function sourceValue(metric){
+  if(!metric||metric.stare==='indisponibil') return 'Indisponibil';
+  if(metric.stare!=='masurat'||metric.valoare===null) return 'Necunoscut';
+  if(typeof metric.valoare==='number') return nf(metric.valoare);
+  const value=String(metric.valoare);
+  return value.replace(/^(\d{4})-(\d{2})-(\d{2}) /,'$3.$2.$1 ');
+}
+function sourceInventoryHtml(d){
+  if(d.mod==='static') return '<p>Inventarul bazei locale nu este disponibil în versiunea statică.</p>';
+  const states={disponibil:'Bază accesibilă',partial:'Date parțial disponibile',lipsa:'Bază lipsă',inaccesibil:'Bază inaccesibilă'};
+  let h='<p class="hint">Actualitate necunoscută · Acoperire juridică necunoscută · Inventar global, independent de filtrele matricei.</p>';
+  for(const [key,[label,total]] of Object.entries(SOURCE_LABELS)){
+    const s=d.surse?.[key], metrics=s?.metrici||{}, warning=!s||s.stare!=='disponibil';
+    const issues=['surse_esuate','documente_fara_sursa_reusita','ocr_necesar','fara_text','status_necunoscut'].filter(k=>metrics[k]?.stare==='masurat'&&metrics[k].valoare>0).map(k=>`${esc(SOURCE_METRICS[k])}: ${esc(sourceValue(metrics[k]))}`).join(' · ');
+    h+=`<details data-source="${key}"><summary><strong>${label}</strong><span class="${warning?'source-warning':'source-note'}">${esc(states[s?.stare]||'Stare necunoscută')}</span> · <span class="source-total">${esc(SOURCE_METRICS[total])}: ${esc(sourceValue(metrics[total]))}</span>${issues?`<br><span class="source-warning">${issues}</span>`:''}</summary>`;
+    h+='<p class="hint">Actualitate necunoscută · Sincronizare completă neconfirmată</p><dl>';
+    for(const [name,value] of Object.entries(metrics)){
+      if(!Object.hasOwn(SOURCE_METRICS,name)) continue;
+      const alert=['surse_esuate','documente_fara_sursa_reusita','ocr_necesar','fara_text','status_necunoscut'].includes(name)&&value?.stare==='masurat'&&value.valoare>0;
+      h+=`<dt>${esc(SOURCE_METRICS[name])}</dt><dd${alert?' class="source-warning"':''}>${esc(sourceValue(value))}</dd>`;
+    }
+    h+='</dl></details>';
+  }
+  h+='<details><summary>Limitele inventarului</summary>'+d.limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')+'</details>';
+  return h;
+}
+let SOURCE_REPORT=null, SOURCE_LOADING=false;
+async function loadSourceInventory(force=false){
+  if(SOURCE_LOADING||SOURCE_REPORT&&!force) return;
+  SOURCE_LOADING=true; SOURCE_REPORT=null;
+  const refresh=$('#source-refresh'), save=$('#source-export'), status=$('#source-status'), content=$('#source-content');
+  refresh.disabled=true;save.disabled=true;content.innerHTML='';status.textContent='Încarc inventarul local…';
+  try{
+    const response=await fetch('/api/inventar-surse');
+    if(!response.ok) throw new Error('HTTP '+response.status);
+    const data=await response.json();
+    if(data.schema_version!==1||!['local_readonly','static'].includes(data.mod)||!Array.isArray(data.limitari)) throw new Error('Contract invalid');
+    content.innerHTML=sourceInventoryHtml(data);SOURCE_REPORT=data;save.disabled=false;
+    status.textContent=data.mod==='static'?'Inventar local indisponibil.':`Raport generat: ${data.generat_la||'necunoscut'}. Sursele oficiale nu au fost reconsultate.`;
+  }catch{status.textContent='Inventarul nu a putut fi încărcat. Reîncearcă.';}
+  finally{SOURCE_LOADING=false;refresh.disabled=false;}
+}
+$('#source-refresh').onclick=()=>loadSourceInventory(true);
+$('#source-export').onclick=()=>{
+  if(!SOURCE_REPORT) return;
+  try{
+    const url=URL.createObjectURL(new Blob([JSON.stringify(SOURCE_REPORT,null,2)],{type:'application/json;charset=utf-8'}));
+    const a=document.createElement('a');a.href=url;a.download='inventar-surse.json';document.body.append(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    $('#source-status').textContent='Export JSON inițiat.';
+  }catch{$('#source-status').textContent='Exportul nu a reușit.';}
+};
 async function loadMatrice(forta){
+  loadSourceInventory();
   if(MATRICE && !forta){ renderMatrice(); return; }
   const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"",
         domeniu=$("#m-domeniu")?.value||"", problema=$("#m-problema")?.value||"",
