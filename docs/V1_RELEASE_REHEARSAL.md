@@ -88,7 +88,7 @@ this acceptance-preparation commit. Python 3.14.0; SQLite 3.50.4.
 | Schema rehearsal | Baseline 7, runtime 7, migration_exercised=false; two baseline historical exports preserved. Schema-8 migration remains untested. |
 | Synthetic etalon | 42 TP / 0 FP / 0 FN across extractor outputs; synthetic cases only. |
 | Authentic S_LGI proxy | Pilot Legea 98: 570/580 (98.3%); Legea 208: zero marks, unmeasured. Full committed marked set: 811/822 (98.7%), including out-of-pilot Legea 310/2021. |
-| Formatting tooling | `git diff --check` and Python syntax checks passed. Ruff executable/module unavailable; no package fetched. |
+| Formatting tooling at initial run | `git diff --check` and Python syntax checks passed. Ruff was unavailable through the system Python; subsequent uv checks are recorded below. |
 
 The initial full-suite run had 1,257 passes and seven failures: two exposed the
 new manifest's missing schema, now supplied; five were sandbox-denied Unix socket
@@ -98,3 +98,24 @@ were not silently excluded. The subsequent full-suite result is recorded below.
 Full suite rerun with local Unix socket support: **1,264 passed in 42.76s**.
 No tests skipped to obtain this result. This is automated repository evidence,
 not real-domain acceptance, browser acceptance or final release approval.
+
+## Formatting follow-up (2026-09-10)
+
+On top of `13d9925`, uv used cached dependencies and Python 3.12.12 (SQLite
+3.50.4). Both requested commands completed successfully after formatting and
+correcting one import-order finding:
+
+```sh
+uv run ruff format scripts/v1_rehearsal.py tests/test_v1_rehearsal.py
+uv run ruff check scripts/v1_rehearsal.py tests/test_v1_rehearsal.py
+uv run pytest -q tests/test_v1_rehearsal.py
+uv run python -m scripts.v1_rehearsal
+```
+
+The focused rerun passed **4 tests in 6.26s**. The full 1,264-test result above
+belongs to the preceding preparation run; it was not rerun for formatting changes.
+The executable rehearsal passed again; its exact stdout is retained in
+[`v1_rehearsal_current.json`](v1_rehearsal_current.json). This is the schema-7
+fixture result from this follow-up, not a live or integrated schema-8 result.
+The pilot remains proposed without a user approval response. Domain and release
+acceptance remain pending; schema-8 validation awaits the integrated UX work.

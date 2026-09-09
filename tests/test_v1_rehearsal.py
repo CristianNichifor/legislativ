@@ -39,7 +39,12 @@ def test_schema7_fixture_contains_real_old_structure_and_synthetic_history(tmp_p
         con.executescript(rehearsal.BASELINE.read_text())
         assert con.execute("PRAGMA user_version").fetchone() == (7,)
         assert [r[1] for r in con.execute("PRAGMA table_info(dosare)")] == [
-            "id", "titlu", "intrebare", "domeniu", "data_analizei", "creat_la"
+            "id",
+            "titlu",
+            "intrebare",
+            "domeniu",
+            "data_analizei",
+            "creat_la",
         ]
         assert con.execute("SELECT count(*) FROM propuneri").fetchone() == (2,)
         assert con.execute("SELECT count(*) FROM analize_propuneri").fetchone() == (1,)

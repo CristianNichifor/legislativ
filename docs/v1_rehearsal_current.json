@@ -1,0 +1,84 @@
+{
+  "status": "fixture_rehearsal_passed",
+  "domain_acceptance": "pending",
+  "release_acceptance": "pending",
+  "pilot_status": "proposed_pending_user_domain_approval",
+  "python": "3.12.12",
+  "sqlite": "3.50.4",
+  "network": "blocked; no model calls",
+  "temporary_data": "removed on exit",
+  "workflow": {
+    "sources": [
+      {
+        "act_id": "lege-98-2016",
+        "path": "sources/lege-98-2016.html.gz",
+        "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762",
+        "kind": "authentic_retrieved_portal_snapshot",
+        "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+        "url_evidence": "tests/test_parsare.py",
+        "retrieved_at": null,
+        "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time",
+        "provisions": 1457,
+        "publisher_marks": 580,
+        "marks_found": 570
+      },
+      {
+        "act_id": "lege-208-2022",
+        "path": "sources/lege-208-2022.html.gz",
+        "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e",
+        "kind": "authentic_retrieved_portal_snapshot",
+        "source_url": null,
+        "url_evidence": "Original retrieval URL not recorded; embedded portal id 282819 is not a verified fetch URL",
+        "retrieved_at": null,
+        "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time",
+        "provisions": 178,
+        "publisher_marks": 0,
+        "marks_found": 0
+      }
+    ],
+    "actual_report_findings": 0,
+    "synthetic_bridge": true,
+    "proposal_revisions": 2,
+    "analysis_checks": {
+      "redactare": "verificat",
+      "conflicte_interne": "verificat",
+      "termene": "verificat",
+      "citari": "partial",
+      "terminologie": "partial",
+      "compatibilitate": "nesuportat",
+      "vid": "nesuportat",
+      "ccr": "nesuportat",
+      "proiecte": "nesuportat"
+    },
+    "restored_row_counts": {
+      "dosare": 1,
+      "rulari": 2,
+      "revizuiri": 0,
+      "verificari_dovezi": 0,
+      "recalculari": 0,
+      "contexte_juridice": 0,
+      "propuneri": 2,
+      "interventii_propuneri": 2,
+      "analize_propuneri": 1
+    },
+    "actual_schema": 7
+  },
+  "upgrade": {
+    "baseline_schema": 7,
+    "actual_schema": 7,
+    "migration_exercised": false,
+    "baseline_sha256": "fb1a9c10d30a90a4450794f2d9bfd51de33877f30333a7e44f6c6c56ec8cd024",
+    "preserved_tables": [
+      "analize_propuneri",
+      "contexte_juridice",
+      "dosare",
+      "interventii_propuneri",
+      "propuneri",
+      "recalculari",
+      "revizuiri",
+      "rulari",
+      "verificari_dovezi"
+    ],
+    "historical_exports": 2
+  }
+}
