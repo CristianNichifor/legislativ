@@ -11,12 +11,87 @@ from pathlib import Path
 from scripts import depozit
 from scripts.cdep import Initiativa
 from scripts.graf import _deschide_graf
-from scripts.servicii import Stare, _matrice, _matrice_acte, _matrice_dosar
+from scripts.servicii import Stare, _matrice, _matrice_acte, _matrice_contradictii, _matrice_dosar
 
 EDGE_SQL = (
     "INSERT INTO muchii (din_act, din_locator, catre_act, locator, fel, incredere, de_la)"
     " VALUES (?,?,?,?,?,?,?)"
 )
+
+
+def test_contradictii_definitions_evidence_filters_and_dossier(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        _act(con, "lege-2-2020", "lege", "2", 2020, "Parlamentul", "Achiziții publice")
+        for act, text in [
+            ("lege-98-2016", "Prin furnizor se înțelege persoana fizică"),
+            ("lege-2-2020", "Prin furnizor se înțelege persoana juridică"),
+            ("hg-1-2017", "Prin furnizor se înțelege orice instituție"),
+        ]:
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, 'art1', 1, ?)",
+                (act, text),
+            )
+        con.commit()
+    qs = {"emitent": ["Parlamentul"]}
+    out = _matrice_contradictii(qs, stare)
+    assert len(out["candidati"]) == 1
+    c = out["candidati"][0]
+    assert c["status"] == "candidat_neconfirmat"
+    assert {c["a"]["act_id"], c["b"]["act_id"]} == {"lege-98-2016", "lege-2-2020"}
+    assert c["a"]["locator"] == "art1"
+    assert c["a"]["actiuni"]
+    assert not out["trunchiat"]
+    assert not _matrice_contradictii({**qs, "tip": ["hg"]}, stare)["candidati"]
+    assert not _matrice_contradictii({}, stare)["candidati"]
+    dosar = _matrice_dosar(qs, stare)
+    assert dosar["contradictii"]["candidati"] == out["candidati"]
+    assert "persoana juridică" in dosar["markdown"]
+    assert "art1" in dosar["markdown"]
+
+
+def test_contradictii_skip_equal_unknown_and_same_act(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        _act(con, "lege-2-2020", "lege", "2", 2020, "Parlamentul", "Achiziții publice")
+        _act(con, "lege-3-2020", "lege", "3", 2020, "Parlamentul", "Titlu necunoscut")
+        for act, ordine, text in [
+            ("lege-98-2016", 1, "Prin furnizor se înțelege persoana fizică"),
+            ("lege-2-2020", 1, "Prin furnizor se înțelege PERSOANA FIZICA"),
+            ("lege-3-2020", 1, "Prin furnizor se înțelege orice instituție"),
+            ("lege-98-2016", 2, "Prin beneficiar se înțelege persoana fizică"),
+            ("lege-98-2016", 3, "Prin beneficiar se înțelege persoana juridică"),
+        ]:
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, ?, ?, ?)",
+                (act, f"art{ordine}", ordine, text),
+            )
+        con.commit()
+    assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
+
+
+def test_contradictii_marks_limit_and_different_domains(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        for i, titlu in [(2, "Achiziții publice"), (3, "Achiziții publice"), (4, "Educația")]:
+            act = f"lege-{i}-2020"
+            _act(con, act, "lege", str(i), 2020, "Parlamentul", titlu)
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, 'art1', 1, ?)",
+                (act, f"Prin furnizor se înțelege categoria numărul {i}"),
+            )
+        con.commit()
+    qs = {"emitent": ["Parlamentul"], "limita": ["1"]}
+    out = _matrice_contradictii(qs, stare)
+    assert len(out["candidati"]) == 1
+    assert not out["trunchiat"]
+    with depozit.deschide(stare.corpus) as con:
+        con.execute(
+            "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, 'art1', 1, ?)",
+            ("lege-98-2016", "Prin furnizor se înțelege toate persoanele"),
+        )
+        con.commit()
+    assert _matrice_contradictii(qs, stare)["trunchiat"]
 
 
 def _act(con, act_id, tip, numar, an, emitent, titlu="T"):

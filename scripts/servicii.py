@@ -1197,6 +1197,86 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
+    """Bounded, same-domain definition differences; never a legal conflict verdict."""
+    from scripts.definitii import definitii
+    from scripts.text import cheie
+
+    selectie = _matrice_acte({**qs, "limita": ["100"]}, stare)
+    acte = selectie["acte"]
+    limita = max(1, min(_numar_qs(qs, "limita", 40), 100))
+    out = {
+        "candidati": [],
+        "acte_selectate": len(acte),
+        "acte_total": selectie["total"],
+        "prevederi_analizate": 0,
+        "definitii_analizate": 0,
+        "trunchiat": selectie["total"] > len(acte),
+        "limitari": [
+            "Candidați neconfirmați; necesită jurist. "
+            "Diferența textuală nu dovedește contradicția.",
+            "Se compară definiții din maximum 100 de acte ale rândului, în același domeniu "
+            "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
+            "Limite: 1000 prevederi per act și 5000 definiții; "
+            "fragmentele extrase pot fi scurtate.",
+            "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
+            "absența candidaților nu dovedește compatibilitatea.",
+            *selectie["limitari"],
+        ],
+    }
+    grupe = {}
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            for act in acte:
+                domeniu = act["domeniu"]["cheie"]
+                if domeniu == "necunoscut":
+                    continue
+                rows = con.execute(
+                    "SELECT locator, text FROM provizii WHERE act_id = ? ORDER BY ord LIMIT 1001",
+                    (act["act_id"],),
+                ).fetchall()
+                out["trunchiat"] |= len(rows) > 1000
+                for row in rows[:1000]:
+                    out["prevederi_analizate"] += 1
+                    for termen in definitii(row["text"]):
+                        if out["definitii_analizate"] >= 5000:
+                            out["trunchiat"] = True
+                            return out
+                        out["definitii_analizate"] += 1
+                        dovada = {
+                            "act_id": act["act_id"],
+                            "locator": row["locator"],
+                            "definitie": termen.definitie,
+                            "rang": act["rang"],
+                            "actiuni": _actiuni_prevedere(act["act_id"], row["locator"]),
+                        }
+                        grup = grupe.setdefault((domeniu, termen.cheia), [])
+                        for anterior in grup:
+                            if anterior["act_id"] == act["act_id"] or cheie(
+                                anterior["definitie"]
+                            ) == cheie(termen.definitie):
+                                continue
+                            if len(out["candidati"]) == limita:
+                                out["trunchiat"] = True
+                                return out
+                            out["candidati"].append(
+                                {
+                                    "tip": "definitie_divergenta",
+                                    "status": "candidat_neconfirmat",
+                                    "termen": termen.termen,
+                                    "domeniu": act["domeniu"],
+                                    "a": anterior,
+                                    "b": dovada,
+                                }
+                            )
+                        if dovada not in grup:
+                            grup.append(dovada)
+    except sqlite3.OperationalError:
+        out["limitari"].append("Corpus indisponibil; comparația nu a putut fi finalizată.")
+        out["trunchiat"] = True
+    return out
+
+
 def _prima(qs: dict, cheie: str, default: str = "") -> str:
     return str(qs.get(cheie, [default])[0] or default)
 
@@ -1275,6 +1355,16 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
         for ref in dosar["referinte_ue"]:
             stare = "importat" if ref.get("importat") else "lipsește"
             linii.append(f"- {ref.get('celex')} ({stare}) — {ref.get('mentionari', 0)} menționări")
+    contradictii = dosar.get("contradictii") or {}
+    linii += ["", "## Contradicții candidate (neconfirmate; necesită jurist)"]
+    for c in contradictii.get("candidati", []):
+        linii.append(f"- {c['termen']} ({c['domeniu']['eticheta']})")
+        for parte in ("a", "b"):
+            d = c[parte]
+            linii.append(f"  - {d['act_id']} / {d['locator']}: {d['definitie']}")
+    if contradictii.get("trunchiat"):
+        linii.append("Rezultate parțiale: limita de analiză sau afișare a fost atinsă.")
+    linii.extend(contradictii.get("limitari", []))
     return "\n".join(linii).strip()
 
 
@@ -1354,6 +1444,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
         "rand": rand,
         "acte": acte,
         "referinte_ue": referinte_ue,
+        "contradictii": _matrice_contradictii(acte_qs, stare),
         "pasi": _pasi_dosar_matrice(rand, matrice.get("problema"), referinte_ue),
         "limitari": [
             "Dosarul este o listă de lucru, nu un verdict juridic.",
