@@ -1376,6 +1376,115 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
     return out
 
 
+def _matrice_proiecte(qs: dict, stare: Stare) -> dict:
+    from scripts.dublura import STADII_MOARTE
+    from scripts.text import cheie
+
+    selectie = _matrice_acte({**qs, "limita": ["100"]}, stare)
+    tinte = {a["cheie_citare"] for a in selectie["acte"]}
+    out = {
+        "initiative": [],
+        "tinte": sorted(tinte),
+        "trunchiat": selectie["total"] > len(selectie["acte"]),
+        "limitari": list(selectie["limitari"]),
+    }
+    if not tinte:
+        return out
+    try:
+        with depozit.deschide(stare.initiative, readonly=True) as con:
+            rows = con.execute(
+                "SELECT DISTINCT i.plx_id, i.titlu, i.stadiu, i.sursa_url, i.citit_la "
+                "FROM initiative i JOIN initiative_tinta t ON t.plx_id = i.plx_id "
+                f"WHERE t.act_id IN ({','.join('?' for _ in tinte)}) "
+                "ORDER BY i.plx_id LIMIT 501",
+                sorted(tinte),
+            ).fetchall()
+        out["trunchiat"] |= len(rows) > 500
+        out["initiative"] = [
+            dict(r)
+            for r in rows[:500]
+            if cheie(r["stadiu"] or "") not in {"", "necunoscut", "unknown"}
+            and not any(m in cheie(r["stadiu"]) for m in STADII_MOARTE)
+        ]
+    except sqlite3.OperationalError:
+        out["limitari"].append("Registrul inițiativelor nu este disponibil.")
+        out["trunchiat"] = True
+    return out
+
+
+def _conflicte_proiecte(cerere: dict, stare: Stare) -> dict:
+    from scripts.conflicte_proiecte import MAX_TEXT, compara, operatii
+
+    if not isinstance(cerere, dict):
+        return {"error": "Cerere invalidă."}
+    for key in ("emitent", "plx_a", "plx_b", "text_a", "text_b"):
+        if not isinstance(cerere.get(key), str) or not cerere[key].strip():
+            return {"error": "Alege două inițiative și completează ambele texte."}
+    if any(len(cerere[k]) > MAX_TEXT for k in ("text_a", "text_b")):
+        return {"error": f"Maximum {MAX_TEXT} caractere pentru fiecare proiect."}
+    if cerere["plx_a"] == cerere["plx_b"]:
+        return {"error": "Alege două inițiative diferite."}
+    qs = {
+        k: [cerere[k]]
+        for k in ("emitent", "tip", "rang", "domeniu")
+        if isinstance(cerere.get(k), str)
+    }
+    selectie = _matrice_proiecte(qs, stare)
+    ini = {r["plx_id"]: r for r in selectie["initiative"]}
+    if any(cerere[k] not in ini for k in ("plx_a", "plx_b")):
+        return {"error": "Inițiativă indisponibilă, închisă sau în afara selecției."}
+    a, ta = operatii(cerere["text_a"], set(selectie["tinte"]))
+    b, tb = operatii(cerere["text_b"], set(selectie["tinte"]))
+    pairs, truncated = compara(a, b)
+    dosar = _matrice_dosar(qs, stare)
+    if not dosar["gasit"]:
+        return {"error": "Rândul matricei nu este disponibil."}
+    raport = {
+        "candidati": [],
+        "operatii_a": len(a),
+        "operatii_b": len(b),
+        "trunchiat": ta or tb or truncated or selectie["trunchiat"],
+        "limitari": [
+            "Texte furnizate de utilizator; versiunea oficială nu este verificată automat.",
+            "Stadiile sunt cele colectate; verifică actualitatea lor în fișa parlamentară.",
+            "Se compară maximum 200 operații pe proiect și se afișează 40 de perechi.",
+            "Absența candidaților nu dovedește compatibilitatea proiectelor.",
+        ],
+    }
+    for pair in pairs:
+        x, y = pair["a"], pair["b"]
+        eticheta = {
+            "abrogare_modificare": "Abrogare / modificare",
+            "numerotare_dublata": "Numerotare dublată",
+            "inlocuiri_diferite": "Înlocuiri diferite",
+        }[pair["tip"]]
+        c = {
+            "tip": pair["tip"],
+            "status": "candidat_neconfirmat",
+            "termen": f"{eticheta}: {x['act_tinta']}",
+            "domeniu": {"eticheta": "proiecte parlamentare"},
+            "tinta": {
+                "act_id": x["act_tinta"],
+                "locator": x["locator"],
+                "actiuni": _actiuni_prevedere(x["act_tinta"], x["locator"]),
+            },
+        }
+        for parte, op in (("a", x), ("b", y)):
+            meta = ini[cerere[f"plx_{parte}"]]
+            c[parte] = {
+                **op,
+                "act_id": meta["plx_id"],
+                "stadiu": meta["stadiu"],
+                "citit_la": meta["citit_la"],
+                "sursa_url": meta["sursa_url"],
+                "actiuni": [],
+            }
+        raport["candidati"].append(c)
+    dosar["conflicte_proiecte"] = raport
+    dosar["markdown"] = _markdown_dosar_matrice(dosar)
+    return dosar
+
+
 def _prima(qs: dict, cheie: str, default: str = "") -> str:
     return str(qs.get(cheie, [default])[0] or default)
 
@@ -1471,6 +1580,20 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
     if contradictii.get("trunchiat"):
         linii.append("Rezultate parțiale: limita de analiză sau afișare a fost atinsă.")
     linii.extend(contradictii.get("limitari", []))
+    proiecte = dosar.get("conflicte_proiecte") or {}
+    if proiecte:
+        linii += ["", "## Conflicte între proiecte (neconfirmate)"]
+        for c in proiecte["candidati"]:
+            linii.append(f"- {c['termen']}")
+            for parte in ("a", "b"):
+                d = c[parte]
+                linii.append(
+                    f"  - {d['act_id']} ({d['stadiu']}; {d['citit_la']}): "
+                    f"{d['act_tinta']} / {d['locator']}: {d['text']}"
+                )
+        if proiecte["trunchiat"]:
+            linii.append("Rezultate parțiale: limita de analiză sau afișare a fost atinsă.")
+        linii.extend(proiecte["limitari"])
     return "\n".join(linii).strip()
 
 

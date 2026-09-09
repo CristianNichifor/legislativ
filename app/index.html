@@ -3770,16 +3770,71 @@ async function mArataActe(buton){
     out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
   }
 }
+async function mArataProiecte(buton){
+  const out=$("#m-proiecte-rand"); if(!out) return;
+  const filtre={...mFiltreCurente(),emitent:buton.dataset.emitent||""};
+  out.textContent="Încarc inițiativele…";
+  try{
+    const response=await fetch("/api/matrice-proiecte?"+new URLSearchParams(filtre));
+    if(!response.ok) throw new Error("HTTP "+response.status);
+    const d=await response.json(); if(!out.isConnected) return;
+    if((d.initiative||[]).length<2){
+      out.textContent="Nu sunt două inițiative eligibile în selecția disponibilă. "+(d.limitari||[]).join(" "); return;
+    }
+    const options=d.initiative.map(i=>`<option value="${esc(i.plx_id)}">${esc(i.plx_id+" · "+i.stadiu)}</option>`).join("");
+    out.innerHTML=`<form class="matrix-draft-form"><div class="parc-h">Compară două proiecte</div>`
+      +["a","b"].map(p=>`<label>Inițiativa ${p.toUpperCase()}<select name="plx_${p}" style="width:100%;min-width:0">${options}</select></label><p class="hint" data-meta="${p}"></p>`
+        +`<label>Text proiect ${p.toUpperCase()} · furnizat de utilizator<textarea name="text_${p}" maxlength="60000" rows="7" required style="width:100%;box-sizing:border-box"></textarea></label>`).join("")
+      +`<p class="hint">Versiunea oficială a textelor nu este verificată automat.</p>`
+      +(d.trunchiat?`<p class="hint">Lista inițiativelor este parțială.</p>`:"")
+      +`<button type="submit">Compară proiectele</button></form><div class="matrix-draft-result"></div>`;
+    out.querySelector('[name="plx_b"]').selectedIndex=1;
+    for(const p of ["a","b"]){
+      const select=out.querySelector(`[name="plx_${p}"]`), meta=out.querySelector(`[data-meta="${p}"]`);
+      const update=()=>{
+        const i=d.initiative.find(i=>i.plx_id===select.value), href=urlSigur(i.sursa_url);
+        meta.innerHTML=esc(i.titlu)+(href?` · <a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Fișa parlamentară</a>`:"");
+      };
+      select.onchange=update; update();
+    }
+    const form=out.querySelector("form"), result=out.querySelector(".matrix-draft-result");
+    form.onsubmit=async e=>{
+      e.preventDefault(); const submit=form.querySelector('[type="submit"]'); submit.disabled=true;
+      result.textContent="Compar proiectele…";
+      try{
+        const response=await fetch("/api/conflicte-proiecte",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...filtre,...Object.fromEntries(new FormData(form))})});
+        if(!response.ok) throw new Error("HTTP "+response.status);
+        const dosar=await response.json(); if(!result.isConnected) return;
+        if(dosar.error){ result.textContent=dosar.error; return; }
+        result.innerHTML=mDosarHtml(dosar);
+        result.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+        result.querySelector(".matrix-copy-dosar").onclick=async()=>{
+          try{await navigator.clipboard.writeText(dosar.markdown);}
+          catch(e){result.insertAdjacentHTML("beforeend",'<p>Copierea nu a reușit.</p>');}
+        };
+        result.querySelector(".matrix-print-dosar").onclick=()=>window.print();
+      }catch(e){ result.textContent="Comparația nu a reușit. Reîncearcă."; }
+      finally{submit.disabled=false;}
+    };
+  }catch(e){out.textContent="Nu am putut încărca inițiativele.";}
+}
 function mContradictiiHtml(d){
   let h=`<div class="parc-h">Contradicții candidate · neconfirmate · necesită jurist</div>`;
-  h+=`<p class="hint">${nf(d.prevederi_analizate||0)} prevederi analizate; ${nf(d.acte_selectate||0)} din ${nf(d.acte_total||0)} acte selectate.</p>`;
+  if("prevederi_analizate" in d) h+=`<p class="hint">${nf(d.prevederi_analizate||0)} prevederi analizate; ${nf(d.acte_selectate||0)} din ${nf(d.acte_total||0)} acte selectate.</p>`;
+  if("operatii_a" in d) h+=`<p class="hint">Intervenții recunoscute: ${nf(d.operatii_a)} în proiectul A, ${nf(d.operatii_b)} în proiectul B.</p>`;
   for(const c of d.candidati||[]){
     const deadline=c.tip==="termen_divergent";
     const authority=c.tip==="competenta_suprapusa";
-    const label=authority?"Atribuții suprapuse: ":deadline?"Termene diferite: ":"Definiții diferite: ";
+    const label=c.tinta?"Proiecte: ":authority?"Atribuții suprapuse: ":deadline?"Termene diferite: ":"Definiții diferite: ";
     h+=`<div class="matrix-ex note"><b>${label}${esc(c.termen)}</b> · ${esc(c.domeniu.eticheta)}`;
+    if(c.tinta) h+=`<p>Țintă: ${esc(c.tinta.act_id)} · ${esc(locRo(c.tinta.locator))} ${mActiuni(c.tinta.actiuni)}</p>`;
     for(const p of [c.a,c.b]){
       h+=`<p>${esc(p.act_id)} · ${esc(locRo(p.locator))} ${mActiuni(p.actiuni)}`;
+      if(p.stadiu){
+        h+=`<br>${esc(p.stadiu)} · colectat: ${esc(p.citit_la)}`;
+        const href=urlSigur(p.sursa_url);
+        if(href) h+=` · <a href="${esc(href)}" target="_blank" rel="noopener noreferrer">Fișa parlamentară</a>`;
+      }
       if(authority) h+=`<br><b>Autoritate: ${esc(p.autoritate)}</b>`;
       if(deadline) h+=`<br><b>${esc(p.termen_text)}</b> · ${esc(p.baza==="neprecizata"?"bază neprecizată":p.baza)}<br>Eveniment: ${esc(p.eveniment)}`;
       h+=`<br>${esc(p.text||p.definitie||"")}</p>`;
@@ -3787,7 +3842,7 @@ function mContradictiiHtml(d){
     h+=(c.verificari||[]).map(v=>`<p class="hint">${esc(v)}</p>`).join("");
     h+=`</div>`;
   }
-  if(!(d.candidati||[]).length) h+=`<p>Nu au fost detectate diferențe de definiții, termene sau suprapuneri de atribuții în selecția analizată.</p>`;
+  if(!(d.candidati||[]).length) h+=`<p>Niciun candidat detectat în selecția analizată.</p>`;
   if(d.trunchiat) h+=`<p>Rezultate parțiale: limita de analiză sau afișare a fost atinsă.</p>`;
   return h+(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
 }
@@ -3844,6 +3899,7 @@ function mDosarHtml(d){
       +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
   }
   if(d.contradictii) h+=mContradictiiHtml(d.contradictii);
+  if(d.conflicte_proiecte) h+=mContradictiiHtml(d.conflicte_proiecte);
   h+=`<div class="parc-h">Referințe UE din actele sursă</div>`;
   if(ue.length){
     h+=ue.map(ref=>{
@@ -3978,6 +4034,7 @@ function mArataRand(el){
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
     +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">Contradicții candidate</button>`
     +`<div id="m-acte-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
+  h+=`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(r.emitent)}">Compară proiecte</button><div id="m-proiecte-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){
@@ -4005,6 +4062,7 @@ function mArataRand(el){
   $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
   $("#m-detalii").querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
   $("#m-detalii").querySelectorAll(".matrix-contradictii").forEach(b=>b.onclick=()=>mArataContradictii(b));
+  $("#m-detalii").querySelectorAll(".matrix-drafts").forEach(b=>b.onclick=()=>mArataProiecte(b));
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
