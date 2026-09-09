@@ -42,6 +42,8 @@ writes, so it coexists with the collectors and answers from more law each time t
   derived from existing registers rather than a model.
 - `GET /api/matrice-acte?emitent=&tip=&rang=&domeniu=` — the concrete acts behind one matrix row,
   narrowed by the same filters.
+- `GET /api/matrice-dosar?emitent=&tip=&rang=&domeniu=&problema=` — a printable work dossier for
+  one matrix row.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET /api/ue/acoperire` — which CELEX ids cited by local laws/initiatives are already imported.
@@ -82,6 +84,7 @@ from scripts.servicii import (
     _lint,
     _matrice,
     _matrice_acte,
+    _matrice_dosar,
     _norma,
     _opinie,
     _opinie_cerere,
@@ -200,6 +203,8 @@ def face_handler(stare: Stare):
                 self._json(_matrice(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-acte":
                 self._json(_matrice_acte(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice-dosar":
+                self._json(_matrice_dosar(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/ue/acoperire":

@@ -11,7 +11,7 @@ from pathlib import Path
 from scripts import depozit
 from scripts.cdep import Initiativa
 from scripts.graf import _deschide_graf
-from scripts.servicii import Stare, _matrice, _matrice_acte
+from scripts.servicii import Stare, _matrice, _matrice_acte, _matrice_dosar
 
 EDGE_SQL = (
     "INSERT INTO muchii (din_act, din_locator, catre_act, locator, fel, incredere, de_la)"
@@ -302,6 +302,63 @@ def test_matrix_problem_filter_turns_rows_into_a_work_queue(tmp_path):
     fara_neconst = tmp_path / "fara_neconst"
     fara_neconst.mkdir()
     assert _matrice({"problema": ["neconstitutionale"]}, _stare(fara_neconst))["randuri"] == []
+
+
+def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
+    stare = _stare(tmp_path, graf=True, initiative=True)
+    with depozit.deschide(stare.corpus) as con:
+        con.execute(
+            "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?,?,?,?)",
+            (
+                "lege-98-2016",
+                "art7",
+                1,
+                "Se aplică Directiva 2014/24/UE privind achizițiile publice.",
+            ),
+        )
+        con.commit()
+    stare.vid = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "text": "Guvernul aprobă normele metodologice.",
+            "instrument": "hg",
+            "severitate": "blocking",
+        }
+    ]
+    stare.neconstitutional = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art5.alin7",
+            "text": "Normă lovită și nereparată.",
+            "decizie": "decizie-9-1994",
+            "severitate": "blocking",
+        }
+    ]
+
+    out = _matrice_dosar({"emitent": ["Parlamentul"], "problema": ["semnale"]}, stare)
+
+    assert out["gasit"] is True
+    assert out["emitent"] == "Parlamentul"
+    assert out["problema"] == "semnale"
+    assert out["rand"]["semnale"]["viduri"] == 1
+    assert out["acte"]["total"] == 1
+    assert out["acte"]["acte"][0]["act_id"] == "lege-98-2016"
+    assert out["referinte_ue"][0]["celex"] == "32014L0024"
+    assert out["pasi"]
+    assert "Dosar matrice: Parlamentul" in out["markdown"]
+    assert "32014L0024" in out["markdown"]
+
+
+def test_matrix_dossier_says_when_the_row_is_not_in_the_current_queue(tmp_path):
+    stare = _stare(tmp_path)
+
+    out = _matrice_dosar({"emitent": ["Parlamentul"], "problema": ["neconstitutionale"]}, stare)
+
+    assert out["gasit"] is False
+    assert out["rand"] is None
+    assert out["acte"]["acte"] == []
+    assert out["limitari"][0] == "Rândul nu există pentru filtrele curente."
 
 
 def test_matrix_counts_amendment_pressure_and_live_initiatives(tmp_path):

@@ -3768,6 +3768,88 @@ async function mArataActe(buton){
     out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
   }
 }
+function mDosarHtml(d){
+  if(!d||!d.gasit){
+    return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi dosarul pentru acest rând.");
+  }
+  const r=d.rand||{}, s=r.semnale||{}, ex=r.exemple||{}, acte=(d.acte&&d.acte.acte)||[];
+  const pasi=d.pasi||[], ue=d.referinte_ue||[];
+  let h=`<div class="parc"><div class="parc-h">Dosar de lucru — ${esc(d.emitent||"")}</div>`
+    +`<div class="watch-meta">${esc(d.problema_eticheta||"toate problemele")} · `
+    +`${nf(r.acte||0)} acte · ${nf(s.viduri||0)} lacune · ${nf(s.neconstitutionale||0)} CCR · `
+    +`${nf(s.initiative_in_lucru||0)} inițiative · ${nf(s.amendamente_primite||0)} amendări</div>`
+    +`<div class="row"><button type="button" class="ghost mini matrix-copy-dosar">copiază dosarul</button>`
+    +`<button type="button" class="ghost mini matrix-print-dosar">tipărește</button></div>`;
+  if(pasi.length){
+    h+=`<div class="parc-h">Pași de verificare</div>`+pasi.map(p=>
+      `<div class="matrix-ex note">${esc(p)}</div>`).join("");
+  }
+  h+=`<div class="parc-h">Acte sursă</div>`
+    +(acte.length?mActeHtml(d.acte):`<span class="hint">Niciun act listat pentru filtrele curente.</span>`);
+  const vid=ex.viduri||[];
+  if(vid.length){
+    h+=`<div class="parc-h">Prevederi cu lacune</div>`+vid.map(v=>
+      `<div class="matrix-ex ${esc(v.severitate||"material")}"><span class="dom-cheie">${esc(v.act_id)}</span> `
+      +(v.locator?`${esc(locRo(v.locator))} `:"")
+      +(v.instrument?`· <b>${esc(v.instrument)}</b> `:"")
+      +mActiuni(v.actiuni)
+      +`<br><span class="hint">${esc(v.text||"")}</span></div>`).join("");
+  }
+  const nec=ex.neconstitutionale||[];
+  if(nec.length){
+    h+=`<div class="parc-h">Prevederi lovite de CCR</div>`+nec.map(n=>
+      `<div class="matrix-ex blocking"><span class="dom-cheie">${esc(n.act_id)}</span> `
+      +(n.locator?`${esc(locRo(n.locator))} `:"")
+      +(n.decizie?`· ${esc(n.decizie)} `:"")
+      +mActiuni(n.actiuni)
+      +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
+  }
+  h+=`<div class="parc-h">Referințe UE din actele sursă</div>`;
+  if(ue.length){
+    h+=ue.map(ref=>{
+      const stare=ref.importat?"importat":"lipsește";
+      const exemple=(ref.exemple||[]).map(e=>`<br><span class="hint">${esc(e.id||"")} `
+        +(e.locator?`${esc(locRo(e.locator))} `:"")+`${esc(e.fragment||e.titlu||"")}</span>`).join("");
+      return `<div class="matrix-ex note"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
+        +`${esc(stare)} · ${nf(ref.mentionari||0)} menționări`
+        +(ref.comanda_import&&!ref.importat?`<br><code>${esc(ref.comanda_import)}</code>`:"")
+        +exemple+`</div>`;
+    }).join("");
+  }else{
+    h+=`<span class="hint">Nu există referințe CELEX explicite în actele listate pentru acest dosar.</span>`;
+  }
+  h+=(d.limitari||[]).map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("");
+  return h+`</div>`;
+}
+async function mArataDosar(buton){
+  const out=$("#m-dosar-rand"); if(!out) return;
+  if(buton.dataset.deschis==="1"){
+    out.innerHTML="";
+    buton.dataset.deschis="";
+    buton.textContent="dosar de lucru";
+    return;
+  }
+  buton.dataset.deschis="1";
+  buton.textContent="ascunde dosarul";
+  out.innerHTML=`<div class="parc"><span class="spin"></span> construiesc dosarul…</div>`;
+  const f=mFiltreCurente();
+  const qs=new URLSearchParams({emitent:buton.dataset.emitent||"",limita:"80"});
+  if(f.tip) qs.set("tip",f.tip);
+  if(f.rang) qs.set("rang",f.rang);
+  if(f.domeniu) qs.set("domeniu",f.domeniu);
+  if(f.problema) qs.set("problema",f.problema);
+  try{
+    const d=await fetch("/api/matrice-dosar?"+qs.toString()).then(r=>r.json());
+    out.innerHTML=mDosarHtml(d);
+    out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+    const copy=out.querySelector(".matrix-copy-dosar");
+    if(copy) copy.onclick=()=>{ navigator.clipboard?.writeText(d.markdown||""); copy.textContent="copiat"; };
+    const print=out.querySelector(".matrix-print-dosar");
+    if(print) print.onclick=()=>window.print();
+  }catch(e){
+    out.innerHTML=empty("Nu am putut construi dosarul pentru acest rând.");
+  }
+}
 async function mPrevedere(buton){
   const gazda=buton.closest(".matrix-ex"); if(!gazda) return;
   const veche=gazda.querySelector(".matrix-prev");
@@ -3852,8 +3934,9 @@ function mArataRand(el){
     +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`
-    +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button></div>`
-    +`<div id="m-acte-rand"></div>`;
+    +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button>`
+    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
+    +`<div id="m-acte-rand"></div><div id="m-dosar-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){
@@ -3879,6 +3962,7 @@ function mArataRand(el){
   $("#m-detalii").innerHTML=h+`</div>`;
   $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
   $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
+  $("#m-detalii").querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };

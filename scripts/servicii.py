@@ -1197,6 +1197,174 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _prima(qs: dict, cheie: str, default: str = "") -> str:
+    return str(qs.get(cheie, [default])[0] or default)
+
+
+def _referinte_ue_dosar(stare: Stare, act_ids: set[str], limita: int = 20) -> list[dict]:
+    if not act_ids:
+        return []
+    try:
+        raport = _acoperire_ue({"limita": ["500"]}, stare)
+    except sqlite3.Error:
+        return []
+    iesire = []
+    for ref in raport.get("referinte") or []:
+        exemple = [
+            e
+            for e in ref.get("exemple") or []
+            if e.get("sursa") == "corpus" and e.get("id") in act_ids
+        ]
+        if not exemple:
+            continue
+        rand = dict(ref)
+        rand["exemple"] = exemple[:3]
+        iesire.append(rand)
+        if len(iesire) >= limita:
+            break
+    return iesire
+
+
+def _pasi_dosar_matrice(rand: dict, problema: str | None, referinte_ue: list[dict]) -> list[str]:
+    semnale = rand.get("semnale") or {}
+    pasi = ["Pornește de la actele listate; fiecare constatare trebuie legată de o prevedere."]
+    if problema in (None, "semnale", "viduri", "viduri_blocking") and semnale.get("viduri"):
+        pasi.append(
+            "Pentru lacune: verifică obligația, termenul și instrumentul lipsă, apoi notează "
+            "autoritatea care trebuia să adopte actul."
+        )
+    if problema in (None, "semnale", "neconstitutionale") and semnale.get("neconstitutionale"):
+        pasi.append(
+            "Pentru CCR: compară textul actual cu decizia și marchează dacă reparația lipsește "
+            "sau doar nu a fost legată în corpus."
+        )
+    if problema in (None, "semnale", "initiative") and semnale.get("initiative_in_lucru"):
+        pasi.append(
+            "Pentru inițiative: verifică PL-x-urile pendinte înainte de a propune text nou."
+        )
+    if problema in (None, "semnale", "amendamente") and semnale.get("amendamente_primite"):
+        pasi.append(
+            "Pentru amendări: verifică dacă intervențiile repetate indică instabilitate reală."
+        )
+    if referinte_ue:
+        pasi.append("Pentru UE: importă CELEX-urile lipsă și verifică prevederile candidate.")
+    return pasi
+
+
+def _markdown_dosar_matrice(dosar: dict) -> str:
+    rand = dosar.get("rand") or {}
+    semnale = rand.get("semnale") or {}
+    linii = [
+        f"# Dosar matrice: {dosar.get('emitent') or ''}",
+        "",
+        f"Problemă: {dosar.get('problema_eticheta') or 'toate'}",
+        f"Acte în rând: {semnale.get('acte') or rand.get('acte') or 0}",
+        (
+            "Semnale: "
+            f"{semnale.get('viduri', 0)} lacune, "
+            f"{semnale.get('neconstitutionale', 0)} CCR, "
+            f"{semnale.get('initiative_in_lucru', 0)} inițiative, "
+            f"{semnale.get('amendamente_primite', 0)} amendări"
+        ),
+        "",
+        "## Pași",
+        *[f"- {p}" for p in dosar.get("pasi") or []],
+    ]
+    if dosar.get("referinte_ue"):
+        linii += ["", "## Referințe UE"]
+        for ref in dosar["referinte_ue"]:
+            stare = "importat" if ref.get("importat") else "lipsește"
+            linii.append(f"- {ref.get('celex')} ({stare}) — {ref.get('mentionari', 0)} menționări")
+    return "\n".join(linii).strip()
+
+
+def _matrice_dosar(qs: dict, stare: Stare) -> dict:
+    emitent = _prima(qs, "emitent").strip()
+    tip = _prima(qs, "tip").strip()
+    rang = _prima(qs, "rang").strip()
+    domeniu = _prima(qs, "domeniu").strip()
+    problema = _prima(qs, "problema").strip()
+    limita_acte = max(1, min(_numar_qs(qs, "limita", 80), 100))
+    if not emitent:
+        return {
+            "gasit": False,
+            "emitent": "",
+            "rand": None,
+            "acte": {"total": 0, "acte": []},
+            "referinte_ue": [],
+            "pasi": [],
+            "markdown": "",
+            "limitari": ["Alege un rând din matrice pentru dosar."],
+        }
+
+    matrix_qs = {"limita": ["200"], "sort": [_prima(qs, "sort", "semnale") or "semnale"]}
+    for cheie, valoare in (
+        ("tip", tip),
+        ("rang", rang),
+        ("domeniu", domeniu),
+        ("problema", problema),
+    ):
+        if valoare:
+            matrix_qs[cheie] = [valoare]
+    matrice = _matrice(matrix_qs, stare)
+    rand = next((r for r in matrice.get("randuri") or [] if r.get("emitent") == emitent), None)
+    if not rand:
+        return {
+            "gasit": False,
+            "emitent": emitent,
+            "tip": matrice.get("tip"),
+            "rang": matrice.get("rang"),
+            "domeniu": matrice.get("domeniu"),
+            "problema": matrice.get("problema"),
+            "problema_eticheta": "",
+            "rand": None,
+            "acte": {"total": 0, "acte": []},
+            "referinte_ue": [],
+            "pasi": [],
+            "markdown": "",
+            "limitari": [
+                "Rândul nu există pentru filtrele curente.",
+                *list(matrice.get("limitari") or []),
+            ],
+        }
+
+    acte_qs = {"emitent": [emitent], "limita": [str(limita_acte)]}
+    for cheie, valoare in (("tip", tip), ("rang", rang), ("domeniu", domeniu)):
+        if valoare:
+            acte_qs[cheie] = [valoare]
+    acte = _matrice_acte(acte_qs, stare)
+    act_ids = {a.get("act_id") or "" for a in acte.get("acte") or []}
+    referinte_ue = _referinte_ue_dosar(stare, act_ids)
+    problema_eticheta = next(
+        (
+            p["eticheta"]
+            for p in matrice.get("probleme") or []
+            if p["cheie"] == matrice.get("problema")
+        ),
+        "",
+    )
+    dosar = {
+        "gasit": True,
+        "emitent": emitent,
+        "tip": matrice.get("tip"),
+        "rang": matrice.get("rang"),
+        "domeniu": matrice.get("domeniu"),
+        "problema": matrice.get("problema"),
+        "problema_eticheta": problema_eticheta,
+        "rand": rand,
+        "acte": acte,
+        "referinte_ue": referinte_ue,
+        "pasi": _pasi_dosar_matrice(rand, matrice.get("problema"), referinte_ue),
+        "limitari": [
+            "Dosarul este o listă de lucru, nu un verdict juridic.",
+            *list(matrice.get("limitari") or []),
+            *list(acte.get("limitari") or []),
+        ],
+    }
+    dosar["markdown"] = _markdown_dosar_matrice(dosar)
+    return dosar
+
+
 LIMITARE_UE = (
     "Potrivirile UE sunt căutare textuală în actele CELEX importate local; "
     "nu sunt verdict de conformitate."
