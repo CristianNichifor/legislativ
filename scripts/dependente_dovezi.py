@@ -68,7 +68,7 @@ def verifica(stare, dossier_id, run_id):
                 "dependente": ids,
             }
         )
-    return {
+    result = {
         "schema_version": 1,
         "rulare_id": run_id,
         "verificat_la": datetime.now(UTC).isoformat(),
@@ -89,6 +89,11 @@ def verifica(stare, dossier_id, run_id):
             "Verificarea nu modifica rapoarte sau decizii.",
         ],
     }
+    if run["dovezi"].get("referinte_ue"):
+        from scripts.verificari_ue import verifica as check_eu
+
+        result["surse_ue"] = check_eu(stare, run["dovezi"])
+    return result
 
 
 def _digest(value):

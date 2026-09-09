@@ -86,7 +86,20 @@ Markdown. Dosarele vechi nu primesc retrospectiv textul curent drept dovadă ist
 Capturile rețin textul extras, **nu octeții originali descărcați**, și URL-ul principal al
 manifestării, nu o dovadă completă a extragerii fiecărui flux din documentele multipart.
 Româna și alternativa engleză rămân distincte; schimbarea limbii nu dovedește modificarea sensului.
-Verificările existente ale constatărilor nu compară încă aceste surse UE.
+La verificarea explicită a dovezilor, sursele UE sunt comparate separat cu `eu.db` local.
+Rezultatul păstrează amprentele și metadatele inițiale/curente, fără o nouă copie integrală a
+textului curent. Textul schimbat, limba schimbată și metadatele schimbate sunt semnale distincte.
+O limbă diferită blochează comparația textelor, nu dovedește o modificare a sensului juridic.
+O simplă schimbare a datei colectării nu este prezentată drept schimbare de text.
+
+Sursele lipsă, corupte, prea mari sau fără o captură inițială verificabilă rămân necomparabile.
+O importare ulterioară nu completează retrospectiv dovada inițială. Nu sunt efectuate descărcări.
+Rezultatele sunt păstrate în istoricul verificărilor și în exporturile revizuirii alături de
+verificarea selectată. Selectarea unei verificări vechi nu recitește sursele. Verificările vechi
+fără rezultate UE sunt etichetate ca atare, fără completare automată.
+
+Aceste rezultate contextuale nu modifică deciziile, numărătorile constatărilor sau filtrele cozii
+de reevaluare. Integrarea unei cozi distincte pentru surse UE contextuale rămâne un pas separat.
 
 Backup-ul SQLite al dosarelor include textul UE capturat în rulări, dar nu tot istoricul de import.
 Pentru acesta trebuie salvat și `eu.db`, folosind API-ul SQLite de backup pentru a include WAL.
