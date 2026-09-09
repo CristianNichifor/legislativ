@@ -24,6 +24,7 @@ from scripts import (
     propuneri,
     revizuiri,
     servicii,
+    surse_propuneri,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -131,6 +132,100 @@ def historical_exports(path):
     return [propuneri.exporta(path, *ref) for ref in refs]
 
 
+def analysis_exports(path):
+    with closing(sqlite3.connect(path)) as con:
+        refs = con.execute(
+            "SELECT r.dosar_id,p.rulare_id,p.constatare_id,p.revizie,a.id "
+            "FROM analize_propuneri a JOIN propuneri p ON p.id=a.propunere_id "
+            "JOIN rulari r ON r.id=p.rulare_id ORDER BY a.seq"
+        ).fetchall()
+    return [propuneri.exporta(path, *ref) for ref in refs]
+
+
+def populate_history(state, path, args, baseline, first, original_export, actual):
+    # Deliberately mutate only the disposable imported corpus, never the committed fixture.
+    with closing(sqlite3.connect(state.corpus)) as con, con:
+        con.execute(
+            "UPDATE provizii SET text=? WHERE act_id=? AND locator=?",
+            ("SYNTHETIC source change for reassessment rehearsal.", "lege-98-2016", "art1"),
+        )
+    raw = sha(path)
+    comparison = surse_propuneri.verifica(state, *args, 1, baseline["id"])
+    require(comparison["stare"] == "schimbat", "Synthetic source change was not detected")
+    require(sha(path) == raw, "Read-only source comparison wrote dossier data")
+    request = dict(zip(("dosar_id", "rulare_id", "constatare_id"), args, strict=True)) | {
+        "id": "e" * 32,
+        "revizie": 1,
+        "analiza_baza_id": baseline["id"],
+    }
+    reassessed = analyses.salveaza(state, request)
+    require(reassessed["reevaluare"]["salvata"], "Reassessment was not saved")
+    require(reassessed["reevaluare"]["stare"] == "schimbat", "Reassessment lost source delta")
+    require(analyses.salveaza(state, request) == reassessed, "Reassessment retry duplicated")
+    require(
+        propuneri.exporta(path, *args, 1, baseline["id"]) == original_export,
+        "Reassessment changed original historical export",
+    )
+    require(
+        propuneri.citeste(path, *args, 1)["propunere"] == first,
+        "Reassessment rewrote saved proposal",
+    )
+    require(
+        analyses.istoric(path, *args, 2)["selectata"] is None,
+        "Reassessment leaked to a later proposal revision",
+    )
+
+    renamed = dosare.modifica(
+        path, {"id": IDENT, "titlu": "PROPOSED renamed rehearsal", "arhivat": False, "revizie": 0}
+    )
+    archive_request = {
+        "id": IDENT,
+        "titlu": renamed["titlu"],
+        "arhivat": True,
+        "revizie": renamed["revizie"],
+    }
+    archived = dosare.modifica(path, archive_request)
+    require(dosare.modifica(path, archive_request) == archived, "Archive retry changed metadata")
+    require(dosare.lista(path)["total"] == 0, "Archived dossier remains in active list")
+    require(dosare.lista(path, stare="arhivate")["total"] == 1, "Archived dossier missing")
+
+    contents = {
+        "editor": {"versiune": 1, "text": "SYNTHETIC unfinished editor draft"},
+        args[1]: {
+            "versiune": 1,
+            "drafts": [
+                [
+                    f"proposal:{args[2]}",
+                    {
+                        "revision": 2,
+                        "values": {"text": "SYNTHETIC unfinished proposal"},
+                        "retry": {"id": "9" * 32},
+                    },
+                ]
+            ],
+            "transactions": [],
+        },
+        actual["id"]: {"versiune": 1, "drafts": [], "transactions": []},
+    }
+    recovery = {}
+    for ident, content in contents.items():
+        body = {
+            "id": ident,
+            "dosar_id": None if ident == "editor" else IDENT,
+            "revizie": 0,
+            "continut": content,
+        }
+        saved = dosare.salveaza_ciorna(path, body)
+        require(dosare.salveaza_ciorna(path, body) == saved, "Recovery retry changed record")
+        if ident == actual["id"]:
+            saved = dosare.salveaza_ciorna(
+                path, {**body, "revizie": saved["revizie"], "continut": None}
+            )
+        recovery[ident] = saved
+    require(dosare.lista_ciorne(path)["total"] == 2, "Recovery tombstone was listed")
+    return archived, recovery, request, reassessed
+
+
 def workflow(root, manifest):
     corpus = root / "corpus.db"
     sources = []
@@ -216,6 +311,14 @@ def workflow(root, manifest):
     exports = historical_exports(path)
     require(exports[0]["analiza"] == result, "Historical analysis lost")
     require(sha(corpus) == source_before, "Proposal workflow modified corpus")
+    archived, recovery, reassessment_request, reassessed = populate_history(
+        state, path, args, result, first, exports[0], actual
+    )
+    dossier = dosare.citeste(path, IDENT)
+    exports = historical_exports(path)
+    retained_analyses = analysis_exports(path)
+    require(len(retained_analyses) == 2, "Expected baseline and reassessment history")
+    recovery_list = dosare.lista_ciorne(path)
     before = snapshot(path)
     backup = root / "backup.db"
     dosare.backup(path, backup)
@@ -231,16 +334,56 @@ def workflow(root, manifest):
     shutil.copyfile(backup, restored)
     require(snapshot(restored) == before, "Restore changed logical data")
     require(historical_exports(restored) == exports, "Restore changed historical exports")
+    require(analysis_exports(restored) == retained_analyses, "Restore lost an analysis version")
+    require(dosare.metadata(restored, IDENT) == archived, "Restore lost archived metadata")
+    require(dosare.lista_ciorne(restored) == recovery_list, "Restore changed recovery library")
+    for ident, saved in recovery.items():
+        require(dosare.citeste_ciorna(restored, ident) == saved, "Restore changed recovery data")
     require(dosare.citeste(restored, IDENT) == dossier, "Restored dossier changed")
     require(dosare.rulari(restored, IDENT, actual["id"]) == actual, "Restored report changed")
     require(dosare.rulari(restored, IDENT, run["id"]) == run, "Restored synthetic report changed")
     (restored_root / "corpus.db").unlink()
     require(historical_exports(restored) == exports, "Historical export needs live corpus")
+    require(analysis_exports(restored) == retained_analyses, "Analysis history needs live corpus")
+    require(
+        analyses.salveaza(state_at(restored_root), reassessment_request) == reassessed,
+        "Restored reassessment retry changed retained result",
+    )
+    unarchived = dosare.modifica(
+        restored,
+        {
+            "id": IDENT,
+            "titlu": archived["titlu"],
+            "arhivat": False,
+            "revizie": archived["revizie"],
+        },
+    )
+    require(
+        not unarchived["arhivat"] and dosare.lista(restored)["total"] == 1,
+        "Restored dossier cannot be unarchived",
+    )
+    for ident, saved in recovery.items():
+        require(dosare.citeste_ciorna(restored, ident) == saved, "Unarchive changed recovery data")
     return {
         "sources": sources,
         "actual_report_findings": len(findings),
         "synthetic_bridge": True,
         "proposal_revisions": len(exports),
+        "retained_analysis_exports": len(retained_analyses),
+        "reassessment": {
+            "source_change": "synthetic_temp_corpus_only",
+            "stare": reassessed["reevaluare"]["stare"],
+            "comparatie_incompleta": reassessed["reevaluare"]["comparatie_incompleta"],
+            "original_export_preserved": True,
+            "offline_retry_preserved": True,
+        },
+        "metadata_recovery": {
+            "archived_revision": archived["revizie"],
+            "restored_active_revision": unarchived["revizie"],
+            "recovery_rows": len(recovery),
+            "recoverable_drafts": 2,
+            "tombstones": 1,
+        },
         "analysis_checks": {c["cheie"]: c["stare"] for c in result["controale"]},
         "restored_row_counts": {k: len(v) for k, v in before.items()},
         "actual_schema": schema(path),

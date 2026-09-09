@@ -23,6 +23,19 @@ reopens a real dossier report, then explicitly injects a synthetic finding to re
 structured proposal creation against authentic article text. Two immutable proposal
 revisions and one revision-linked analysis are saved/reopened/exported. The newer
 revision must not inherit the older analysis. Retry checks prevent duplicate saves.
+The extended workflow then changes article 1 in the temporary corpus with explicit
+synthetic text and saves a source reassessment against the first analysis. It checks
+both exact analysis exports, including the original basis, before and after restore.
+A source comparison may remain incomplete because the full-act capture is bounded;
+the structured target change must still be detected. This mutation is a test control,
+not authentic newly retrieved legislation.
+
+The dossier is renamed and archived, with one editor draft, one run-linked proposal
+recovery payload (including retry identity), and one deleted recovery tombstone.
+All database rows must survive backup/restore. Recovery reads, archive metadata and
+library listing must agree with the original database. After removing the restored
+corpus, the saved reassessment must retry without recomputation, and the restored
+dossier must unarchive without changing recovery records.
 SQLite backup APIs preserve corpus and dossier data; fresh paths validate integrity,
 foreign keys, all logical table rows and exact historical exports. Historical exports
 are checked again after the restored corpus is removed. Production data is never used.
@@ -114,8 +127,34 @@ uv run python -m scripts.v1_rehearsal
 
 The focused rerun passed **4 tests in 6.26s**. The full 1,264-test result above
 belongs to the preceding preparation run; it was not rerun for formatting changes.
-The executable rehearsal passed again; its exact stdout is retained in
-[`v1_rehearsal_current.json`](v1_rehearsal_current.json). This is the schema-7
-fixture result from this follow-up, not a live or integrated schema-8 result.
+The executable rehearsal passed again at schema 7. The current-result artifact
+has since been replaced by the extended schema-8 run documented below.
 The pilot remains proposed without a user approval response. Domain and release
 acceptance remain pending; schema-8 validation awaits the integrated UX work.
+
+## Extended history coverage (2026-09-10)
+
+Base: `055ce49`, with `13d9925` and `b99ba6b` cherry-picked as `f3d37d9` and
+`2abbd8c`, followed by this harness extension. No M5/schema-9 changes are included.
+The runtime schema is still read dynamically; rerun after later integrations.
+Exact current stdout: [`v1_rehearsal_current.json`](v1_rehearsal_current.json).
+
+Observed on this exact base: schema **7 -> 8**, `migration_exercised=true`, with
+both frozen baseline historical exports intact. The populated workflow retains
+two analyses (original plus reassessment), one `dosare_stare` row and three `ciorne`
+rows (two recoverable drafts plus one tombstone). The archived metadata revision
+is 2; the restored active revision is 3. All logical rows and exact analysis exports
+are compared through restore, including after the restored corpus is removed.
+
+The reassessment reports `schimbat` and `comparatie_incompleta=true`; the synthetic
+target change is detected without claiming full-act coverage. On `055ce49`, the
+actual report still produces **0 findings**. The parent's reported **1 finding**
+belongs to a later integrated run and is not substituted for this measured result.
+The pilot remains proposed; domain and release acceptance remain pending.
+
+Validation for this extension: Ruff format/check passed; **78 tests passed in
+12.27s** across `test_v1_rehearsal`, `test_surse_propuneri`,
+`test_dossier_usability`, `test_analize_propuneri` and `test_dosare`.
+This includes repeatability/cleanup and a negative check that dropping the recovery
+table from a backup fails the rehearsal. The full-suite result earlier in this
+document remains historical; it was not rerun for this extension.

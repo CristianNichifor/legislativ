@@ -16,6 +16,18 @@ def test_rehearsal_repeatable_and_honest(tmp_path, monkeypatch):
     assert first["domain_acceptance"] == first["release_acceptance"] == "pending"
     assert first["workflow"]["synthetic_bridge"]
     assert first["workflow"]["proposal_revisions"] == 2
+    assert first["workflow"]["retained_analysis_exports"] == 2
+    assert first["workflow"]["reassessment"]["stare"] == "schimbat"
+    assert first["workflow"]["metadata_recovery"] == {
+        "archived_revision": 2,
+        "restored_active_revision": 3,
+        "recovery_rows": 3,
+        "recoverable_drafts": 2,
+        "tombstones": 1,
+    }
+    counts = first["workflow"]["restored_row_counts"]
+    assert counts["analize_propuneri"] == 2
+    assert counts["dosare_stare"] == 1 and counts["ciorne"] == 3
     assert first["upgrade"]["actual_schema"] == dosare.SCHEMA_VERSION
     assert first["upgrade"]["migration_exercised"] == (dosare.SCHEMA_VERSION > 7)
 
@@ -31,6 +43,19 @@ def test_fixture_tampering_fails_before_corpus_write(tmp_path):
 def test_network_is_blocked():
     with rehearsal.offline(), pytest.raises(RuntimeError, match="Network forbidden"):
         socket.create_connection(("127.0.0.1", 9))
+
+
+def test_backup_missing_recovery_table_fails(tmp_path, monkeypatch):
+    backup = dosare.backup
+
+    def incomplete(path, destination):
+        backup(path, destination)
+        with sqlite3.connect(destination) as con:
+            con.execute("DROP TABLE ciorne")
+
+    monkeypatch.setattr(dosare, "backup", incomplete)
+    with rehearsal.offline(), pytest.raises(RuntimeError, match="Restore changed logical data"):
+        rehearsal.workflow(tmp_path, json.loads(rehearsal.MANIFEST.read_text()))
 
 
 def test_schema7_fixture_contains_real_old_structure_and_synthetic_history(tmp_path):

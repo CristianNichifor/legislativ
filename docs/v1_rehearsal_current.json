@@ -39,6 +39,21 @@
     "actual_report_findings": 0,
     "synthetic_bridge": true,
     "proposal_revisions": 2,
+    "retained_analysis_exports": 2,
+    "reassessment": {
+      "source_change": "synthetic_temp_corpus_only",
+      "stare": "schimbat",
+      "comparatie_incompleta": true,
+      "original_export_preserved": true,
+      "offline_retry_preserved": true
+    },
+    "metadata_recovery": {
+      "archived_revision": 2,
+      "restored_active_revision": 3,
+      "recovery_rows": 3,
+      "recoverable_drafts": 2,
+      "tombstones": 1
+    },
     "analysis_checks": {
       "redactare": "verificat",
       "conflicte_interne": "verificat",
@@ -59,19 +74,23 @@
       "contexte_juridice": 0,
       "propuneri": 2,
       "interventii_propuneri": 2,
-      "analize_propuneri": 1
+      "analize_propuneri": 2,
+      "dosare_stare": 1,
+      "ciorne": 3
     },
-    "actual_schema": 7
+    "actual_schema": 8
   },
   "upgrade": {
     "baseline_schema": 7,
-    "actual_schema": 7,
-    "migration_exercised": false,
+    "actual_schema": 8,
+    "migration_exercised": true,
     "baseline_sha256": "fb1a9c10d30a90a4450794f2d9bfd51de33877f30333a7e44f6c6c56ec8cd024",
     "preserved_tables": [
       "analize_propuneri",
+      "ciorne",
       "contexte_juridice",
       "dosare",
+      "dosare_stare",
       "interventii_propuneri",
       "propuneri",
       "recalculari",
