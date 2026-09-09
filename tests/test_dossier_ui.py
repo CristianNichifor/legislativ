@@ -103,3 +103,27 @@ def test_review_form_escapes_evidence_and_history():
         "assert.ok(draft.includes('data-draft-versions')&&!draft.includes('<script>'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_snapshot_renderer_escapes_text_provenance_and_labels_unknown():
+    source = (
+        APP.read_text()
+        .split("function dossierEuSnapshotsHtml", 1)[1]
+        .split("function dossierTime", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "function dossierEuSnapshotsHtml" + source + "assert.equal(dossierEuSnapshotsHtml({}), '');"
+        "assert.ok(dossierEuSnapshotsHtml({dovezi:{referinte_ue:[{}]}}).includes('necapturate'));"
+        "const run={dovezi:{surse_ue:{instantanee:[{celex:'<img>',stare:'capturat',id:'<svg>',"
+        "sursa:{text:'<script>',limba:'ENG',titlu:'<iframe>',text_sha256:'abc'}}]}}};"
+        "const html=dossierEuSnapshotsHtml(run);"
+        "assert.ok(html.includes('Engleză · text alternativ'));"
+        "assert.ok(html.includes('abc')&&html.includes('&lt;script&gt;'));"
+        "assert.ok(!/<(img|svg|script|iframe)>/.test(html));"
+        "run.dovezi.surse_ue.instantanee[0]={stare:'limita_depasita'};"
+        "assert.ok(dossierEuSnapshotsHtml(run).includes('Limită de captură depășită'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

@@ -95,6 +95,13 @@ def lista(path, dossier_id, run_id):
         else "Manifest necapturat pentru aceasta rulare.",
     ]
     lines += limitations + ["# Raportul salvat", run["raport"].get("markdown", "")]
+    if run["dovezi"].get("referinte_ue"):
+        lines += [
+            "# Surse UE contextuale salvate",
+            dosare._json(run["dovezi"]["surse_ue"])
+            if "surse_ue" in run["dovezi"]
+            else "Instantanee UE necapturate pentru aceasta rulare.",
+        ]
     return {
         "schema_version": 1,
         "rulare_id": run_id,
