@@ -356,7 +356,11 @@ def salveaza_ciorna(path, request):
     elif request["dosar_id"] is not None:
         raise ValueError("Editorul nu aparține unui dosar.")
     content = request["continut"]
-    if content is not None and (not isinstance(content, dict) or content.get("versiune") != 1):
+    if content is not None and (
+        not isinstance(content, dict)
+        or type(content.get("versiune")) is not int
+        or content["versiune"] != 1
+    ):
         raise ValueError("Format de ciornă incompatibil.")
     encoded = _json(content)
     if len(encoded.encode("utf-8")) > 200_000:

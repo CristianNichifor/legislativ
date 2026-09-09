@@ -3853,10 +3853,51 @@ let evidenceQueueOffset=0,evidenceQueueSequence=0;
 function dossierHasDrafts(){
   const panel=$('#dossier-saved .finding-reviews');
   if([...(panel?.reviewDrafts?.values()||[]),...(panel?.reviewTransactions?.values()||[])].some(r=>r.saving))return true;
-  return !!panel?.reviewDrafts?.size && panel.recoveryFingerprint!==JSON.stringify(findingDraftSnapshot(panel));
+  return !!panel?.reviewDrafts?.size && panel.recoveryFingerprint!==draftFingerprint(findingDraftSnapshot(panel));
 }
 function findingDraftSnapshot(panel){
-  return {versiune:1,drafts:[...(panel.reviewDrafts||[])],transactions:[...(panel.reviewTransactions||[])]};
+  return structuredClone({versiune:1,drafts:[...(panel.reviewDrafts||[])],transactions:[...(panel.reviewTransactions||[])]});
+}
+function draftFingerprint(content){
+  // SQLite canonicalizes object keys; array order (including Map entries) is retained.
+  return JSON.stringify(content,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
+    ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
+}
+function restoreFindingDrafts(panel,content){
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  const fail=()=>{throw Error('Format de ciornă invalid');};
+  const fields=(values,allowed)=>object(values)&&Object.entries(values).every(([key,value])=>allowed.includes(key)&&typeof value==='string');
+  const revision=value=>Number.isSafeInteger(value)&&value>=0;
+  const contextFields=['evaluator','motiv',...Object.keys(CONTEXT_FIELDS).flatMap(key=>[key,key+'_citare'])];
+  const validate=(entries,transactions)=>{
+    if(!Array.isArray(entries))fail();const keys=new Set();
+    for(const entry of entries){
+      if(!Array.isArray(entry)||entry.length!==2)fail();
+      const [key,record]=entry;
+      if(typeof key!=='string'||!object(record)||keys.has(key))fail();keys.add(key);
+      const review=/^[a-f0-9]{32}$/.test(key),proposal=/^proposal:[a-f0-9]{32}$/.test(key);
+      const context=/^context:[a-f0-9]{32}:(a|b|constatare)$/.test(key);
+      if(transactions?!review:!review&&!proposal&&!context)fail();
+      if(transactions||!review){
+        if(!revision(record.revision))fail();
+        for(const name of ['error','id','fingerprint'])if(record[name]!==undefined&&typeof record[name]!=='string')fail();
+        if(record.saving!==undefined&&typeof record.saving!=='boolean')fail();
+        if(record.retry!==undefined&&(!object(record.retry)||typeof record.retry.id!=='string'||typeof record.retry.fingerprint!=='string'))fail();
+      }
+      if(!transactions){
+        const allowed=proposal?['titlu','text','motiv']:context?contextFields:['stare','evaluator','motiv'];
+        if(!fields(review?record:record.values,allowed))fail();
+        if(record.initial!==undefined&&!fields(record.initial,allowed))fail();
+        for(const name of ['structura','interventie'])if(record[name]!=null&&!fields(record[name],['act_id','locator','operatie','articol_nou','text_nou','sha256_tinta']))fail();
+      }
+    }
+  };
+  if(!object(content)||content.versiune!==1)fail();
+  validate(content.drafts,false);validate(content.transactions,true);
+  if([...(panel.reviewDrafts?.values()||[]),...(panel.reviewTransactions?.values()||[])].some(r=>r.saving))throw Error('Salvare în curs');
+  const copy=structuredClone(content);
+  for(const [,record] of [...copy.drafts,...copy.transactions])delete record.saving;
+  panel.reviewDrafts=new Map(copy.drafts);panel.reviewTransactions=new Map(copy.transactions);
 }
 function bindDraftRecovery(host,id,dossierId,snapshot,restore,onSaved=()=>{}){
   host.innerHTML='<details><summary>Ciornă locală · recuperare</summary><p class="hint">La „Păstrează ciorna”, textul este stocat pe acest calculator, în baza SQLite de dosare, inclusiv în copiile de siguranță. Nu se salvează în browser și nu se trimite altor persoane. Salvarea este manuală; modificările ulterioare trebuie păstrate din nou. Ștergerea copiei locale nu șterge copiile de siguranță.</p><div class="dossier-actions"><button type="button" class="ghost mini" data-draft-save disabled>Păstrează ciorna</button><button type="button" class="ghost mini" data-draft-restore disabled>Recuperează copia</button><button type="button" class="ghost mini" data-draft-delete disabled>Șterge copia locală</button><button type="button" class="ghost mini" data-draft-reload>Reîncarcă copia locală</button></div><p class="hint" role="status" data-draft-status></p></details>';
@@ -3874,7 +3915,7 @@ function bindDraftRecovery(host,id,dossierId,snapshot,restore,onSaved=()=>{}){
     busy=true;ready();status.textContent='Păstrez copia locală…';
     try{
       const data=await dossierApi('/api/dosare/ciorne',{id,dosar_id:dossierId,revizie:saved.revizie,continut:content});
-      saved=data;onSaved(content===null?null:JSON.stringify(content));describe();
+      saved=data;onSaved(data.continut===null?null:draftFingerprint(data.continut));describe();
     }catch(err){status.textContent=err.message+' Textul deschis a fost păstrat. Poți reîncerca.';}
     finally{busy=false;ready();}
   };
@@ -3886,19 +3927,19 @@ function bindDraftRecovery(host,id,dossierId,snapshot,restore,onSaved=()=>{}){
   q('[data-draft-delete]').onclick=()=>{if(confirm('Ștergi copia de recuperare locală? Textul deschis rămâne disponibil.'))save(null);};
   q('[data-draft-restore]').onclick=()=>{
     if(!confirm('Înlocuiești ciorna deschisă cu această copie locală? Modificările nepăstrate se pierd.'))return;
-    try{restore(structuredClone(saved.continut));onSaved(JSON.stringify(snapshot()));status.textContent='Ciornă recuperată. Nu este o revizie înregistrată.';}
+    try{restore(structuredClone(saved.continut));onSaved(draftFingerprint(snapshot()));status.textContent='Ciornă recuperată. Nu este o revizie înregistrată.';}
     catch{status.textContent='Copia nu poate fi recuperată în acest editor.';}
   };
   q('[data-draft-reload]').onclick=load;
   load();
 }
-let editorRecoveryFingerprint=JSON.stringify({versiune:1,text:$('#draft').value});
+let editorRecoveryFingerprint=draftFingerprint({versiune:1,text:$('#draft').value});
 bindDraftRecovery($('#editor-recovery'),'editor',null,()=>({versiune:1,text:$('#draft').value}),content=>{
   if(content.versiune!==1||typeof content.text!=='string')throw Error('Format invalid');
   $('#draft').value=content.text;$('#draft').dispatchEvent(new Event('input',{bubbles:true}));$('#draft').focus();
-},fingerprint=>{editorRecoveryFingerprint=fingerprint??JSON.stringify({versiune:1,text:''});});
+},fingerprint=>{editorRecoveryFingerprint=fingerprint??draftFingerprint({versiune:1,text:''});});
 window.addEventListener('beforeunload',e=>{
-  if(dossierHasDrafts()||JSON.stringify({versiune:1,text:$('#draft').value})!==editorRecoveryFingerprint){e.preventDefault();e.returnValue='';}
+  if(dossierHasDrafts()||draftFingerprint({versiune:1,text:$('#draft').value})!==editorRecoveryFingerprint){e.preventDefault();e.returnValue='';}
 });
 let draftLibraryOffset=0,draftLibrarySequence=0;
 async function loadDraftLibrary(offset=0){
@@ -4021,10 +4062,7 @@ async function openDossierRun(id,runId,token,checkId=null,findingId=null){
     }
     const recovery=document.createElement('div');out.prepend(recovery);
     bindDraftRecovery(recovery,runId,id,()=>findingDraftSnapshot(reviews),content=>{
-      if(content.versiune!==1||!Array.isArray(content.drafts)||!Array.isArray(content.transactions))throw Error('Format invalid');
-      if([...(reviews.reviewDrafts?.values()||[]),...(reviews.reviewTransactions?.values()||[])].some(r=>r.saving))throw Error('Salvare în curs');
-      for(const [,record] of [...content.drafts,...content.transactions])delete record.saving;
-      reviews.reviewDrafts=new Map(content.drafts);reviews.reviewTransactions=new Map(content.transactions);
+      restoreFindingDrafts(reviews,content);
       loadFindingReviews(reviews,id,runId,token,checkId);
     },fingerprint=>{reviews.recoveryFingerprint=fingerprint;});
     loadFindingReviews(reviews,id,runId,token,checkId);

@@ -151,6 +151,8 @@ def test_http_recovery_and_bounds(state):
     for change in (
         {"revizie": True},
         {"continut": []},
+        {"continut": {"versiune": True}},
+        {"continut": {"versiune": 1.0}},
         {"id": "../x"},
         {"continut": {"versiune": 1, "text": "x" * 200001}},
     ):
@@ -212,14 +214,14 @@ def test_recovery_navigation_guard_tracks_edits_and_pending_saves():
         assert.equal(dossierHasDrafts(),false);
         panel.reviewDrafts.set('proposal:a',{revision:2,values:{text:'unfinished'}});
         assert.equal(dossierHasDrafts(),true);
-        panel.recoveryFingerprint=JSON.stringify(findingDraftSnapshot(panel));
+        panel.recoveryFingerprint=draftFingerprint(findingDraftSnapshot(panel));
         assert.equal(dossierHasDrafts(),false);
         panel.reviewDrafts.get('proposal:a').values.text='newer';
         assert.equal(dossierHasDrafts(),true);
-        panel.recoveryFingerprint=JSON.stringify(findingDraftSnapshot(panel));
+        panel.recoveryFingerprint=draftFingerprint(findingDraftSnapshot(panel));
         assert.equal(dossierHasDrafts(),false);
         panel.reviewTransactions.set('a',{saving:true});
-        panel.recoveryFingerprint=JSON.stringify(findingDraftSnapshot(panel));
+        panel.recoveryFingerprint=draftFingerprint(findingDraftSnapshot(panel));
         assert.equal(dossierHasDrafts(),true);
         panel.reviewTransactions.clear();panel.reviewDrafts.clear();
         assert.equal(dossierHasDrafts(),false);
@@ -237,3 +239,113 @@ def test_static_worker_rejects_recovery_and_metadata(route):
     scope = {"path": "/api/dosare/" + route}
     exec("if path in ('/api/dosare'" + branch, scope)
     assert "numai în aplicația locală" in scope["out"]["error"]
+
+
+@pytest.mark.parametrize("version", [True, False, 1.0, "1"])
+def test_recovery_version_requires_exact_integer_before_storage(state, version):
+    with pytest.raises(ValueError, match="Format"):
+        dosare.salveaza_ciorna(
+            dosare.cale(state),
+            {
+                **editor(),
+                "continut": {"versiune": version, "text": "Draft"},
+            },
+        )
+    assert not dosare.cale(state).exists()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_restore_rejects_malformed_entries_before_replacing_either_map():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function restoreFindingDrafts(panel,content){", 1)[1].split(
+        "function bindDraftRecovery", 1
+    )[0]
+    program = (
+        r"""
+const assert=require('node:assert/strict'),CONTEXT_FIELDS={teritoriu:'Territory'};
+const id='a'.repeat(32),key='proposal:'+id;
+const valid={versiune:1,drafts:[[key,{revision:2,values:{titlu:'Title',text:'Text',motiv:''},
+    interventie:{act_id:'lege-1-2020',sha256_tinta:'hash'},
+    retry:{id:'retry',fingerprint:'original'},saving:true}]],
+    transactions:[[id,{revision:3,id:'review-retry',fingerprint:'review',saving:true}]]};
+"""
+        + "function restoreFindingDrafts(panel,content){"
+        + source
+        + r"""
+const bad=[null,{},[],{...valid,versiune:true},
+  ...[null,{},[null],[[key]],[[key,null]],[[key,[]]],[[2,{}]],
+     [[key,{revision:2,values:{unknown:'breaks namedItem'}}]],
+     [[key,{revision:false,values:{}}]],[[key,{revision:2,values:[]}]],
+     [[key,{revision:2,values:{},retry:[]}]],
+     [[id,{stare:'unreviewed',unknown:'bad field'}]],
+     [valid.drafts[0],valid.drafts[0]]].map(drafts=>({...valid,drafts})),
+  ...[[null],[[id,null]],[[id,[]]],[[id,{revision:'3'}]],
+     [[key,{revision:3}]]].map(transactions=>({...valid,transactions}))];
+for(const content of bad){
+  const panel={reviewDrafts:new Map([['existing',{motiv:'Keep'}]]),reviewTransactions:new Map()};
+  const drafts=panel.reviewDrafts,transactions=panel.reviewTransactions;
+  assert.throws(()=>restoreFindingDrafts(panel,content));
+  assert.equal(panel.reviewDrafts,drafts);assert.equal(panel.reviewTransactions,transactions);
+}
+const panel={reviewDrafts:new Map(),reviewTransactions:new Map()};
+restoreFindingDrafts(panel,valid);
+assert.equal(panel.reviewDrafts.get(key).values.text,'Text');
+assert.equal(panel.reviewDrafts.get(key).retry.fingerprint,'original');
+assert.equal(panel.reviewTransactions.get(id).revision,3);
+assert.equal(panel.reviewDrafts.get(key).saving,undefined);
+assert.equal(panel.reviewTransactions.get(id).saving,undefined);
+assert.equal(valid.drafts[0][1].saving,true,'validation/restore must not mutate stored copy');
+"""
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_inflight_recovery_save_does_not_acknowledge_later_mutations():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function dossierHasDrafts(){", 1)[1].split(
+        "let editorRecoveryFingerprint=", 1
+    )[0]
+    program = (
+        r"""
+const assert=require('node:assert/strict');
+const record={revision:0,values:{titlu:'Draft',text:'Before',motiv:''},
+              structura:{text_nou:'Before'}};
+const panel={reviewDrafts:new Map([['proposal:a',record]]),reviewTransactions:new Map()};
+const $=()=>panel,dossierTime=x=>x;
+const controls=new Map();
+const host={isConnected:true,querySelector:s=>{
+  if(!controls.has(s))controls.set(s,{});return controls.get(s);
+},querySelectorAll:()=>[]};
+let complete,committed;
+async function dossierApi(path,body){
+  if(!body)return {revizie:0,continut:null};
+  committed=JSON.parse(JSON.stringify(body.continut,(_key,value)=>
+    value&&typeof value==='object'&&!Array.isArray(value)
+      ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value));
+  await new Promise(resolve=>complete=resolve);
+  return {revizie:1,continut:committed,modificat_la:'now'};
+}
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+"""
+        + "function dossierHasDrafts(){"
+        + source
+        + r"""
+(async()=>{
+  bindDraftRecovery(host,'run','dossier',()=>findingDraftSnapshot(panel),()=>{},
+                    value=>panel.recoveryFingerprint=value);
+  await tick();controls.get('[data-draft-save]').onclick();
+  record.structura.text_nou='After';record.values.text='After';
+  complete();await tick();
+  assert.equal(committed.drafts[0][1].structura.text_nou,'Before');
+  assert.equal(dossierHasDrafts(),true,'newer edits must remain unpreserved');
+  record.structura.text_nou='Before';record.values.text='Before';
+  assert.equal(dossierHasDrafts(),false,'exact committed content permits navigation');
+  controls.get('[data-draft-save]').onclick();
+  committed.drafts[0][1].values.text='Returned committed content';
+  complete();await tick();
+  assert.equal(dossierHasDrafts(),true,'acknowledge returned content, not the request');
+})().catch(error=>{console.error(error);process.exit(1)});
+"""
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
