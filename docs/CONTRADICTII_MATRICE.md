@@ -144,3 +144,30 @@ The existing 60,000-character comparison ceiling still applies without truncatio
 The static Pyodide build keeps pasted-text comparison but reports official import
 as a local-app feature. No background refresh, automatic document selection,
 Senate-page crawling or version alerts are implemented in this slice.
+# Comparația versiunilor importate
+
+În aplicația locală, „Documente oficiale” permite alegerea a două importuri ale
+aceleiași inițiative, în ordinea explicită „Înainte” / „După”. Comparația arată
+unitățile adăugate, eliminate și modificate, aliniate numai după numărul scris al
+articolului; preambulul este păstrat. Spațiile sunt ignorate la egalitate, dar nu
+literele mari, diacriticele sau numerele. Textul nu este o concluzie juridică.
+
+Articolele lipsă ori duplicate declanșează comparația documentelor integrale.
+Textele identice la numere diferite sunt semnalate drept posibilă renumerotare,
+nu realiniate automat. Erorile de extragere PDF rămân de verificat; importurile
+care necesită OCR nu pot fi comparate. Sursele diferite pot fi documente de tipuri
+diferite, iar momentul importului nu stabilește ordinea parlamentară.
+
+Raportul include schimbările în mulțimile de ținte de amendare, termene explicite
+și autorități recunoscute de gramaticile existente, nu o inventariere exhaustivă.
+Mențiunile repetate nu sunt numărate. Exportul Markdown include ambele URL-uri,
+momentele importului și hash-urile SHA-256. Limite: 60000 caractere pe document,
+100 de unități schimbate afișate (cu total și avertisment), 2000 de tokenuri pe
+unitate pentru evidențiere; peste această limită textul integral rămâne vizibil.
+
+„Verifică actualizări” revalidează prezența URL-ului ales pe fișa oficială și
+compară hash-ul octeților descărcați cu importul „După”. Octeții neschimbați
+reutilizează importul; octeții diferiți păstrează o versiune separată. O schimbare
+de fișier nu implică neapărat o schimbare de text. Istoricul și textul din editor
+nu sunt suprascrise. Nu există monitorizare automată sau urmărirea automată a
+unui link înlocuit. Aceste operații nu sunt disponibile în versiunea statică.

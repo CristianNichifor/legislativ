@@ -253,6 +253,8 @@ def face_handler(stare: Stare):
                 "/api/docx",
                 "/api/conflicte-proiecte",
                 "/api/importa-proiect",
+                "/api/diferente-versiuni",
+                "/api/actualizare-proiect",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -273,8 +275,17 @@ def face_handler(stare: Stare):
             except json.JSONDecodeError:
                 self._json({"error": "json invalid"}, 400)
                 return
-            if ruta == "/api/importa-proiect":
-                from scripts.documente_proiecte import citeste, importa
+            if ruta in (
+                "/api/importa-proiect",
+                "/api/diferente-versiuni",
+                "/api/actualizare-proiect",
+            ):
+                from scripts.documente_proiecte import (
+                    citeste,
+                    diferente,
+                    importa,
+                    verifica_actualizari,
+                )
 
                 origin = self.headers.get("Origin")
                 allowed = {
@@ -288,7 +299,15 @@ def face_handler(stare: Stare):
                     self._json({"error": "Cerere invalidă."}, 400)
                     return
                 try:
-                    if isinstance(cerere.get("versiune"), str):
+                    if ruta == "/api/diferente-versiuni":
+                        if not all(isinstance(cerere.get(k), str) for k in ("inainte", "dupa")):
+                            raise ValueError("Selectează două versiuni.")
+                        out = diferente(stare, cerere["plx"], cerere["inainte"], cerere["dupa"])
+                    elif ruta == "/api/actualizare-proiect":
+                        if not isinstance(cerere.get("versiune"), str):
+                            raise ValueError("Selectează o versiune importată.")
+                        out = verifica_actualizari(stare, cerere["plx"], cerere["versiune"])
+                    elif isinstance(cerere.get("versiune"), str):
                         out = citeste(stare, cerere["plx"], cerere["versiune"])
                     else:
                         out = importa(stare, cerere["plx"], cerere.get("url"))

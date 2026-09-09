@@ -315,7 +315,8 @@ def _raspunde(path, query, body):
     elif path == '/api/matrice-dosar': out = _matrice_dosar(qs, _stare)
     elif path == '/api/matrice-contradictii': out = _matrice_contradictii(qs, _stare)
     elif path == '/api/matrice-proiecte': out = _matrice_proiecte(qs, _stare)
-    elif path in ('/api/documente-proiect', '/api/importa-proiect'):
+    elif path in ('/api/documente-proiect', '/api/importa-proiect',
+                  '/api/diferente-versiuni', '/api/actualizare-proiect'):
         out = {'error': 'Importul oficial este disponibil în aplicația locală.'}
     elif path == '/api/conflicte-proiecte': out = _conflicte_proiecte(json.loads(body or '{}'), _stare)
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
