@@ -46,6 +46,8 @@ web/data/
 web/bundle.zip
 web/index.html
 web/worker.js
+web/browser-workspace.js
+web/dataset-updates.js
 web/sw.js
 # copied here from app/fonts/ by the build; app/fonts/ is the committed source
 web/fonts/

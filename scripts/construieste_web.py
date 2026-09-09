@@ -110,7 +110,8 @@ PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
 # block the page: boot (seconds) and every lint or search run happen here, and the UI stays live.
 WORKER = """
 importScripts("__PYODIDE__");
-let raspunde, cautaJson;
+importScripts("browser-workspace.js");
+let raspunde, cautaJson, runtime;
 
 // De unde se citește corpusul întreg. Gol = comportamentul vechi (doar catalogul mic + felii).
 const DEPOZIT = "__DEPOZIT__";
@@ -225,6 +226,7 @@ async function copiaOffline(nume){
 
 async function boot(){
   const pyodide = await loadPyodide();
+  runtime = pyodide;
   await pyodide.loadPackage("sqlite3");  // unvendored in Pyodide; the corpus is SQLite
   const zip = await fetch("bundle.zip").then(r=>r.arrayBuffer());
   pyodide.unpackArchive(zip, "zip");
@@ -237,14 +239,22 @@ async function boot(){
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
   const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json","ue_acoperire.json"];
   for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
-    // manifest.json is the one that has to describe what is in the repository rather than what
-    // the build happened to ship: it carries the headline counts, and counting 3,3 million
-    // provisions over byte ranges to recompute them would read most of the corpus.
-    const url = (DEPOZIT && name === "manifest.json")
-      ? DEPOZIT.replace(/\\/$/, "") + "/manifest.json"
+    // Reports and databases must describe the same selected generation.
+    const url = DEPOZIT
+      ? DEPOZIT.replace(/\\/$/, "") + "/" + name
       : "data/" + name;
-    const buf = new Uint8Array(await fetch(url).then(r=>r.arrayBuffer()));
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+    const buf = new Uint8Array(await response.arrayBuffer());
     pyodide.FS.writeFile("data/"+name, buf);
+  }
+  // Only a bounded build-time slice, never an implicit full dataset download.
+  if (!DEPOZIT && __LOCAL_CORPUS__) {
+    const response = await fetch('data/corpus.db');
+    if (!response.ok) throw new Error('Corpusul inclus nu este disponibil.');
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.length > 32 * 1024 * 1024) throw new Error('Corpusul inclus depaseste limita de 32 MiB.');
+    pyodide.FS.writeFile('data/corpus.db', bytes);
   }
   // Toate bazele mari, fără a descărca niciuna. Textul legii stă în corpus.db, citările în
   // graf.db, Parlamentul în initiative.db, iar dreptul UE în eu.db — degeaba am 203.353 de acte
@@ -253,10 +263,11 @@ async function boot(){
     const baza = DEPOZIT.replace(/\\/$/, "");
     for (const nume of ["corpus.db", "graf.db", "initiative.db", "eu.db"]) {
       let sursa = null, deUnde = "";
-      try { sursa = await copiaOffline(nume); deUnde = "offline"; }
-      catch (e) {
+      // Legacy OPFS files have no verified generation identity. Never mount them over
+      // a selected remote release; the dataset protocol owns future verified caches.
+      {
         try { sursa = prinRange(`${baza}/${nume}`); deUnde = "depozit"; }
-        catch (e2) { console.warn(`${nume} nu e disponibil:`, e2.message); }
+        catch (e2) { throw new Error(`${nume} din generatia selectata nu e disponibil: ${e2.message}`); }
       }
       if (sursa) {
         monteaza(pyodide, sursa, nume);
@@ -281,15 +292,17 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
                corpus_intreg=__CORPUS_INTREG__)
-def _raspunde(path, query, body):
+_stare.dosare_db = '/workspace/dosare.db'
+def _raspunde(path, query, body, method='GET'):
     qs = parse_qs(query or '')
     def _i(k):
         v = qs.get(k, [''])[0]
         try: return int(v) if v not in ('', None) else None
         except ValueError: return None
     if path == '/api/rezumat': out = rezumat(_stare)
-    elif path in ('/api/dosare', '/api/dosare/metadate', '/api/dosare/ciorne', '/api/dosare/rulari', '/api/dosare/revizuiri', '/api/dosare/dovezi', '/api/dosare/verificari', '/api/dosare/coada', '/api/dosare/coada-ue', '/api/dosare/context', '/api/dosare/propuneri', '/api/dosare/propuneri/previzualizare', '/api/dosare/propuneri/analize', '/api/dosare/propuneri/surse'):
-        out = {'error': 'Dosarele persistente sunt disponibile numai în aplicația locală.'}
+    elif path == '/api/dosare' or path.startswith('/api/dosare/'):
+        from scripts.browser_workspace import route
+        out = route(_stare, path, qs, json.loads(body or '{}'), method)
     elif path == '/api/inventar-surse':
         from scripts.servicii import _inventar_surse
         out = _inventar_surse(_stare)
@@ -396,16 +409,21 @@ _cauta_json
 }
 const gata = boot().then(()=>postMessage({type:"ready"}))
                    .catch(e=>{ postMessage({type:"error", error:String(e)}); throw e; });
-onmessage = async (e) => {
-  const {id, path, query, body} = e.data;
+let requestQueue = Promise.resolve();
+onmessage = (e) => { requestQueue = requestQueue.then(() => handle(e.data)); };
+async function handle(request) {
+  const {id, path, query, body, method = 'GET'} = request;
   try {
     await gata;
     // Căutarea trece mereu prin index, nu prin corpus. Măsurat pe corpusul montat: ordonarea a
     // 6.478 potriviri după bm25 a cerut ~1.000 de citiri împrăștiate și 291 de secunde, fiindcă
     // bm25 vrea lungimea fiecărui document. Aceleași potriviri ies din index în două cereri.
-    const res = (path === "/api/cauta")
+    const execute = () => raspunde(path, query, body, method);
+    const res = (path === '/api/dosare' || path.startsWith('/api/dosare/') || path === '/api/browser-workspace')
+      ? await BrowserWorkspace.run(runtime, {...request, method}, execute)
+      : (path === "/api/cauta")
       ? await cautaJson(query || "")
-      : raspunde(path, query, body);
+      : execute();
     postMessage({id, ok:true, result:res});
   } catch(err){
     postMessage({id, ok:false, error:String(err)});
@@ -419,6 +437,7 @@ onmessage = async (e) => {
 # search runs. Runs before the app's own inline script (document order), so `window.fetch` is
 # already redirected by the time the page makes its first call.
 BOOT = """
+<script src="browser-workspace.js"></script>
 <script>
 (function(){
   const origFetch = window.fetch.bind(window);
@@ -550,11 +569,16 @@ BOOT = """
     const p = pending.get(m.id); if (!p) return; pending.delete(m.id);
     m.ok ? p.resolve(m.result) : p.reject(new Error(m.error));
   };
-  worker.onerror = (e)=>{ rejectReady(new Error(e.message || "worker error")); };
-  function call(path, query, body){
+  worker.onerror = (e)=>{
+    const error = new Error(e.message || "worker error");
+    rejectReady(error);
+    for (const p of pending.values()) p.reject(error);
+    pending.clear();
+  };
+  function call(path, query, body, method = 'GET'){
     return new Promise((resolve, reject)=>{
       const id = ++seq; pending.set(id, {resolve, reject});
-      worker.postMessage({id, path, query, body});
+      worker.postMessage({id, path, query, body, method});
     });
   }
   if (DEPOZIT_CAUTARE) incalzesteBanda().catch(()=>{});
@@ -576,7 +600,7 @@ BOOT = """
       try {
         const parsed = new URL(u, location.origin);
         const body = (opts && opts.body) ? String(opts.body) : "";
-        const res = await call(parsed.pathname, parsed.search.slice(1), body);
+        const res = await call(parsed.pathname, parsed.search.slice(1), body, (opts && opts.method || 'GET').toUpperCase());
         return new Response(res, {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
       } catch(e){
         return new Response(JSON.stringify({error:String(e)}), {status:500});
@@ -604,9 +628,9 @@ BOOT = """
 # browser installs and whose `activate` deletes every older cache — the resync, without a manual clear.
 SW = """
 const VERSIUNE = "__VERSION__";
-const CACHE = "legislativ-" + VERSIUNE;
+const CACHE = "legislativ-shell-" + VERSIUNE;
 const NUCLEU = [
-  "./", "./index.html", "./worker.js", "./bundle.zip",
+  "./", "./index.html", "./worker.js", "./browser-workspace.js", "./bundle.zip",
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db", "./data/eu.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
@@ -626,7 +650,7 @@ self.addEventListener("install", (e)=>{
 self.addEventListener("activate", (e)=>{
   e.waitUntil(
     caches.keys()
-      .then(ks=>Promise.all(ks.map(k=>k===CACHE ? null : caches.delete(k))))
+      .then(ks=>Promise.all(ks.map(k=>k!==CACHE && k.startsWith('legislativ-shell-') ? caches.delete(k) : null)))
       .then(()=>self.clients.claim())
   );
 });
@@ -1003,8 +1027,11 @@ def _bundle() -> None:
 
 
 def _worker(depozit: str = "") -> None:
+    corpus = DATA / "corpus.db"
+    local_corpus = not depozit and corpus.is_file() and corpus.stat().st_size <= 32 * 1024 * 1024
     text = (
         WORKER.replace("__PYODIDE__", PYODIDE)
+        .replace("__LOCAL_CORPUS__", "true" if local_corpus else "false")
         .replace("__DEPOZIT__", depozit)
         # With a repository behind it the corpus is really there, so counts, titles and search
         # must come from the database and not from the slice manifest.
@@ -1174,6 +1201,16 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
     felii = felii or 1
     boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
     pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
+    # The shared page describes localhost storage; only the browser build changes this copy.
+    pagina = pagina.replace(
+        "Nu se salvează în browser și nu se trimite altor persoane.",
+        "Se salveaza in acest browser; nu se trimite altor persoane. Exportati copii de siguranta: stergerea datelor site-ului elimina dosarele.",
+    )
+    shutil.copy2(ROOT / "app" / "browser-workspace.js", WEB / "browser-workspace.js")
+    # Local update controls own their unsupported-endpoint state in the shared page.
+    updates = ROOT / "app" / "dataset-updates.js"
+    if updates.is_file():
+        shutil.copy2(updates, WEB / updates.name)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
