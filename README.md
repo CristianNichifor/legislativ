@@ -469,6 +469,10 @@ endpoint and a recorded fixture are the same shape.
 
 ## The documents
 
+Persistent local research storage is documented in [`docs/DOSARE.md`](docs/DOSARE.md):
+dossier/run APIs, immutable saved reports, schema compatibility and backup/restore.
+This storage foundation does not yet add a save/review interface.
+
 | | |
 | --- | --- |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | The design system: USR's palette and typeface, where each token came from, and the two brand values that are deliberately not used as published because they fail WCAG AA as text. Read this before changing a colour. |

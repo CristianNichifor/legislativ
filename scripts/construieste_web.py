@@ -288,6 +288,8 @@ def _raspunde(path, query, body):
         try: return int(v) if v not in ('', None) else None
         except ValueError: return None
     if path == '/api/rezumat': out = rezumat(_stare)
+    elif path in ('/api/dosare', '/api/dosare/rulari'):
+        out = {'error': 'Dosarele persistente sunt disponibile numai în aplicația locală.'}
     elif path == '/api/inventar-surse':
         from scripts.servicii import _inventar_surse
         out = _inventar_surse(_stare)

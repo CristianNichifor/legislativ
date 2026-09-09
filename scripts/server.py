@@ -130,11 +130,23 @@ def _incalzeste(stare: Stare) -> None:
 
 def face_handler(stare: Stare):
     class Handler(BaseHTTPRequestHandler):
+        def _dosare_permis(self):
+            hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
+            origin = self.headers.get("Origin")
+            if self.headers.get("Host") not in hosts or (
+                origin and origin not in {"http://" + host for host in hosts}
+            ):
+                self._json({"error": "Origine nepermisă."}, 403)
+                return False
+            return True
+
         def _json(self, obj: dict, code: int = 200) -> None:
             corp = json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corp)))
+            if urlparse(self.path).path in ("/api/dosare", "/api/dosare/rulari"):
+                self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(corp)
 
@@ -237,6 +249,26 @@ def face_handler(stare: Stare):
                 from scripts.servicii import _inventar_surse
 
                 self._json(_inventar_surse(stare))
+            elif ruta.path in ("/api/dosare", "/api/dosare/rulari"):
+                from scripts import dosare
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    path = dosare.cale(stare)
+                    qs = parse_qs(ruta.query)
+                    ident = qs.get("id", [None])[0]
+                    if ruta.path == "/api/dosare/rulari":
+                        out = dosare.rulari(path, ident, qs.get("rulare_id", [None])[0])
+                    elif ident:
+                        out = dosare.citeste(path, ident)
+                    else:
+                        out = dosare.lista(path, int(qs.get("offset", ["0"])[0]))
+                    self._json(out)
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Depozitul de dosare nu este disponibil."}, 503)
             else:
                 self._json({"error": "not found"}, 404)
 
@@ -259,6 +291,8 @@ def face_handler(stare: Stare):
                 "/api/importa-proiect",
                 "/api/diferente-versiuni",
                 "/api/actualizare-proiect",
+                "/api/dosare",
+                "/api/dosare/rulari",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -271,13 +305,34 @@ def face_handler(stare: Stare):
             except ValueError:
                 self._json({"error": "content-length invalid"}, 400)
                 return
-            if lung > MAX_CERERE:
+            if lung < 0:
+                self._json({"error": "content-length invalid"}, 400)
+                return
+            if lung > (16000 if ruta.startswith("/api/dosare") else MAX_CERERE):
                 self._json({"error": "cerere prea mare"}, 413)
                 return
             try:
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 self._json({"error": "json invalid"}, 400)
+                return
+            if ruta in ("/api/dosare", "/api/dosare/rulari"):
+                from scripts import dosare
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    path = dosare.cale(stare)
+                    out = (
+                        dosare.creeaza(path, cerere)
+                        if ruta == "/api/dosare"
+                        else dosare.salveaza_rulare(stare, cerere)
+                    )
+                    self._json(out)
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Depozitul de dosare nu este disponibil."}, 503)
                 return
             if ruta in (
                 "/api/importa-proiect",
