@@ -19,11 +19,11 @@ const assert=require('node:assert/strict');
 const esc=String,dossierTime=String,proposalAnalysisHtml=data=>data.selectata?.id||'unchecked';
 const panel={},identity={dosar_id:'dossier',rulare_id:'run',constatare_id:'finding'};
 const saved={revizie:1},tick=()=>new Promise(r=>setImmediate(r));
-let created,post=[],release,fail=true,stored=[];
-const document={createElement:()=>created={isConnected:true,dataset:{},append(){},
+let mounted,post=[],release,fail=true,stored=[];
+const document={createElement:()=>({isConnected:true,dataset:{},append(){},
   controls:new Map(),
-  querySelector(s){if(!this.controls.has(s))this.controls.set(s,{value:'',textContent:'',append(){}});
-    return this.controls.get(s);}}};
+  querySelector(s){if(!this.controls.has(s))this.controls.set(s,{value:'',textContent:'',append(){},after(){}});
+    return this.controls.get(s);}})};
 async function dossierApi(url,payload){
   if(payload){post.push(payload);await new Promise(r=>release=r);
     if(!stored.some(a=>a.id===payload.id))stored.push({id:payload.id,baza:{revizie:payload.revizie}});
@@ -35,9 +35,9 @@ async function dossierApi(url,payload){
     revizie:a.baza.revizie,creat_la:'time'})),total:stored.length};
 }
 function mount(){
-  const host={closest:()=>({after(){}})};
+  const host={closest:()=>({after(section){mounted=section;}})};
   bindProposalAnalysis(host,panel,saved,identity,()=>true);
-  const section=created;section.open=true;section.ontoggle();return section;
+  const section=mounted;section.open=true;section.ontoggle();return section;
 }
 const control=(section,name)=>section.querySelector('[data-analysis-'+name+']');
 """

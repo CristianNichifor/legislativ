@@ -1,14 +1,14 @@
 # Legislativ v1 completion checklist
 
-Baseline: PR139 merged. This is the finite release scope accepted by the maintainer,
+Baseline: PR140 merged. This is the finite release scope accepted by the maintainer,
 not a claim that the remaining milestones are already implemented. Local-first,
 deterministic research and drafting; no reviewer required to operate the app.
 
 | Milestone | Baseline status | Acceptance required before completion |
 | --- | --- | --- |
 | 1. Structured proposals | Merged in PR139 for supported targets | Explicit act/provision and replace/add/repeal intents, target snapshots, before/after preview, ambiguous-target rejection, free-text drafts and revision history are covered. See supported-target limits in DOSARE.md. |
-| 2. Revision-linked analysis | Implemented for bounded deterministic checks; awaiting PR review | Explicit saved-revision checks, immutable input/source hashes, distinct partial/unavailable/unsupported states, history, retry, exact-revision exports and no carryover after edits. Five adapters are supported; broader legal assessments remain explicitly unsupported here. See DOSARE.md. |
-| 3. Proposal source changes | Partial: finding evidence checks exist | Proposal dependency warnings and explicit reassessment preserve original basis and draft text. |
+| 2. Revision-linked analysis | Merged in PR140 for bounded deterministic checks | Explicit saved-revision checks, immutable input/source hashes, distinct partial/unavailable/unsupported states, history, retry, exact-revision exports and no carryover after edits. Five adapters are supported; broader legal assessments remain explicitly unsupported here. See DOSARE.md. |
+| 3. Proposal source changes | Implemented; awaiting PR review | Explicit captured-source comparison, metadata/content distinction, bounded before/after text, changed/unavailable states, linked reassessment, retry and immutable history/export. Original basis and unsaved draft text remain intact. See PROPOSAL_SOURCE_CHANGES.md. |
 | 4. Domain/applicability workflow | Partial: cited context exists | Known, unknown and heuristic context remain distinct in filtering/comparison; dates, territory, recipients, exceptions and classification have explicit provenance. |
 | 5. Bounded Romanian/EU assessment | Partial: acquisition and search exist | National provision/proposal linked to an explicit EU obligation, supporting evidence and potential coverage/conflict/gap; missing text blocks substantive assessment. |
 | 6. Everyday UX | Partial | Rename/archive dossiers, recover unfinished drafts, accessible navigation and consistent retry/error states; sharing scope clearly visible. |
@@ -21,8 +21,11 @@ The second batch passes 1,258 tests and adds schema-7 analysis records and captu
 tests for revision/ownership isolation, source bounds, migration rollback, concurrent
 retry, history and export. Desktop/mobile checks cover lost-response retry after commit,
 pending navigation, unsaved text preservation, historical selection and pagination.
-Milestones 1/2 are implemented within their documented scope; six milestones remain.
-Milestone 3's source-change warnings are not supplied by merely retaining snapshots.
+Milestones 1/2/3 are implemented within their documented scope; five milestones remain.
+The third batch adds explicit source comparison and linked reassessment with no new
+schema migration. Source-change workflows pass 1,271 tests and desktop/mobile checks.
+Parallel branches prepare milestones 4/6 and acceptance/release rehearsal; those are
+not marked complete here until their own implementations are integrated and verified.
 Passing unit tests does not establish source completeness or legal accuracy.
 The baseline has 1,205 passing tests, proposal revision comparison/export, source
 inventory/acquisition, immutable saved evidence and manual evidence checking.

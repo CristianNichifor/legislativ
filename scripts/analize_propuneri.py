@@ -2,16 +2,14 @@
 
 import hashlib
 import json
-import sqlite3
-from contextlib import closing
 from dataclasses import asdict
 from datetime import UTC, datetime
-from pathlib import Path
 
 from scripts import dosare, propuneri
 from scripts.definitii import definitii, jargon
 from scripts.redactare import conformitate, interventii_conflictuale
 from scripts.referinte import referinte
+from scripts.surse_propuneri import captura, compara
 from scripts.termene import obligatii
 
 ENGINE = "analiza-propunere-v1"
@@ -28,48 +26,7 @@ def _sha(value):
 
 
 def _sources(stare, ids):
-    records, size = [], 0
-    path = getattr(stare, "corpus", None)
-    try:
-        if path is None:
-            raise OSError("No corpus")
-        with closing(sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True)) as con:
-            con.row_factory = sqlite3.Row
-            con.execute("BEGIN")
-            for ident in ids:
-                meta = con.execute(
-                    "SELECT id,sursa_url,citit_la FROM acte WHERE id=?", (ident,)
-                ).fetchone()
-                source = {"act_id": ident, "stare": "indisponibil", "prevederi": []}
-                if meta is not None:
-                    source["metadate"] = dict(meta)
-                    source["stare"] = "verificat"
-                    rows = con.execute(
-                        "SELECT locator,ord,text,vigoare_de_la,vigoare_pana_la FROM provizii "
-                        "WHERE act_id=? ORDER BY ord LIMIT ?",
-                        (ident, MAX_ROWS + 1),
-                    )
-                    locators = set()
-                    for row in rows:
-                        value = dict(row)
-                        length = len(dosare._json(value).encode())
-                        if len(source["prevederi"]) == MAX_ROWS or size + length > MAX_SOURCE_BYTES:
-                            source["stare"] = "partial"
-                            break
-                        source["prevederi"].append(value)
-                        if not (value["text"] or "").strip() or value["locator"] in locators:
-                            source["stare"] = "partial"
-                        locators.add(value["locator"])
-                        size += length
-                    if not source["prevederi"] and source["stare"] != "partial":
-                        source["stare"] = "indisponibil"
-                records.append(source)
-    except (OSError, sqlite3.Error):
-        # Never mix a failed acquisition with apparently complete source coverage.
-        records = [{"act_id": ident, "stare": "indisponibil", "prevederi": []} for ident in ids]
-    for record in records:
-        record["sha256"] = _sha(record)
-    return records
+    return captura(stare, ids, max_rows=MAX_ROWS, max_bytes=MAX_SOURCE_BYTES)
 
 
 def _check(key, label, findings, *, status="verificat", note="", kind="semnale"):
@@ -300,25 +257,34 @@ def _result(row):
     return {"id": row["id"], **json.loads(row["rezultat_json"])}
 
 
-def _retry(con, ident, proposal_id):
+def _retry(con, ident, proposal_id, baseline_id=None):
     if not _supported(con):
         return None
     row = con.execute("SELECT * FROM analize_propuneri WHERE id=?", (ident,)).fetchone()
     if row and row["propunere_id"] != proposal_id:
         raise ValueError("Identificator reutilizat pentru alta revizie.")
-    return _result(row) if row else None
+    result = _result(row) if row else None
+    if result and result.get("reevaluare", {}).get("analiza_baza_id") != baseline_id:
+        raise ValueError("Identificator reutilizat cu alta baza de reevaluare.")
+    return result
 
 
 def salveaza(stare, request):
-    if not isinstance(request, dict) or set(request) != {
+    required = {
         "id",
         "dosar_id",
         "rulare_id",
         "constatare_id",
         "revizie",
-    }:
+    }
+    if (
+        not isinstance(request, dict)
+        or not required <= set(request)
+        or set(request) - required - {"analiza_baza_id"}
+    ):
         raise ValueError("Cerere de analiza invalida.")
     ident = dosare._id(request["id"])
+    baseline_id = dosare._id(request["analiza_baza_id"]) if "analiza_baza_id" in request else None
     propuneri._number(request["revizie"], 1)
     path = dosare.cale(stare)
     proposal = propuneri.citeste(
@@ -329,15 +295,30 @@ def salveaza(stare, request):
         request["revizie"],
     )["propunere"]
     with dosare._open(path) as con:
-        old = _retry(con, ident, proposal["id"])
+        old = _retry(con, ident, proposal["id"], baseline_id)
         if old:
             return old
+    baseline = (
+        propuneri.analize(
+            path,
+            request["dosar_id"],
+            request["rulare_id"],
+            request["constatare_id"],
+            request["revizie"],
+            analysis_id=baseline_id,
+        )["selectata"]
+        if baseline_id
+        else None
+    )
     result = executa(stare, proposal)
+    if baseline:
+        result["reevaluare"] = compara(stare, proposal, baseline, current_sources=result["surse"])
+        result["reevaluare"]["salvata"] = True
     payload = dosare._json(result)
     if len(payload.encode()) > dosare.MAX_REPORT_BYTES:
         raise ValueError("Analiza depaseste limita de 4 MB.")
     with dosare._open(path, write=True) as con:
-        old = _retry(con, ident, proposal["id"])
+        old = _retry(con, ident, proposal["id"], baseline_id)
         if old:
             return old
         con.execute(

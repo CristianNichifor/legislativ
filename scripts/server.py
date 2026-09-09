@@ -304,6 +304,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
+                "/api/dosare/propuneri/surse",
             ):
                 from scripts import dosare
 
@@ -313,7 +314,11 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/propuneri/analize":
+                    if ruta.path == "/api/dosare/propuneri/surse":
+                        from scripts.surse_propuneri import citeste_cerere
+
+                        out = citeste_cerere(stare, qs)
+                    elif ruta.path == "/api/dosare/propuneri/analize":
                         from scripts.analize_propuneri import citeste_cerere
 
                         out = citeste_cerere(path, qs)
