@@ -1109,6 +1109,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "referinte": referinte,
             "referinte_neimportate": [],
             "semnale": semnale,
+            "matrice": triage_ue.matrice_analiza([], [], semnale, referinte=referinte),
             "limitari": ["Textul proiectului este gol.", LIMITARE_UE],
         }
     if not stare.are_ue():
@@ -1122,6 +1123,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "referinte": referinte,
             "referinte_neimportate": referinte,
             "semnale": semnale,
+            "matrice": triage_ue.matrice_analiza([], referinte, semnale, referinte=referinte),
             "limitari": [
                 "Dreptul UE nu este încărcat local; importă acte CELEX în eu.db cu "
                 "`uv run python -m scripts.cellar 32018R1805 --db eu.db`.",
@@ -1144,6 +1146,9 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
                     "referinte": referinte,
                     "referinte_neimportate": referinte,
                     "semnale": semnale,
+                    "matrice": triage_ue.matrice_analiza(
+                        [], referinte, semnale, referinte=referinte
+                    ),
                     "limitari": [
                         "eu.db există, dar nu are indexul de prevederi UE; rulează importul CELEX "
                         "sau reindexarea cu "
@@ -1171,6 +1176,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "referinte": referinte,
             "referinte_neimportate": referinte,
             "semnale": semnale,
+            "matrice": triage_ue.matrice_analiza([], referinte, semnale, referinte=referinte),
             "limitari": [f"eu.db nu a putut fi citit: {e}", LIMITARE_UE],
         }
 
@@ -1195,6 +1201,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
         "referinte": referinte,
         "referinte_neimportate": neimportate,
         "semnale": semnale,
+        "matrice": triage_ue.matrice_analiza(rezultate, neimportate, semnale, referinte=referinte),
         "limitari": limitari,
     }
 

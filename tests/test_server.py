@@ -164,6 +164,8 @@ def test_ue_returns_explicit_referenced_celex_provisions(tmp_path):
     assert out["rezultate"][0]["potrivire"] == "referinta"
     assert out["rezultate"][0]["triere"]["nivel"] == "referinta"
     assert out["rezultate"][0]["referinte"][0]["text"] == "Regulamentului (UE) 2018/1805"
+    assert out["matrice"]["rezumat"]["acte_citate"] == 1
+    assert out["matrice"]["rezumat"]["neimportate"] == 0
 
 
 def test_ue_reports_explicit_reference_missing_from_eu_db(tmp_path):
@@ -175,6 +177,9 @@ def test_ue_reports_explicit_reference_missing_from_eu_db(tmp_path):
     assert out["referinte"][0]["celex"] == "32014L0024"
     assert out["referinte_neimportate"][0]["celex"] == "32014L0024"
     assert out["referinte_neimportate"][0]["triere"]["nivel"] == "neimportat"
+    assert out["matrice"]["rezumat"]["neimportate"] == 1
+    randuri = {r["cheie"]: r for r in out["matrice"]["randuri"]}
+    assert randuri["acoperire_locala"]["nivel"] == "blocking"
     assert any("neimportate" in limita for limita in out["limitari"])
 
 
@@ -186,6 +191,9 @@ def test_ue_reports_derogation_signal_without_verdict(tmp_path):
 
     assert out["semnale"][0]["nivel"] == "posibila_derogare"
     assert out["semnale"][0]["referinte"] == ["32018R1805"]
+    assert out["matrice"]["rezumat"]["semnale"] == 1
+    randuri = {r["cheie"]: r for r in out["matrice"]["randuri"]}
+    assert randuri["derogare_posibila"]["numar"] == 1
     assert any("nu sunt verdict" in limita for limita in out["limitari"])
 
 

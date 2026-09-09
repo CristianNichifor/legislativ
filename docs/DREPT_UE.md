@@ -16,6 +16,17 @@ Referința explicită este tratată ca fapt de citare, nu ca verdict juridic. Da
 un act UE importat, aplicația îl scoate în față și arată prevederi citable din `eu.db`. Dacă îl
 citează dar actul nu este importat, aplicația listează CELEX-ul lipsă ca muncă de acoperire.
 
+Interfața mai afișează o matrice scurtă de verificare UE. Ea separă:
+
+- acte UE citate explicit;
+- acoperirea locală din `eu.db`;
+- potriviri textuale pe aceeași materie;
+- formulări de derogare posibilă;
+- lacună/obligație UE și contradicție UE, marcate explicit ca **necalculate**.
+
+Matricea este o listă de lucru: arată ce poate fi verificat imediat și ce rămâne blocat de date sau
+de analiză juridică punctuală.
+
 ## Import local din Cellar
 
 Importul pornește de la CELEX, fie introdus manual, fie copiat din lista de acte citate dar
@@ -116,6 +127,7 @@ CELEX       citări  importat  limba  surse
 32018R1805      4  da        RON    confiscare, cooperare judiciară
 ```
 
-Abia după această acoperire merită construită matricea juridică: domeniu, rang normativ, act UE
-incident, proiect național, lacună, derogare posibilă, contradicție posibilă. Fără acoperire, o
-matrice ar confunda absența din `eu.db` cu absența unei obligații europene.
+Matricea actuală este primul strat determinist al analizei juridice: domeniu și rang normativ se
+pot vedea doar unde textul le face verificabile, iar lacuna/contradicția UE rămân necalculate până
+când există actul UE incident, prevederea națională comparată și motivarea punctuală. Fără
+acoperire, o matrice completă ar confunda absența din `eu.db` cu absența unei obligații europene.

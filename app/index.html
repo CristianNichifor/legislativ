@@ -359,6 +359,16 @@
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
+  .ue-matrix{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r1);
+    background:var(--surface);margin:.55rem 0 .75rem}
+  .ue-matrix-head,.ue-matrix-row{display:grid;grid-template-columns:minmax(11rem,1.1fr) 8rem 4rem minmax(15rem,2fr);
+    gap:.55rem;align-items:start;min-width:42rem}
+  .ue-matrix-head{font-family:var(--sans);font-size:.64rem;font-weight:700;text-transform:uppercase;
+    letter-spacing:.04em;color:var(--ink-mute);background:var(--sunk);padding:.45rem .65rem}
+  .ue-matrix-row{font-size:.78rem;padding:.5rem .65rem;border-top:1px solid var(--rule-soft)}
+  .ue-matrix-row.blocking{box-shadow:inset 3px 0 0 var(--blocking)}
+  .ue-matrix-row.material{box-shadow:inset 3px 0 0 var(--material)}
+  .ue-matrix-row.note{box-shadow:inset 3px 0 0 var(--note)}
   .ue-dosare{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:.55rem;
     margin:.65rem 0 .8rem}
   .ue-dosar{border:1px solid var(--rule);border-left:3px solid var(--accent);
@@ -3657,6 +3667,22 @@ function ueReferinteLipsaHtml(refs){
       +`</div>`).join("")
     +`</div></div>`;
 }
+function ueMatriceHtml(matrice){
+  const rows=(matrice&&matrice.randuri)||[];
+  if(!rows.length) return "";
+  return `<div class="ue-matrix">`
+    +`<div class="ue-matrix-head"><span>dimensiune</span><span>stare</span><span>nr.</span><span>următorul pas</span></div>`
+    +rows.map(r=>{
+      const celex=(r.celexuri||[]).length?`<br><span class="hint">CELEX: ${r.celexuri.map(esc).join(", ")}</span>`:"";
+      const det=r.detalii?`<br><span class="hint">${esc(r.detalii)}</span>`:"";
+      return `<div class="ue-matrix-row ${esc(r.nivel||"note")}">`
+        +`<span><b>${esc(r.dimensiune||"")}</b>${celex}${det}</span>`
+        +`<span>${esc(r.stare||"")}</span>`
+        +`<span class="matrix-cell">${nf(r.numar||0)}</span>`
+        +`<span>${esc(r.actiune||"")}</span></div>`;
+    }).join("")+`</div>`
+    +ueLimitariHtml(matrice.limitari||[]);
+}
 function ueSemnaleHtml(semnale){
   const ss=semnale||[];
   if(!ss.length) return "";
@@ -3742,28 +3768,31 @@ function renderUE(d){
   const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], dosare=(d&&d.dosare)||[];
   const lipsa=(d&&d.referinte_neimportate)||[];
   const semnale=(d&&d.semnale)||[];
+  const matrice=ueMatriceHtml(d&&d.matrice);
   stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate`
     : (lipsa.length ? `${nf(lipsa.length)} referințe UE neimportate`
       : (semnale.length ? `${nf(semnale.length)} semnale UE` : ""));
   const note=ueLimitariHtml(lim);
   const refs=ueReferinteLipsaHtml(lipsa);
   const sig=ueSemnaleHtml(semnale);
-  if(!rr.length){ out.innerHTML=sig+refs+(sig||refs?"":empty("Nicio prevedere UE de arătat."))+note; return; }
-  out.innerHTML=sig+refs+ueDosareHtml(dosare)+ueHitsHtml(rr)+note;
+  if(!rr.length){ out.innerHTML=matrice+sig+refs+(matrice||sig||refs?"":empty("Nicio prevedere UE de arătat."))+note; return; }
+  out.innerHTML=matrice+sig+refs+ueDosareHtml(dosare)+ueHitsHtml(rr)+note;
 }
 function renderUEInline(d){
   if(!d || d.error) return "";
   const rr=d.rezultate||[], lim=d.limitari||[], dosare=d.dosare||[];
   const lipsa=d.referinte_neimportate||[];
   const semnale=d.semnale||[];
+  const areSemnal=rr.length||lipsa.length||semnale.length;
+  const matrice=areSemnal?ueMatriceHtml(d.matrice):"";
   const primele=rr.slice(0,5);
   const refs=ueReferinteLipsaHtml(lipsa);
   const sig=ueSemnaleHtml(semnale);
   const corp=rr.length
-    ? sig+refs+ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
+    ? matrice+sig+refs+ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
       +(rr.length>primele.length?`<p class="hint" style="margin:.25rem 0">Se afișează primele ${primele.length} din ${rr.length}; fila «Drept UE» poate căuta separat același text.</p>`:"")
       +ueLimitariHtml(lim)
-    : sig+refs+(sig||refs?"":empty(esc(lim[0]||"Nicio prevedere UE de arătat.")))+ueLimitariHtml(lim, (sig||refs)?0:1);
+    : matrice+sig+refs+(matrice||sig||refs?"":empty(esc(lim[0]||"Nicio prevedere UE de arătat.")))+ueLimitariHtml(lim, (matrice||sig||refs)?0:1);
   return sec("Drept UE", rr.length+lipsa.length+semnale.length, corp
     +`<div class="row" style="margin-top:.5rem"><button type="button" class="ghost ue-open">Vezi în fila Drept UE</button></div>`);
 }
