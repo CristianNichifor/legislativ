@@ -472,7 +472,7 @@ endpoint and a recorded fixture are the same shape.
 Persistent local research storage is documented in [`docs/DOSARE.md`](docs/DOSARE.md):
 dossier/run APIs, immutable saved reports, schema compatibility and backup/restore.
 The matrix's saved-dossier section supports creating dossiers and saving/reopening
-analysis runs. Reviewer decisions remain a separate upcoming workflow.
+analysis runs, recording reviewer decisions and exporting their evidence and history.
 
 | | |
 | --- | --- |

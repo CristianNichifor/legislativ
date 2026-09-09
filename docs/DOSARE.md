@@ -1,7 +1,49 @@
 # Persistent local dossiers (B1)
 
-B1 supplies storage and APIs; B2 adds the save/reopen UI. Review decisions and
-append-only reviewer events remain later batches.
+B1 supplies storage and APIs; B2 adds the save/reopen UI; B3 adds review decisions
+and append-only history for findings retained in a saved run.
+
+## Review decisions (B3)
+
+Saved gap/CCR examples and contradiction candidates receive deterministic finding
+IDs from their category and canonical saved evidence. Duplicate identical evidence
+within a category is one reviewable finding. Aggregate counts without retained
+examples are not fabricated into findings. The report itself remains unchanged.
+
+Each finding starts `unreviewed`. A reviewer may record `needs_evidence`,
+`confirmed_by_reviewer`, `dismissed` or return it to `unreviewed`. Every event requires
+a declared reviewer label (120 characters) and a reason/note (2000 characters).
+Confirmation is a human assessment, not an official legal determination. Labels
+are not authenticated identities, and a local database is not a tamper-proof audit log.
+
+`GET /api/dosare/revizuiri?id=<dossier>&rulare_id=<run>` returns findings, latest
+states/revisions, recent history, limitations, the original saved run and Markdown.
+UI filters include unresolved (`unreviewed` and `needs_evidence`). JSON/Markdown
+exports include all findings regardless of the UI filter, original evidence and
+report hash. Each finding's newest 20 events are included; `istoric_trunchiat` and
+the Markdown warning explicitly mark truncated history. All events remain stored.
+The history UI loads older pages through the same GET route with `constatare_id`
+and `offset` (20 per page). This is a bounded export, not an assertion of complete
+history when the flag is present. Backups retain all events.
+
+`POST /api/dosare/revizuiri` accepts exactly `id` (32-character retry UUID),
+`dosar_id`, `rulare_id`, `constatare_id`, `revizie` (expected current revision),
+`stare`, `evaluator` and `motiv`. Run ownership and finding membership are checked
+against stored evidence, not a client-provided finding. Concurrent stale edits fail
+with a reload instruction; exact retries reuse their event. Events are inserted in
+a write transaction, and UPDATE/DELETE triggers reject modification of old events.
+An authorized local database owner can still bypass these controls by changing the
+database schema; this is not cryptographic immutability.
+
+Schema 2 adds `revizuiri`. Version-1 stores remain readable without migration and
+show no review events. The next explicit dossier/review write upgrades them
+transactionally; failed writes roll back the migration. Backup before upgrading;
+older application code rejects schema 2. Reviews belong to a saved run and never
+transfer automatically to a different run, even with similar evidence.
+
+Unsaved review text is retained while filtering or reloading reviews within the
+same displayed run. It is not persisted until the decision is saved. Errors permit
+retry; source-change invalidation and cross-run review carryover remain Phase C work.
 
 ## Interface (B2)
 
@@ -35,7 +77,7 @@ metadata and imported document bytes. Static clients reject persistent dossier
 operations explicitly. No hosted authentication or multi-user isolation is provided;
 this is a local single-user workspace.
 
-First creation initializes schema 1 and the SQLite application ID in one write
+First creation initializes schema 2 and the SQLite application ID in one write
 transaction. Reads do not create or migrate files. An unrelated nonempty database
 or incompatible application/schema version is rejected, not reset. A failure during
 initialization rolls back tables and version markers together. Future migrations

@@ -35,7 +35,7 @@ def test_create_read_retry_and_isolation(state):
         dosare.creeaza(path, {"id": ID, "titlu": "Different"})
     assert dosare.lista(path)["total"] == 1
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 1
+        assert con.execute("PRAGMA user_version").fetchone()[0] == 2
         assert con.execute("PRAGMA application_id").fetchone()[0] == dosare.APPLICATION_ID
 
 
@@ -68,7 +68,7 @@ def test_foreign_future_schema_and_atomic_migration(state):
         assert con.execute("SELECT name FROM sqlite_master").fetchall() == []
     create(state)
     with sqlite3.connect(path) as con:
-        con.execute("PRAGMA user_version=2")
+        con.execute("PRAGMA user_version=3")
     for operation in (lambda: create(state), lambda: dosare.lista(path)):
         with pytest.raises(ValueError, match="compatibil"):
             operation()
@@ -174,6 +174,8 @@ def test_http_boundaries(state):
     assert request(state, "GET", "/api/dosare?id=" + ID)[1]["titlu"] == "A"
     assert request(state, "GET", "/api/dosare?offset=bad")[0] == 400
     assert request(state, "GET", "/api/dosare/rulari?id=" + ID)[1]["total"] == 0
+    assert request(state, "GET", "/api/dosare/revizuiri?id=" + ID)[0] == 400
+    assert request(state, "POST", "/api/dosare/revizuiri", {}, origin="https://evil.test")[0] == 403
     assert request(state, "POST", "/api/dosare/rulari", {"dosar_id": OTHER, "filtre": {}})[0] == 400
     state.date_dir = "static"
     assert request(state, "POST", "/api/dosare", body)[0] == 400

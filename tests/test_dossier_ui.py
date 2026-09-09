@@ -53,3 +53,26 @@ def test_saved_run_provenance_is_escaped_and_labeled_historical():
         "assert.ok(!h.includes('<img>')&&!h.includes('<script>'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_review_form_escapes_evidence_and_history():
+    source = (
+        APP.read_text()
+        .split("const REVIEW_STATES=", 1)[1]
+        .split("async function loadFindingReviews", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const locRo=s=>s;const REVIEW_STATES="
+        + source
+        + "const h=reviewFindingHtml({id:'abc',tip:'lacuna',stare:'needs_evidence',revizie:1,"
+        "dovada:{text:'<script>',act_id:'A',locator:'art1'},istoric_trunchiat:true,"
+        "istoric:[{stare:'needs_evidence',revizie:1,evaluator:'<img>',motiv:'<svg>',creat_la:'now'}]});"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<img>')&&!h.includes('<svg>'));"
+        "assert.ok(h.includes('Evenimente mai vechi'));"
+        "assert.ok(h.includes('type=\"text\"'));"
+        "assert.ok(h.includes('Confirmat de evaluator'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
