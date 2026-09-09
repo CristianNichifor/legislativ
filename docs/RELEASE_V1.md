@@ -11,9 +11,9 @@ deterministic research and drafting; no reviewer required to operate the app.
 | 3. Proposal source changes | Merged in PR141 | Explicit captured-source comparison, metadata/content distinction, bounded before/after text, changed/unavailable states, linked reassessment, retry and immutable history/export. Original basis and unsaved draft text remain intact. See PROPOSAL_SOURCE_CHANGES.md. |
 | 4. Domain/applicability workflow | Merged in PR142 for saved-finding context | Filter and compare loaded target/context revisions by field, declared-known/unknown/heuristic state, value and citation. Dates, territory, recipients, exceptions and classification retain author/source provenance; no applicability verdict or global cross-domain inference. See APPLICABILITY_WORKFLOW.md. |
 | 5. Bounded Romanian/EU assessment | Implemented for structured proposals / retained EU articles; awaiting PR review | Explicit saved proposal revision, retained EU snapshot/article and exact body quote; author-declared potential coverage/conflict/gap with reason. Missing bodies, unresolved targets and invalid hashes block linking. Schema 9 retains immutable basis, retry, history/export; no automated compliance verdict. See LEGATURI_UE.md. |
-| 6. Everyday UX | Implemented for local dossiers/editor; awaiting PR review | Rename/archive and restore dossiers, explicitly preserve/recover/delete editor and finding drafts, keyboard tab navigation, conflict/retry states and local storage/sharing disclosures. Recovery is manual, not autosave; see DOSARE.md for excluded transient forms. Schema 8 adds dossier metadata and recovery copies. |
-| 7. Real-data acceptance | Not complete | Choose and record a bounded domain/source set; run complete workflows on actual documents, measure missing/extraction/false-positive cases and fix release blockers. Fixtures alone do not satisfy this gate. |
-| 8. Release readiness | Partial: tests, migrations and backups exist | Clean install, update, realistic backup/restore and upgrade rehearsal; local/static limitations; optional AI deployment/cost audit; versioned release with known limitations. |
+| 6. Everyday UX | Merged in PR143 for local dossiers/editor | Rename/archive and restore dossiers, explicitly preserve/recover/delete editor and finding drafts, keyboard tab navigation, conflict/retry states and local storage/sharing disclosures. Recovery is manual, not autosave; see DOSARE.md for excluded transient forms. Schema 8 adds dossier metadata and recovery copies. |
+| 7. Real-data acceptance | Prepared, not complete | Proposed public-procurement manifest, measurement sheet and acceptance procedure exist in V1_ACCEPTANCE.md. Domain approval, authentic end-to-end cases, missing/extraction/false-positive measurements and blocker fixes remain. Fixtures alone do not satisfy this gate. |
+| 8. Release readiness | Rehearsal implemented; deployment sign-off pending | Isolated clean-runtime, populated backup/restore and schema 7 -> 9 rehearsal in V1_RELEASE_REHEARSAL.md. Actual deployment inventory, install/update, complete database/document backup, AI cost ownership and versioned release remain unverified. |
 
 Each implementation PR must update this checklist with evidence and remaining scope.
 The first completion batch passed 1,224 tests and desktop/mobile browser checks.
@@ -33,6 +33,9 @@ The integrated EU workflow passes 1,322 tests. The isolated schema-7 to schema-9
 rehearsal preserves reassessment history, recovery copies, archived metadata and
 a synthetic EU link through backup/restore and offline history/export retries.
 This fixture evidence is not real-data domain acceptance or a deployment audit.
+The complete integrated preparation batch passes 1,333 tests, repository-wide
+Ruff checks, desktop/mobile workflows and a fresh dependency-free Python rehearsal
+(normal and optimized execution). See V1_RELEASE_REHEARSAL.md and its current JSON.
 Passing unit tests does not establish source completeness or legal accuracy.
 The baseline has 1,205 passing tests, proposal revision comparison/export, source
 inventory/acquisition, immutable saved evidence and manual evidence checking.

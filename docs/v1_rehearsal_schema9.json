@@ -1,0 +1,126 @@
+{
+  "runtime_base_commit": "9e60c4ab993bcfc55170490f1a5d2bb9d87aa370",
+  "runtime_note": "M5 working tree includes uncommitted changes; hashes identify tested files",
+  "runtime_files_sha256": {
+    "scripts/dosare.py": "3200fae5d2bf71399221e0c11230ed7df0299f7ca5b1eb769208204ff5f81110",
+    "scripts/legaturi_ue.py": "ff2fcdf5a2b1a372274497deef75fe30cbba60d6132c2ebb4104f7d82d7b4308",
+    "scripts/legaturi_ue_store.py": "d9c294c6b81611c6035289ede60a8310efe5e24115b732a84ec3145b229e1133",
+    "scripts/legaturi_ue_schema.py": "1f10508bfb1444970a8d22e687f4a6e6d981aa102840cfad34543c4fb2db329b",
+    "tests/test_instantanee_ue.py": "3f6862fc06d409768f89e5793ca59acd8178674150e77e2256a9974e9848b23c",
+    "tests/test_cellar.py": "03134e76c55fb81bd83fc0eccf5539bdfb6dfc4ac8823d06805b195daf02da3d"
+  },
+  "harness_root": "/tmp/legislativ-v1-rehearsal-history",
+  "runtime_root": "/tmp/legislativ-v1-eu-link",
+  "result": {
+    "status": "fixture_rehearsal_passed",
+    "domain_acceptance": "pending",
+    "release_acceptance": "pending",
+    "pilot_status": "proposed_pending_user_domain_approval",
+    "python": "3.12.12",
+    "sqlite": "3.50.4",
+    "network": "blocked; no model calls",
+    "precomputed_reports": "explicitly empty; ambient cwd reports are not read",
+    "temporary_data": "removed on exit",
+    "workflow": {
+      "sources": [
+        {
+          "act_id": "lege-98-2016",
+          "path": "sources/lege-98-2016.html.gz",
+          "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762",
+          "kind": "authentic_retrieved_portal_snapshot",
+          "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+          "url_evidence": "tests/test_parsare.py",
+          "retrieved_at": null,
+          "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time",
+          "provisions": 1457,
+          "publisher_marks": 580,
+          "marks_found": 570
+        },
+        {
+          "act_id": "lege-208-2022",
+          "path": "sources/lege-208-2022.html.gz",
+          "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e",
+          "kind": "authentic_retrieved_portal_snapshot",
+          "source_url": null,
+          "url_evidence": "Original retrieval URL not recorded; embedded portal id 282819 is not a verified fetch URL",
+          "retrieved_at": null,
+          "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time",
+          "provisions": 178,
+          "publisher_marks": 0,
+          "marks_found": 0
+        }
+      ],
+      "actual_report_findings": 0,
+      "synthetic_bridge": true,
+      "proposal_revisions": 2,
+      "retained_analysis_exports": 2,
+      "eu_link": {
+        "status": "synthetic_link_verified",
+        "fixture_kind": "synthetic_text_and_provenance_not_authentic_eu_law",
+        "retained_links": 1,
+        "offline_retry_after_source_removal": true
+      },
+      "reassessment": {
+        "source_change": "synthetic_temp_corpus_only",
+        "stare": "schimbat",
+        "comparatie_incompleta": true,
+        "original_export_preserved": true,
+        "offline_retry_preserved": true
+      },
+      "metadata_recovery": {
+        "archived_revision": 2,
+        "restored_active_revision": 3,
+        "recovery_rows": 3,
+        "recoverable_drafts": 2,
+        "tombstones": 1
+      },
+      "analysis_checks": {
+        "redactare": "verificat",
+        "conflicte_interne": "verificat",
+        "termene": "verificat",
+        "citari": "partial",
+        "terminologie": "partial",
+        "compatibilitate": "nesuportat",
+        "vid": "nesuportat",
+        "ccr": "nesuportat",
+        "proiecte": "nesuportat"
+      },
+      "restored_row_counts": {
+        "dosare": 1,
+        "rulari": 2,
+        "revizuiri": 0,
+        "verificari_dovezi": 0,
+        "recalculari": 0,
+        "contexte_juridice": 0,
+        "propuneri": 2,
+        "interventii_propuneri": 2,
+        "analize_propuneri": 2,
+        "dosare_stare": 1,
+        "ciorne": 3,
+        "legaturi_ue": 1
+      },
+      "actual_schema": 9
+    },
+    "upgrade": {
+      "baseline_schema": 7,
+      "actual_schema": 9,
+      "migration_exercised": true,
+      "baseline_sha256": "fb1a9c10d30a90a4450794f2d9bfd51de33877f30333a7e44f6c6c56ec8cd024",
+      "preserved_tables": [
+        "analize_propuneri",
+        "ciorne",
+        "contexte_juridice",
+        "dosare",
+        "dosare_stare",
+        "interventii_propuneri",
+        "legaturi_ue",
+        "propuneri",
+        "recalculari",
+        "revizuiri",
+        "rulari",
+        "verificari_dovezi"
+      ],
+      "historical_exports": 2
+    }
+  }
+}
