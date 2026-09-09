@@ -2,12 +2,16 @@
 const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
 const {execFileSync}=require('node:child_process');
 const assert=require('node:assert/strict');
+const path=require('node:path');
+const root=path.resolve(__dirname,'..');
 const base=process.env.CONTEXT_BASE_URL||'http://127.0.0.1:8042';
 (async()=>{
   const browser=await chromium.launch({headless:true});
   try{for(const width of [1280,390]){
-    const seed=JSON.parse(execFileSync('uv',['run','python','-m','tests.context_workflow_fixture'],{encoding:'utf8'}));
+    const seed=JSON.parse(execFileSync('uv',['run','python','-m','tests.context_workflow_fixture'],{encoding:'utf8',cwd:root}));
     const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];
+    const visible=await page.request.get(base+'/api/dosare?id='+seed.id);
+    assert.ok(visible.ok(),'Preview cannot read seeded dossier: set CONTEXT_INITIATIVE_DB to the preview --initiative path');
     page.on('pageerror',e=>errors.push(e.message));
     await page.goto(base);await page.click('#tab-matrice');
     await page.locator('#dossier-library > summary').click();
@@ -38,9 +42,12 @@ const base=process.env.CONTEXT_BASE_URL||'http://127.0.0.1:8042';
     assert.equal(await a.locator('[name=motiv]').inputValue(),'Draft survives context filtering');
     await a.locator('[data-context-cancel]').click();
     await workflow.locator('summary').click();
-    await workflow.locator('[data-context-field]').selectOption('teritoriu');
+    await workflow.locator('[data-context-field]').selectOption('all');
     await workflow.scrollIntoViewIfNeeded();
-    await page.screenshot({path:`.context-fixture/context-${width}.png`});
+    assert.equal(await workflow.locator('[data-context-results]>section').count(),8);
+    const spacing=await workflow.locator('[data-context-results]>section').first().evaluate(el=>parseFloat(getComputedStyle(el).marginTop));
+    assert.ok(spacing<=16,'Context results inherited full-page section spacing');
+    await page.screenshot({path:path.join(root,`.context-fixture/context-${width}.png`)});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
     assert.deepEqual(errors,[]);
     console.log(`${width}: filters, provenance, target/history comparison, older pages, escaping, drafts, no overflow passed`);

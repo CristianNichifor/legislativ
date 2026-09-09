@@ -1,6 +1,7 @@
-"""Seed only this worktree's disposable context browser database."""
+"""Seed disposable context dossiers; optionally use an explicit preview store."""
 
 import json
+import os
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +13,8 @@ from scripts import dosare, revizuiri
 def main():
     root = Path(__file__).resolve().parents[1] / ".context-fixture"
     root.mkdir(exist_ok=True)
-    state = SimpleNamespace(initiative=root / "initiative.db", date_dir=None)
+    initiative = Path(os.environ.get("CONTEXT_INITIATIVE_DB", root / "initiative.db")).resolve()
+    state = SimpleNamespace(initiative=initiative, date_dir=None)
     ident = uuid.uuid4().hex
     path = dosare.cale(state)
     dosare.creeaza(path, {"id": ident, "titlu": "FIXTURE context comparison"})

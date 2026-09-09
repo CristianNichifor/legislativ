@@ -53,8 +53,32 @@ Start the existing server with `--port 8042 --initiative
 No package install or source download is needed when Playwright is available.
 The seed creates disposable schema-7 dossiers in this worktree only.
 
+For an integrated preview, use its actual corpus with a disposable initiative/
+dossier store, and point the fixture at the same initiative path:
+
+```bash
+CONTEXT_BASE_URL=http://127.0.0.1:8042 \
+CONTEXT_INITIATIVE_DB=/absolute/path/to/preview/initiative.db \
+PLAYWRIGHT_MODULE=/path/to/playwright \
+node tests/context_workflow_browser.cjs
+```
+
+`CONTEXT_INITIATIVE_DB` must match the preview server's `--initiative` argument;
+it names the initiative path, not the derived `.dosare.db` path. The seed adds
+synthetic dossiers to that derived store using the checked-out storage code.
+Use a disposable preview store, not a working research dossier database. The
+fixture never opens or changes the corpus, initiative data or EU sources. Actual
+corpus access remains the preview server's configuration (`--corpus`). A preflight
+read fails clearly if the server cannot see the seeded dossier. Run from the
+integrated checkout so seeding uses the integrated schema implementation.
+Use a disposable copy of a valid initiative database for a full preview: the
+context seeder creates only the derived dossier database. An absent initiative
+database leaves unrelated background summary requests unavailable even though
+the context workflow checks can pass.
+
 Verified at 1280px and 390px: state/field/text filtering, visible metadata evidence,
 A/B and historical revision comparison, older-page selection, HTML escaping,
 unsaved context preservation and no horizontal overflow or JavaScript errors.
 Screenshots are local artifacts in `.context-fixture/context-1280.png` and
 `.context-fixture/context-390.png`; do not stage fixture databases or screenshots.
+The entire `.context-fixture/` directory is ignored by Git.
