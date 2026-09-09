@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 import sqlite3
 from contextlib import closing
 from pathlib import Path
@@ -126,14 +127,12 @@ def arhiveaza_curenta(con, celex):
 
 def captureaza(stare, references):
     """Read one local SQLite snapshot; never import, migrate, or backfill old dossiers."""
-    from scripts.cellar import normalizeaza_celex
-
     result = {"schema_version": 1, "instantanee": [], "limitare": LIMITATION}
     ids = []
     for ref in references[:MAX_REFERENCES]:
-        try:
-            celex = normalizeaza_celex(ref.get("celex", ""))
-        except (ValueError, TypeError, AttributeError):
+        # Reports contain canonical CELEX identifiers, not user-entered URLs or aliases.
+        celex = ref.get("celex") if isinstance(ref, dict) else None
+        if not isinstance(celex, str) or not re.fullmatch(r"[0-9A-Z()._-]{5,50}", celex):
             result["instantanee"].append({"stare": "referinta_invalida"})
             continue
         if celex not in ids:
