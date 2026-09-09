@@ -99,7 +99,30 @@ verificarea selectată. Selectarea unei verificări vechi nu recitește sursele.
 fără rezultate UE sunt etichetate ca atare, fără completare automată.
 
 Aceste rezultate contextuale nu modifică deciziile, numărătorile constatărilor sau filtrele cozii
-de reevaluare. Integrarea unei cozi distincte pentru surse UE contextuale rămâne un pas separat.
+de reevaluare a constatărilor.
+
+### Coada surselor UE între dosare
+
+În biblioteca locală, **Surse UE între dosare** listează rulările cu referințe UE din toate
+dosarele, câte 50 pe pagină. Endpoint-ul read-only `/api/dosare/coada-ue` folosește numai datele
+salvate în baza dosarelor. Deschiderea, filtrarea și reîncărcarea listei nu citesc `eu.db`, nu
+descarcă surse și nu salvează verificări. Baza lipsă produce o listă goală fără creare; citirea
+schemelor vechi nu le migrează. Funcționalitatea nu este disponibilă în versiunea statică.
+
+Se folosește ultima verificare salvată a fiecărei rulări, în ordinea inserării, chiar dacă acea
+verificare nu conține rezultate UE. Lipsa rezultatelor UE înseamnă **Fără verificare UE**, nu text
+neschimbat. O versiune necunoscută a rezultatului sau un set incomplet de comparații rămâne
+incomplet. Modificarea surselor locale nu schimbă această listă până la o verificare explicită.
+
+Filtrele separă texte schimbate, limbi schimbate, surse cu numai metadate schimbate, comparații
+incomplete și lipsa verificării UE. Numărătorile descriu surse, nu constatări. Filtrele se pot
+suprapune: o rulare poate avea o sursă schimbată și alta indisponibilă. **Fără schimbări semnalate**
+cere o comparație completă fără schimbări de text, limbă sau metadate; nu certifică actualitatea.
+
+Deschiderea unui rând selectează rularea și exact verificarea afișată în coadă, nu înlocuiește
+acea verificare cu una salvată între timp. Instantaneele inițiale rămân în analiza salvată.
+Notele nesalvate blochează navigarea din coadă. Verificările, sursele inițiale și deciziile nu sunt
+modificate prin navigare; salvarea explicită a unei verificări reîncarcă și coada deschisă.
 
 Backup-ul SQLite al dosarelor include textul UE capturat în rulări, dar nu tot istoricul de import.
 Pentru acesta trebuie salvat și `eu.db`, folosind API-ul SQLite de backup pentru a include WAL.

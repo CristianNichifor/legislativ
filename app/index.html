@@ -347,6 +347,7 @@
   .dossier-library .dossier-actions{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.5rem 0}
   .dossier-library p,.dossier-library h4{overflow-wrap:anywhere}
   #evidence-queue-list button,[data-run-origins] button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+  #eu-queue-list button{max-width:100%;white-space:normal;overflow-wrap:anywhere}
   [data-check-history] .dossier-actions{display:grid;grid-template-columns:40px 40px minmax(0,1fr);max-width:420px}
   [data-check-history] label{grid-column:1/-1}
   #dossier-run-select{font-family:var(--sans);font-size:.8rem}
@@ -1207,6 +1208,12 @@
               <p class="hint">Ultima verificare salvată pentru fiecare rulare, nu o verificare nouă a surselor.</p>
               <p class="hint" id="evidence-queue-status" role="status"></p><div id="evidence-queue-list"></div>
               <div class="dossier-actions"><button type="button" class="ghost mini" id="evidence-queue-prev" title="Pagina anterioară">←</button><button type="button" class="ghost mini" id="evidence-queue-next" title="Pagina următoare">→</button></div>
+            </details>
+            <details id="eu-queue"><summary>Surse UE între dosare</summary>
+              <div class="dossier-actions"><label>Starea surselor UE<select id="eu-queue-filter"><option value="toate">Toate rulările cu referințe UE</option><option value="text">Text schimbat</option><option value="limba">Limbă schimbată</option><option value="metadate">Doar metadate schimbate</option><option value="indisponibil">Comparație incompletă</option><option value="neverificat">Fără verificare UE</option><option value="neschimbat">Fără schimbări semnalate</option></select></label><button type="button" class="ghost mini" id="eu-queue-refresh" title="Reîncarcă rezultatele UE salvate">↻</button></div>
+              <p class="hint">Ultimele rezultate salvate pentru sursele contextuale UE, nu constatări juridice sau verificări noi.</p>
+              <p class="hint" id="eu-queue-status" role="status"></p><div id="eu-queue-list"></div>
+              <div class="dossier-actions"><button type="button" class="ghost mini" id="eu-queue-prev" title="Pagina anterioară">←</button><button type="button" class="ghost mini" id="eu-queue-next" title="Pagina următoare">→</button></div>
             </details>
             <details><summary>Dosar nou</summary><form id="dossier-create">
               <label>Titlu<input name="titlu" required maxlength="200"></label>
@@ -3772,6 +3779,31 @@ $('#evidence-queue-filter').onchange=()=>loadEvidenceQueue();
 $('#evidence-queue-refresh').onclick=()=>loadEvidenceQueue(evidenceQueueOffset);
 $('#evidence-queue-prev').onclick=()=>loadEvidenceQueue(Math.max(0,evidenceQueueOffset-50));
 $('#evidence-queue-next').onclick=()=>loadEvidenceQueue(evidenceQueueOffset+50);
+let euQueueOffset=0,euQueueSequence=0;
+function euQueueRowHtml(r,i){
+  const state=r.verificat?`Texte schimbate: ${r.texte} · Limbi schimbate: ${r.limbi} · Doar metadate: ${r.metadate}${r.incomplet?' · Comparație incompletă':''}`:'Fără verificare UE';
+  return `<p><button type="button" class="ghost mini" data-eu-run="${i}">${esc(r.titlu)} · ${esc(dossierTime(r.creat_la))}</button><br><span class="hint">${esc(state)}${r.verificare_id?' · '+esc(dossierTime(r.verificat_la)):''}</span></p>`;
+}
+async function loadEuQueue(offset=0){
+  const seq=++euQueueSequence,status=$('#eu-queue-status');euQueueOffset=offset;
+  status.textContent='Încarc rezultatele UE salvate…';
+  try{
+    const data=await dossierApi('/api/dosare/coada-ue?'+new URLSearchParams({offset:String(offset),stare:$('#eu-queue-filter').value}));
+    if(seq!==euQueueSequence) return;
+    status.textContent=`${data.total} rulări · ${data.total?offset+1:0}–${Math.min(offset+data.rulari.length,data.total)}`;
+    $('#eu-queue-list').innerHTML=data.rulari.map(euQueueRowHtml).join('')||'<p>Nicio rulare în această selecție.</p>';
+    $('#eu-queue-list').querySelectorAll('[data-eu-run]').forEach(button=>button.onclick=()=>{
+      if(dossierHasDrafts()){status.textContent='Există note nesalvate în rularea deschisă.';return;}
+      const row=data.rulari[Number(button.dataset.euRun)];selectDossier(row.dosar_id,row.rulare_id,row.verificare_id);
+    });
+    $('#eu-queue-prev').disabled=offset===0;$('#eu-queue-next').disabled=offset+data.rulari.length>=data.total;
+  }catch(err){if(seq===euQueueSequence){status.textContent=err.message;$('#eu-queue-list').textContent='';}}
+}
+$('#eu-queue').ontoggle=()=>{if($('#eu-queue').open) loadEuQueue();};
+$('#eu-queue-filter').onchange=()=>loadEuQueue();
+$('#eu-queue-refresh').onclick=()=>loadEuQueue(euQueueOffset);
+$('#eu-queue-prev').onclick=()=>loadEuQueue(Math.max(0,euQueueOffset-50));
+$('#eu-queue-next').onclick=()=>loadEuQueue(euQueueOffset+50);
 async function loadDossiers(offset=DOSARE_UI.offset){
   const token=++DOSARE_UI.listSequence, status=$('#dossier-status');
   status.textContent='Încarc dosarele…';
@@ -3811,14 +3843,14 @@ function dossierTime(value){
   const date=new Date(value);
   return Number.isNaN(date.getTime())?'Dată necunoscută':new Intl.DateTimeFormat('ro-RO',{dateStyle:'short',timeStyle:'medium',timeZone:'UTC'}).format(date)+' UTC';
 }
-async function openDossierRun(id,runId,token){
+async function openDossierRun(id,runId,token,checkId=null){
   const out=$('#dossier-saved');out.textContent='Încarc analiza salvată…';
   try{
     const run=await dossierApi('/api/dosare/rulari?'+new URLSearchParams({id,rulare_id:runId}));
     if(token!==DOSARE_UI.sequence) return;
     out.innerHTML=dossierSnapshotHtml(run);
     const reviews=document.createElement('section');reviews.className='finding-reviews';out.prepend(reviews);
-    loadFindingReviews(reviews,id,runId,token);
+    loadFindingReviews(reviews,id,runId,token,checkId);
     out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
     const copy=out.querySelector('.matrix-copy-dosar');
     if(copy) copy.onclick=async()=>{try{await navigator.clipboard.writeText(`Analiză salvată: ${run.creat_la}\nSHA-256 raport: ${run.sha256}\n\n${run.raport.markdown||''}`);$('#dossier-status').textContent='Raport copiat.';}catch{$('#dossier-status').textContent='Copierea nu a reușit.';}};
@@ -3855,7 +3887,7 @@ function reviewFindingHtml(f){
     +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div><button type="submit" class="ghost mini">Înregistrează decizia</button></div></form><p class="hint review-status" role="status"></p>'
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
 }
-async function loadFindingReviews(panel,dossierId,runId,token){
+async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
   const generation=(panel.reviewGeneration||0)+1;panel.reviewGeneration=generation;
   const drafts=panel.reviewDrafts||(panel.reviewDrafts=new Map());
   let filter=panel.querySelector('[data-review-filter]')?.value||'all';
@@ -3954,7 +3986,7 @@ async function loadFindingReviews(panel,dossierId,runId,token){
         origins.querySelectorAll('[data-origin]').forEach(button=>button.onclick=()=>{if(drafts.size){evidenceStatus.textContent='Există note nesalvate.';return;}selectDossier(dossierId,data.origini[Number(button.dataset.origin)].sursa_id);});
       }catch(err){if(valid()&&seq===historyGeneration) evidenceStatus.textContent=err.message;}
     };
-    loadHistory();
+    loadHistory(checkId);
     const checkButton=panel.querySelector('[data-evidence-check]');
     checkButton.onclick=async()=>{
       checkButton.disabled=true;++historyGeneration;evidenceStatus.textContent='Verific și salvez dovezile locale…';
@@ -3964,6 +3996,7 @@ async function loadFindingReviews(panel,dossierId,runId,token){
         if(!valid()) return;
         panel.checkRetry=null;panel.evidenceCheck=check;applyCheck();render();await loadHistory(check.id);
         if($('#evidence-queue').open) loadEvidenceQueue(evidenceQueueOffset);
+        if($('#eu-queue').open) loadEuQueue(euQueueOffset);
       }catch(err){if(valid()) evidenceStatus.textContent=err.message+(panel.evidenceCheck?' Ultima verificare afișată rămâne cea anterioară.':'');}
       finally{checkButton.disabled=false;}
     };
@@ -3989,7 +4022,7 @@ async function loadFindingReviews(panel,dossierId,runId,token){
     panel.querySelector('[data-review-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.markdown+(panel.evidenceCheck?'\n\n# Verificarea dovezilor locale\n\n'+JSON.stringify(panel.evidenceCheck,null,2):'')+'\n\n# Recalculări\n\n'+JSON.stringify({origini:panel.runOrigins||[],origini_trunchiate:!!panel.runOriginsTruncated},null,2));status.textContent='Revizuire copiată: toate constatările, indiferent de filtru.';}catch{status.textContent='Copierea nu a reușit.';}};
   }catch(err){if(valid()){panel.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncarcă revizuirile';retry.onclick=()=>loadFindingReviews(panel,dossierId,runId,token);panel.append(retry);}}
 }
-async function selectDossier(id,runId){
+async function selectDossier(id,runId,checkId=null){
   const token=++DOSARE_UI.sequence;
   DOSARE_UI.selected=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
@@ -4008,7 +4041,11 @@ async function selectDossier(id,runId){
     if(!history.rulari.length){runs.textContent='Nicio analiză salvată.';return;}
     runs.innerHTML=`<label>Analize salvate<select id="dossier-run-select"><option value="">Alege o analiză</option>${history.rulari.map((r,i)=>`<option value="${esc(r.id)}">${esc((i+1)+' · '+dossierTime(r.creat_la))}</option>`).join('')}</select></label>`+(history.trunchiat?'<p class="hint">Sunt afișate ultimele 100 de analize.</p>':'');
     $('#dossier-run-select').onchange=e=>{const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);};
-    if(runId){$('#dossier-run-select').value=runId;await openDossierRun(id,runId,token);}
+    if(runId){
+      const picker=$('#dossier-run-select');
+      if(![...picker.options].some(o=>o.value===runId)) picker.add(new Option('Rulare din coadă · '+runId,runId));
+      picker.value=runId;await openDossierRun(id,runId,token,checkId);
+    }
   }catch(err){if(token===DOSARE_UI.sequence) $('#dossier-status').textContent=err.message;}
 }
 $('#dossier-library').ontoggle=()=>{if($('#dossier-library').open) loadDossiers();};
