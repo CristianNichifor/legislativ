@@ -37,9 +37,9 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `GET /api/domenii[?emitent=&tip=]` — the corpus grouped by the body that issued it, or one
   body's acts. By issuer and not by subject: the portal publishes no classification of any kind,
   and inventing one would present a guess as something read.
-- `GET /api/matrice[?tip=&rang=&domeniu=&sort=]` — a corpus-wide risk matrix by issuing body:
-  gaps, unrepaired constitutional hits, pending initiatives and amendment pressure, each derived
-  from existing registers rather than a model.
+- `GET /api/matrice[?tip=&rang=&domeniu=&problema=&sort=]` — corpus-wide risk matrix by issuing
+  body: gaps, unrepaired constitutional hits, pending initiatives and amendment pressure, each
+  derived from existing registers rather than a model.
 - `GET /api/matrice-acte?emitent=&tip=&rang=&domeniu=` — the concrete acts behind one matrix row,
   narrowed by the same filters.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
