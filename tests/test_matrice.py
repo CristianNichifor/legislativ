@@ -6,6 +6,7 @@ instrument type and risk signals from already-built reports, the graph and live 
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from scripts import depozit
@@ -226,7 +227,7 @@ def test_authority_overlaps_exclude_same_authority_act_and_other_domains(tmp_pat
     assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
 
 
-def test_draft_comparison_validates_metadata_and_exports_evidence(tmp_path):
+def test_draft_comparison_validates_metadata_and_exports_evidence(tmp_path, monkeypatch):
     from scripts.servicii import _conflicte_proiecte, _matrice_proiecte
 
     stare = _stare(tmp_path)
@@ -273,6 +274,20 @@ def test_draft_comparison_validates_metadata_and_exports_evidence(tmp_path):
     ]:
         assert "error" in _conflicte_proiecte({**req, **changes}, stare)
     assert "error" in _conflicte_proiecte([], stare)
+    from scripts import documente_proiecte as dp
+    from scripts.fisiere import catre_docx
+
+    url = "https://www.cdep.ro/proiecte/test.docx"
+    monkeypatch.setattr(dp, "lista", lambda *args: {"documente": [{"url": url, "label": "Draft"}]})
+    monkeypatch.setattr(dp, "descarca", lambda *args: catre_docx("", req["text_a"]))
+    doc = dp.importa(stare, "plx-a", url)
+    imported = _conflicte_proiecte({**req, "text_a": "tampered", "versiune_a": doc["id"]}, stare)
+    assert imported["conflicte_proiecte"]["candidati"][0]["a"]["text"] == req["text_a"]
+    assert doc["sha256"] in imported["markdown"]
+    assert "error" in _conflicte_proiecte({**req, "versiune_b": doc["id"]}, stare)
+    with sqlite3.connect(dp.cale_store(stare)) as con:
+        con.execute("UPDATE documente SET status='ocr_necesar'")
+    assert "error" in _conflicte_proiecte({**req, "versiune_a": doc["id"]}, stare)
 
 
 def _ini(plx_id: str, stadiu: str = "pe ordinea de zi") -> Initiativa:

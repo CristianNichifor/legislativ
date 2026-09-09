@@ -6,8 +6,8 @@ measured — nothing here is new logic, only wiring. The request-handling functi
 exact same functions; this module is one of two thin skins over them, not a place they get
 reimplemented.
 
-**Read-only, so it runs while the corpus fills.** Every open is `mode=ro`; the server never
-writes, so it coexists with the collectors and answers from more law each time they land a page.
+Corpus queries are read-only. User-triggered official document imports write immutable snapshots
+to a separate `initiative.documente.db` beside the initiative database.
 
 **Endpoints, one question each:**
 - `POST /api/lint` — a pasted draft against the law: deadlines, defined terms it talks around,
@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -215,6 +216,13 @@ def face_handler(stare: Stare):
                 self._json(_matrice_dosar(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-proiecte":
                 self._json(_matrice_proiecte(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/documente-proiect":
+                from scripts.documente_proiecte import lista
+
+                try:
+                    self._json(lista(stare, parse_qs(ruta.query).get("plx", [""])[0]))
+                except (OSError, ValueError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/ue/acoperire":
@@ -244,6 +252,7 @@ def face_handler(stare: Stare):
                 "/api/importa",
                 "/api/docx",
                 "/api/conflicte-proiecte",
+                "/api/importa-proiect",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -263,6 +272,29 @@ def face_handler(stare: Stare):
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except json.JSONDecodeError:
                 self._json({"error": "json invalid"}, 400)
+                return
+            if ruta == "/api/importa-proiect":
+                from scripts.documente_proiecte import citeste, importa
+
+                origin = self.headers.get("Origin")
+                allowed = {
+                    f"http://127.0.0.1:{self.server.server_port}",
+                    f"http://localhost:{self.server.server_port}",
+                }
+                if origin and origin not in allowed:
+                    self._json({"error": "Origine nepermisă."}, 403)
+                    return
+                if not isinstance(cerere, dict) or not isinstance(cerere.get("plx"), str):
+                    self._json({"error": "Cerere invalidă."}, 400)
+                    return
+                try:
+                    if isinstance(cerere.get("versiune"), str):
+                        out = citeste(stare, cerere["plx"], cerere["versiune"])
+                    else:
+                        out = importa(stare, cerere["plx"], cerere.get("url"))
+                    self._json(out)
+                except (OSError, ValueError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
                 return
             if ruta == "/api/conflicte-proiecte":
                 self._json(_conflicte_proiecte(cerere, stare))

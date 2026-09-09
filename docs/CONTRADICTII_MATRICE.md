@@ -104,5 +104,43 @@ supplied text; first 200 extracted operations per text; 40 result pairs. Partial
 coverage is labelled. The result includes both operation texts, target provision
 drilldown, parliamentary status and collection timestamps, alongside the existing
 matrix dossier. Copy/print includes the transient findings and their limitations.
-An empty result does not establish compatibility. Automatic official-draft text
-ingestion and version tracking remain future work.
+An empty result does not establish compatibility.
+
+## Official document imports (local application)
+
+Each comparison input has a `Documente oficiale` action. It discovers PDF/DOCX
+links on the stored initiative's Chamber page, including official Senate links
+present there. Source labels and adjacent row descriptions are preserved: users
+must select the appropriate draft/version, as pages also contain opinions and
+reports. Legacy `.doc` and indirect download links are outside this slice.
+
+`GET /api/documente-proiect?plx=...` lists discovered documents and up to 100 local
+snapshots. `POST /api/importa-proiect` accepts `plx` plus a discovered `url`, or
+`plx` plus an existing `versiune` ID to reopen a snapshot. Every fresh import
+rechecks that the link belongs to the initiative page. Only exact official CDEP
+and Senate HTTPS hosts are fetched; redirects are checked, proxies are disabled,
+downloads are bounded (2 MB pages, 10 MB files) and socket timeouts apply.
+
+Snapshots live in a separate database beside the initiative database, using the
+suffix `.documente.db`. They retain original bytes, extracted text, source URL,
+label, SHA-256 and first retrieval time. Identical bytes at the same initiative/URL
+reuse the snapshot; changed bytes create a new version without replacing history.
+Local versions remain available if the remote page is temporarily unavailable.
+
+PDF extraction uses installed Poppler `pdftotext`; on Debian/Ubuntu install
+`poppler-utils`. DOCX uses the existing bounded reader. Extraction runs in a fresh
+POSIX child with CPU, address-space and output-file limits and a parent timeout.
+Pages with fewer than 20 word characters are conservatively marked as needing
+OCR/manual inspection; that can also include intentionally blank pages. OCR is
+not performed. Images, existing OCR mistakes and complex layout can still require
+manual verification. Such flagged snapshots cannot feed comparison directly.
+
+Successful imports fill the textarea and display provenance. Editing the text
+clears the selected snapshot. Comparison with `versiune_a`/`versiune_b` reloads
+stored text and validates initiative ownership, rather than trusting client text
+or a client-supplied hash. The dossier preserves the source, timestamp and hash.
+The existing 60,000-character comparison ceiling still applies without truncation.
+
+The static Pyodide build keeps pasted-text comparison but reports official import
+as a local-app feature. No background refresh, automatic document selection,
+Senate-page crawling or version alerts are implemented in this slice.
