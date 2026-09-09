@@ -343,7 +343,7 @@ def workflow(root, manifest):
     depozit.importa(corpus, parsed)
     state = state_at(root)
     path = dosare.cale(state)
-    dossier = dosare.creeaza(path, {"id": IDENT, "titlu": "PROPOSED procurement fixture pilot"})
+    dosare.creeaza(path, {"id": IDENT, "titlu": "PROPOSED procurement fixture pilot"})
     request = {"dosar_id": IDENT, "filtre": {"emitent": "PARLAMENTUL"}}
     actual = dosare.salveaza_rulare(state, request)
     require(actual == dosare.salveaza_rulare(state, request), "Report retry duplicated")
