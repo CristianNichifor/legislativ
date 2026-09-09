@@ -1,0 +1,38 @@
+{
+  "$schema": "../schema/v1_pilot.schema.json",
+  "status": "proposed_pending_user_domain_approval",
+  "domain": "bounded public procurement: Legea 98/2016 and Legea 208/2022",
+  "sources": [
+    {
+      "act_id": "lege-98-2016",
+      "path": "sources/lege-98-2016.html.gz",
+      "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762",
+      "kind": "authentic_retrieved_portal_snapshot",
+      "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+      "url_evidence": "tests/test_parsare.py",
+      "retrieved_at": null,
+      "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time"
+    },
+    {
+      "act_id": "lege-208-2022",
+      "path": "sources/lege-208-2022.html.gz",
+      "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e",
+      "kind": "authentic_retrieved_portal_snapshot",
+      "source_url": null,
+      "url_evidence": "Original retrieval URL not recorded; embedded portal id 282819 is not a verified fetch URL",
+      "retrieved_at": null,
+      "retrieval_time_status": "unknown; corpus citit_la is rehearsal import time, not retrieval time"
+    }
+  ],
+  "excluded": [
+    "Legea 99/2016 and 100/2016 full text missing",
+    "EU obligation full text missing",
+    "Other domains",
+    "Republished and pre-2022 versions missing"
+  ],
+  "synthetic_controls": [
+    "data/etalon.json",
+    "workflow bridge finding and proposed replacement wording",
+    "tests/fixtures/v1_schema7.sql historical workflow records"
+  ]
+}
