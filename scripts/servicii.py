@@ -1058,6 +1058,97 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _matrice_acte(qs: dict, stare: Stare) -> dict:
+    """Concrete acts behind one matrix row, with the same filters the matrix used."""
+    from scripts import domenii_juridice, rang_normativ
+
+    emitent = (qs.get("emitent", [""])[0] or "").strip()
+    tip = (qs.get("tip", [""])[0] or "").strip() or None
+    rang = (qs.get("rang", [""])[0] or "").strip() or None
+    domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
+    limita = max(1, min(_numar_qs(qs, "limita", 40), 100))
+    ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
+    rang_filtru = rang if rang in ranguri_valide else None
+    domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
+    if not emitent:
+        return {
+            "emitent": "",
+            "tip": tip,
+            "rang": rang_filtru,
+            "domeniu": domeniu_filtru,
+            "total": 0,
+            "acte": [],
+            "limitari": ["Alege un rând din matrice."],
+        }
+
+    def accepta_tip(tip_act: str | None) -> bool:
+        if tip and tip_act != tip:
+            return False
+        return not (rang_filtru and rang_normativ.categorie(tip_act) != rang_filtru)
+
+    try:
+        with depozit.deschide(stare.corpus, readonly=True) as con:
+            conditie = " AND tip = ?" if tip else ""
+            params = [emitent] + ([tip] if tip else [])
+            randuri = con.execute(
+                "SELECT id, cheie_citare, tip, numar, an, titlu, emitent, publicat,"
+                " sursa_url, id_act_portal"
+                " FROM acte"
+                " WHERE COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') = ?"
+                f"{conditie}"
+                " ORDER BY an DESC, publicat DESC, numar DESC, id DESC",
+                params,
+            ).fetchall()
+    except sqlite3.OperationalError:
+        return {
+            "emitent": emitent,
+            "tip": tip,
+            "rang": rang_filtru,
+            "domeniu": domeniu_filtru,
+            "total": 0,
+            "acte": [],
+            "limitari": ["Corpusul nu este disponibil; actele rândului nu pot fi listate."],
+        }
+
+    acte = []
+    for r in randuri:
+        if not accepta_tip(r["tip"]):
+            continue
+        domeniu_act = domenii_juridice.clasifica(titlu=r["titlu"] or "", emitent=r["emitent"] or "")
+        if domeniu_filtru and domeniu_act["cheie"] != domeniu_filtru:
+            continue
+        rang_act = rang_normativ.info(r["tip"])
+        acte.append(
+            {
+                "act_id": r["id"],
+                "cheie_citare": r["cheie_citare"] or r["id"],
+                "tip": r["tip"],
+                "numar": r["numar"],
+                "an": r["an"],
+                "titlu": r["titlu"],
+                "publicat": r["publicat"],
+                "sursa_url": depozit.url_document(r["sursa_url"], r["id_act_portal"]),
+                "rang": rang_act,
+                "domeniu": domeniu_act,
+            }
+        )
+    return {
+        "emitent": emitent,
+        "tip": tip,
+        "rang": rang_filtru,
+        "domeniu": domeniu_filtru,
+        "total": len(acte),
+        "acte": acte[:limita],
+        "limitari": [
+            "Lista folosește aceleași filtre de tip, rang și domeniu ca matricea.",
+            (
+                "Domeniul este orientativ: apare numai când titlul sau emitentul conține un "
+                "indicator cunoscut."
+            ),
+        ],
+    }
+
+
 LIMITARE_UE = (
     "Potrivirile UE sunt căutare textuală în actele CELEX importate local; "
     "nu sunt verdict de conformitate."

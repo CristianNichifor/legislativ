@@ -11,7 +11,7 @@ from pathlib import Path
 from scripts import depozit
 from scripts.cdep import Initiativa
 from scripts.graf import _deschide_graf
-from scripts.servicii import Stare, _matrice
+from scripts.servicii import Stare, _matrice, _matrice_acte
 
 EDGE_SQL = (
     "INSERT INTO muchii (din_act, din_locator, catre_act, locator, fel, incredere, de_la)"
@@ -235,6 +235,24 @@ def test_matrix_domain_filter_applies_to_counts_and_report_rows(tmp_path):
 
     assert [r["emitent"] for r in out["randuri"]] == ["Guvernul"]
     assert out["rezumat"]["viduri"] == 0
+
+
+def test_matrix_source_acts_use_the_same_filters(tmp_path):
+    stare = _stare(tmp_path)
+
+    out = _matrice_acte(
+        {"emitent": ["Parlamentul"], "domeniu": ["achizitii-publice"], "rang": ["primar"]},
+        stare,
+    )
+
+    assert out["total"] == 1
+    assert out["acte"][0]["cheie_citare"] == "lege-98-2016"
+    assert out["acte"][0]["rang"]["categorie"] == "primar"
+    assert out["acte"][0]["domeniu"]["cheie"] == "achizitii-publice"
+    assert out["acte"][0]["domeniu"]["dovezi"] == ["titlu: achizițiile publice"]
+
+    assert _matrice_acte({"emitent": ["Parlamentul"], "domeniu": ["educatie"]}, stare)["total"] == 0
+    assert _matrice_acte({"emitent": ["Guvernul"], "rang": ["primar"]}, stare)["total"] == 0
 
 
 def test_matrix_counts_amendment_pressure_and_live_initiatives(tmp_path):
