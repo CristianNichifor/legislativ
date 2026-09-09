@@ -134,6 +134,7 @@ def test_retry_and_concurrent_conflict(case):
 def test_v4_reads_without_migration_and_failed_write_rolls_back(case):
     _, path, _, req = case
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE interventii_propuneri")
         con.execute("DROP TABLE propuneri")
         con.execute("PRAGMA user_version=4")
     before = path.read_bytes()
@@ -146,7 +147,7 @@ def test_v4_reads_without_migration_and_failed_write_rolls_back(case):
         assert not con.execute("SELECT 1 FROM sqlite_master WHERE name='propuneri'").fetchone()
     propuneri.salveaza(path, req)
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 def test_http_local_origin_limits_and_static(case):

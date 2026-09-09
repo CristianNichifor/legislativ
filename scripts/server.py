@@ -408,6 +408,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
+                "/api/dosare/propuneri/previzualizare",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -425,7 +426,7 @@ def face_handler(stare: Stare):
                 return
             if lung > (
                 80000
-                if ruta == "/api/dosare/propuneri"
+                if ruta in ("/api/dosare/propuneri", "/api/dosare/propuneri/previzualizare")
                 else 16000
                 if ruta.startswith(("/api/dosare", "/api/surse-proiecte", "/api/ue/surse"))
                 else MAX_CERERE
@@ -468,6 +469,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/propuneri",
+                "/api/dosare/propuneri/previzualizare",
             ):
                 from scripts import dosare
 
@@ -475,10 +477,14 @@ def face_handler(stare: Stare):
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/propuneri":
+                    if ruta == "/api/dosare/propuneri/previzualizare":
+                        from scripts.propuneri import previzualizeaza
+
+                        out = previzualizeaza(stare, cerere)
+                    elif ruta == "/api/dosare/propuneri":
                         from scripts.propuneri import salveaza
 
-                        out = salveaza(path, cerere)
+                        out = salveaza(path, cerere, stare)
                     elif ruta == "/api/dosare/context":
                         from scripts.revizuiri import context_salveaza
 

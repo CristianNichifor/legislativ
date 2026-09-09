@@ -9,6 +9,17 @@ from scripts import dosare, revizuiri
 MAX_REQUEST_BYTES = 80_000
 
 
+def _with_intervention(con, row):
+    result = dict(row)
+    if con.execute("PRAGMA user_version").fetchone()[0] >= 6:
+        item = con.execute(
+            "SELECT continut_json FROM interventii_propuneri WHERE id=?", (row["id"],)
+        ).fetchone()
+        if item:
+            result["interventie"] = json.loads(item[0])
+    return result
+
+
 def _finding(path, dossier_id, run_id, finding_id):
     dossier_id, run_id, finding_id = map(dosare._id, (dossier_id, run_id, finding_id))
     run = dosare.rulari(path, dossier_id, run_id)
@@ -26,7 +37,7 @@ def _current(con, run_id, finding_id):
         "ORDER BY revizie DESC LIMIT 1",
         (run_id, finding_id),
     ).fetchone()
-    return dict(row) if row else None
+    return _with_intervention(con, row) if row else None
 
 
 def _number(value, minimum=0):
@@ -52,7 +63,7 @@ def citeste(path, dossier_id, run_id, finding_id, revision=None):
             )
             if row is None:
                 raise ValueError("Revizia propunerii nu exista.")
-            current = dict(row)
+            current = _with_intervention(con, row)
     if current and current["raport_sha256"] != run["sha256"]:
         raise ValueError("Baza propunerii nu corespunde raportului salvat.")
     return {
@@ -154,6 +165,13 @@ def exporta(path, dossier_id, run_id, finding_id, revision):
         "## Surse si referinte pastrate in rulare (context complet)",
         _json_block(run["dovezi"]),
     ]
+    if proposal.get("interventie"):
+        sections.extend(
+            [
+                "## Interventie structurata si tinta locala capturata",
+                _json_block(proposal["interventie"]),
+            ]
+        )
     return {
         "schema_version": 1,
         **data,
@@ -178,8 +196,24 @@ def citeste_cerere(path, qs):
     return citeste(*params, int(qs["revizie"][0]) if "revizie" in qs else None)
 
 
-def salveaza(path, request):
+def previzualizeaza(stare, request):
     if not isinstance(request, dict) or set(request) != {
+        "dosar_id",
+        "rulare_id",
+        "constatare_id",
+        "interventie",
+    }:
+        raise ValueError("Cerere de previzualizare invalida.")
+    _finding(
+        dosare.cale(stare), request["dosar_id"], request["rulare_id"], request["constatare_id"]
+    )
+    from scripts.interventii_propuneri import pregateste
+
+    return pregateste(stare, request["interventie"])
+
+
+def salveaza(path, request, stare=None):
+    required = {
         "id",
         "dosar_id",
         "rulare_id",
@@ -188,7 +222,12 @@ def salveaza(path, request):
         "titlu",
         "text",
         "motiv",
-    }:
+    }
+    if (
+        not isinstance(request, dict)
+        or not required <= set(request)
+        or set(request) - required - {"interventie"}
+    ):
         raise ValueError("Cerere de propunere invalida.")
     ident = dosare._id(request["id"])
     revision = request["revizie"]
@@ -205,6 +244,19 @@ def salveaza(path, request):
     fields = (run["id"], finding["id"], revision + 1, run["sha256"], title, text, reason)
     with dosare._open(path, write=True) as con:
         old = con.execute("SELECT * FROM propuneri WHERE id=?", (ident,)).fetchone()
+        old_data = _with_intervention(con, old) if old else None
+        intervention = None
+        if request.get("interventie") is not None:
+            from scripts.interventii_propuneri import pregateste
+
+            intervention = pregateste(
+                stare,
+                request["interventie"],
+                require_hash=True,
+                snapshot=old_data.get("interventie", {}).get("tinta") if old_data else None,
+            )
+            if intervention["text_compus"] != text:
+                raise ValueError("Textul propunerii nu corespunde interventiei previzualizate.")
         if old:
             if (
                 tuple(
@@ -220,9 +272,10 @@ def salveaza(path, request):
                     )
                 )
                 != fields
+                or old_data.get("interventie") != intervention
             ):
                 raise ValueError("Identificator reutilizat cu alta propunere.")
-            return dict(old)
+            return old_data
         current = _current(con, run["id"], finding["id"])
         if (current["revizie"] if current else 0) != revision:
             raise ValueError(
@@ -233,4 +286,11 @@ def salveaza(path, request):
             "INSERT INTO propuneri VALUES (?,?,?,?,?,?,?,?,?)",
             (ident, *fields, datetime.now(UTC).isoformat()),
         )
-        return dict(con.execute("SELECT * FROM propuneri WHERE id=?", (ident,)).fetchone())
+        if intervention:
+            con.execute(
+                "INSERT INTO interventii_propuneri VALUES (?,?)",
+                (ident, dosare._json(intervention)),
+            )
+        return _with_intervention(
+            con, con.execute("SELECT * FROM propuneri WHERE id=?", (ident,)).fetchone()
+        )

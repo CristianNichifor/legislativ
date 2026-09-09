@@ -80,6 +80,7 @@ def test_invalid_or_missing_revision(case, revision):
 def test_read_modes_on_old_schema_do_not_migrate(case):
     _, path, run, req = case
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE interventii_propuneri")
         con.execute("DROP TABLE propuneri")
         con.execute("PRAGMA user_version=4")
     before = path.read_bytes()
