@@ -249,7 +249,12 @@ def face_handler(stare: Stare):
                 from scripts.servicii import _inventar_surse
 
                 self._json(_inventar_surse(stare))
-            elif ruta.path in ("/api/dosare", "/api/dosare/rulari", "/api/dosare/revizuiri"):
+            elif ruta.path in (
+                "/api/dosare",
+                "/api/dosare/rulari",
+                "/api/dosare/revizuiri",
+                "/api/dosare/dovezi",
+            ):
                 from scripts import dosare
 
                 if not self._dosare_permis():
@@ -258,7 +263,11 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/revizuiri":
+                    if ruta.path == "/api/dosare/dovezi":
+                        from scripts.dependente_dovezi import verifica
+
+                        out = verifica(stare, ident, qs.get("rulare_id", [None])[0])
+                    elif ruta.path == "/api/dosare/revizuiri":
                         from scripts.revizuiri import istoric, lista
 
                         run_id = qs.get("rulare_id", [None])[0]

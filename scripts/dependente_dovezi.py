@@ -3,12 +3,86 @@
 import hashlib
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 
 from scripts import dosare
 
 MAX_PROVISIONS = 2000
 MAX_TEXT_BYTES = 2_000_000
+
+
+def verifica(stare, dossier_id, run_id):
+    """Explicit local comparison, independent of immutable reports and review decisions."""
+    from scripts.revizuiri import constatari
+
+    dosare._id(run_id)
+    run = dosare.rulari(dosare.cale(stare), dossier_id, run_id)
+    baseline = run["dovezi"].get("manifest") or {}
+    supported = baseline.get("schema_version") == 1
+    current = captureaza(stare, run["raport"]) if supported else {}
+    now = {d["id"]: d for d in current.get("dependente", [])}
+    compared = {}
+    for old in baseline.get("dependente", []) if supported else []:
+        new = now.get(old["id"])
+        comparable = (
+            new is not None
+            and old.get("stare") == new.get("stare") == "capturat"
+            and old.get("algoritm") == new.get("algoritm") == "sha256-json-prevederi-v1"
+            and bool(old.get("sha256_continut"))
+            and bool(new.get("sha256_continut"))
+        )
+        status = "indisponibil"
+        if comparable:
+            status = (
+                "neschimbat" if old["sha256_continut"] == new["sha256_continut"] else "schimbat"
+            )
+        compared[old["id"]] = {
+            "id": old["id"],
+            "stare": status,
+            "metadate_schimbate": bool(new and old.get("metadate") != new.get("metadate")),
+            "salvat": old,
+            "curent": new,
+        }
+    links = (
+        {f["constatare_id"]: f["dependente"] for f in baseline.get("constatari", [])}
+        if supported
+        else {}
+    )
+    findings = []
+    for finding in constatari(run):
+        ids = links.get(finding["id"], []) if supported else []
+        states = [compared.get(ident, {}).get("stare", "indisponibil") for ident in ids]
+        unknown = not states or "indisponibil" in states
+        status = "schimbat" if "schimbat" in states else "indisponibil" if unknown else "neschimbat"
+        findings.append(
+            {
+                "constatare_id": finding["id"],
+                "stare": status,
+                "comparatie_incompleta": unknown,
+                "dependente": ids,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "rulare_id": run_id,
+        "verificat_la": datetime.now(UTC).isoformat(),
+        "manifest_disponibil": supported,
+        "dependente": list(compared.values()),
+        "constatari": findings,
+        "totaluri": {
+            state: sum(f["stare"] == state for f in findings)
+            for state in ("schimbat", "neschimbat", "indisponibil")
+        },
+        "limitari": [
+            "Comparatie explicita cu corpusul local, fara actualizare de la sursele oficiale.",
+            "Neschimbat inseamna aceeasi amprenta, nu actualitate sau validitate juridica.",
+            "Lipsa sursei sau a amprentei inseamna comparatie indisponibila, nu abrogare.",
+            "Metadatele schimbate singure nu invalideaza continutul sau deciziile.",
+            "Textul istoric integral nu este arhivat; raportul pastreaza numai dovezile retinute.",
+            "Verificarea nu modifica rapoarte sau decizii si nu este pastrata automat.",
+        ],
+    }
 
 
 def _digest(value):

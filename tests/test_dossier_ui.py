@@ -74,5 +74,10 @@ def test_review_form_escapes_evidence_and_history():
         "assert.ok(h.includes('Evenimente mai vechi'));"
         "assert.ok(h.includes('type=\"text\"'));"
         "assert.ok(h.includes('Confirmat de evaluator'));"
+        "const evidence=reviewEvidenceHtml({verificare:{stare:'schimbat',"
+        "comparatie_incompleta:true},dependente_verificate:[{salvat:'<script>',curent:'<img>'}]});"
+        "assert.ok(evidence.includes('de reevaluat')&&evidence.includes('Comparație incompletă'));"
+        "assert.ok(!evidence.includes('<script>')&&!evidence.includes('<img>'));"
+        "assert.equal(reviewEvidenceHtml({}),'');"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
