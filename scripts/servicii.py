@@ -1216,15 +1216,15 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
         "trunchiat": selectie["total"] > len(acte),
         "limitari": [
             "Candidați neconfirmați; necesită jurist. "
-            "Diferența textuală nu dovedește contradicția.",
+            + "Diferența textuală nu dovedește contradicția.",
             "Se compară definiții și termene din maximum 100 de acte ale rândului, "
-            "în același domeniu "
-            "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
+            + "în același domeniu "
+            + "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
             "Limite: 1000 prevederi per act, 5000 definiții și 5000 termene comparabile; "
-            "fragmentele definițiilor pot fi scurtate.",
+            + "fragmentele definițiilor pot fi scurtate.",
             "Termenele se compară doar pentru formulări identice ale obligației și "
-            "evenimentului explicit. Lunile și anii nu sunt convertiți în zile. "
-            "Excepțiile explicite și ancorele ambigue sunt excluse.",
+            + "evenimentului explicit. Lunile și anii nu sunt convertiți în zile. "
+            + "Excepțiile explicite și ancorele ambigue sunt excluse.",
             "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
             + "absența candidaților nu dovedește compatibilitatea.",
             *selectie["limitari"],
@@ -1282,9 +1282,9 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
                                     "verificari": [
                                         "Verifică sfera de aplicare și excepțiile din ambele acte.",
                                         "Verifică dacă evenimentul declanșator este același "
-                                        "în fapt.",
+                                        + "în fapt.",
                                         "Verifică zilele lucrătoare/calendaristice și "
-                                        "regulile de calcul; baza neprecizată nu este presupusă.",
+                                        + "regulile de calcul; baza neprecizată nu este presupusă.",
                                     ],
                                 }
                             )
