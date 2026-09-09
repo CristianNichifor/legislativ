@@ -357,6 +357,12 @@
     line-height:1.45}
   .matrix-ex.blocking{border-left-color:var(--blocking)}
   .matrix-ex.material{border-left-color:var(--material)}
+  .matrix-actions{display:inline-flex;gap:.35rem;margin-left:.35rem;vertical-align:middle}
+  button.matrix-prov{font-size:.68rem;padding:.12rem .45rem;min-height:1.35rem}
+  .matrix-prev{margin:.45rem 0 0;padding:.5rem .6rem;border:1px solid var(--rule-soft);
+    border-radius:var(--r1);background:var(--sunk)}
+  .matrix-prev-h{font-family:var(--sans);font-size:.72rem;color:var(--ink-mute);margin-bottom:.25rem}
+  .matrix-prev-text{white-space:pre-wrap;overflow-wrap:break-word}
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -3586,6 +3592,46 @@ function mRanguri(ranguri){
   return rr.map(r=>`${esc(r.eticheta||r.categorie)} ${nf(r.acte||0)}`
     +((r.note||[]).length?` (${r.note.map(esc).join(", ")})`:"")).join(" · ");
 }
+function mActiuni(lista){
+  const acts=(lista||[]).filter(a=>a.fel==="prevedere"&&a.act_id&&a.locator);
+  if(!acts.length) return "";
+  return `<span class="matrix-actions">`+acts.map(a=>
+    `<button type="button" class="ghost mini matrix-prov" data-act="${esc(a.act_id)}" `
+    +`data-loc="${esc(a.locator)}" data-et="${esc(a.eticheta||"vezi prevederea")}">`
+    +`${esc(a.eticheta||"vezi prevederea")}</button>`).join("")+`</span>`;
+}
+async function mPrevedere(buton){
+  const gazda=buton.closest(".matrix-ex"); if(!gazda) return;
+  const veche=gazda.querySelector(".matrix-prev");
+  if(veche){
+    veche.remove();
+    if(buton.dataset.deschis==="1"){ buton.dataset.deschis=""; buton.textContent=buton.dataset.et; return; }
+  }
+  buton.dataset.deschis="1";
+  buton.textContent="ascunde";
+  const out=document.createElement("div");
+  out.className="matrix-prev";
+  out.innerHTML=`<span class="spin"></span> caut prevederea…`;
+  gazda.appendChild(out);
+  buton.disabled=true;
+  try{
+    const d=await prevedereTinta(buton.dataset.act||"", buton.dataset.loc||"");
+    const loc=esc(locRo((d&&d.locator)||buton.dataset.loc||""));
+    if(d&&d.gasit){
+      const text=String(d.text||"");
+      const scurt=text.length>1400 ? text.slice(0,1400)+"…" : text;
+      out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||"")}</div>`
+        +`<div class="matrix-prev-text">${textLizibil(scurt)}</div>`;
+    }else{
+      out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b></div>`
+        +`<span class="hint">Corpusul local nu are text adresabil pentru această prevedere.</span>`;
+    }
+  }catch(e){
+    out.innerHTML=`<span class="hint">Nu am putut citi prevederea.</span>`;
+  }finally{
+    buton.disabled=false;
+  }
+}
 function renderMatrice(){
   const gazda=$("#m-lista"), rez=$("#m-rezumat"), det=$("#m-detalii");
   const d=MATRICE||{}, rr=d.rezumat||{};
@@ -3642,6 +3688,7 @@ function mArataRand(el){
       +(v.locator?`${esc(locRo(v.locator))} `:"")
       +(v.instrument?`· <b>${esc(v.instrument)}</b> `:"")
       +(v.zile_intarziere?`· ${nf(v.zile_intarziere)} zile întârziere `:"")
+      +mActiuni(v.actiuni)
       +`<br><span class="hint">${esc(v.text||"")}</span></div>`).join("");
   }
   const nec=ex.neconstitutionale||[];
@@ -3651,10 +3698,12 @@ function mArataRand(el){
       +(n.locator?`${esc(locRo(n.locator))} `:"")
       +(n.decizie?`· ${esc(n.decizie)} `:"")
       +(n.zile_de_la_termen?`· ${nf(n.zile_de_la_termen)} zile de la termen `:"")
+      +mActiuni(n.actiuni)
       +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
   }
   if(!vid.length&&!nec.length) h+=`<p class="hint">Rândul are semnale de mișcare legislativă, dar nu are exemple de lacune sau neconstituționalitate în registrul publicat.</p>`;
   $("#m-detalii").innerHTML=h+`</div>`;
+  $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
