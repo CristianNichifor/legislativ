@@ -23,11 +23,11 @@ repeat a warmed search. The service worker does **not** cache the external Pyodi
 runtime: an offline reload needs those assets to survive in the browser's separate
 HTTP cache, so an offline restart is not guaranteed. A fresh offline browser cannot
 load an uncached shell. The cache name carries a
-**content hash of the corpus and graph** (`versiune` in `manifest.json`); when the data changes the
-hash changes, the browser sees a different `sw.js`, installs it, and `activate` deletes every older
-cache. That is the resync — the client follows the server's data with no manual clear. Verified in a
-browser: the page is SW-controlled, the shell and databases are cached on first load, and per-act
-shards join the cache the moment a search first touches them.
+**content hash of the corpus and graph** (`versiune` in `manifest.json`). The implementation
+changes `sw.js` with that version and deletes older caches on activation; a complete
+update-cycle test is not included yet. The browser baseline verifies service-worker
+control and actual cached worker-shell and Pagefind entries after a warmed search.
+It also verifies that the tested catalog-mode workflow does not download `corpus.db`.
 
 The automated [static browser baseline](../docs/BROWSER_BASELINE.md#static-worker-baseline)
 uses the real worker and Pagefind at root and nested URLs. It checks a deliberately
