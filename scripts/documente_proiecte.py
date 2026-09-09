@@ -8,12 +8,12 @@ import re
 import sqlite3
 import sys
 import urllib.request
+from contextlib import closing
 from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
-from scripts import depozit
 from scripts.cdep import BASE, USER_AGENT
 
 MAX_BYTES = 10 * 1024 * 1024
@@ -107,6 +107,10 @@ def versiuni(stare, plx: str) -> list[dict]:
         return []
     with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True) as con:
         con.row_factory = sqlite3.Row
+        if not con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='documente'"
+        ).fetchone():
+            return []
         return [
             dict(r)
             for r in con.execute(
@@ -118,7 +122,10 @@ def versiuni(stare, plx: str) -> list[dict]:
 
 
 def lista(stare, plx: str) -> dict:
-    with depozit.deschide(stare.initiative, readonly=True) as con:
+    with closing(
+        sqlite3.connect(Path(stare.initiative).resolve().as_uri() + "?mode=ro", uri=True)
+    ) as con:
+        con.row_factory = sqlite3.Row
         row = con.execute("SELECT idp, cam FROM initiative WHERE plx_id=?", (plx,)).fetchone()
     if not row or not re.fullmatch(r"\d{1,10}", row["idp"]) or row["cam"] not in (1, 2):
         raise ValueError("Inițiativa nu are o fișă parlamentară adresabilă.")
@@ -174,6 +181,8 @@ def extrage(data: bytes) -> dict:
 def importa(stare, plx: str, url: str) -> dict:
     url = url_oficial(url)
     discovered = lista(stare, plx)
+    if discovered.get("avertisment"):
+        raise OSError("Sursa oficiala nu este disponibila.")
     doc = next((d for d in discovered["documente"] if d["url"] == url), None)
     if not doc:
         raise ValueError("Documentul nu apare între linkurile fișei inițiativei.")

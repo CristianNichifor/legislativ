@@ -376,6 +376,17 @@
   .finding-sources .source-text{white-space:pre-wrap;max-height:22rem;overflow:auto;font-size:.9rem}
   .review-checks{border-block:1px solid var(--rule);padding:.6rem 0;margin:.6rem 0}
   .review-checks>summary{font-size:.85rem}
+  .acquisition-workspace{display:grid;grid-template-columns:minmax(210px,300px) minmax(0,1fr);gap:1rem;margin-top:1rem}
+  .acquisition-workspace>nav,.acquisition-workspace>div{min-width:0;overflow-wrap:anywhere}
+  .acquisition-workspace [data-acquisition-plx]{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;border:0;border-left:3px solid transparent;border-radius:0;background:transparent;padding:.65rem;font:inherit}
+  .acquisition-workspace [data-acquisition-plx][aria-current=true]{border-color:#18745b;background:#e5f1ec}
+  .acquisition-workspace nav small{display:block;color:var(--ink-mute);font-size:.75rem;margin-top:.3rem}
+  #acquisition-list{max-height:34rem;overflow:auto}
+  #acquisition-detail select{width:100%;min-width:0}
+  #acquisition-detail h4{font-size:1rem}
+  #acquisition-detail .source-text{white-space:pre-wrap;max-height:30rem;overflow:auto;border-block:1px solid var(--rule);padding:.7rem 0}
+  .acquisition-attempt{border-top:1px solid var(--rule);padding:.5rem 0}
+  @media(max-width:700px){.acquisition-workspace{grid-template-columns:minmax(0,1fr)}#acquisition-list{max-height:14rem}}
   @media(max-width:700px){.review-workspace{grid-template-columns:minmax(0,1fr);gap:0}.review-finding-nav [data-finding-buttons]{max-height:12rem}}
   @media(max-width:600px){.finding-review form{grid-template-columns:minmax(0,1fr)}}
   .matrix-tools input{flex:1 1 18rem}
@@ -1218,6 +1229,12 @@
           <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
           <div id="source-content"></div>
         </section>
+        <details class="dossier-library" id="source-project-manager">
+          <summary>Surse parlamentare · Import și actualizări</summary>
+          <form id="acquisition-search" class="dossier-actions"><label>Caută inițiativa<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label><button type="submit" class="ghost mini">Caută</button><button type="button" id="acquisition-refresh" class="ghost mini" title="Reîncarcă datele locale" aria-label="Reîncarcă datele locale">↻</button></form>
+          <p id="acquisition-status" class="hint" role="status"></p>
+          <div class="acquisition-workspace"><nav aria-label="Surse parlamentare"><div id="acquisition-list"></div><div class="dossier-actions"><button type="button" id="acquisition-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="acquisition-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div></nav><div id="acquisition-detail"></div></div>
+        </details>
         <details class="dossier-library" id="dossier-library">
           <summary>Dosare salvate</summary>
           <p class="hint" id="dossier-status" role="status">Niciun dosar selectat.</p>
@@ -4290,6 +4307,111 @@ $('#source-export').onclick=()=>{
     $('#source-status').textContent='Export JSON inițiat.';
   }catch{$('#source-status').textContent='Exportul nu a reușit.';}
 };
+const ACQUISITION={offset:0,query:'',selected:null,sequence:0,busy:false,loaded:false,documents:new Map(),versions:new Map()};
+const IMPORT_STATES={extras:'Text extras',ocr_necesar:'Necesită OCR / verificare',fara_text:'Fără text extras'};
+const ACQUISITION_ACTIONS={descopera:'Consultare fișă',importa:'Import document',actualizeaza:'Verificare și import actualizare'};
+function acquisitionLink(url,label){const safe=urlSigur(url);return safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(label||url)}</a>`:'Sursă oficială necunoscută';}
+function acquisitionState(row){
+  const state=row.stare==='metadate'?'Doar metadate locale':row.stare==='importat'?`${row.versiuni_total} versiuni importate`:'Importuri indisponibile';
+  return state+(row.ultima_incercare?.stare==='eroare'?' · Ultima încercare eșuată':'');
+}
+function acquisitionRowHtml(row){
+  return `<button type="button" data-acquisition-plx="${esc(row.plx_id)}" aria-current="${row.plx_id===ACQUISITION.selected}"><b>${esc(row.plx_id)}</b><small>${esc(row.titlu)}</small><small>${esc(acquisitionState(row))}</small></button>`;
+}
+function acquisitionVersionHtml(doc){
+  return `<h4>${esc(doc.label)}</h4><p>${esc(IMPORT_STATES[doc.status]||'Stare de extragere necunoscută')}</p><p class="hint">Import păstrat: ${esc(dossierTime(doc.preluat_la))} · Limbă: necunoscută</p><p>${acquisitionLink(doc.url)}</p><details><summary>Amprenta documentului</summary><p>SHA-256: ${esc(doc.sha256)}</p></details>`;
+}
+function acquisitionAttemptsHtml(rows){
+  return rows.map((r,i)=>`<div class="acquisition-attempt"><b>${esc(ACQUISITION_ACTIONS[r.operatie]||r.operatie)} · ${r.stare==='ok'?'Reușită':'Eșuată'}</b><p>${acquisitionLink(r.url)}</p><p class="hint">Ultima încercare: ${esc(dossierTime(r.incercat_la))}<br>Ultima reușită pentru această acțiune și sursă: ${r.reusit_la?esc(dossierTime(r.reusit_la)):'Necunoscută'}</p>${r.eroare?`<p>${esc(r.eroare)}</p><button type="button" class="ghost mini" data-acquisition-retry="${i}">Reîncearcă</button>`:''}</div>`).join('')||'<p>Nicio încercare înregistrată în acest flux.</p>';
+}
+function acquisitionBusy(value){
+  ACQUISITION.busy=value;
+  $('#source-project-manager').querySelectorAll('button,input,select').forEach(c=>{
+    if(value){c.dataset.wasDisabled=String(c.disabled);c.disabled=true;}
+    else{c.disabled=c.dataset.wasDisabled==='true';delete c.dataset.wasDisabled;}
+  });
+}
+async function acquisitionApi(params,body){
+  const response=await fetch('/api/surse-proiecte'+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const d=await response.json();if(!response.ok||d.error)throw new Error(d.error||'Cererea nu a reușit.');return d;
+}
+async function loadAcquisitionList(offset=0){
+  if(ACQUISITION.busy)return;
+  const token=++ACQUISITION.sequence;ACQUISITION.offset=offset;ACQUISITION.selected=null;
+  const list=$('#acquisition-list'),status=$('#acquisition-status');list.innerHTML='';$('#acquisition-detail').innerHTML='';status.textContent='Încarc sursele locale…';
+  $('#acquisition-prev').disabled=true;$('#acquisition-next').disabled=true;
+  try{
+    const d=await acquisitionApi({q:ACQUISITION.query,offset});if(token!==ACQUISITION.sequence)return;
+    ACQUISITION.loaded=true;
+    list.innerHTML=d.initiative.map(acquisitionRowHtml).join('')||'<p>Nicio inițiativă în această selecție.</p>';
+    list.querySelectorAll('button').forEach(b=>b.onclick=()=>loadAcquisitionDetail(b.dataset.acquisitionPlx));
+    $('#acquisition-prev').disabled=!offset;$('#acquisition-next').disabled=!d.mai_multe;
+    status.textContent=d.initiative.length?`Inițiative ${offset+1}–${offset+d.initiative.length} · Date locale; actualitate necunoscută.`:'Niciun rezultat local.';
+  }catch(err){if(token===ACQUISITION.sequence){status.textContent=err.message;list.innerHTML='<button type="button" class="ghost mini" data-list-retry>Reîncearcă încărcarea</button>';list.querySelector('button').onclick=()=>loadAcquisitionList(offset);}}
+}
+async function loadAcquisitionDetail(plx){
+  if(ACQUISITION.busy)return;
+  const token=++ACQUISITION.sequence;ACQUISITION.selected=plx;
+  $('#acquisition-list').querySelectorAll('[data-acquisition-plx]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.acquisitionPlx===plx)));
+  const out=$('#acquisition-detail');out.textContent='Încarc importurile locale…';
+  try{
+    const d=await acquisitionApi({plx});if(token!==ACQUISITION.sequence)return;
+    renderAcquisitionDetail(d);
+  }catch(err){if(token===ACQUISITION.sequence){out.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă încărcarea';retry.onclick=()=>loadAcquisitionDetail(plx);out.append(retry);}}
+}
+function renderAcquisitionDetail(d){
+  const out=$('#acquisition-detail'),plx=d.plx_id;
+  const row=$('#acquisition-list [aria-current=true] small:last-child');if(row)row.textContent=acquisitionState(d);
+  out.innerHTML=`<h4>${esc(plx)} · ${esc(d.titlu)}</h4><p>${esc(d.stadiu||'Stadiu necunoscut')}</p><p>${acquisitionLink(d.fisa_url,'Fișa parlamentară oficială')}</p><p class="hint">Metadate locale: ${esc(dossierTime(d.citit_la))} · Actualitate necunoscută · Limbă necunoscută</p>`
+    +`<button type="button" class="ghost mini" data-acquisition-discover ${d.fisa_url?'':'disabled'}>Consultă documentele oficiale</button><p data-acquisition-operation role="status" class="hint"></p><div data-acquisition-documents></div>`
+    +`<h4>Versiuni locale · ${d.versiuni_total}</h4><div data-acquisition-versions></div>`
+    +`<details data-acquisition-attempts ${d.incercari.some(r=>r.stare==='eroare')?'open':''}><summary>Încercări de preluare</summary>${acquisitionAttemptsHtml(d.incercari)}${d.incercari_trunchiate?'<p class="hint">Primele 100 de surse și acțiuni afișate.</p>':''}</details>`;
+  const choices=ACQUISITION.documents.get(plx),docs=out.querySelector('[data-acquisition-documents]');
+  if(choices){
+    docs.innerHTML=choices.documente.length?`<label>Document oficial<select data-acquisition-document>${choices.documente.map((r,i)=>`<option value="${i}">${esc(r.label)}</option>`).join('')}</select></label><p data-acquisition-url></p><button type="button" class="ghost mini" data-acquisition-import>Importă documentul selectat</button>`:'<p>Niciun document PDF/DOCX găsit pe fișă.</p>';
+    if(choices.trunchiat)docs.insertAdjacentHTML('beforeend','<p class="hint">Primele 100 de documente afișate.</p>');
+    const picker=docs.querySelector('select');
+    if(picker){const index=choices.documente.findIndex(r=>r.url===choices.selectedUrl);if(index>=0)picker.value=String(index);const selected=()=>choices.documente[Number(picker.value)];picker.onchange=()=>{choices.selectedUrl=selected().url;docs.querySelector('[data-acquisition-url]').innerHTML=esc(selected().label)+'<br>'+acquisitionLink(selected().url);};picker.onchange();docs.querySelector('button').onclick=()=>runAcquisition({plx,operatie:'importa',url:selected().url});}
+  }
+  out.querySelector('[data-acquisition-discover]').onclick=()=>runAcquisition({plx,operatie:'descopera'});
+  const versions=out.querySelector('[data-acquisition-versions]');
+  if(!d.versiuni.length)versions.innerHTML='<p>Doar metadate; niciun document importat local.</p>';
+  else{
+    versions.innerHTML=`<label>Versiune importată<select data-acquisition-version>${d.versiuni.map((v,i)=>`<option value="${i}">${esc('Versiunea '+(i+1)+' · '+v.sha256.slice(0,8))}</option>`).join('')}</select></label><div data-acquisition-version-meta></div><div class="dossier-actions"><button type="button" class="ghost mini" data-acquisition-read>Vezi textul local</button><button type="button" class="ghost mini" data-acquisition-update ${d.fisa_url?'':'disabled'}>Verifică și importă actualizarea</button></div><div data-acquisition-text></div>${d.versiuni_trunchiate?'<p class="hint">Ultimele 100 de versiuni afișate.</p>':''}`;
+    const picker=versions.querySelector('select'),selected=()=>d.versiuni[Number(picker.value)];let readSequence=0;
+    const preferred=d.versiuni.findIndex(v=>v.id===ACQUISITION.versions.get(plx));if(preferred>=0)picker.value=String(preferred);
+    picker.onchange=()=>{readSequence++;ACQUISITION.versions.set(plx,selected().id);versions.querySelector('[data-acquisition-version-meta]').innerHTML=acquisitionVersionHtml(selected());versions.querySelector('[data-acquisition-text]').innerHTML='';};picker.onchange();
+    versions.querySelector('[data-acquisition-update]').onclick=()=>runAcquisition({plx,operatie:'actualizeaza',versiune:selected().id});
+    versions.querySelector('[data-acquisition-read]').onclick=async()=>{
+      const token=++readSequence,text=versions.querySelector('[data-acquisition-text]');text.textContent='Încarc textul local…';
+      try{const doc=await acquisitionApi({plx,versiune:selected().id});if(!text.isConnected||token!==readSequence)return;text.innerHTML='<div class="source-text"></div>';text.firstChild.textContent=doc.text||'Document fără text extras.';}
+      catch(err){if(text.isConnected&&token===readSequence)text.textContent=err.message;}
+    };
+  }
+  out.querySelectorAll('[data-acquisition-retry]').forEach(b=>{const r=d.incercari[Number(b.dataset.acquisitionRetry)];b.onclick=()=>runAcquisition({plx,operatie:r.operatie,url:r.url,versiune:r.versiune});});
+}
+async function runAcquisition(body){
+  if(ACQUISITION.busy)return;
+  acquisitionBusy(true);const status=$('#acquisition-status');status.textContent='Consult sursa oficială…';let message;
+  try{
+    const result=await acquisitionApi(null,body);
+    if(body.operatie==='descopera'){result.selectedUrl=ACQUISITION.documents.get(body.plx)?.selectedUrl;ACQUISITION.documents.set(body.plx,result);}
+    else ACQUISITION.versions.set(body.plx,(result.versiune||result).id);
+    SOURCE_REPORT=null;
+    message=body.operatie==='descopera'?'Fișă consultată.':body.operatie==='actualizeaza'?(result.schimbat?'Document schimbat; versiune păstrată.':'Conținut neschimbat.'):'Document importat.';
+    message+=' Analizele salvate și textul din editor nu au fost modificate.';
+    if(result.avertisment_achizitie)message+=' '+result.avertisment_achizitie;
+  }catch(err){message=err.message;}
+  finally{acquisitionBusy(false);}
+  await loadAcquisitionDetail(body.plx);
+  status.textContent=message;
+  const operation=$('#acquisition-detail [data-acquisition-operation]');if(operation)operation.textContent=message;
+}
+$('#acquisition-search').onsubmit=e=>{e.preventDefault();if(ACQUISITION.busy)return;ACQUISITION.query=e.currentTarget.elements.q.value;loadAcquisitionList();};
+$('#acquisition-refresh').onclick=()=>loadAcquisitionList(ACQUISITION.offset);
+$('#acquisition-prev').onclick=()=>loadAcquisitionList(Math.max(0,ACQUISITION.offset-25));
+$('#acquisition-next').onclick=()=>loadAcquisitionList(ACQUISITION.offset+25);
+$('#source-project-manager').ontoggle=e=>{if(e.currentTarget.open&&!ACQUISITION.loaded)loadAcquisitionList();};
 async function loadMatrice(forta){
   loadSourceInventory();
   if(MATRICE && !forta){ renderMatrice(); return; }
