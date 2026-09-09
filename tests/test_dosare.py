@@ -175,7 +175,11 @@ def test_http_boundaries(state):
     assert request(state, "GET", "/api/dosare?offset=bad")[0] == 400
     assert request(state, "GET", "/api/dosare/rulari?id=" + ID)[1]["total"] == 0
     assert request(state, "GET", "/api/dosare/revizuiri?id=" + ID)[0] == 400
+    assert request(state, "GET", "/api/dosare/dovezi?id=" + ID)[0] == 400
+    assert request(state, "GET", "/api/dosare/dovezi", host="evil.test:8123")[0] == 403
+    assert request(state, "GET", "/api/dosare/dovezi", origin="https://evil.test")[0] == 403
     assert request(state, "POST", "/api/dosare/revizuiri", {}, origin="https://evil.test")[0] == 403
     assert request(state, "POST", "/api/dosare/rulari", {"dosar_id": OTHER, "filtre": {}})[0] == 400
     state.date_dir = "static"
+    assert request(state, "GET", "/api/dosare/dovezi?id=" + ID)[0] == 400
     assert request(state, "POST", "/api/dosare", body)[0] == 400

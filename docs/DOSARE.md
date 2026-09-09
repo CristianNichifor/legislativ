@@ -134,7 +134,43 @@ their original hash contract and are never backfilled from current sources.
 Review JSON and Markdown exports include the manifest; legacy Markdown explicitly
 states that it was not captured. No review decisions are changed or transferred.
 No database migration or new endpoint is required. Changed-evidence comparisons
-and re-review queues are a separate, subsequent batch.
+and re-review queues are described below.
+
+## Local Evidence Rechecks
+
+`GET /api/dosare/dovezi?id=<dossier>&rulare_id=<run>` explicitly compares a saved
+manifest with the current local corpus. It shares the dossier API's local-only
+Host/Origin checks and no-store responses; static deployments reject it. It does
+not fetch official sources, write to the dossier database or change review events.
+
+The response contains `verificat_la`, per-dependency saved/current fingerprints
+and source metadata, per-finding status, and counts. Status is `schimbat` only when
+two compatible captured content hashes differ. Metadata-only changes are reported
+separately. `neschimbat` means equal captured content, not up-to-date legislation
+or a legal validity assessment. Missing current sources, uncaptured baselines,
+unsupported manifest/hash versions and exceeded capture limits are `indisponibil`,
+never unchanged or presumed repealed. A finding with both changed and unavailable
+dependencies remains changed and also has `comparatie_incompleta=true`.
+
+In the saved-run review panel, **Verifica dovezile** runs this check on demand.
+The filter offers changed-evidence and unavailable-comparison queues for the
+selected run, independently of human review status. Dependency details retain
+both fingerprints. The old report remains visible, but full historical source
+text is not archived and no reconstructed full-text diff is claimed. Check results
+and their timestamp are included in the UI's JSON/Markdown exports. Checks are
+session-only, not a persistent audit log, and do not run automatically on opening
+a dossier. Rechecking after source collection is an explicit user action.
+
+**Recalculeaza pentru reevaluare** runs the saved filters against current data and
+opens the resulting saved run. If content is identical, deduplication preserves
+the existing run and its decisions. Otherwise the new run starts unreviewed and
+requires explicit reviewer decisions; earlier decisions remain historical. Unsaved
+notes block this action's navigation, including notes entered while recalculation is in flight.
+No acknowledgement on an old run dismisses its evidence-change warning.
+
+This is a selected-run corpus queue, not a cross-dossier scheduled monitor. The
+manifest's scope and separate-read limitations still apply. EU documents, CCR
+decision documents and imported parliamentary snapshots are not compared here.
 
 ## API
 

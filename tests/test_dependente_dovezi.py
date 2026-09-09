@@ -150,3 +150,144 @@ def test_runs_preserve_manifest_reviews_and_hash_contract(source, monkeypatch):
     old = revizuiri.lista(path, dossier_id, first["id"])
     assert "manifest" not in old["rulare"]["dovezi"]
     assert "Manifest necapturat" in old["markdown"]
+
+
+@pytest.fixture
+def saved_check(source, monkeypatch):
+    path = dosare.cale(source)
+    ident = "a" * 32
+    dosare.creeaza(path, {"id": ident, "titlu": "Research"})
+    data = report()
+    data["rand"]["exemple"]["viduri"].append({"act_id": "lege-1-2020", "locator": None})
+    monkeypatch.setattr("scripts.servicii._matrice_dosar", lambda qs, s: data)
+    run = dosare.salveaza_rulare(source, {"dosar_id": ident, "filtre": {"emitent": "Parlament"}})
+    return source, ident, run
+
+
+def test_check_fans_out_changes_without_writes(saved_check):
+    source, ident, run = saved_check
+    path = dosare.cale(source)
+    before = path.read_bytes()
+    assert dependencies.verifica(source, ident, run["id"])["totaluri"]["neschimbat"] == 2
+    with sqlite3.connect(source.corpus) as con:
+        con.execute("UPDATE acte SET citit_la='later'")
+    metadata = dependencies.verifica(source, ident, run["id"])
+    assert metadata["totaluri"]["neschimbat"] == 2
+    assert all(d["metadate_schimbate"] for d in metadata["dependente"])
+    with sqlite3.connect(source.corpus) as con:
+        con.execute("UPDATE provizii SET text='Changed' WHERE ord=1")
+    changed = dependencies.verifica(source, ident, run["id"])
+    assert changed["totaluri"]["schimbat"] == 2
+    assert all(not f["comparatie_incompleta"] for f in changed["constatari"])
+    assert changed["verificat_la"] and changed["rulare_id"] == run["id"]
+    assert path.read_bytes() == before
+    assert dosare.rulari(path, ident, run["id"]) == run
+
+
+@pytest.mark.parametrize("missing", ["act", "provision", "database"])
+def test_missing_current_source_is_unknown_not_unchanged(saved_check, missing, tmp_path):
+    source, ident, run = saved_check
+    if missing == "database":
+        source.corpus = tmp_path / "absent.db"
+    else:
+        with sqlite3.connect(source.corpus) as con:
+            con.execute("DELETE FROM " + ("acte" if missing == "act" else "provizii"))
+    out = dependencies.verifica(source, ident, run["id"])
+    assert out["totaluri"] == {"schimbat": 0, "neschimbat": 0, "indisponibil": 2}
+    assert all(f["comparatie_incompleta"] for f in out["constatari"])
+    if missing == "database":
+        assert not source.corpus.exists()
+
+
+@pytest.mark.parametrize("patch", [None, {"schema_version": 99}, {"schema_version": 1}])
+def test_legacy_future_or_missing_dependencies_are_unknown(saved_check, patch):
+    source, ident, run = saved_check
+    evidence = copy.deepcopy(run["dovezi"])
+    evidence["manifest"] = patch
+    with sqlite3.connect(dosare.cale(source)) as con:
+        con.execute("UPDATE rulari SET dovezi_json=?", (dosare._json(evidence),))
+    assert dependencies.verifica(source, ident, run["id"])["totaluri"]["indisponibil"] == 2
+
+
+def test_uncaptured_baseline_cannot_become_unchanged(saved_check):
+    source, ident, run = saved_check
+    evidence = copy.deepcopy(run["dovezi"])
+    for dep in evidence["manifest"]["dependente"]:
+        dep["stare"] = "sursa_indisponibila"
+        del dep["sha256_continut"]
+    with sqlite3.connect(dosare.cale(source)) as con:
+        con.execute("UPDATE rulari SET dovezi_json=?", (dosare._json(evidence),))
+    assert dependencies.verifica(source, ident, run["id"])["totaluri"]["indisponibil"] == 2
+
+
+def test_unaffected_locator_and_explicit_new_review(saved_check):
+    source, ident, run = saved_check
+    path = dosare.cale(source)
+    revizuiri.salveaza(
+        path,
+        {
+            "id": "b" * 32,
+            "dosar_id": ident,
+            "rulare_id": run["id"],
+            "constatare_id": revizuiri.constatari(run)[0]["id"],
+            "revizie": 0,
+            "stare": "confirmed_by_reviewer",
+            "evaluator": "Reviewer",
+            "motiv": "Checked",
+        },
+    )
+    with sqlite3.connect(source.corpus) as con:
+        con.execute(
+            "INSERT INTO provizii (act_id,locator,ord,text) VALUES (?,?,?,?)",
+            ("lege-1-2020", "art2", 2, "New unrelated article"),
+        )
+    out = dependencies.verifica(source, ident, run["id"])
+    assert [f["stare"] for f in out["constatari"]] == ["neschimbat", "schimbat"]
+    assert revizuiri.lista(path, ident, run["id"])["constatari"][0]["stare"] == (
+        "confirmed_by_reviewer"
+    )
+    new = dosare.salveaza_rulare(source, {"dosar_id": ident, "filtre": run["filtre"]})
+    assert new["id"] != run["id"]
+    assert revizuiri.lista(path, ident, new["id"])["constatari"][0]["stare"] == "unreviewed"
+
+
+def test_check_ownership_and_limits(saved_check, monkeypatch):
+    source, ident, run = saved_check
+    with pytest.raises(ValueError):
+        dependencies.verifica(source, "b" * 32, run["id"])
+    with pytest.raises(ValueError):
+        dependencies.verifica(source, ident, "invalid")
+    monkeypatch.setattr(dependencies, "MAX_PROVISIONS", 1)
+    assert dependencies.verifica(source, ident, run["id"])["totaluri"]["indisponibil"] == 2
+
+
+def test_changed_dependency_keeps_partial_warning(source, monkeypatch):
+    data = {
+        "gasit": True,
+        "contradictii": {
+            "candidati": [
+                {
+                    "a": {"act_id": "lege-1-2020", "locator": "art1"},
+                    "b": {"act_id": "absent", "locator": "art1"},
+                }
+            ]
+        },
+    }
+    ident = "a" * 32
+    dosare.creeaza(dosare.cale(source), {"id": ident, "titlu": "Partial"})
+    monkeypatch.setattr("scripts.servicii._matrice_dosar", lambda qs, s: data)
+    run = dosare.salveaza_rulare(source, {"dosar_id": ident, "filtre": {"emitent": "Parlament"}})
+    with sqlite3.connect(source.corpus) as con:
+        con.execute("UPDATE provizii SET text='Changed' WHERE ord=0")
+    finding = dependencies.verifica(source, ident, run["id"])["constatari"][0]
+    assert finding["stare"] == "schimbat" and finding["comparatie_incompleta"]
+
+
+def test_unknown_hash_algorithm_is_not_compared(saved_check):
+    source, ident, run = saved_check
+    evidence = copy.deepcopy(run["dovezi"])
+    for dep in evidence["manifest"]["dependente"]:
+        dep["algoritm"] = "future-algorithm"
+    with sqlite3.connect(dosare.cale(source)) as con:
+        con.execute("UPDATE rulari SET dovezi_json=?", (dosare._json(evidence),))
+    assert dependencies.verifica(source, ident, run["id"])["totaluri"]["indisponibil"] == 2

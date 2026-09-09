@@ -3780,11 +3780,18 @@ async function openDossierRun(id,runId,token){
   }catch(err){if(token===DOSARE_UI.sequence) out.textContent=err.message;}
 }
 const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
+const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
+function reviewEvidenceHtml(f){
+  if(!f.verificare) return '';
+  return `<p class="hint"><b>${esc(EVIDENCE_STATES[f.verificare.stare]||EVIDENCE_STATES.indisponibil)}</b>${f.verificare.comparatie_incompleta?' · Comparație incompletă':''}</p>`
+    +`<details><summary>Amprente salvate și curente</summary><pre>${esc(JSON.stringify(f.dependente_verificate,null,2))}</pre></details>`;
+}
 function reviewEventHtml(e){return `<p><b>${esc(REVIEW_STATES[e.stare])}</b> · Revizia ${e.revizie} · ${esc(e.evaluator)} · ${esc(e.creat_la)}<br>${esc(e.motiv)}</p>`;}
 function reviewFindingHtml(f){
   const title=f.dovada.termen||f.dovada.act_id||f.tip;
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
+    +reviewEvidenceHtml(f)
     +(f.dovada.text?`<p>${esc(f.dovada.text)}</p>`:'')
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
@@ -3802,13 +3809,26 @@ async function loadFindingReviews(panel,dossierId,runId,token){
     if(!valid()) return;
     panel.innerHTML='<h4>Revizuirea constatărilor</h4><p class="hint">Confirmarea evaluatorului nu este o hotărâre juridică oficială. Identitatea evaluatorului este declarată.</p>'
       +`<p class="hint">Constatări revizuibile păstrate: ${d.constatari.length}. Numărătorile agregate fără dovezi individuale nu sunt incluse.</p>`
+      +'<div class="dossier-actions"><button type="button" class="ghost mini" data-evidence-check title="Compară dovezile cu corpusul local">↻ Verifică dovezile</button><button type="button" class="ghost mini" data-evidence-rerun title="Recalculează raportul; deciziile vechi rămân în rularea inițială">Recalculează pentru reevaluare →</button></div><p class="hint" data-evidence-status role="status">Dovezi neverificate în această sesiune.</p><p class="hint">Verificare locală, fără actualizare de la sursele oficiale. Textul istoric integral nu este arhivat. Deciziile rămân asociate rulării în care au fost înregistrate.</p>'
       +'<div class="dossier-actions"><label>Filtru<select data-review-filter><option value="all">Toate</option><option value="unresolved">Nerezolvate</option>'+Object.entries(REVIEW_STATES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label><button type="button" class="ghost mini" data-review-refresh>Reîncarcă revizuirile</button><button type="button" class="ghost mini" data-review-json>Exportă revizuirea JSON</button><button type="button" class="ghost mini" data-review-copy>Copiază revizuirea Markdown</button></div><p class="hint" data-review-status role="status"></p><div data-review-list></div>';
     const list=panel.querySelector('[data-review-list]'), status=panel.querySelector('[data-review-status]'), picker=panel.querySelector('[data-review-filter]');
+    picker.add(new Option('Dovezi schimbate · de reevaluat','evidence_changed'));
+    picker.add(new Option('Comparație indisponibilă','evidence_unknown'));
     picker.value=filter;
+    const evidenceStatus=panel.querySelector('[data-evidence-status]');
+    const applyCheck=()=>{
+      const check=panel.evidenceCheck;
+      for(const f of d.constatari){
+        f.verificare=check?.constatari.find(c=>c.constatare_id===f.id);
+        f.dependente_verificate=check?.dependente.filter(c=>f.verificare?.dependente.includes(c.id));
+      }
+      if(check) evidenceStatus.textContent=`Verificat: ${dossierTime(check.verificat_la)} · Schimbate: ${check.totaluri.schimbat} · Neschimbate: ${check.totaluri.neschimbat} · Indisponibile: ${check.totaluri.indisponibil}. Rezultatul nu este salvat automat.`;
+    };
+    applyCheck();
     const render=()=>{
       filter=picker.value;
-      const findings=d.constatari.filter(f=>filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter);
-      list.innerHTML=findings.map(reviewFindingHtml).join('')||'<p>Nicio constatare în această selecție.</p>';
+      const findings=d.constatari.filter(f=>filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter||filter==='evidence_changed'&&f.verificare?.stare==='schimbat'||filter==='evidence_unknown'&&(f.verificare?.stare==='indisponibil'||f.verificare?.comparatie_incompleta));
+      list.innerHTML=findings.map(reviewFindingHtml).join('')||(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p>':'<p>Nicio constatare în această selecție.</p>');
       list.querySelectorAll('form').forEach(form=>{
         const f=findings.find(f=>f.id===form.closest('[data-finding]').dataset.finding);
         const older=form.parentElement.querySelector('[data-older-events]');let offset=20;
@@ -3823,7 +3843,11 @@ async function loadFindingReviews(panel,dossierId,runId,token){
         };
         const draft=drafts.get(f.id);
         if(draft) for(const [key,value] of Object.entries(draft)) form.elements.namedItem(key).value=value;
-        form.oninput=()=>drafts.set(f.id,Object.fromEntries(new FormData(form)));
+        form.oninput=()=>{
+          const values=Object.fromEntries(new FormData(form));
+          if(values.evaluator||values.motiv||values.stare!==f.stare) drafts.set(f.id,values);
+          else drafts.delete(f.id);
+        };
         let retry=null;
         form.onsubmit=async e=>{
           e.preventDefault();const values=Object.fromEntries(new FormData(form)), fingerprint=JSON.stringify(values), message=form.parentElement.querySelector('.review-status');
@@ -3839,11 +3863,35 @@ async function loadFindingReviews(panel,dossierId,runId,token){
       });
     };
     picker.onchange=render;render();
+    const checkButton=panel.querySelector('[data-evidence-check]');
+    checkButton.onclick=async()=>{
+      checkButton.disabled=true;evidenceStatus.textContent='Verific dovezile locale…';
+      try{
+        const check=await dossierApi('/api/dosare/dovezi?'+new URLSearchParams({id:dossierId,rulare_id:runId}));
+        if(!valid()) return;
+        panel.evidenceCheck=check;applyCheck();render();
+      }catch(err){if(valid()) evidenceStatus.textContent=err.message+(panel.evidenceCheck?' Ultima verificare afișată rămâne cea anterioară.':'');}
+      finally{checkButton.disabled=false;}
+    };
+    const rerunButton=panel.querySelector('[data-evidence-rerun]');
+    rerunButton.onclick=async()=>{
+      if(drafts.size){evidenceStatus.textContent='Există note nesalvate. Înregistrează deciziile înainte de a schimba rularea.';return;}
+      rerunButton.disabled=true;
+      try{
+        const run=await dossierApi('/api/dosare/rulari',{dosar_id:dossierId,filtre:d.rulare.filtre});
+        if(!valid()) return;
+        if(drafts.size){evidenceStatus.textContent='Recalcularea a fost salvată în istoricul dosarului. Notele nesalvate au fost păstrate în această rulare.';return;}
+        if(run.id===runId) evidenceStatus.textContent='Recalcularea este identică. Rularea existentă și deciziile sale au fost păstrate.';
+        else await selectDossier(dossierId,run.id);
+      }catch(err){if(valid()) evidenceStatus.textContent=err.message;}
+      finally{rerunButton.disabled=false;}
+    };
+    const exportData=()=>({...d,verificare_dovezi:panel.evidenceCheck||null});
     panel.querySelector('[data-review-refresh]').onclick=()=>loadFindingReviews(panel,dossierId,runId,token);
     panel.querySelector('[data-review-json]').onclick=()=>{
-      try{const url=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='revizuire-'+runId+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Export inițiat: toate constatările și istoricul inclus, indiferent de filtru.';}catch{status.textContent='Exportul nu a reușit.';}
+      try{const url=URL.createObjectURL(new Blob([JSON.stringify(exportData(),null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='revizuire-'+runId+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Export inițiat: toate constatările și istoricul inclus, indiferent de filtru.';}catch{status.textContent='Exportul nu a reușit.';}
     };
-    panel.querySelector('[data-review-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.markdown);status.textContent='Revizuire copiată: toate constatările, indiferent de filtru.';}catch{status.textContent='Copierea nu a reușit.';}};
+    panel.querySelector('[data-review-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.markdown+(panel.evidenceCheck?'\n\n# Verificarea dovezilor locale\n\n'+JSON.stringify(panel.evidenceCheck,null,2):''));status.textContent='Revizuire copiată: toate constatările, indiferent de filtru.';}catch{status.textContent='Copierea nu a reușit.';}};
   }catch(err){if(valid()){panel.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncarcă revizuirile';retry.onclick=()=>loadFindingReviews(panel,dossierId,runId,token);panel.append(retry);}}
 }
 async function selectDossier(id,runId){
