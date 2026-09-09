@@ -757,6 +757,47 @@ def _initiative_matrice(stare: Stare) -> dict[str, int]:
         return {}
 
 
+PROBLEME_MATRICE = (
+    {"cheie": "semnale", "eticheta": "orice semnal"},
+    {"cheie": "viduri", "eticheta": "lacune legislative"},
+    {"cheie": "viduri_blocking", "eticheta": "lacune blocante"},
+    {"cheie": "neconstitutionale", "eticheta": "CCR nereparat"},
+    {"cheie": "initiative", "eticheta": "inițiative pendinte"},
+    {"cheie": "amendamente", "eticheta": "amendări primite"},
+)
+
+
+def _probleme_matrice() -> list[dict]:
+    return [dict(p) for p in PROBLEME_MATRICE]
+
+
+def _filtru_problema_matrice(rand: dict, problema: str | None) -> bool:
+    if not problema:
+        return True
+    semnale = rand["semnale"]
+    if problema == "semnale":
+        return any(
+            semnale[k]
+            for k in (
+                "viduri",
+                "neconstitutionale",
+                "initiative_in_lucru",
+                "amendamente_primite",
+            )
+        )
+    if problema == "viduri":
+        return semnale["viduri"] > 0
+    if problema == "viduri_blocking":
+        return semnale["viduri_blocking"] > 0
+    if problema == "neconstitutionale":
+        return semnale["neconstitutionale"] > 0
+    if problema == "initiative":
+        return semnale["initiative_in_lucru"] > 0
+    if problema == "amendamente":
+        return semnale["amendamente_primite"] > 0
+    return True
+
+
 def _matrice(qs: dict, stare: Stare) -> dict:
     """A deterministic risk matrix by legally stated issuing body and instrument.
 
@@ -767,6 +808,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     sortare = (qs.get("sort", ["semnale"])[0] or "semnale").strip()
     rang = (qs.get("rang", [""])[0] or "").strip() or None
     domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
+    problema = (qs.get("problema", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
     viduri = _raport_lista(stare.vid)
     neconst = _raport_lista(stare.neconstitutional)
@@ -784,6 +826,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
     rang_filtru = rang if rang in ranguri_valide else None
     domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
+    probleme_valide = {p["cheie"] for p in PROBLEME_MATRICE}
+    problema_filtru = problema if problema in probleme_valide else None
 
     def tip_acceptat(tip_act: str | None) -> bool:
         if tip and tip_act != tip:
@@ -880,6 +924,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             "rang": rang_filtru,
             "domeniu": domeniu_filtru,
             "domenii": domenii_juridice.optiuni(),
+            "problema": problema_filtru,
+            "probleme": _probleme_matrice(),
             "sort": sortare,
             "limita": limita,
             "total": 0,
@@ -983,39 +1029,39 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             nivel = "note"
         else:
             nivel = "ok"
-        iesire.append(
-            {
-                "emitent": rand["emitent"],
-                "acte": rand["acte"],
-                "tipuri": [
-                    {"tip": t, "acte": n}
-                    for t, n in sorted(rand["_tipuri"].items(), key=lambda x: (-x[1], x[0]))[:8]
-                ],
-                "ranguri": _ranguri_matrice(rand),
-                "de_la": rand["de_la"],
-                "pana_la": rand["pana_la"],
-                "semnale": {
-                    "viduri": rand["viduri"],
-                    "viduri_blocking": rand["viduri_blocking"],
-                    "viduri_material": rand["viduri_material"],
-                    "neconstitutionale": rand["neconstitutionale"],
-                    "amendamente_primite": rand["amendamente_primite"],
-                    "acte_amendate": rand["acte_amendate"],
-                    "initiative_in_lucru": rand["initiative_in_lucru"],
-                },
-                "scor": scor,
-                "nivel": nivel,
-                "exemple": {
-                    "viduri": rand["_vid_exemple"],
-                    "neconstitutionale": rand["_neconst_exemple"],
-                },
-                "domeniu": next(
-                    (d for d in domenii_juridice.optiuni() if d["cheie"] == domeniu_filtru),
-                    None,
-                ),
-                "domeniu_exemple": rand["_domeniu_exemple"],
-            }
-        )
+        rand_public = {
+            "emitent": rand["emitent"],
+            "acte": rand["acte"],
+            "tipuri": [
+                {"tip": t, "acte": n}
+                for t, n in sorted(rand["_tipuri"].items(), key=lambda x: (-x[1], x[0]))[:8]
+            ],
+            "ranguri": _ranguri_matrice(rand),
+            "de_la": rand["de_la"],
+            "pana_la": rand["pana_la"],
+            "semnale": {
+                "viduri": rand["viduri"],
+                "viduri_blocking": rand["viduri_blocking"],
+                "viduri_material": rand["viduri_material"],
+                "neconstitutionale": rand["neconstitutionale"],
+                "amendamente_primite": rand["amendamente_primite"],
+                "acte_amendate": rand["acte_amendate"],
+                "initiative_in_lucru": rand["initiative_in_lucru"],
+            },
+            "scor": scor,
+            "nivel": nivel,
+            "exemple": {
+                "viduri": rand["_vid_exemple"],
+                "neconstitutionale": rand["_neconst_exemple"],
+            },
+            "domeniu": next(
+                (d for d in domenii_juridice.optiuni() if d["cheie"] == domeniu_filtru),
+                None,
+            ),
+            "domeniu_exemple": rand["_domeniu_exemple"],
+        }
+        if _filtru_problema_matrice(rand_public, problema_filtru):
+            iesire.append(rand_public)
 
     chei = {
         "acte": lambda r: (-r["acte"], -r["scor"], r["emitent"]),
@@ -1043,6 +1089,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "rang": rang_filtru,
         "domeniu": domeniu_filtru,
         "domenii": domenii_juridice.optiuni(),
+        "problema": problema_filtru,
+        "probleme": _probleme_matrice(),
         "sort": sortare,
         "limita": limita,
         "total": len(iesire),

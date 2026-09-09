@@ -255,6 +255,55 @@ def test_matrix_source_acts_use_the_same_filters(tmp_path):
     assert _matrice_acte({"emitent": ["Guvernul"], "rang": ["primar"]}, stare)["total"] == 0
 
 
+def test_matrix_problem_filter_turns_rows_into_a_work_queue(tmp_path):
+    stare = _stare(tmp_path, graf=True, initiative=True)
+    stare.vid = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "text": "Guvernul aprobă normele metodologice.",
+            "instrument": "hg",
+            "severitate": "blocking",
+        }
+    ]
+    stare.neconstitutional = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art5.alin7",
+            "text": "Normă lovită și nereparată.",
+            "decizie": "decizie-9-1994",
+            "severitate": "blocking",
+        }
+    ]
+
+    out = _matrice({"problema": ["semnale"]}, stare)
+
+    assert out["problema"] == "semnale"
+    assert {p["cheie"] for p in out["probleme"]} >= {
+        "viduri",
+        "viduri_blocking",
+        "neconstitutionale",
+        "initiative",
+        "amendamente",
+    }
+    assert [r["emitent"] for r in out["randuri"]] == ["Parlamentul"]
+
+    for problema, camp, asteptat in [
+        ("viduri", "viduri", 1),
+        ("viduri_blocking", "viduri_blocking", 1),
+        ("neconstitutionale", "neconstitutionale", 1),
+        ("initiative", "initiative_in_lucru", 1),
+        ("amendamente", "amendamente_primite", 2),
+    ]:
+        out = _matrice({"problema": [problema]}, stare)
+        assert [r["emitent"] for r in out["randuri"]] == ["Parlamentul"]
+        assert out["randuri"][0]["semnale"][camp] == asteptat
+
+    fara_neconst = tmp_path / "fara_neconst"
+    fara_neconst.mkdir()
+    assert _matrice({"problema": ["neconstitutionale"]}, _stare(fara_neconst))["randuri"] == []
+
+
 def test_matrix_counts_amendment_pressure_and_live_initiatives(tmp_path):
     stare = _stare(tmp_path, graf=True, initiative=True)
 
