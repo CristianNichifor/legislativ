@@ -116,3 +116,33 @@ manual promotion must follow the same remote verification sequence. Configure sh
 cache lifetime for `/channel.json`, immutable caching for release paths, and preserve
 older releases. Browser search shards are not local-first payloads and are not covered
 by this sidecar. No live R2 writes are needed to test this implementation.
+
+## Local update panel
+
+`app/dataset-updates.js` mounts in `#dataset-updates` above the workspace tabs. The
+browser build must copy this asset beside `index.html`; the local server must serve
+it there. Asset routing and build integration are maintained by their respective
+owners, outside this change.
+
+Startup and periodic polling only GET the local `/api/date` status. Unsupported
+endpoints and non-local modes hide the panel. Checking the trusted channel is an
+explicit POST action. Download confirmation shows the offered version and total
+size, and the POST pins the offer's SHA-256. The UI sends only action and offer hash,
+never editor or private workspace contents.
+
+Ready downloads require explicit activation. Activation, rollback and the separate
+reload button honor the app's existing cancellable `beforeunload` draft guards.
+No automatic reload occurs. Transfer failures leave the current version visible;
+the server remains responsible for preserving the active release and validating
+all state transitions. The panel is separate from browser workspace storage UI.
+
+Offline browser checks (desktop and mobile, mocked HTTP only):
+
+```bash
+PLAYWRIGHT_MODULE=/path/to/node_modules/playwright node tests/dataset_updates_browser.cjs
+```
+
+The same fixture is available through `tests/test_dataset_updates_ui.py` when
+`PLAYWRIGHT_MODULE` is set. It covers empty state, explicit requests, confirmation,
+hash pinning, progress/cancel, draft guards, activation without reload, rollback,
+disk errors, escaped server text and unsupported endpoints.

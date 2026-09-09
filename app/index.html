@@ -1079,6 +1079,8 @@
     <p class="stat" id="stat"><span class="spin"></span> se încarcă…</p>
   </header>
 
+  <section id="dataset-updates" hidden aria-label="Date legislative locale"></section>
+
   <div class="tabs" role="tablist">
     <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
     <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
@@ -5912,5 +5914,6 @@ $("#ue-limba").onchange=()=>{ if(($("#ue-text").value||"").trim()) cautaUE(); };
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));
 </script>
+<script src="dataset-updates.js" defer></script>
 </body>
 </html>
