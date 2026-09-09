@@ -1096,6 +1096,7 @@
         <div class="draft-split">
           <div class="ta-wrap">
             <textarea id="draft" placeholder="Lipește textul unui proiect de act normativ. Ex.: „La articolul 7 din Legea nr. 98/2016 privind achizițiile publice, alineatul (2) se modifică. În termen de 30 de zile de la intrarea în vigoare, Guvernul aprobă normele metodologice.”"></textarea>
+            <div id="editor-recovery"></div>
             <div id="suggest" class="suggest" hidden aria-live="polite"></div>
           </div>
           <div id="draft-clar" class="draft-clar" hidden>
@@ -1271,6 +1272,8 @@
           <p class="hint" id="dossier-status" role="status">Niciun dosar selectat.</p>
           <button type="button" class="ghost mini" id="dossier-reload">Reîncarcă lista</button>
           <div id="dossier-local" hidden>
+            <label>Dosare afișate<select id="dossier-filter"><option value="active">Active</option><option value="arhivate">Arhivate</option><option value="toate">Toate</option></select></label>
+            <details id="draft-library"><summary>Ciorne păstrate local</summary><button type="button" class="ghost mini" id="draft-library-reload">Reîncarcă ciornele</button><p class="hint" id="draft-library-status" role="status"></p><div id="draft-library-list"></div><div class="dossier-actions"><button type="button" class="ghost mini" id="draft-library-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="draft-library-next" disabled>Pagina următoare</button></div></details>
             <details id="evidence-queue"><summary>Reevaluare între dosare</summary>
               <div class="dossier-actions"><label>Starea dovezilor<select id="evidence-queue-filter"><option value="toate">Toate rulările</option><option value="schimbat">Dovezi schimbate</option><option value="indisponibil">Comparație indisponibilă</option><option value="neverificat">Neverificate</option><option value="neschimbat">Amprente neschimbate</option></select></label><button type="button" class="ghost mini" id="evidence-queue-refresh" title="Reîncarcă verificările salvate">↻</button></div>
               <p class="hint">Ultima verificare salvată pentru fiecare rulare, nu o verificare nouă a surselor.</p>
@@ -1646,6 +1649,7 @@ const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","d
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
+    $("#tab-"+p).tabIndex = p===which ? 0 : -1;
     $("#pane-"+p).hidden = p!==which;
   });
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
@@ -1664,6 +1668,13 @@ function selectTab(which){
   if(which==="supraveghere") renderSupraveghere();
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
+PANES.forEach((p,index)=>{
+  const tab=$('#tab-'+p);tab.tabIndex=tab.getAttribute('aria-selected')==='true'?0:-1;
+  tab.onkeydown=e=>{
+    const next=e.key==='Home'?0:e.key==='End'?PANES.length-1:e.key==='ArrowRight'?(index+1)%PANES.length:e.key==='ArrowLeft'?(index+PANES.length-1)%PANES.length:null;
+    if(next===null)return;e.preventDefault();selectTab(PANES[next]);$('#tab-'+PANES[next]).focus();
+  };
+});
 $(".app").dataset.pane = "lint";   // initial tab
 
 // ---- theme: auto / light / dark, remembered per browser ----
@@ -3827,7 +3838,7 @@ const DOSARE_UI={offset:0,selected:null,sequence:0,listSequence:0,request:null,s
 const DOSSIER_VIEWS=new Map();
 function dossierMayNavigate(){
   if(!dossierHasDrafts()) return true;
-  $('#dossier-status').textContent='Există note nesalvate. Înregistrează sau renunță la ele înainte de a schimba analiza.';
+  $('#dossier-status').textContent='Există modificări nepăstrate. Păstrează ciorna locală, înregistrează revizia sau renunță înainte de a schimba analiza.';
   $('#dossier-select').value=DOSARE_UI.selected?.id||'';
   if($('#dossier-run-select')) $('#dossier-run-select').value=DOSARE_UI.runId||'';
   return false;
@@ -3839,7 +3850,118 @@ async function dossierApi(path,body){
   return data;
 }
 let evidenceQueueOffset=0,evidenceQueueSequence=0;
-function dossierHasDrafts(){return !!$('#dossier-saved .finding-reviews')?.reviewDrafts?.size;}
+function dossierHasDrafts(){
+  const panel=$('#dossier-saved .finding-reviews');
+  if([...(panel?.reviewDrafts?.values()||[]),...(panel?.reviewTransactions?.values()||[])].some(r=>r.saving))return true;
+  return !!panel?.reviewDrafts?.size && panel.recoveryFingerprint!==draftFingerprint(findingDraftSnapshot(panel));
+}
+function findingDraftSnapshot(panel){
+  return structuredClone({versiune:1,drafts:[...(panel.reviewDrafts||[])],transactions:[...(panel.reviewTransactions||[])]});
+}
+function draftFingerprint(content){
+  // SQLite canonicalizes object keys; array order (including Map entries) is retained.
+  return JSON.stringify(content,(_key,value)=>value&&typeof value==='object'&&!Array.isArray(value)
+    ?Object.fromEntries(Object.keys(value).sort().map(key=>[key,value[key]])):value);
+}
+function restoreFindingDrafts(panel,content){
+  const object=value=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+  const fail=()=>{throw Error('Format de ciornă invalid');};
+  const fields=(values,allowed)=>object(values)&&Object.entries(values).every(([key,value])=>allowed.includes(key)&&typeof value==='string');
+  const revision=value=>Number.isSafeInteger(value)&&value>=0;
+  const contextFields=['evaluator','motiv',...Object.keys(CONTEXT_FIELDS).flatMap(key=>[key,key+'_citare'])];
+  const validate=(entries,transactions)=>{
+    if(!Array.isArray(entries))fail();const keys=new Set();
+    for(const entry of entries){
+      if(!Array.isArray(entry)||entry.length!==2)fail();
+      const [key,record]=entry;
+      if(typeof key!=='string'||!object(record)||keys.has(key))fail();keys.add(key);
+      const review=/^[a-f0-9]{32}$/.test(key),proposal=/^proposal:[a-f0-9]{32}$/.test(key);
+      const context=/^context:[a-f0-9]{32}:(a|b|constatare)$/.test(key);
+      if(transactions?!review:!review&&!proposal&&!context)fail();
+      if(transactions||!review){
+        if(!revision(record.revision))fail();
+        for(const name of ['error','id','fingerprint'])if(record[name]!==undefined&&typeof record[name]!=='string')fail();
+        if(record.saving!==undefined&&typeof record.saving!=='boolean')fail();
+        if(record.retry!==undefined&&(!object(record.retry)||typeof record.retry.id!=='string'||typeof record.retry.fingerprint!=='string'))fail();
+      }
+      if(!transactions){
+        const allowed=proposal?['titlu','text','motiv']:context?contextFields:['stare','evaluator','motiv'];
+        if(!fields(review?record:record.values,allowed))fail();
+        if(record.initial!==undefined&&!fields(record.initial,allowed))fail();
+        for(const name of ['structura','interventie'])if(record[name]!=null&&!fields(record[name],['act_id','locator','operatie','articol_nou','text_nou','sha256_tinta']))fail();
+      }
+    }
+  };
+  if(!object(content)||content.versiune!==1)fail();
+  validate(content.drafts,false);validate(content.transactions,true);
+  if([...(panel.reviewDrafts?.values()||[]),...(panel.reviewTransactions?.values()||[])].some(r=>r.saving))throw Error('Salvare în curs');
+  const copy=structuredClone(content);
+  for(const [,record] of [...copy.drafts,...copy.transactions])delete record.saving;
+  panel.reviewDrafts=new Map(copy.drafts);panel.reviewTransactions=new Map(copy.transactions);
+}
+function bindDraftRecovery(host,id,dossierId,snapshot,restore,onSaved=()=>{}){
+  host.innerHTML='<details><summary>Ciornă locală · recuperare</summary><p class="hint">La „Păstrează ciorna”, textul este stocat pe acest calculator, în baza SQLite de dosare, inclusiv în copiile de siguranță. Nu se salvează în browser și nu se trimite altor persoane. Salvarea este manuală; modificările ulterioare trebuie păstrate din nou. Ștergerea copiei locale nu șterge copiile de siguranță.</p><div class="dossier-actions"><button type="button" class="ghost mini" data-draft-save disabled>Păstrează ciorna</button><button type="button" class="ghost mini" data-draft-restore disabled>Recuperează copia</button><button type="button" class="ghost mini" data-draft-delete disabled>Șterge copia locală</button><button type="button" class="ghost mini" data-draft-reload>Reîncarcă copia locală</button></div><p class="hint" role="status" data-draft-status></p></details>';
+  const q=s=>host.querySelector(s),status=q('[data-draft-status]'),buttons=[...host.querySelectorAll('button')];
+  let saved=null,busy=false;
+  const ready=()=>{buttons.forEach(b=>b.disabled=busy);q('[data-draft-save]').disabled=busy||!saved;q('[data-draft-restore]').disabled=busy||!saved?.continut;q('[data-draft-delete]').disabled=busy||!saved?.continut;};
+  const describe=()=>{status.textContent=saved?.continut?'Copie locală: '+dossierTime(saved.modificat_la)+'. Recuperarea înlocuiește textul deschis numai după confirmare.':'Nicio copie locală păstrată.';};
+  const load=async()=>{
+    busy=true;ready();status.textContent='Încarc copia locală…';
+    try{const data=await dossierApi('/api/dosare/ciorne?'+new URLSearchParams({id}));if(!host.isConnected)return;saved=data;describe();}
+    catch(err){status.textContent=err.message+' Reîncearcă reîncărcarea copiei locale.';}
+    finally{busy=false;ready();}
+  };
+  const save=async content=>{
+    busy=true;ready();status.textContent='Păstrez copia locală…';
+    try{
+      const data=await dossierApi('/api/dosare/ciorne',{id,dosar_id:dossierId,revizie:saved.revizie,continut:content});
+      saved=data;onSaved(data.continut===null?null:draftFingerprint(data.continut));describe();
+    }catch(err){status.textContent=err.message+' Textul deschis a fost păstrat. Poți reîncerca.';}
+    finally{busy=false;ready();}
+  };
+  q('[data-draft-save]').onclick=()=>{
+    const content=snapshot();
+    if([...(content.drafts||[]),...(content.transactions||[])].some(([,r])=>r.saving)){status.textContent='Așteaptă încheierea salvării reviziei.';return;}
+    save(content);
+  };
+  q('[data-draft-delete]').onclick=()=>{if(confirm('Ștergi copia de recuperare locală? Textul deschis rămâne disponibil.'))save(null);};
+  q('[data-draft-restore]').onclick=()=>{
+    if(!confirm('Înlocuiești ciorna deschisă cu această copie locală? Modificările nepăstrate se pierd.'))return;
+    try{restore(structuredClone(saved.continut));onSaved(draftFingerprint(snapshot()));status.textContent='Ciornă recuperată. Nu este o revizie înregistrată.';}
+    catch{status.textContent='Copia nu poate fi recuperată în acest editor.';}
+  };
+  q('[data-draft-reload]').onclick=load;
+  load();
+}
+let editorRecoveryFingerprint=draftFingerprint({versiune:1,text:$('#draft').value});
+bindDraftRecovery($('#editor-recovery'),'editor',null,()=>({versiune:1,text:$('#draft').value}),content=>{
+  if(content.versiune!==1||typeof content.text!=='string')throw Error('Format invalid');
+  $('#draft').value=content.text;$('#draft').dispatchEvent(new Event('input',{bubbles:true}));$('#draft').focus();
+},fingerprint=>{editorRecoveryFingerprint=fingerprint??draftFingerprint({versiune:1,text:''});});
+window.addEventListener('beforeunload',e=>{
+  if(dossierHasDrafts()||draftFingerprint({versiune:1,text:$('#draft').value})!==editorRecoveryFingerprint){e.preventDefault();e.returnValue='';}
+});
+let draftLibraryOffset=0,draftLibrarySequence=0;
+async function loadDraftLibrary(offset=0){
+  const token=++draftLibrarySequence;
+  const status=$('#draft-library-status'),list=$('#draft-library-list');status.textContent='Încarc ciornele…';
+  try{
+    const data=await dossierApi('/api/dosare/ciorne?offset='+offset);if(token!==draftLibrarySequence)return;
+    draftLibraryOffset=offset;$('#draft-library-prev').disabled=offset===0;$('#draft-library-next').disabled=offset+50>=data.total;
+    status.textContent=data.total?`${Math.min(offset+1,data.total)}–${Math.min(offset+50,data.total)} din ${data.total} ciorne păstrate.`:'Nicio ciornă păstrată.';
+    list.innerHTML=data.ciorne.map((row,i)=>`<p><button type="button" class="ghost mini" data-recover-run="${i}">${esc(row.titlu||'Editor · Verifică')} · ${esc(dossierTime(row.modificat_la))}</button></p>`).join('');
+    list.querySelectorAll('button').forEach(button=>button.onclick=async()=>{
+      const row=data.ciorne[Number(button.dataset.recoverRun)];
+      if(row.id==='editor'){selectTab('lint');$('#editor-recovery details').open=true;$('#editor-recovery summary').focus();return;}
+      await selectDossier(row.dosar_id,row.id);
+      const recovery=$('#dossier-saved > div > details');if(recovery){recovery.open=true;recovery.querySelector('summary').focus();}
+    });
+  }catch(err){if(token===draftLibrarySequence)status.textContent=err.message+' Reîncearcă reîncărcarea ciornelor.';}
+}
+$('#draft-library').ontoggle=()=>{if($('#draft-library').open)loadDraftLibrary();};
+$('#draft-library-reload').onclick=()=>loadDraftLibrary(draftLibraryOffset);
+$('#draft-library-prev').onclick=()=>loadDraftLibrary(Math.max(0,draftLibraryOffset-50));
+$('#draft-library-next').onclick=()=>loadDraftLibrary(draftLibraryOffset+50);
 async function loadEvidenceQueue(offset=0){
   const seq=++evidenceQueueSequence,status=$('#evidence-queue-status');
   evidenceQueueOffset=offset;status.textContent='Încarc verificările salvate…';
@@ -3889,13 +4011,13 @@ async function loadDossiers(offset=DOSARE_UI.offset){
   const token=++DOSARE_UI.listSequence, status=$('#dossier-status');
   status.textContent='Încarc dosarele…';
   try{
-    const d=await dossierApi('/api/dosare?offset='+offset);
+    const d=await dossierApi('/api/dosare?'+new URLSearchParams({offset:String(offset),stare:$('#dossier-filter').value}));
     if(token!==DOSARE_UI.listSequence) return;
     if(!Array.isArray(d.dosare)) throw new Error('Răspuns invalid.');
     DOSARE_UI.offset=offset;DOSARE_UI.supported=true;$('#dossier-local').hidden=false;
     const selected=DOSARE_UI.selected, items=[...d.dosare];
     if(selected&&!items.some(x=>x.id===selected.id)) items.unshift(selected);
-    $('#dossier-select').innerHTML='<option value="">Alege un dosar</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.titlu)}</option>`).join('');
+    $('#dossier-select').innerHTML='<option value="">Alege un dosar</option>'+items.map(x=>`<option value="${esc(x.id)}">${esc(x.titlu)}${x.arhivat?' · Arhivat':''}${!d.dosare.some(row=>row.id===x.id)?' · Selectat în afara paginii/filtrului':''}</option>`).join('');
     $('#dossier-select').value=selected?.id||'';
     $('#dossier-prev').disabled=offset===0;$('#dossier-next').disabled=offset+50>=d.total;
     $('#dossier-page').textContent=d.total?`${Math.min(offset+1,d.total)}–${Math.min(offset+50,d.total)} din ${d.total}`:'Niciun dosar salvat.';
@@ -3938,6 +4060,11 @@ async function openDossierRun(id,runId,token,checkId=null,findingId=null){
       DOSSIER_VIEWS.set(key,{...view,filter:'all',query:'',selected:findingId});
       reviews.proposalOpen=new Set([findingId]);
     }
+    const recovery=document.createElement('div');out.prepend(recovery);
+    bindDraftRecovery(recovery,runId,id,()=>findingDraftSnapshot(reviews),content=>{
+      restoreFindingDrafts(reviews,content);
+      loadFindingReviews(reviews,id,runId,token,checkId);
+    },fingerprint=>{reviews.recoveryFingerprint=fingerprint;});
     loadFindingReviews(reviews,id,runId,token,checkId);
     out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
     const copy=out.querySelector('.matrix-copy-dosar');
@@ -4091,6 +4218,7 @@ function bindProposalHistory(host,query,saved,alive){
   const section=document.createElement('details');section.dataset.proposalHistory='';
   section.innerHTML='<summary>Istoric și export · revizii salvate</summary><div class="dossier-actions"><label>Revizia A<input type="number" data-revision-a min="1" step="1"></label><label>Revizia B<input type="number" data-revision-b min="1" step="1"></label><button type="button" class="ghost mini" data-compare-revisions>Compară</button></div><div data-proposal-history-list></div><div class="dossier-actions"><button type="button" class="ghost mini" data-history-prev title="Revizii mai noi">←</button><button type="button" class="ghost mini" data-history-next title="Revizii mai vechi">→</button><button type="button" class="ghost mini" data-history-refresh title="Reîncarcă istoricul">↻</button></div><p class="hint" data-history-status role="status"></p><div data-revision-comparison></div><div class="dossier-actions"><label>Revizia de exportat<input type="number" data-export-revision min="1" step="1"></label><label>Format<select data-export-format><option value="md">Markdown</option><option value="json">JSON</option></select></label><button type="button" class="ghost mini" data-export-proposal>Descarcă revizia salvată</button></div><p class="hint" data-export-status role="status"></p>';
   host.closest('.finding-authoring').after(section);
+  section.innerHTML+='<p class="hint">Partajare: numai revizia salvată aleasă, fără ciorne. JSON include rularea originală completă, inclusiv alte constatări și surse. Markdown include dovezile și contextul surselor păstrate. Exportul nu este anonimizat; verifică informațiile înainte de a le trimite.</p>';
   const a=section.querySelector('[data-revision-a]'),b=section.querySelector('[data-revision-b]'),exportRevision=section.querySelector('[data-export-revision]');
   a.value=Math.max(1,saved.revizie-1);b.value=saved.revizie;exportRevision.value=saved.revizie;
   const valid=()=>alive()&&section.isConnected,status=section.querySelector('[data-history-status]');
@@ -4349,6 +4477,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       +'<details class="review-checks" data-review-checks><summary data-checks-summary>Verificări, surse UE și recalculări</summary><div class="dossier-actions"><button type="button" class="ghost mini" data-evidence-check title="Compară și salvează dovezile din corpusul local">↻ Verifică și salvează dovezile</button><button type="button" class="ghost mini" data-evidence-rerun title="Recalculează raportul; deciziile vechi rămân în rularea inițială">Recalculează pentru reevaluare →</button></div><p class="hint" data-evidence-status role="status">Încarc istoricul verificărilor…</p><div data-check-history></div><div data-run-origins></div><p class="hint">Verificare locală, fără actualizare de la sursele oficiale. Deciziile rămân asociate rulării în care au fost înregistrate.</p></details>'
       +'<div class="dossier-actions"><label>Filtru<select data-review-filter><option value="all">Toate</option><option value="unresolved">Nerezolvate</option>'+Object.entries(REVIEW_STATES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label><button type="button" class="ghost mini" data-review-refresh>Reîncarcă revizuirile</button><button type="button" class="ghost mini" data-review-json>Exportă revizuirea JSON</button><button type="button" class="ghost mini" data-review-copy>Copiază revizuirea Markdown</button></div><p class="hint" data-review-status role="status"></p><button type="button" class="ghost mini" data-show-drafts hidden>Note nesalvate</button><div class="review-workspace"><nav class="review-finding-nav" aria-label="Constatări salvate"><label>Căutare<input type="search" data-finding-search placeholder="Act, articol, termen"></label><p class="hint" data-finding-count></p><div data-finding-buttons></div></nav><div data-review-list></div></div>';
     const list=panel.querySelector('[data-review-list]'), status=panel.querySelector('[data-review-status]'), picker=panel.querySelector('[data-review-filter]');
+    const scope=document.createElement('p');scope.className='hint';scope.textContent='Partajare: exportul revizuirii include toate constatările și istoricul inclus, indiferent de filtru, plus verificarea selectată. Ciornele locale nu sunt incluse. JSON include și rularea originală completă. Verifică datele înainte de a le trimite altor persoane.';status.before(scope);
     picker.add(new Option('Dovezi schimbate · de reevaluat','evidence_changed'));
     picker.add(new Option('Comparație indisponibilă','evidence_unknown'));
     picker.value=filter;
@@ -4376,7 +4505,10 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       panel.querySelector('[data-finding-count]').textContent=`${findings.length} din ${d.constatari.length}`;
       const buttons=panel.querySelector('[data-finding-buttons]');
       buttons.innerHTML=findings.map(f=>workspaceFindingHtml(f,active?.id,dirty(f.id))).join('');
-      buttons.querySelectorAll('button').forEach(b=>b.onclick=()=>{view.selected=b.dataset.selectFinding;render();});
+      buttons.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+        view.selected=b.dataset.selectFinding;render();
+        buttons.querySelector(`[data-select-finding="${view.selected}"]`)?.focus();
+      });
       panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
       list.innerHTML=active?reviewFindingHtml(active):(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p><button type="button" class="ghost mini" data-open-checks>Deschide verificările</button>':'<p>Nicio constatare în această selecție.</p>');
       if(active)bindFindingProposal(list.querySelector('[data-proposal]'),panel,active,dossierId,runId,valid,render);
@@ -4556,7 +4688,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
   $('#dossier-proposals').textContent='';++proposalListSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
   try{
-    const meta=await dossierApi('/api/dosare?id='+encodeURIComponent(id));
+    const meta=await dossierApi('/api/dosare/metadate?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
     loadProposalList(id);
@@ -4564,6 +4696,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     if(![...picker.options].some(option=>option.value===id)) picker.add(new Option(meta.titlu,id));
     picker.value=id;
     $('#dossier-meta').innerHTML=`<h4>${esc(meta.titlu)}</h4><p>${esc(meta.intrebare)}</p><p class="hint">Domeniu declarat: ${esc(meta.domeniu||'neprecizat')} · Creat: ${esc(meta.creat_la)}</p>`;
+    bindDossierMetadata(meta);
     $('#dossier-status').textContent='Dosar ales: '+meta.titlu;
     const history=await dossierApi('/api/dosare/rulari?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
@@ -4576,9 +4709,34 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
       if(![...picker.options].some(o=>o.value===runId)) picker.add(new Option('Rulare din coadă · '+runId,runId));
       picker.value=runId;await openDossierRun(id,runId,token,checkId,findingId);
     }
-  }catch(err){if(token===DOSARE_UI.sequence) $('#dossier-status').textContent=err.message;}
+  }catch(err){if(token===DOSARE_UI.sequence){
+    const status=$('#dossier-status');status.textContent=err.message;
+    const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă deschiderea dosarului';retry.onclick=()=>selectDossier(id,runId,checkId,findingId);status.append(retry);
+  }}
+}
+function bindDossierMetadata(meta){
+  const host=$('#dossier-meta'),form=document.createElement('form');
+  form.innerHTML=`<label>Titlul dosarului<input type="text" name="titlu" required maxlength="200" value="${esc(meta.titlu)}"></label><div class="dossier-actions"><button type="submit" class="ghost mini">Redenumește</button><button type="button" class="ghost mini" data-archive>${meta.arhivat?'Restaurează dosarul':'Arhivează dosarul'}</button><button type="button" class="ghost mini" data-reload-meta>Reîncarcă metadatele</button></div><p class="hint">${meta.arhivat?'Arhivat · păstrat integral. Restaurează pentru a salva analize noi.':'Activ · arhivarea păstrează analizele și permite restaurarea.'}</p><p class="hint" role="status" data-meta-status></p>`;
+  host.append(form);
+  const status=form.querySelector('[data-meta-status]');
+  const update=async archived=>{
+    const title=form.elements.namedItem('titlu').value;[...form.elements].forEach(e=>e.disabled=true);
+    try{
+      const result=await dossierApi('/api/dosare/metadate',{id:meta.id,titlu:title,arhivat:archived,revizie:meta.revizie});
+      if(!form.isConnected)return;DOSARE_UI.selected=result;
+      host.querySelector('h4').textContent=result.titlu;form.remove();bindDossierMetadata(result);await loadDossiers();
+    }catch(err){if(form.isConnected)status.textContent=err.message;}
+    finally{[...form.elements].forEach(e=>e.disabled=false);}
+  };
+  form.onsubmit=e=>{e.preventDefault();update(meta.arhivat);};
+  form.querySelector('[data-archive]').onclick=()=>{if(form.reportValidity())update(!meta.arhivat);};
+  form.querySelector('[data-reload-meta]').onclick=async()=>{
+    try{const fresh=await dossierApi('/api/dosare/metadate?id='+meta.id);if(!form.isConnected)return;DOSARE_UI.selected=fresh;host.querySelector('h4').textContent=fresh.titlu;form.remove();bindDossierMetadata(fresh);}
+    catch(err){status.textContent=err.message;}
+  };
 }
 $('#dossier-library').ontoggle=()=>{if($('#dossier-library').open) loadDossiers();};
+$('#dossier-filter').onchange=()=>loadDossiers(0);
 $('#dossier-reload').onclick=()=>loadDossiers();
 $('#dossier-prev').onclick=()=>loadDossiers(Math.max(0,DOSARE_UI.offset-50));
 $('#dossier-next').onclick=()=>loadDossiers(DOSARE_UI.offset+50);
@@ -4604,6 +4762,7 @@ function dossierSaveControls(out,filters,projects=null){
   button.onclick=async()=>{
     const selected=DOSARE_UI.selected;
     if(!selected||!DOSARE_UI.supported){$('#dossier-library').open=true;status.textContent='Alege sau creează un dosar în „Dosare salvate”.';return;}
+    if(selected.arhivat){status.textContent='Dosarul ales este arhivat. Restaurează-l înainte de a salva o analiză nouă.';return;}
     button.disabled=true;status.textContent='Recalculez și salvez în: '+selected.titlu;
     try{
       const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters,...(projects?{proiecte:projects}:{})});

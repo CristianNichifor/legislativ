@@ -295,6 +295,8 @@ def face_handler(stare: Stare):
                     self._json({"error": "Sursele locale nu sunt disponibile."}, 503)
             elif ruta.path in (
                 "/api/dosare",
+                "/api/dosare/metadate",
+                "/api/dosare/ciorne",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/dovezi",
@@ -318,6 +320,14 @@ def face_handler(stare: Stare):
                         from scripts.surse_propuneri import citeste_cerere
 
                         out = citeste_cerere(stare, qs)
+                    elif ruta.path == "/api/dosare/metadate":
+                        out = dosare.metadata(path, ident)
+                    elif ruta.path == "/api/dosare/ciorne":
+                        out = (
+                            dosare.citeste_ciorna(path, ident)
+                            if ident
+                            else dosare.lista_ciorne(path, int(qs.get("offset", ["0"])[0]))
+                        )
                     elif ruta.path == "/api/dosare/propuneri/analize":
                         from scripts.analize_propuneri import citeste_cerere
 
@@ -382,7 +392,9 @@ def face_handler(stare: Stare):
                     elif ident:
                         out = dosare.citeste(path, ident)
                     else:
-                        out = dosare.lista(path, int(qs.get("offset", ["0"])[0]))
+                        out = dosare.lista(
+                            path, int(qs.get("offset", ["0"])[0]), qs.get("stare", ["active"])[0]
+                        )
                     self._json(out)
                 except ValueError as exc:
                     self._json({"error": str(exc)}, 400)
@@ -413,6 +425,8 @@ def face_handler(stare: Stare):
                 "/api/surse-proiecte",
                 "/api/ue/surse",
                 "/api/dosare",
+                "/api/dosare/metadate",
+                "/api/dosare/ciorne",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
@@ -436,7 +450,9 @@ def face_handler(stare: Stare):
                 self._json({"error": "content-length invalid"}, 400)
                 return
             if lung > (
-                80000
+                210000
+                if ruta == "/api/dosare/ciorne"
+                else 80000
                 if ruta in ("/api/dosare/propuneri", "/api/dosare/propuneri/previzualizare")
                 else 16000
                 if ruta.startswith(("/api/dosare", "/api/surse-proiecte", "/api/ue/surse"))
@@ -475,6 +491,8 @@ def face_handler(stare: Stare):
                 return
             if ruta in (
                 "/api/dosare",
+                "/api/dosare/metadate",
+                "/api/dosare/ciorne",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
@@ -489,7 +507,11 @@ def face_handler(stare: Stare):
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/propuneri/analize":
+                    if ruta == "/api/dosare/metadate":
+                        out = dosare.modifica(path, cerere)
+                    elif ruta == "/api/dosare/ciorne":
+                        out = dosare.salveaza_ciorna(path, cerere)
+                    elif ruta == "/api/dosare/propuneri/analize":
                         from scripts.analize_propuneri import salveaza
 
                         out = salveaza(stare, cerere)

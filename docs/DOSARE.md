@@ -59,8 +59,9 @@ remains unchanged. Opening the workspace does not run a new source check.
 Within the browser session, each run retains its search, filter, preferred finding,
 selected historical check and check-section state. Filtering can temporarily hide the
 preferred finding; clearing the filter restores it unless another finding was selected.
-No workspace state or unsaved notes are written to browser persistent storage. Reloading
-the entire page still loses unsaved work; saved records remain in SQLite.
+No workspace state or unsaved notes are written to browser persistent storage.
+The explicit local recovery controls below can preserve unfinished work in SQLite;
+changes made after the last manual recovery save are not persisted.
 
 Review, legal-context and proposal drafts survive finding changes and review reloads. A drafts
 button returns to an unsaved finding even when filters hide it. Explicit cancel buttons
@@ -94,13 +95,53 @@ workspace, not a shared review or authenticated collaboration feature.
 
 ## Store and migration
 
+### Everyday dossier and draft workflow (v1 milestone 6)
+
+Dossiers can be renamed, archived and restored from their metadata form. The
+library defaults to active dossiers, with explicit archived/all filters. A selected
+dossier outside the current page/filter remains labeled as such. Archive preserves
+all runs, revisions and recovery copies; restore returns it to the active list.
+Archived dossiers cannot receive new runs, but existing evidence and revisions remain
+available. Metadata writes use an expected revision; stale differing edits require
+reload, while exact retries are harmless. Renaming preserves creation retry identity.
+
+`GET /api/dosare/metadate?id=…` reads title, archive state and metadata revision.
+`POST /api/dosare/metadate` accepts exactly `id`, `titlu`, `arhivat` (boolean) and
+`revizie`. `GET /api/dosare?stare=active|arhivate|toate` filters before pagination.
+
+The main text editor and each saved-run workspace offer **manual** local recovery
+copies. The disclosure beside the controls explains SQLite storage, inclusion in
+backups, absence of browser persistence and the need to save again after edits.
+Recovery does not register a review/context/proposal revision. It preserves draft
+text, structured intent, original expected revisions and retry identities; in-flight
+flags are cleared on recovery. Existing unsaved text requires confirmation before
+replacement. Conflicts preserve the open text and expose reload/retry. Successful
+revision saves do not automatically delete a separately retained recovery copy;
+the user can delete it explicitly. Backup copies are unaffected by deletion.
+
+`GET /api/dosare/ciorne?offset=0` lists retained copies in pages of 50 with a total;
+the library offers older/newer pages. `?id=editor` reads the main editor copy;
+`?id=<run>` reads that run's copy. `POST /api/dosare/ciorne` accepts exactly `id`,
+`dosar_id` (null for editor), `revizie` and `continut` (version-1 object, or null to
+delete). Run ownership is checked. Content is bounded to 200 KB UTF-8 and HTTP
+bodies to 210 KB. Revisioned tombstones prevent stale writes after deletion.
+These endpoints retain local Host/Origin checks, no-store and static rejection.
+
+Schema 8 adds `dosare_stare` and `ciorne` transactionally. Schemas 1–7 stay readable
+without migration; the next successful write upgrades them, and a failed write
+rolls back the upgrade. Back up before upgrading: older applications reject schema 8.
+SQLite backups include metadata state and recovery copies. Only the main text editor
+and saved-run review/context/proposal drafts are covered; composer fields and other
+transient application forms are not recovery copies. Exports exclude these drafts;
+sharing disclosures identify full-run JSON and retained-source Markdown scope.
+
 The store is derived from the configured initiative database: `initiative.db`
 becomes `initiative.dosare.db`. It is separate from collected legislation, initiative
 metadata and imported document bytes. Static clients reject persistent dossier
 operations explicitly. No hosted authentication or multi-user isolation is provided;
 this is a local single-user workspace.
 
-First creation initializes schema 7 and the SQLite application ID in one write
+First creation initializes schema 8 and the SQLite application ID in one write
 transaction. Reads do not create or migrate files. An unrelated nonempty database
 or incompatible application/schema version is rejected, not reset. A failure during
 initialization rolls back tables and version markers together. Future migrations
