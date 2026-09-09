@@ -3843,7 +3843,11 @@ async function loadFindingReviews(panel,dossierId,runId,token){
         };
         const draft=drafts.get(f.id);
         if(draft) for(const [key,value] of Object.entries(draft)) form.elements.namedItem(key).value=value;
-        form.oninput=()=>drafts.set(f.id,Object.fromEntries(new FormData(form)));
+        form.oninput=()=>{
+          const values=Object.fromEntries(new FormData(form));
+          if(values.evaluator||values.motiv||values.stare!==f.stare) drafts.set(f.id,values);
+          else drafts.delete(f.id);
+        };
         let retry=null;
         form.onsubmit=async e=>{
           e.preventDefault();const values=Object.fromEntries(new FormData(form)), fingerprint=JSON.stringify(values), message=form.parentElement.querySelector('.review-status');

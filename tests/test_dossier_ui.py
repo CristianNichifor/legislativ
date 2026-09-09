@@ -8,6 +8,24 @@ import pytest
 APP = Path(__file__).parents[1] / "app/index.html"
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_cleared_review_draft_does_not_block_recalculation():
+    handler = APP.read_text().split("form.oninput=()=>{", 1)[1].split("let retry=null;", 1)[0]
+    code = (
+        "const assert=require('node:assert/strict'), drafts=new Map(), form={};"
+        "const f={id:'a',stare:'unreviewed'};"
+        "let values={evaluator:'',motiv:'',stare:'unreviewed'};"
+        "class FormData{constructor(){return Object.entries(values)}}"
+        "const handle=()=>{"
+        + handler
+        + "handle();assert.equal(drafts.size,0);"
+        "values.motiv='note';handle();assert.equal(drafts.size,1);"
+        "values.motiv='';handle();assert.equal(drafts.size,0);"
+        "values.stare='needs_evidence';handle();assert.equal(drafts.size,1);"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
 def test_library_is_in_matrix_tab():
     class Placement(HTMLParser):
         def __init__(self):
