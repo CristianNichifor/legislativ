@@ -203,6 +203,7 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     assert "/api/documente-proiect" in text
     assert "/api/importa-proiect" in text
     assert "/api/inventar-surse" in text
+    assert "/api/dosare/rulari" in text
     assert "/api/diferente-versiuni" in text
     assert "/api/actualizare-proiect" in text
 
