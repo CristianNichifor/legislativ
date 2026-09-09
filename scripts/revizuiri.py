@@ -47,6 +47,7 @@ def lista(path, dossier_id, run_id):
     dosare._id(run_id)
     run = dosare.rulari(path, dossier_id, run_id)
     findings = constatari(run)
+    manifest = run["dovezi"].get("manifest")
     with dosare._open(path) as con:
         for finding in findings:
             events = _events(con, run_id, finding["id"])
@@ -86,6 +87,12 @@ def lista(path, dossier_id, run_id):
             lines.append(
                 "Istoric parțial: ultimele 20 de evenimente; baza păstrează toate reviziile."
             )
+    lines += [
+        "# Dependente ale dovezilor",
+        dosare._json(manifest)
+        if manifest is not None
+        else "Manifest necapturat pentru aceasta rulare.",
+    ]
     lines += limitations + ["# Raportul salvat", run["raport"].get("markdown", "")]
     return {
         "schema_version": 1,
