@@ -256,6 +256,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/dovezi",
                 "/api/dosare/verificari",
                 "/api/dosare/coada",
+                "/api/dosare/coada-ue",
             ):
                 from scripts import dosare
 
@@ -274,6 +275,12 @@ def face_handler(stare: Stare):
                             qs.get("rulare_id", [None])[0],
                             int(qs.get("offset", ["0"])[0]),
                             qs.get("verificare_id", [None])[0],
+                        )
+                    elif ruta.path == "/api/dosare/coada-ue":
+                        from scripts.coada_ue import lista
+
+                        out = lista(
+                            path, int(qs.get("offset", ["0"])[0]), qs.get("stare", ["toate"])[0]
                         )
                     elif ruta.path == "/api/dosare/coada":
                         from scripts.verificari_dovezi import coada

@@ -150,3 +150,26 @@ def test_eu_check_renderer_keeps_unknown_and_language_change_distinct():
         "assert.ok(h.includes('nu este o comparație a sensului'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_queue_renderer_escapes_titles_and_separates_unchecked():
+    source = (
+        APP.read_text()
+        .split("function euQueueRowHtml", 1)[1]
+        .split("async function loadEuQueue", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;function euQueueRowHtml"
+        + source
+        + "let row={titlu:'<script>',creat_la:'now',verificat:0};"
+        "let h=euQueueRowHtml(row,0);assert.ok(h.includes('Fără verificare UE'));"
+        "assert.ok(!h.includes('<script>')&&!h.includes('Texte schimbate: 0'));"
+        "row={...row,verificat:1,texte:1,limbi:2,metadate:3,incomplet:1};"
+        "h=euQueueRowHtml(row,0);assert.ok(h.includes('Texte schimbate: 1'));"
+        "assert.ok(h.includes('Limbi schimbate: 2')&&h.includes('Doar metadate: 3'));"
+        "assert.ok(h.includes('Comparație incompletă'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
