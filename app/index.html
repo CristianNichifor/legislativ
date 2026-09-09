@@ -347,6 +347,11 @@
   .dossier-library .dossier-actions{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;margin:.5rem 0}
   .dossier-library p,.dossier-library h4{overflow-wrap:anywhere}
   #dossier-run-select{font-family:var(--sans);font-size:.8rem}
+  .finding-review{border-top:1px solid var(--rule);padding:.7rem 0}
+  .finding-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem}
+  .finding-review form{margin:.5rem 0;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .finding-review form label:nth-child(3),.finding-review form>div{grid-column:1/-1}
+  @media(max-width:600px){.finding-review form{grid-template-columns:minmax(0,1fr)}}
   .matrix-tools input{flex:1 1 18rem}
   .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
   .matrix-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.45rem;
@@ -3766,11 +3771,80 @@ async function openDossierRun(id,runId,token){
     const run=await dossierApi('/api/dosare/rulari?'+new URLSearchParams({id,rulare_id:runId}));
     if(token!==DOSARE_UI.sequence) return;
     out.innerHTML=dossierSnapshotHtml(run);
+    const reviews=document.createElement('section');reviews.className='finding-reviews';out.prepend(reviews);
+    loadFindingReviews(reviews,id,runId,token);
     out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
     const copy=out.querySelector('.matrix-copy-dosar');
     if(copy) copy.onclick=async()=>{try{await navigator.clipboard.writeText(`Analiză salvată: ${run.creat_la}\nSHA-256 raport: ${run.sha256}\n\n${run.raport.markdown||''}`);$('#dossier-status').textContent='Raport copiat.';}catch{$('#dossier-status').textContent='Copierea nu a reușit.';}};
     const print=out.querySelector('.matrix-print-dosar');if(print) print.onclick=()=>window.print();
   }catch(err){if(token===DOSARE_UI.sequence) out.textContent=err.message;}
+}
+const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
+function reviewEventHtml(e){return `<p><b>${esc(REVIEW_STATES[e.stare])}</b> · Revizia ${e.revizie} · ${esc(e.evaluator)} · ${esc(e.creat_la)}<br>${esc(e.motiv)}</p>`;}
+function reviewFindingHtml(f){
+  const title=f.dovada.termen||f.dovada.act_id||f.tip;
+  return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
+    +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
+    +(f.dovada.text?`<p>${esc(f.dovada.text)}</p>`:'')
+    +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
+    +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
+    +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div><button type="submit" class="ghost mini">Înregistrează decizia</button></div></form><p class="hint review-status" role="status"></p>'
+    +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
+}
+async function loadFindingReviews(panel,dossierId,runId,token){
+  const generation=(panel.reviewGeneration||0)+1;panel.reviewGeneration=generation;
+  const drafts=panel.reviewDrafts||(panel.reviewDrafts=new Map());
+  let filter=panel.querySelector('[data-review-filter]')?.value||'all';
+  panel.textContent='Încarc revizuirile…';
+  const valid=()=>panel.isConnected&&token===DOSARE_UI.sequence&&panel.reviewGeneration===generation;
+  try{
+    const d=await dossierApi('/api/dosare/revizuiri?'+new URLSearchParams({id:dossierId,rulare_id:runId}));
+    if(!valid()) return;
+    panel.innerHTML='<h4>Revizuirea constatărilor</h4><p class="hint">Confirmarea evaluatorului nu este o hotărâre juridică oficială. Identitatea evaluatorului este declarată.</p>'
+      +`<p class="hint">Constatări revizuibile păstrate: ${d.constatari.length}. Numărătorile agregate fără dovezi individuale nu sunt incluse.</p>`
+      +'<div class="dossier-actions"><label>Filtru<select data-review-filter><option value="all">Toate</option><option value="unresolved">Nerezolvate</option>'+Object.entries(REVIEW_STATES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label><button type="button" class="ghost mini" data-review-refresh>Reîncarcă revizuirile</button><button type="button" class="ghost mini" data-review-json>Exportă revizuirea JSON</button><button type="button" class="ghost mini" data-review-copy>Copiază revizuirea Markdown</button></div><p class="hint" data-review-status role="status"></p><div data-review-list></div>';
+    const list=panel.querySelector('[data-review-list]'), status=panel.querySelector('[data-review-status]'), picker=panel.querySelector('[data-review-filter]');
+    picker.value=filter;
+    const render=()=>{
+      filter=picker.value;
+      const findings=d.constatari.filter(f=>filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter);
+      list.innerHTML=findings.map(reviewFindingHtml).join('')||'<p>Nicio constatare în această selecție.</p>';
+      list.querySelectorAll('form').forEach(form=>{
+        const f=findings.find(f=>f.id===form.closest('[data-finding]').dataset.finding);
+        const older=form.parentElement.querySelector('[data-older-events]');let offset=20;
+        if(older) older.onclick=async()=>{
+          older.disabled=true;
+          try{const page=await dossierApi('/api/dosare/revizuiri?'+new URLSearchParams({id:dossierId,rulare_id:runId,constatare_id:f.id,offset:String(offset)}));
+            if(!valid()||!older.isConnected) return;
+            form.parentElement.querySelector('[data-event-list]').insertAdjacentHTML('beforeend',page.evenimente.map(reviewEventHtml).join(''));
+            offset+=page.evenimente.length;if(offset>=page.total) older.hidden=true;
+          }catch(err){if(valid()) form.parentElement.querySelector('.review-status').textContent=err.message;}
+          finally{older.disabled=false;}
+        };
+        const draft=drafts.get(f.id);
+        if(draft) for(const [key,value] of Object.entries(draft)) form.elements.namedItem(key).value=value;
+        form.oninput=()=>drafts.set(f.id,Object.fromEntries(new FormData(form)));
+        let retry=null;
+        form.onsubmit=async e=>{
+          e.preventDefault();const values=Object.fromEntries(new FormData(form)), fingerprint=JSON.stringify(values), message=form.parentElement.querySelector('.review-status');
+          const controls=[...form.elements];controls.forEach(c=>c.disabled=true);
+          try{
+            if(retry?.fingerprint!==fingerprint) retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
+            await dossierApi('/api/dosare/revizuiri',{...values,id:retry.id,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:f.revizie});
+            drafts.delete(f.id);
+            if(valid()) await loadFindingReviews(panel,dossierId,runId,token);
+          }catch(err){if(valid()) message.textContent=err.message;}
+          finally{controls.forEach(c=>c.disabled=false);}
+        };
+      });
+    };
+    picker.onchange=render;render();
+    panel.querySelector('[data-review-refresh]').onclick=()=>loadFindingReviews(panel,dossierId,runId,token);
+    panel.querySelector('[data-review-json]').onclick=()=>{
+      try{const url=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='revizuire-'+runId+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Export inițiat: toate constatările și istoricul inclus, indiferent de filtru.';}catch{status.textContent='Exportul nu a reușit.';}
+    };
+    panel.querySelector('[data-review-copy]').onclick=async()=>{try{await navigator.clipboard.writeText(d.markdown);status.textContent='Revizuire copiată: toate constatările, indiferent de filtru.';}catch{status.textContent='Copierea nu a reușit.';}};
+  }catch(err){if(valid()){panel.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncarcă revizuirile';retry.onclick=()=>loadFindingReviews(panel,dossierId,runId,token);panel.append(retry);}}
 }
 async function selectDossier(id,runId){
   const token=++DOSARE_UI.sequence;

@@ -145,7 +145,7 @@ def face_handler(stare: Stare):
             self.send_response(code)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corp)))
-            if urlparse(self.path).path in ("/api/dosare", "/api/dosare/rulari"):
+            if urlparse(self.path).path.startswith("/api/dosare"):
                 self.send_header("Cache-Control", "no-store")
             self.end_headers()
             self.wfile.write(corp)
@@ -249,7 +249,7 @@ def face_handler(stare: Stare):
                 from scripts.servicii import _inventar_surse
 
                 self._json(_inventar_surse(stare))
-            elif ruta.path in ("/api/dosare", "/api/dosare/rulari"):
+            elif ruta.path in ("/api/dosare", "/api/dosare/rulari", "/api/dosare/revizuiri"):
                 from scripts import dosare
 
                 if not self._dosare_permis():
@@ -258,7 +258,21 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/rulari":
+                    if ruta.path == "/api/dosare/revizuiri":
+                        from scripts.revizuiri import istoric, lista
+
+                        run_id = qs.get("rulare_id", [None])[0]
+                        if "constatare_id" in qs:
+                            out = istoric(
+                                path,
+                                ident,
+                                run_id,
+                                qs["constatare_id"][0],
+                                int(qs.get("offset", ["0"])[0]),
+                            )
+                        else:
+                            out = lista(path, ident, run_id)
+                    elif ruta.path == "/api/dosare/rulari":
                         out = dosare.rulari(path, ident, qs.get("rulare_id", [None])[0])
                     elif ident:
                         out = dosare.citeste(path, ident)
@@ -293,6 +307,7 @@ def face_handler(stare: Stare):
                 "/api/actualizare-proiect",
                 "/api/dosare",
                 "/api/dosare/rulari",
+                "/api/dosare/revizuiri",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -316,18 +331,21 @@ def face_handler(stare: Stare):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._json({"error": "json invalid"}, 400)
                 return
-            if ruta in ("/api/dosare", "/api/dosare/rulari"):
+            if ruta in ("/api/dosare", "/api/dosare/rulari", "/api/dosare/revizuiri"):
                 from scripts import dosare
 
                 if not self._dosare_permis():
                     return
                 try:
                     path = dosare.cale(stare)
-                    out = (
-                        dosare.creeaza(path, cerere)
-                        if ruta == "/api/dosare"
-                        else dosare.salveaza_rulare(stare, cerere)
-                    )
+                    if ruta == "/api/dosare/revizuiri":
+                        from scripts.revizuiri import salveaza
+
+                        out = salveaza(path, cerere)
+                    elif ruta == "/api/dosare":
+                        out = dosare.creeaza(path, cerere)
+                    else:
+                        out = dosare.salveaza_rulare(stare, cerere)
                     self._json(out)
                 except ValueError as exc:
                     self._json({"error": str(exc)}, 400)

@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ENGINE_VERSION = "matrice-dosar-v1"
 MAX_REPORT_BYTES = 4_000_000
 
@@ -75,9 +75,26 @@ def _open(path, *, write=False):
                 "dovezi_json TEXT NOT NULL, UNIQUE(dosar_id,sha256))"
             )
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
-            con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-        elif version != SCHEMA_VERSION or app != APPLICATION_ID:
+            version = 1
+            app = APPLICATION_ID
+        if version not in (1, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
+        if write and version == 1:
+            con.execute(
+                "CREATE TABLE revizuiri (id TEXT PRIMARY KEY, rulare_id TEXT NOT NULL "
+                "REFERENCES rulari(id), constatare_id TEXT NOT NULL, revizie INTEGER NOT NULL, "
+                "stare TEXT NOT NULL, evaluator TEXT NOT NULL, motiv TEXT NOT NULL, "
+                "creat_la TEXT NOT NULL, UNIQUE(rulare_id,constatare_id,revizie))"
+            )
+            con.execute(
+                "CREATE TRIGGER revizuiri_no_update BEFORE UPDATE ON revizuiri "
+                "BEGIN SELECT RAISE(ABORT,'Review events are append-only'); END"
+            )
+            con.execute(
+                "CREATE TRIGGER revizuiri_no_delete BEFORE DELETE ON revizuiri "
+                "BEGIN SELECT RAISE(ABORT,'Review events are append-only'); END"
+            )
+            con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
         con.commit()
     except Exception:
