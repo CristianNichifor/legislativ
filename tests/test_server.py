@@ -128,6 +128,7 @@ def test_ue_returns_local_celex_provision_candidates(tmp_path):
     assert out["limba"] == "RON"
     assert out["rezultate"]
     assert out["rezultate"][0]["celex"] == "32018R1805"
+    assert out["rezultate"][0]["potrivire"] == "text"
     assert "<mark>" in out["rezultate"][0]["fragment"]
     assert out["dosare"] == [
         {
@@ -146,6 +147,31 @@ def test_ue_returns_local_celex_provision_candidates(tmp_path):
             "scor": out["rezultate"][0]["scor"],
         }
     ]
+
+
+def test_ue_returns_explicit_referenced_celex_provisions(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+
+    out = _ue("Potrivit Regulamentului (UE) 2018/1805.", stare, limba="RON")
+
+    assert out["referinte"][0]["celex"] == "32018R1805"
+    assert out["referinte_neimportate"] == []
+    assert out["rezultate"]
+    assert out["rezultate"][0]["celex"] == "32018R1805"
+    assert out["rezultate"][0]["potrivire"] == "referinta"
+    assert out["rezultate"][0]["referinte"][0]["text"] == "Regulamentului (UE) 2018/1805"
+
+
+def test_ue_reports_explicit_reference_missing_from_eu_db(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+
+    out = _ue("Se aplică Directiva 2014/24/UE.", stare, limba="RON")
+
+    assert out["referinte"][0]["celex"] == "32014L0024"
+    assert out["referinte_neimportate"][0]["celex"] == "32014L0024"
+    assert any("neimportate" in limita for limita in out["limitari"])
 
 
 def test_ue_groups_candidates_by_celex_act(tmp_path):

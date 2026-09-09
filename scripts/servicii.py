@@ -986,6 +986,104 @@ def _dosare_ue(rezultate: list[dict]) -> list[dict]:
     return iesire
 
 
+def _referinte_ue(text: str) -> list[dict]:
+    from scripts.referinte_ue import referinte_dict
+
+    return referinte_dict(text)
+
+
+def _celex_importate_ue(con: sqlite3.Connection, referinte: list[dict]) -> set[str]:
+    celexuri = {r.get("celex") for r in referinte if r.get("celex")}
+    gasite: set[str] = set()
+    for bucata in _bucati(celexuri):
+        marci = ",".join("?" * len(bucata))
+        for rand in con.execute(f"SELECT celex FROM eu_acte WHERE celex IN ({marci})", bucata):
+            gasite.add(rand["celex"])
+    return gasite
+
+
+def _fragment_ue(text: str, limita: int = 360) -> str:
+    fragment = re.sub(r"\s+", " ", text or "").strip()
+    if len(fragment) <= limita:
+        return fragment
+    return fragment[: limita - 1].rstrip() + "…"
+
+
+def _prevederi_ue_referite(
+    con: sqlite3.Connection,
+    referinte: list[dict],
+    *,
+    limita: int,
+    limba: str | None,
+) -> tuple[list[dict], list[dict]]:
+    if not referinte:
+        return [], []
+
+    importate = _celex_importate_ue(con, referinte)
+    neimportate = [r for r in referinte if r.get("celex") not in importate]
+    if not importate:
+        return [], neimportate
+
+    referinte_pe_celex: dict[str, list[dict]] = {}
+    for ref in referinte:
+        celex = ref.get("celex") or ""
+        if celex in importate:
+            referinte_pe_celex.setdefault(celex, []).append(ref)
+
+    rezultate: list[dict] = []
+    ordine = list(referinte_pe_celex)
+    for celex in ordine:
+        if len(rezultate) >= limita:
+            break
+        params: list[object] = [celex]
+        clauza_limba = ""
+        if limba:
+            clauza_limba = " AND p.limba = ?"
+            params.append(limba)
+        randuri = con.execute(
+            "SELECT p.celex, p.locator, p.fel, p.titlu, p.text, p.limba,"
+            " a.titlu AS act_titlu, a.sursa_url, a.item_url"
+            " FROM eu_provizii p"
+            " JOIN eu_acte a ON a.celex = p.celex"
+            f" WHERE p.celex = ?{clauza_limba}"
+            " ORDER BY p.ord LIMIT ?",
+            (*params, min(4, limita - len(rezultate))),
+        ).fetchall()
+        for r in randuri:
+            rezultate.append(
+                {
+                    "celex": r["celex"],
+                    "locator": r["locator"],
+                    "fel": r["fel"],
+                    "titlu": r["titlu"] or "",
+                    "limba": r["limba"],
+                    "act_titlu": r["act_titlu"] or "",
+                    "sursa_url": r["sursa_url"] or "",
+                    "item_url": r["item_url"] or "",
+                    "fragment": _fragment_ue(r["text"]),
+                    "scor": None,
+                    "termeni": [],
+                    "potrivire": "referinta",
+                    "referinte": referinte_pe_celex[celex],
+                }
+            )
+    return rezultate, neimportate
+
+
+def _imbina_rezultate_ue(exacte: list[dict], textuale: list[dict], limita: int) -> list[dict]:
+    rezultate: list[dict] = []
+    vazute: set[tuple[str, str, str]] = set()
+    for rand in [*exacte, *textuale]:
+        cheie = (rand.get("celex") or "", rand.get("locator") or "", rand.get("limba") or "")
+        if cheie in vazute:
+            continue
+        vazute.add(cheie)
+        rezultate.append(rand)
+        if len(rezultate) >= limita:
+            break
+    return rezultate
+
+
 def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     """Candidate EU provisions, from the local CELEX database.
 
@@ -997,6 +1095,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     text = (draft or "").strip()
     limita_i = _limita_ue(limita)
     limba_filtru = _limba_ue(limba)
+    referinte = _referinte_ue(text)
     if not text:
         return {
             "sursa": "eu.db",
@@ -1004,6 +1103,8 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "total": 0,
             "dosare": [],
             "rezultate": [],
+            "referinte": referinte,
+            "referinte_neimportate": [],
             "limitari": ["Textul proiectului este gol.", LIMITARE_UE],
         }
     if not stare.are_ue():
@@ -1013,6 +1114,8 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "total": 0,
             "dosare": [],
             "rezultate": [],
+            "referinte": referinte,
+            "referinte_neimportate": referinte,
             "limitari": [
                 "Dreptul UE nu este încărcat local; importă acte CELEX în eu.db cu "
                 "`uv run python -m scripts.cellar 32018R1805 --db eu.db`.",
@@ -1031,6 +1134,8 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
                     "total": 0,
                     "dosare": [],
                     "rezultate": [],
+                    "referinte": referinte,
+                    "referinte_neimportate": referinte,
                     "limitari": [
                         "eu.db există, dar nu are indexul de prevederi UE; rulează importul CELEX "
                         "sau reindexarea cu "
@@ -1038,7 +1143,13 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
                         LIMITARE_UE,
                     ],
                 }
-            rezultate = cellar.cauta_ue(con, text, limita=limita_i, limba=limba_filtru)
+            exacte, neimportate = _prevederi_ue_referite(
+                con, referinte, limita=limita_i, limba=limba_filtru
+            )
+            textuale = cellar.cauta_ue(con, text, limita=limita_i, limba=limba_filtru)
+            for rand in textuale:
+                rand.setdefault("potrivire", "text")
+            rezultate = _imbina_rezultate_ue(exacte, textuale, limita_i)
     except sqlite3.Error as e:
         return {
             "sursa": "eu.db",
@@ -1046,8 +1157,22 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "total": 0,
             "dosare": [],
             "rezultate": [],
+            "referinte": referinte,
+            "referinte_neimportate": referinte,
             "limitari": [f"eu.db nu a putut fi citit: {e}", LIMITARE_UE],
         }
+
+    limitari = (
+        [LIMITARE_UE]
+        if rezultate
+        else [
+            "Nu s-au găsit prevederi UE candidate pentru termenii din text.",
+            LIMITARE_UE,
+        ]
+    )
+    if neimportate:
+        ids = ", ".join(sorted({r["celex"] for r in neimportate}))
+        limitari = [f"Acte UE citate explicit, dar neimportate local în eu.db: {ids}.", *limitari]
 
     return {
         "sursa": "eu.db",
@@ -1055,11 +1180,9 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
         "total": len(rezultate),
         "dosare": _dosare_ue(rezultate),
         "rezultate": rezultate,
-        "limitari": (
-            [LIMITARE_UE]
-            if rezultate
-            else ["Nu s-au găsit prevederi UE candidate pentru termenii din text.", LIMITARE_UE]
-        ),
+        "referinte": referinte,
+        "referinte_neimportate": neimportate,
+        "limitari": limitari,
     }
 
 
