@@ -130,6 +130,7 @@ def test_ue_returns_local_celex_provision_candidates(tmp_path):
     assert out["rezultate"]
     assert out["rezultate"][0]["celex"] == "32018R1805"
     assert out["rezultate"][0]["potrivire"] == "text"
+    assert out["rezultate"][0]["triere"]["nivel"] == "materie"
     assert "<mark>" in out["rezultate"][0]["fragment"]
     assert out["dosare"] == [
         {
@@ -161,6 +162,7 @@ def test_ue_returns_explicit_referenced_celex_provisions(tmp_path):
     assert out["rezultate"]
     assert out["rezultate"][0]["celex"] == "32018R1805"
     assert out["rezultate"][0]["potrivire"] == "referinta"
+    assert out["rezultate"][0]["triere"]["nivel"] == "referinta"
     assert out["rezultate"][0]["referinte"][0]["text"] == "Regulamentului (UE) 2018/1805"
 
 
@@ -172,7 +174,19 @@ def test_ue_reports_explicit_reference_missing_from_eu_db(tmp_path):
 
     assert out["referinte"][0]["celex"] == "32014L0024"
     assert out["referinte_neimportate"][0]["celex"] == "32014L0024"
+    assert out["referinte_neimportate"][0]["triere"]["nivel"] == "neimportat"
     assert any("neimportate" in limita for limita in out["limitari"])
+
+
+def test_ue_reports_derogation_signal_without_verdict(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+
+    out = _ue("Prin derogare de la Regulamentul (UE) 2018/1805.", stare, limba="RON")
+
+    assert out["semnale"][0]["nivel"] == "posibila_derogare"
+    assert out["semnale"][0]["referinte"] == ["32018R1805"]
+    assert any("nu sunt verdict" in limita for limita in out["limitari"])
 
 
 def test_ue_groups_candidates_by_celex_act(tmp_path):

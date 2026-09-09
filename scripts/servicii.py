@@ -1096,6 +1096,9 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     limita_i = _limita_ue(limita)
     limba_filtru = _limba_ue(limba)
     referinte = _referinte_ue(text)
+    from scripts import triage_ue
+
+    semnale = triage_ue.semnale_draft(text, referinte)
     if not text:
         return {
             "sursa": "eu.db",
@@ -1105,9 +1108,11 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "rezultate": [],
             "referinte": referinte,
             "referinte_neimportate": [],
+            "semnale": semnale,
             "limitari": ["Textul proiectului este gol.", LIMITARE_UE],
         }
     if not stare.are_ue():
+        triage_ue.aplica_triere_lipsa(referinte)
         return {
             "sursa": "absent",
             "limba": limba_filtru,
@@ -1116,6 +1121,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "rezultate": [],
             "referinte": referinte,
             "referinte_neimportate": referinte,
+            "semnale": semnale,
             "limitari": [
                 "Dreptul UE nu este încărcat local; importă acte CELEX în eu.db cu "
                 "`uv run python -m scripts.cellar 32018R1805 --db eu.db`.",
@@ -1128,6 +1134,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     try:
         with cellar.deschide(stare.eu, readonly=True) as con:
             if not _schema_ue(con):
+                triage_ue.aplica_triere_lipsa(referinte)
                 return {
                     "sursa": "eu.db",
                     "limba": limba_filtru,
@@ -1136,6 +1143,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
                     "rezultate": [],
                     "referinte": referinte,
                     "referinte_neimportate": referinte,
+                    "semnale": semnale,
                     "limitari": [
                         "eu.db există, dar nu are indexul de prevederi UE; rulează importul CELEX "
                         "sau reindexarea cu "
@@ -1150,7 +1158,10 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             for rand in textuale:
                 rand.setdefault("potrivire", "text")
             rezultate = _imbina_rezultate_ue(exacte, textuale, limita_i)
+            triage_ue.aplica_triere(rezultate)
+            triage_ue.aplica_triere_lipsa(neimportate)
     except sqlite3.Error as e:
+        triage_ue.aplica_triere_lipsa(referinte)
         return {
             "sursa": "eu.db",
             "limba": limba_filtru,
@@ -1159,6 +1170,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
             "rezultate": [],
             "referinte": referinte,
             "referinte_neimportate": referinte,
+            "semnale": semnale,
             "limitari": [f"eu.db nu a putut fi citit: {e}", LIMITARE_UE],
         }
 
@@ -1182,6 +1194,7 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
         "rezultate": rezultate,
         "referinte": referinte,
         "referinte_neimportate": neimportate,
+        "semnale": semnale,
         "limitari": limitari,
     }
 

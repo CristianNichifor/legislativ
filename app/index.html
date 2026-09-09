@@ -3652,18 +3652,34 @@ function ueReferinteLipsaHtml(refs){
   return `<div class="ue-missing">`
     +`<div class="ue-dosar-stat">Acte UE citate explicit, dar neimportate în eu.db</div>`
     +`<div class="ue-ref-list">`+rr.map(r=>`<div class="ue-ref">`
-      +`<span class="ue-loc">${esc(r.celex||"")}</span>${esc(r.text||"")}</div>`).join("")
+      +`<span class="ue-loc">${esc(r.celex||"")}</span>${esc(r.text||"")}`
+      +(r.triere?`<br><span class="hint">${esc(r.triere.eticheta||"act UE neimportat")} · ${esc(r.triere.explicatie||"")}</span>`:"")
+      +`</div>`).join("")
     +`</div></div>`;
+}
+function ueSemnaleHtml(semnale){
+  const ss=semnale||[];
+  if(!ss.length) return "";
+  return `<div class="ue-missing">`
+    +`<div class="ue-dosar-stat">Semnale UE de verificat manual</div>`
+    +`<div class="ue-ref-list">`+ss.map(s=>{
+      const refs=(s.referinte||[]).length?` · CELEX: ${s.referinte.map(esc).join(", ")}`:"";
+      const expresii=(s.expresii||[]).length?` · expresii: ${s.expresii.map(esc).join(", ")}`:"";
+      return `<div class="ue-ref"><span class="ue-loc">${esc(s.eticheta||"semnal UE")}</span>`
+        +`${esc(s.explicatie||"")}${refs}${expresii}</div>`;
+    }).join("")+`</div></div>`;
 }
 function ueHitsHtml(rr){
   return `<div class="ue-list">`+(rr||[]).map(r=>{
     const href=urlSigur(r.sursa_url||r.item_url);
     const loc=[r.celex, r.locator].filter(Boolean).join(" · ");
-    const mod=r.potrivire==="referinta" ? "referință explicită" : "potrivire text";
+    const triere=r.triere||{};
+    const mod=triere.eticheta || (r.potrivire==="referinta" ? "referință explicită" : "potrivire text");
     return `<article class="ue-hit">`
       +`<div class="ue-hit-head"><span class="ue-loc">${esc(loc)}</span>`
       +`<span class="hint">${esc(r.fel||"")} · ${esc(r.limba||"")} · ${esc(mod)}</span></div>`
       +`<div class="ue-title">${esc(r.act_titlu||r.titlu||"Act UE fără titlu")}</div>`
+      +(triere.explicatie?`<div class="hint">${esc(triere.explicatie)}</div>`:"")
       +(r.titlu&&r.titlu!==r.act_titlu?`<div class="hint">${esc(r.titlu)}</div>`:"")
       +`<div class="ue-frag">${markFragment(r.fragment||"")}</div>`
       +`<div class="ue-meta">`
@@ -3725,25 +3741,30 @@ function renderUE(d){
   const out=$("#ue-out"), stat=$("#ue-stat");
   const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], dosare=(d&&d.dosare)||[];
   const lipsa=(d&&d.referinte_neimportate)||[];
+  const semnale=(d&&d.semnale)||[];
   stat.textContent=rr.length ? `${nf(rr.length)} prevederi candidate`
-    : (lipsa.length ? `${nf(lipsa.length)} referințe UE neimportate` : "");
+    : (lipsa.length ? `${nf(lipsa.length)} referințe UE neimportate`
+      : (semnale.length ? `${nf(semnale.length)} semnale UE` : ""));
   const note=ueLimitariHtml(lim);
   const refs=ueReferinteLipsaHtml(lipsa);
-  if(!rr.length){ out.innerHTML=refs+(refs?"":empty("Nicio prevedere UE de arătat."))+note; return; }
-  out.innerHTML=refs+ueDosareHtml(dosare)+ueHitsHtml(rr)+note;
+  const sig=ueSemnaleHtml(semnale);
+  if(!rr.length){ out.innerHTML=sig+refs+(sig||refs?"":empty("Nicio prevedere UE de arătat."))+note; return; }
+  out.innerHTML=sig+refs+ueDosareHtml(dosare)+ueHitsHtml(rr)+note;
 }
 function renderUEInline(d){
   if(!d || d.error) return "";
   const rr=d.rezultate||[], lim=d.limitari||[], dosare=d.dosare||[];
   const lipsa=d.referinte_neimportate||[];
+  const semnale=d.semnale||[];
   const primele=rr.slice(0,5);
   const refs=ueReferinteLipsaHtml(lipsa);
+  const sig=ueSemnaleHtml(semnale);
   const corp=rr.length
-    ? refs+ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
+    ? sig+refs+ueDosareHtml(dosare, 3)+ueHitsHtml(primele)
       +(rr.length>primele.length?`<p class="hint" style="margin:.25rem 0">Se afișează primele ${primele.length} din ${rr.length}; fila «Drept UE» poate căuta separat același text.</p>`:"")
       +ueLimitariHtml(lim)
-    : refs+(refs?"":empty(esc(lim[0]||"Nicio prevedere UE de arătat.")))+ueLimitariHtml(lim, refs?0:1);
-  return sec("Drept UE", rr.length+lipsa.length, corp
+    : sig+refs+(sig||refs?"":empty(esc(lim[0]||"Nicio prevedere UE de arătat.")))+ueLimitariHtml(lim, (sig||refs)?0:1);
+  return sec("Drept UE", rr.length+lipsa.length+semnale.length, corp
     +`<div class="row" style="margin-top:.5rem"><button type="button" class="ghost ue-open">Vezi în fila Drept UE</button></div>`);
 }
 function pregatesteUEDinDraft(forta){
