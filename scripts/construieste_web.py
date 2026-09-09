@@ -14,10 +14,9 @@ It produces, under `web/`:
   loads the bundle and the data into the virtual filesystem, and replaces `fetch('/api/…')` with a
   call into `scripts.servicii`. The rest of the page is untouched, so the whole UI runs client-side.
 
-**Nothing the user types leaves the tab**, and the page enforces it: a Content-Security-Policy
-whose `connect-src` allows only this origin and the Pyodide CDN, so no script — first-party or
-injected — can POST the draft anywhere else. The only network calls are Pyodide (runtime + the
-`sqlite3` package) and the static data files (public law) from the app's own origin.
+By default, nothing the user types leaves the tab. The deterministic checks run locally. The only
+exception is explicit "Limbaj clar" rewriting when the user chooses online BYOK; then the browser
+sends that text directly to the selected provider or user-owned Worker, with the user's key.
 
 Two data sources:
 
@@ -60,22 +59,22 @@ CURATE = ["lege-98-2016", "lege-99-2016", "lege-100-2016", "lege-24-2000", "oug-
 N_ACTE = 400
 N_INITIATIVE = 300
 
-# The privacy guarantee, made a rule the page obeys rather than a claim it makes. `connect-src` is
-# the load-bearing line: even a compromised or injected script cannot send the draft anywhere but
-# this origin and the Pyodide CDN. `'unsafe-eval'` is Pyodide's (it compiles Python and instantiates
-# WebAssembly); `'unsafe-inline'` covers the app's first-party inline script and styles — a hardened
-# build would externalise those to drop it, but neither weakens the exfiltration guarantee, which
-# rests on `connect-src`.
+# The privacy boundary, made a rule the page obeys rather than a claim it makes. `connect-src` is the
+# load-bearing line: deterministic checks can reach only this origin and the Pyodide/WebLLM assets.
+# The extra AI provider origins are for explicit online BYOK rewriting, where the UI says the text
+# and session-held key go directly to that provider. `'unsafe-eval'` is Pyodide's (it compiles Python
+# and instantiates WebAssembly); `'unsafe-inline'` covers the app's first-party inline script/styles.
 CSP = (
     "default-src 'self'; "
     # esm.run/jsdelivr serve Pyodide and (opt-in) the WebLLM library; both are code, not data.
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://esm.run; "
-    # connect targets, all public artifacts — never the user's draft, which is analysed locally and
-    # whose only connect target is 'self':
-    #  · `*.workers.dev` — the opt-in cloud rewrite service (receives PUBLIC law text only);
+    # connect targets:
+    #  · `api.openai.com` / `api.anthropic.com` — explicit BYOK rewrite providers;
+    #  · `*.workers.dev` — a user-owned Worker rewrite endpoint;
     #  · huggingface.co / hf.co — WebLLM's on-device model weights, for the opt-in local AI. The
     #    provision text stays on the device; only the model is downloaded.
-    "connect-src 'self' https://cdn.jsdelivr.net https://esm.run https://*.workers.dev "
+    "connect-src 'self' https://cdn.jsdelivr.net https://esm.run https://api.openai.com "
+    "https://api.anthropic.com https://*.workers.dev "
     "https://huggingface.co https://*.huggingface.co https://hf.co https://*.hf.co "
     "https://raw.githubusercontent.com__DEPOZIT_CSP__; "
     "worker-src 'self' blob:; child-src 'self' blob:; "

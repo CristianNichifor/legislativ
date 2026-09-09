@@ -1,13 +1,16 @@
-# infra — the plain-language rewrite service (Cloudflare, free)
+# infra — optional plain-language rewrite service (Cloudflare, free)
 
 The side-by-side "Limbaj clar" feature restates a provision of **public** law in plain language
-(Danish style — see `docs/STIL_DANEZ.md`). It is a Cloudflare Worker that runs the rewrite on
-**Workers AI** (Cloudflare's own hosted models — no external account, no key) and caches each result
-in KV, so a provision is rewritten **once, ever**, then served from cache to everyone. The app's own
-draft never touches it — only public law text is sent (and online mode confirms before sending).
+(Danish style — see `docs/STIL_DANEZ.md`). This Worker is an optional endpoint that a user or
+deployment owner can run with their own Cloudflare account. It runs the rewrite on **Workers AI**
+(Cloudflare's own hosted models — no external account, no key) and caches each result in KV, so a
+provision is rewritten **once**, then served from cache.
 
-Everything is on Cloudflare's **free tier**. Workers AI is billed in Neurons with a free daily
-allocation, so day-to-day this costs **nothing**.
+The browser app no longer defaults to a project-owned endpoint. Online AI is BYOK: users pick a
+provider or paste their own Worker endpoint, and private draft text is sent only after confirmation.
+
+The Worker can fit on Cloudflare's **free tier**. Workers AI is billed in Neurons with a free daily
+allocation, so light use can cost **nothing**.
 
 ## What Cloudflare pieces we use
 
@@ -20,8 +23,9 @@ allocation, so day-to-day this costs **nothing**.
 | **AI Gateway** `law-legislation-project-gateway` | free | caching + analytics in front of Workers AI | live |
 | **R2** | — | *planned* for the bulk data shards | not enabled |
 
-Account: **CN Webify** `432316a05c0d6000c6e196fe32e47dd7`. Endpoint (already the app's default):
-`https://legislativ-rescrieri.cn-webify.workers.dev/rescrie`.
+Account: **CN Webify** `432316a05c0d6000c6e196fe32e47dd7`. Existing maintainer endpoint:
+`https://legislativ-rescrieri.cn-webify.workers.dev/rescrie`. It is not used as the public app
+default.
 
 ## Deploy
 
@@ -31,8 +35,8 @@ Already deployed and working. To redeploy after a change:
 cd infra/worker && npx wrangler deploy      # needs `npx wrangler login` once
 ```
 
-No secret to set — Workers AI needs no key. The app already targets the endpoint above, so picking
-"online (prin API)" in the AI settings just works (users can still override the endpoint in the UI).
+No secret to set — Workers AI needs no key. In the app, pick "online (BYOK)" → "Worker propriu" and
+paste your own `/rescrie` endpoint.
 
 ### AI Gateway (optional, free — for caching + analytics)
 
@@ -63,7 +67,7 @@ which is why this one step is a dashboard/API-token action.
 - `POST {text, stil?, model?}` **without `act`** is a general rewrite of the caller's own text — never
   cached, still rate-limited / size-capped / daily-capped. The app uses this for the Redactează block
   text and the draft "Limbaj clar" (and confirms before sending).
-- The app's CSP already allows `https://*.workers.dev`.
+- The app's CSP allows `https://*.workers.dev` for user-owned Worker endpoints.
 
 ## Keeping it free and abuse-proof
 
