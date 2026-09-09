@@ -152,6 +152,15 @@ def test_matrix_groups_gap_reports_by_issuer(tmp_path):
     assert rand["semnale"]["viduri"] == 1
     assert rand["semnale"]["neconstitutionale"] == 1
     assert rand["nivel"] == "blocking"
+    assert rand["ranguri"] == [
+        {
+            "categorie": "primar",
+            "eticheta": "rang primar",
+            "rang": 1,
+            "acte": 1,
+            "note": ["organic/ordinar neprecizat în corpus"],
+        }
+    ]
     assert rand["exemple"]["viduri"][0]["act_id"] == "lege-98-2016"
     assert out["limitari"]
 
@@ -166,6 +175,25 @@ def test_matrix_type_filter_applies_to_counts_and_report_rows(tmp_path):
     assert out["rezumat"]["acte"] == 1
     assert out["rezumat"]["viduri"] == 0
     assert out["randuri"][0]["tipuri"] == [{"tip": "hg", "acte": 1}]
+    assert out["randuri"][0]["ranguri"][0]["categorie"] == "secundar"
+
+
+def test_matrix_rank_filter_applies_to_counts_and_report_rows(tmp_path):
+    stare = _stare(tmp_path)
+    stare.vid = [{"act_id": "lege-98-2016", "severitate": "blocking"}]
+
+    out = _matrice({"rang": ["primar"]}, stare)
+
+    assert out["rang"] == "primar"
+    assert [r["emitent"] for r in out["randuri"]] == ["Parlamentul"]
+    assert out["rezumat"]["acte"] == 1
+    assert out["rezumat"]["viduri"] == 1
+    assert out["rezumat"]["ranguri"][0]["categorie"] == "primar"
+
+    out = _matrice({"rang": ["secundar"]}, stare)
+
+    assert [r["emitent"] for r in out["randuri"]] == ["Guvernul"]
+    assert out["rezumat"]["viduri"] == 0
 
 
 def test_matrix_counts_amendment_pressure_and_live_initiatives(tmp_path):

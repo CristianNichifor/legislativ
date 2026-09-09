@@ -90,6 +90,10 @@ uv run python -m scripts.cellar 32018R1805 --db eu.db
 uv run python -m scripts.cellar --indexeaza --db eu.db   # pentru texte UE importate înainte
 ```
 
+Fila **Matrice** grupează semnale verificabile pe emitent, tip de act și rang normativ. Rangul este
+dedus doar din tipul actului (`lege`, `oug`, `hg`, `ordin` etc.); pentru `lege`, aplicația marchează
+explicit că organic/ordinar nu este precizat în corpus.
+
 Reparațiile pe un corpus deja adunat stau separat, fiindcă o migrare care se rulează singură pe un
 orar e una pe care nimeni nu poate decide să n-o ruleze:
 

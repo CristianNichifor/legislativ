@@ -349,6 +349,7 @@
   .matrix-row.note{box-shadow:inset 3px 0 0 var(--note)}
   .matrix-name{font-weight:600}
   .matrix-years{font-family:var(--mono);font-size:.68rem;color:var(--ink-mute);margin-left:.35rem}
+  .matrix-ranks{font-size:.7rem;color:var(--ink-mute)}
   .matrix-cell{font-family:var(--mono);white-space:nowrap}
   .matrix-zero{color:var(--ink-mute)}
   .matrix-detail{margin-top:.7rem}
@@ -1140,9 +1141,10 @@
 
       <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
         <p class="hint" style="margin:.2rem 0 .8rem">
-          Matrice deterministă pe emitent și tip de act: lacune legislative, prevederi lovite de
-          Curte rămase nereparate, inițiative pendinte și presiune de amendare. Nu clasifică pe
-          domenii materiale inventate — arată numai axele pe care corpusul le poate apăra.
+          Matrice deterministă pe emitent, tip și rang normativ: lacune legislative, prevederi
+          lovite de Curte rămase nereparate, inițiative pendinte și presiune de amendare. Nu
+          clasifică pe domenii materiale inventate și nu deduce lege organică/ordinară când
+          metadatele nu o spun.
         </p>
         <div class="matrix-tools">
           <input type="search" id="m-q" placeholder="filtrează emitent, instrument sau act">
@@ -1155,6 +1157,15 @@
             <option value="ordin">ordin</option>
             <option value="decizie">decizie</option>
             <option value="decret">decret</option>
+          </select>
+          <select id="m-rang" title="Filtrează după rang normativ">
+            <option value="">toate rangurile</option>
+            <option value="primar">primar: lege/OUG/OG</option>
+            <option value="secundar">secundar: HG</option>
+            <option value="administrativ">administrativ: ordin/normă</option>
+            <option value="decret">decret</option>
+            <option value="constitutional">constituțional</option>
+            <option value="necunoscut">necunoscut</option>
           </select>
           <select id="m-sort" title="Ordonează matricea">
             <option value="semnale">semnale</option>
@@ -3555,17 +3566,25 @@ function mTextCautare(r){
   const ex=r.exemple||{};
   const vid=(ex.viduri||[]).map(x=>`${x.act_id} ${x.instrument||""} ${x.text||""}`).join(" ");
   const nec=(ex.neconstitutionale||[]).map(x=>`${x.act_id} ${x.decizie||""} ${x.text||""}`).join(" ");
-  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${vid} ${nec}`);
+  const ranguri=(r.ranguri||[]).map(x=>`${x.categorie} ${x.eticheta} ${(x.note||[]).join(" ")}`).join(" ");
+  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${ranguri} ${vid} ${nec}`);
 }
 async function loadMatrice(forta){
   if(MATRICE && !forta){ renderMatrice(); return; }
-  const tip=$("#m-tip")?.value||"", sort=$("#m-sort")?.value||"semnale";
+  const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"", sort=$("#m-sort")?.value||"semnale";
   $("#m-lista").innerHTML=`<span class="spin"></span> încarc…`;
   $("#m-detalii").innerHTML="";
   const qs=new URLSearchParams({limita:"120",sort});
   if(tip) qs.set("tip",tip);
+  if(rang) qs.set("rang",rang);
   MATRICE=await fetch("/api/matrice?"+qs.toString()).then(r=>r.json()).catch(()=>null);
   renderMatrice();
+}
+function mRanguri(ranguri){
+  const rr=(ranguri||[]).slice(0,3);
+  if(!rr.length) return "";
+  return rr.map(r=>`${esc(r.eticheta||r.categorie)} ${nf(r.acte||0)}`
+    +((r.note||[]).length?` (${r.note.map(esc).join(", ")})`:"")).join(" · ");
 }
 function renderMatrice(){
   const gazda=$("#m-lista"), rez=$("#m-rezumat"), det=$("#m-detalii");
@@ -3590,8 +3609,10 @@ function renderMatrice(){
     +MATRIX_ROWS.map((r,i)=>{
       const s=r.semnale||{}, ani=r.de_la?`<span class="matrix-years">${esc(r.de_la)}–${esc(r.pana_la||r.de_la)}</span>`:"";
       const tipuri=(r.tipuri||[]).map(t=>`${esc(t.tip)} ${nf(t.acte)}`).join(" · ");
+      const ranguri=mRanguri(r.ranguri||[]);
       return `<div class="matrix-row ${esc(r.nivel||"")}" role="button" tabindex="0" aria-expanded="false" data-i="${i}">`
-        +`<span><span class="matrix-name">${esc(r.emitent)}</span>${ani}<br><span class="dom-tipuri">${tipuri}</span></span>`
+        +`<span><span class="matrix-name">${esc(r.emitent)}</span>${ani}<br><span class="dom-tipuri">${tipuri}</span>`
+        +(ranguri?`<br><span class="matrix-ranks">${ranguri}</span>`:"")+`</span>`
         +mNum(r.acte)+mNum(s.viduri,"dep-nu")+mNum(s.neconstitutionale,"dep-nu")
         +mNum(s.initiative_in_lucru,"dep-pend")+mNum(s.amendamente_primite)+"</div>";
     }).join("")+`</div>`
@@ -3607,8 +3628,11 @@ function mArataRand(el){
   $("#m-lista").querySelectorAll(".matrix-row").forEach(x=>x.setAttribute("aria-expanded","false"));
   el.setAttribute("aria-expanded","true");
   const s=r.semnale||{}, ex=r.exemple||{};
+  const ranguri=mRanguri(r.ranguri||[]);
   let h=`<div class="parc"><div class="parc-h">${esc(r.emitent)} — semnale verificabile</div>`
-    +`<div class="watch-meta">${nf(r.acte)} acte · ${nf(s.viduri)} lacune · `
+    +`<div class="watch-meta">${nf(r.acte)} acte`
+    +(ranguri?` · ${ranguri}`:"")
+    +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`;
   const vid=ex.viduri||[];
@@ -3634,6 +3658,7 @@ function mArataRand(el){
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-rang").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 // ---- Drept UE: candidate CELEX provisions for the draft text ----

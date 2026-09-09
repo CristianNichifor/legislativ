@@ -44,6 +44,7 @@ from datetime import date, timedelta
 from typing import Final
 
 from scripts.decizii import Proviziune
+from scripts.rang_normativ import poate_modifica
 
 # Article 147 (1) of the Constitution, and article 145 (1) before the 2003 revision.
 ZILE_SUSPENDARE: Final[int] = 45
@@ -53,21 +54,6 @@ ZILE_SUSPENDARE: Final[int] = 45
 FELURI_REPARATOARE: Final[frozenset[str]] = frozenset(
     {"modifica", "inlocuieste", "abroga", "completeaza", "introduce"}
 )
-
-# What may amend what. A law is amended by a law or by an ordonanță; a hotărâre or an ordin
-# cannot reach it. Ranks are compared, not matched, so an oug amending an hg is fine.
-RANG: Final[dict[str, int]] = {
-    "constitutie": 0,
-    "lege": 1,
-    "decret-lege": 1,
-    "oug": 1,
-    "og": 1,
-    "decret": 2,
-    "hg": 3,
-    "ordin": 4,
-    "norma": 4,
-    "instructiuni": 4,
-}
 
 
 @dataclass(frozen=True)
@@ -138,9 +124,7 @@ def _atinge(muchie: Muchie, prov: Proviziune) -> bool:
 
 def _poate_repara(din_tip: str | None, catre_tip: str | None) -> bool:
     """Whether an act of the first type can lawfully amend one of the second."""
-    if din_tip is None or catre_tip is None:
-        return True
-    return RANG.get(din_tip, 9) <= RANG.get(catre_tip, 9)
+    return poate_modifica(din_tip, catre_tip)
 
 
 def registru(
