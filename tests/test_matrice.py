@@ -173,6 +173,59 @@ def test_deadline_candidates_exclude_same_act_unknown_and_other_domain(tmp_path)
     assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
 
 
+def test_authority_overlaps_evidence_dossier_and_shared_limit(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        for i, autoritate in enumerate(
+            ["Ministerul Mediului", "Agenția Națională pentru Mediu", "Oficiul pentru Mediu"], 2
+        ):
+            act_id = f"lege-{i}-2020"
+            _act(con, act_id, "lege", str(i), 2020, "Parlamentul", "Achiziții publice")
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, 'art1', 1, ?)",
+                (act_id, f"{autoritate} emite autorizațiile de mediu."),
+            )
+        con.commit()
+    qs = {"emitent": ["Parlamentul"]}
+    out = _matrice_contradictii(qs, stare)
+    assert out["atributii_analizate"] == 3
+    assert len(out["candidati"]) == 3
+    for c in out["candidati"]:
+        assert c["tip"] == "competenta_suprapusa"
+        assert c["status"] == "candidat_neconfirmat"
+        assert c["a"]["autoritate"] != c["b"]["autoritate"]
+        assert c["a"]["actiuni"][0]["locator"] == "art1"
+        assert c["verificari"]
+    partial = _matrice_contradictii({**qs, "limita": ["1"]}, stare)
+    assert partial["trunchiat"] and len(partial["candidati"]) == 1
+    assert not _matrice_contradictii({**qs, "tip": ["hg"]}, stare)["candidati"]
+    dosar = _matrice_dosar(qs, stare)
+    assert dosar["contradictii"]["candidati"] == out["candidati"]
+    assert "Autoritate: ministerul mediului" in dosar["markdown"]
+    assert "Ministerul Mediului emite autorizațiile de mediu." in dosar["markdown"]
+
+
+def test_authority_overlaps_exclude_same_authority_act_and_other_domains(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        for i, titlu in [(2, "Achiziții publice"), (3, "Educația"), (4, "Alte reguli")]:
+            _act(con, f"lege-{i}-2020", "lege", str(i), 2020, "Parlamentul", titlu)
+        for act, ord, autoritate, obiect in [
+            ("lege-98-2016", 1, "Ministerul Mediului", "autorizațiile de mediu"),
+            ("lege-2-2020", 1, "Ministerul Mediului", "autorizațiile de mediu"),
+            ("lege-3-2020", 1, "Ministerul Economiei", "autorizațiile de mediu"),
+            ("lege-4-2020", 1, "Ministerul Economiei", "autorizațiile de mediu"),
+            ("lege-98-2016", 2, "Ministerul Mediului", "licențele pentru instalații"),
+            ("lege-98-2016", 3, "Ministerul Economiei", "licențele pentru instalații"),
+        ]:
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, ?, ?, ?)",
+                (act, f"art{ord}", ord, f"{autoritate} emite {obiect}."),
+            )
+        con.commit()
+    assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
+
+
 def _ini(plx_id: str, stadiu: str = "pe ordinea de zi") -> Initiativa:
     return Initiativa(
         plx_id=plx_id,
