@@ -3,6 +3,11 @@
 Preparation for M8, not release sign-off. No user database, network fetch,
 inference API, secret inventory or paid service is accessed.
 
+Current integrated evidence is in [v1_rehearsal_current.json](v1_rehearsal_current.json).
+It exercises schema 7 -> 9 with populated reassessment, recovery, dossier metadata
+and EU-link records. The dated runs below retain earlier intermediate results;
+`v1_rehearsal_schema9.json` is provisional historical evidence, not the current run.
+
 ## Repeatable command
 
 From a clean checkout with Python >=3.12 and SQLite FTS5:
@@ -12,9 +17,8 @@ python -m scripts.v1_rehearsal
 python -m pytest tests/test_v1_rehearsal.py tests/test_dosare.py tests/test_propuneri.py tests/test_proposal_workflow.py tests/test_interventii_propuneri.py tests/test_analize_propuneri.py tests/test_etalon.py tests/test_etalon_real.py tests/test_consolidare_gold.py
 ```
 
-The schema-8 harness uses the standard library only. The schema-9 EU extension
-reuses `tests.test_instantanee_ue.write`, so use `uv run` with cached development
-dependencies (including pytest) for that fixture path.
+The harness uses only the standard library and production modules, including its
+schema-9 synthetic EU fixture. Development dependencies are needed only for pytest.
 It creates a fresh `TemporaryDirectory` and deletes it even on failure. JSON goes
 to stdout; assertion failures exit nonzero, including under `python -O`.
 Network connection/DNS functions are blocked during the run. No model is invoked.
@@ -242,3 +246,26 @@ spec.loader.exec_module(harness)
 print(json.dumps(harness.rehearse(), indent=2))
 PY
 ```
+
+## Final integrated rehearsal (2026-09-10)
+
+The combined runtime includes M3/M4, M6 recovery-race fixes, M5 schema 9 and the
+expanded rehearsal. `python -m scripts.v1_rehearsal` passed in a fresh Python
+3.12.12 venv created without pip or development packages (SQLite 3.50.4).
+The final EU fixture is constructed directly through `cellar.ManifestareUE` and
+`cellar.scrie_celex`, with explicitly synthetic `.invalid` provenance, rather than
+importing pytest helpers. A subprocess regression disables all site packages.
+
+The current JSON records two retained analysis exports, three recovery rows
+(two recoverable copies and one tombstone), archived/restored metadata and one
+EU link. Exact retries and exports remain valid after source removal. Frozen
+schema-7 history survives migration to 9 and pre/post-upgrade backups. Ambient
+reports are excluded, all network connections are blocked and temporary data is
+removed. This is a clean-runtime fixture rehearsal, not a packaged deployment,
+authentic EU-law evaluation or completed M7/M8 sign-off.
+
+Final verification: **1,333 tests passed in 64.87s**; repository-wide Ruff lint
+and formatting passed. The fresh-runtime rehearsal also passed under `python -O`.
+Desktop/mobile source, context, recovery and EU-link workflows passed on the
+integrated app; the EU test uses a matching synthetic national corpus so the
+subsequent structured proposal save does not bypass stale-target protection.

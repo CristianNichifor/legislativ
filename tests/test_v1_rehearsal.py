@@ -3,6 +3,7 @@ import shutil
 import socket
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,24 @@ def test_fixture_tampering_fails_before_corpus_write(tmp_path):
 def test_network_is_blocked():
     with rehearsal.offline(), pytest.raises(RuntimeError, match="Network forbidden"):
         socket.create_connection(("127.0.0.1", 9))
+
+
+def test_rehearsal_runs_without_site_packages():
+    program = (
+        "import runpy,sys;sys.path.insert(0,"
+        + repr(str(rehearsal.ROOT))
+        + ");runpy.run_module('scripts.v1_rehearsal',run_name='__main__')"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-S", "-c", program],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    data = json.loads(result.stdout)
+    assert data["status"] == "fixture_rehearsal_passed"
+    assert data["workflow"]["actual_schema"] == dosare.SCHEMA_VERSION
 
 
 def test_ambient_reports_are_not_read(tmp_path, monkeypatch):

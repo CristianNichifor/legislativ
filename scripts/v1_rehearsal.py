@@ -151,12 +151,31 @@ def analysis_exports(path):
 def populate_eu_link(state, args):
     if dosare.SCHEMA_VERSION < 9:
         return None
-    from scripts import achizitii_ue, legaturi_ue
+    from scripts import achizitii_ue, cellar, legaturi_ue
     from scripts import legaturi_ue_store as store
-    from tests.test_instantanee_ue import write
 
     body = "Obligatie sintetica pentru repetitie, fara valoare juridica."
-    write(state, "REGULAMENT SINTETIC DE TEST\nArticolul 1\nObligatii de test\n" + body)
+    source = cellar.ManifestareUE(
+        celex="32018R1805",
+        work_uri="https://fixtures.example.invalid/work",
+        expression_uri="https://fixtures.example.invalid/work/ron",
+        manifestation_uri="https://fixtures.example.invalid/work/ron/xhtml",
+        limba="RON",
+        format="xhtml",
+        item_url="https://fixtures.example.invalid/synthetic.xhtml",
+        titlu="SYNTHETIC rehearsal source",
+        data_document=None,
+        tip_uri=None,
+        in_vigoare=None,
+    )
+    with cellar.deschide(str(state.eu)) as con:
+        cellar.scrie_celex(
+            con,
+            source.celex,
+            [source],
+            source,
+            "REGULAMENT SINTETIC DE TEST\nArticolul 1\nObligatii de test\n" + body,
+        )
     selected = dict(zip(("dosar_id", "rulare_id", "constatare_id"), args, strict=True)) | {
         "revizie": 1,
         "celex": "32018R1805",

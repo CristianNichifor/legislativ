@@ -42,10 +42,10 @@
     "proposal_revisions": 2,
     "retained_analysis_exports": 2,
     "eu_link": {
-      "status": "not_exercised_requires_schema9",
+      "status": "synthetic_link_verified",
       "fixture_kind": "synthetic_text_and_provenance_not_authentic_eu_law",
-      "retained_links": 0,
-      "offline_retry_after_source_removal": false
+      "retained_links": 1,
+      "offline_retry_after_source_removal": true
     },
     "reassessment": {
       "source_change": "synthetic_temp_corpus_only",
@@ -83,13 +83,14 @@
       "interventii_propuneri": 2,
       "analize_propuneri": 2,
       "dosare_stare": 1,
-      "ciorne": 3
+      "ciorne": 3,
+      "legaturi_ue": 1
     },
-    "actual_schema": 8
+    "actual_schema": 9
   },
   "upgrade": {
     "baseline_schema": 7,
-    "actual_schema": 8,
+    "actual_schema": 9,
     "migration_exercised": true,
     "baseline_sha256": "fb1a9c10d30a90a4450794f2d9bfd51de33877f30333a7e44f6c6c56ec8cd024",
     "preserved_tables": [
@@ -99,6 +100,7 @@
       "dosare",
       "dosare_stare",
       "interventii_propuneri",
+      "legaturi_ue",
       "propuneri",
       "recalculari",
       "revizuiri",
