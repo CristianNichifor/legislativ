@@ -254,6 +254,8 @@ def face_handler(stare: Stare):
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/dovezi",
+                "/api/dosare/verificari",
+                "/api/dosare/coada",
             ):
                 from scripts import dosare
 
@@ -263,7 +265,23 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/dovezi":
+                    if ruta.path == "/api/dosare/verificari":
+                        from scripts.verificari_dovezi import istoric
+
+                        out = istoric(
+                            path,
+                            ident,
+                            qs.get("rulare_id", [None])[0],
+                            int(qs.get("offset", ["0"])[0]),
+                            qs.get("verificare_id", [None])[0],
+                        )
+                    elif ruta.path == "/api/dosare/coada":
+                        from scripts.verificari_dovezi import coada
+
+                        out = coada(
+                            path, int(qs.get("offset", ["0"])[0]), qs.get("stare", ["toate"])[0]
+                        )
+                    elif ruta.path == "/api/dosare/dovezi":
                         from scripts.dependente_dovezi import verifica
 
                         out = verifica(stare, ident, qs.get("rulare_id", [None])[0])
@@ -317,6 +335,7 @@ def face_handler(stare: Stare):
                 "/api/dosare",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
+                "/api/dosare/verificari",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -340,14 +359,23 @@ def face_handler(stare: Stare):
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._json({"error": "json invalid"}, 400)
                 return
-            if ruta in ("/api/dosare", "/api/dosare/rulari", "/api/dosare/revizuiri"):
+            if ruta in (
+                "/api/dosare",
+                "/api/dosare/rulari",
+                "/api/dosare/revizuiri",
+                "/api/dosare/verificari",
+            ):
                 from scripts import dosare
 
                 if not self._dosare_permis():
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/revizuiri":
+                    if ruta == "/api/dosare/verificari":
+                        from scripts.verificari_dovezi import salveaza
+
+                        out = salveaza(stare, cerere)
+                    elif ruta == "/api/dosare/revizuiri":
                         from scripts.revizuiri import salveaza
 
                         out = salveaza(path, cerere)

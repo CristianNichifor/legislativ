@@ -35,10 +35,11 @@ a write transaction, and UPDATE/DELETE triggers reject modification of old event
 An authorized local database owner can still bypass these controls by changing the
 database schema; this is not cryptographic immutability.
 
-Schema 2 adds `revizuiri`. Version-1 stores remain readable without migration and
-show no review events. The next explicit dossier/review write upgrades them
+Schema 2 added `revizuiri`; schema 3 adds evidence-check history and recalculation
+links. Version-1/2 stores remain readable without migration; absent history is
+shown as uncaptured, never backfilled. The next explicit dossier/review write upgrades them
 transactionally; failed writes roll back the migration. Backup before upgrading;
-older application code rejects schema 2. Reviews belong to a saved run and never
+older application code rejects schema 3. Reviews belong to a saved run and never
 transfer automatically to a different run, even with similar evidence.
 
 Unsaved review text is retained while filtering or reloading reviews within the
@@ -77,7 +78,7 @@ metadata and imported document bytes. Static clients reject persistent dossier
 operations explicitly. No hosted authentication or multi-user isolation is provided;
 this is a local single-user workspace.
 
-First creation initializes schema 2 and the SQLite application ID in one write
+First creation initializes schema 3 and the SQLite application ID in one write
 transaction. Reads do not create or migrate files. An unrelated nonempty database
 or incompatible application/schema version is rejected, not reset. A failure during
 initialization rolls back tables and version markers together. Future migrations
@@ -152,14 +153,15 @@ unsupported manifest/hash versions and exceeded capture limits are `indisponibil
 never unchanged or presumed repealed. A finding with both changed and unavailable
 dependencies remains changed and also has `comparatie_incompleta=true`.
 
-In the saved-run review panel, **Verifica dovezile** runs this check on demand.
+In the saved-run review panel, **Verifica si salveaza dovezile** runs and saves a check on demand.
 The filter offers changed-evidence and unavailable-comparison queues for the
 selected run, independently of human review status. Dependency details retain
 both fingerprints. The old report remains visible, but full historical source
 text is not archived and no reconstructed full-text diff is claimed. Check results
-and their timestamp are included in the UI's JSON/Markdown exports. Checks are
-session-only, not a persistent audit log, and do not run automatically on opening
-a dossier. Rechecking after source collection is an explicit user action.
+and their timestamp are included in the UI's JSON/Markdown exports. The panel loads
+saved history, not current source data, when opened. Rechecking after source
+collection remains an explicit user action. The original GET comparison endpoint
+is still read-only and does not itself save results.
 
 **Recalculeaza pentru reevaluare** runs the saved filters against current data and
 opens the resulting saved run. If content is identical, deduplication preserves
@@ -168,9 +170,50 @@ requires explicit reviewer decisions; earlier decisions remain historical. Unsav
 notes block this action's navigation, including notes entered while recalculation is in flight.
 No acknowledgement on an old run dismisses its evidence-change warning.
 
-This is a selected-run corpus queue, not a cross-dossier scheduled monitor. The
-manifest's scope and separate-read limitations still apply. EU documents, CCR
+The manifest's scope and separate-read limitations still apply. EU documents, CCR
 decision documents and imported parliamentary snapshots are not compared here.
+
+## Persistent Check History and Queue
+
+`POST /api/dosare/verificari` accepts exactly `id` (32-character retry UUID),
+`dosar_id` and `rulare_id`. Results are generated server-side, bounded to 4 MB,
+and saved as append-only events in `verificari_dovezi`. Reusing a successful ID
+for the same run returns the original check without rereading sources, even after
+sources change; a different run is rejected. Concurrent retries insert only one
+event. Each deliberate new check uses a fresh ID. The queue's latest event is
+defined by database insertion sequence, not client clocks or UUID ordering.
+
+`GET /api/dosare/verificari?id=<dossier>&rulare_id=<run>&offset=0` returns 20 check
+summaries, total count, and the latest full result as `selectata`. Supplying
+`verificare_id` retrieves that historical result after validating run ownership.
+The UI history picker and paging controls expose older checks without overwriting
+the current source manifest. Exports include the selected check ID and timestamp,
+not the entire check history; the database backup preserves all events.
+
+`GET /api/dosare/coada?stare=toate&offset=0` returns 50 runs across all local
+dossiers with their latest saved check and title. Supported filters are `toate`,
+`schimbat`, `indisponibil`, `neverificat` and `neschimbat`. Changed and incomplete
+comparisons can overlap; runs with no comparable findings are not classified as
+unchanged. The queue performs no source scans and does not imply present freshness.
+Old runs remain visible even after recalculation. Open a run from the queue to
+perform a new check or review. No scheduled or bulk-source checking is introduced.
+
+`POST /api/dosare/rulari` also accepts optional `sursa_rulare_id`. It must belong
+to the same dossier and have identical filters. An append-only `recalculari` row
+links the source and resulting run in the same transaction as the run save.
+Repeated identical links deduplicate; identical self-recalculations add no link.
+Run content and hashes remain unchanged. Recalculation can rediscover an existing
+historical run, so these are operation links, not a guaranteed acyclic ancestry
+graph, and existing decisions on a deduplicated run are retained. Check history
+returns up to 100 incoming links with an explicit truncation flag; UI and exports
+include them. Backup preserves every link.
+
+Schema-3 tables have no-update/no-delete triggers. They prevent accidental changes
+through ordinary SQL, not tampering by the local database owner. Reads never
+migrate version-1/2 stores. New writes migrate atomically; failed migrations roll
+back. Back up before upgrading because older application versions reject schema 3.
+New routes retain local Host/Origin guards, no-store responses and static-mode
+rejection. Stores and backups remain private, unencrypted local research data.
 
 ## API
 

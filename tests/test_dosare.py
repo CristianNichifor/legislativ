@@ -35,7 +35,7 @@ def test_create_read_retry_and_isolation(state):
         dosare.creeaza(path, {"id": ID, "titlu": "Different"})
     assert dosare.lista(path)["total"] == 1
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert con.execute("PRAGMA user_version").fetchone()[0] == 3
         assert con.execute("PRAGMA application_id").fetchone()[0] == dosare.APPLICATION_ID
 
 
@@ -68,7 +68,7 @@ def test_foreign_future_schema_and_atomic_migration(state):
         assert con.execute("SELECT name FROM sqlite_master").fetchall() == []
     create(state)
     with sqlite3.connect(path) as con:
-        con.execute("PRAGMA user_version=3")
+        con.execute("PRAGMA user_version=4")
     for operation in (lambda: create(state), lambda: dosare.lista(path)):
         with pytest.raises(ValueError, match="compatibil"):
             operation()
@@ -178,8 +178,20 @@ def test_http_boundaries(state):
     assert request(state, "GET", "/api/dosare/dovezi?id=" + ID)[0] == 400
     assert request(state, "GET", "/api/dosare/dovezi", host="evil.test:8123")[0] == 403
     assert request(state, "GET", "/api/dosare/dovezi", origin="https://evil.test")[0] == 403
+    for route in ("/api/dosare/verificari", "/api/dosare/coada"):
+        assert request(state, "GET", route, host="evil.test:8123")[0] == 403
+        assert request(state, "GET", route, origin="https://evil.test")[0] == 403
+    assert (
+        request(state, "POST", "/api/dosare/verificari", {}, origin="https://evil.test")[0] == 403
+    )
+    assert request(state, "POST", "/api/dosare/verificari", {}, length=16001)[0] == 413
+    assert request(state, "POST", "/api/dosare/verificari", {})[0] == 400
+    assert request(state, "GET", "/api/dosare/coada")[1]["total"] == 0
     assert request(state, "POST", "/api/dosare/revizuiri", {}, origin="https://evil.test")[0] == 403
     assert request(state, "POST", "/api/dosare/rulari", {"dosar_id": OTHER, "filtre": {}})[0] == 400
     state.date_dir = "static"
+    assert request(state, "GET", "/api/dosare/coada")[0] == 400
+    assert request(state, "GET", "/api/dosare/verificari")[0] == 400
+    assert request(state, "POST", "/api/dosare/verificari", {})[0] == 400
     assert request(state, "GET", "/api/dosare/dovezi?id=" + ID)[0] == 400
     assert request(state, "POST", "/api/dosare", body)[0] == 400

@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 ENGINE_VERSION = "matrice-dosar-v2"
 MAX_REPORT_BYTES = 4_000_000
 
@@ -77,7 +77,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -94,6 +94,11 @@ def _open(path, *, write=False):
                 "CREATE TRIGGER revizuiri_no_delete BEFORE DELETE ON revizuiri "
                 "BEGIN SELECT RAISE(ABORT,'Review events are append-only'); END"
             )
+            version = 2
+        if write and version == 2:
+            from scripts.verificari_dovezi import migreaza
+
+            migreaza(con)
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
         con.commit()
@@ -189,7 +194,11 @@ def rulari(path, ident, run_id=None):
 def salveaza_rulare(stare, request):
     from scripts.servicii import _matrice_dosar
 
-    if not isinstance(request, dict) or set(request) != {"dosar_id", "filtre"}:
+    if (
+        not isinstance(request, dict)
+        or not {"dosar_id", "filtre"} <= set(request)
+        or set(request) - {"dosar_id", "filtre", "sursa_rulare_id"}
+    ):
         raise ValueError("Cerere invalidă.")
     path = cale(stare)
     ident = request["dosar_id"]
@@ -206,6 +215,11 @@ def salveaza_rulare(stare, request):
     filters = {k: _text(v, 300) for k, v in filters.items()}
     if not filters.get("emitent"):
         raise ValueError("Emitentul este obligatoriu.")
+    parent = request.get("sursa_rulare_id")
+    if "sursa_rulare_id" in request:
+        original = rulari(path, ident, _id(parent))
+        if original["filtre"] != filters:
+            raise ValueError("Recalcularea trebuie sa pastreze filtrele rularii originale.")
     report = _matrice_dosar({k: [v] for k, v in filters.items()}, stare)
     if not report.get("gasit"):
         raise ValueError("Selecția nu produce un dosar de analiză.")
@@ -242,6 +256,11 @@ def salveaza_rulare(stare, request):
         run_id = con.execute(
             "SELECT id FROM rulari WHERE dosar_id=? AND sha256=?", (ident, digest)
         ).fetchone()[0]
+        if parent and parent != run_id:
+            con.execute(
+                "INSERT OR IGNORE INTO recalculari VALUES (?,?,?)",
+                (parent, run_id, datetime.now(UTC).isoformat()),
+            )
     return rulari(path, ident, run_id)
 
 

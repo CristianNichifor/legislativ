@@ -80,7 +80,7 @@ def verifica(stare, dossier_id, run_id):
             "Lipsa sursei sau a amprentei inseamna comparatie indisponibila, nu abrogare.",
             "Metadatele schimbate singure nu invalideaza continutul sau deciziile.",
             "Textul istoric integral nu este arhivat; raportul pastreaza numai dovezile retinute.",
-            "Verificarea nu modifica rapoarte sau decizii si nu este pastrata automat.",
+            "Verificarea nu modifica rapoarte sau decizii.",
         ],
     }
 
