@@ -601,6 +601,7 @@ def _rand_matrice(emitent: str) -> dict:
         "de_la": None,
         "pana_la": None,
         "_tipuri": {},
+        "_ranguri": {},
         "viduri": 0,
         "viduri_blocking": 0,
         "viduri_material": 0,
@@ -611,6 +612,66 @@ def _rand_matrice(emitent: str) -> dict:
         "_vid_exemple": [],
         "_neconst_exemple": [],
     }
+
+
+def _adauga_rang_matrice(rand: dict, tip: str, acte: int) -> None:
+    from scripts import rang_normativ
+
+    info = rang_normativ.info(tip)
+    item = rand["_ranguri"].setdefault(
+        info["categorie"],
+        {
+            "categorie": info["categorie"],
+            "eticheta": info["eticheta"],
+            "rang": info["rang"],
+            "acte": 0,
+            "_note": set(),
+        },
+    )
+    item["acte"] += acte
+    if info.get("nota"):
+        item["_note"].add(info["nota"])
+
+
+def _ranguri_matrice(rand: dict) -> list[dict]:
+    return [
+        {
+            "categorie": r["categorie"],
+            "eticheta": r["eticheta"],
+            "rang": r["rang"],
+            "acte": r["acte"],
+            "note": sorted(r["_note"]),
+        }
+        for r in sorted(rand["_ranguri"].values(), key=lambda x: (x["rang"], x["categorie"]))
+    ]
+
+
+def _rezumat_ranguri_matrice(randuri: list[dict]) -> list[dict]:
+    total: dict[str, dict] = {}
+    for rand in randuri:
+        for rang in rand["ranguri"]:
+            item = total.setdefault(
+                rang["categorie"],
+                {
+                    "categorie": rang["categorie"],
+                    "eticheta": rang["eticheta"],
+                    "rang": rang["rang"],
+                    "acte": 0,
+                    "_note": set(),
+                },
+            )
+            item["acte"] += rang["acte"]
+            item["_note"].update(rang["note"])
+    return [
+        {
+            "categorie": r["categorie"],
+            "eticheta": r["eticheta"],
+            "rang": r["rang"],
+            "acte": r["acte"],
+            "note": sorted(r["_note"]),
+        }
+        for r in sorted(total.values(), key=lambda x: (x["rang"], x["categorie"]))
+    ]
 
 
 def _pune_exemplu(lista: list[dict], exemplu: dict, *, fel: str) -> None:
@@ -683,6 +744,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     """
     tip = (qs.get("tip", [""])[0] or "").strip() or None
     sortare = (qs.get("sort", ["semnale"])[0] or "semnale").strip()
+    rang = (qs.get("rang", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
     viduri = _raport_lista(stare.vid)
     neconst = _raport_lista(stare.neconstitutional)
@@ -694,6 +756,17 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         | set(amendamente)
         | set(initiative)
     )
+
+    from scripts import rang_normativ
+
+    ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
+    rang_filtru = rang if rang in ranguri_valide else None
+
+    def tip_acceptat(tip_act: str | None) -> bool:
+        if tip and tip_act != tip:
+            return False
+        return not (rang_filtru and rang_normativ.categorie(tip_act) != rang_filtru)
+
     try:
         with depozit.deschide(stare.corpus, readonly=True) as con:
             randuri: dict[str, dict] = {}
@@ -705,9 +778,13 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 f" WHERE 1 = 1{conditie} GROUP BY emitent, tip",
                 params,
             ):
+                tip_act = r["tip"] or ""
+                if not tip_acceptat(tip_act):
+                    continue
                 rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
                 rand["acte"] += r["acte"]
-                rand["_tipuri"][r["tip"]] = rand["_tipuri"].get(r["tip"], 0) + r["acte"]
+                rand["_tipuri"][tip_act] = rand["_tipuri"].get(tip_act, 0) + r["acte"]
+                _adauga_rang_matrice(rand, tip_act, r["acte"])
                 ani = [x for x in (r["de_la"], r["pana_la"]) if x]
                 if ani:
                     rand["de_la"] = (
@@ -720,6 +797,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     except sqlite3.OperationalError:
         return {
             "tip": tip,
+            "rang": rang_filtru,
             "sort": sortare,
             "limita": limita,
             "total": 0,
@@ -737,8 +815,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
 
     def rand_pentru(act_id: str) -> dict | None:
         m = _alege_meta(act_id, meta)
-        tip_act = (m or {}).get("tip")
-        if tip and (tip_act or act_id.split("-", 1)[0]) != tip:
+        tip_act = (m or {}).get("tip") or act_id.split("-", 1)[0]
+        if not tip_acceptat(tip_act):
             return None
         emitent = (m or {}).get("emitent") or "(act negăsit în corpus)"
         return randuri.setdefault(emitent, _rand_matrice(emitent))
@@ -823,6 +901,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                     {"tip": t, "acte": n}
                     for t, n in sorted(rand["_tipuri"].items(), key=lambda x: (-x[1], x[0]))[:8]
                 ],
+                "ranguri": _ranguri_matrice(rand),
                 "de_la": rand["de_la"],
                 "pana_la": rand["pana_la"],
                 "semnale": {
@@ -858,6 +937,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     rez = {
         "emitenti": len(iesire),
         "acte": sum(r["acte"] for r in iesire),
+        "ranguri": _rezumat_ranguri_matrice(iesire),
         "viduri": sum(r["semnale"]["viduri"] for r in iesire),
         "neconstitutionale": sum(r["semnale"]["neconstitutionale"] for r in iesire),
         "amendamente_primite": sum(r["semnale"]["amendamente_primite"] for r in iesire),
@@ -865,6 +945,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     }
     return {
         "tip": tip,
+        "rang": rang_filtru,
         "sort": sortare,
         "limita": limita,
         "total": len(iesire),
