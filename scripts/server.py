@@ -87,6 +87,7 @@ from scripts.servicii import (
     _lint,
     _matrice,
     _matrice_acte,
+    _matrice_contradictii,
     _matrice_dosar,
     _norma,
     _opinie,
@@ -206,6 +207,8 @@ def face_handler(stare: Stare):
                 self._json(_matrice(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-acte":
                 self._json(_matrice_acte(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice-contradictii":
+                self._json(_matrice_contradictii(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-dosar":
                 self._json(_matrice_dosar(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":

@@ -3770,6 +3770,34 @@ async function mArataActe(buton){
     out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
   }
 }
+function mContradictiiHtml(d){
+  let h=`<div class="parc-h">Contradicții candidate · neconfirmate · necesită jurist</div>`;
+  h+=`<p class="hint">${nf(d.prevederi_analizate||0)} prevederi analizate; ${nf(d.acte_selectate||0)} din ${nf(d.acte_total||0)} acte selectate.</p>`;
+  for(const c of d.candidati||[]){
+    h+=`<div class="matrix-ex note"><b>${esc(c.termen)}</b> · ${esc(c.domeniu.eticheta)}`;
+    for(const p of [c.a,c.b]) h+=`<p>${esc(p.act_id)} · ${esc(locRo(p.locator))} ${mActiuni(p.actiuni)}<br>${esc(p.definitie)}</p>`;
+    h+=`</div>`;
+  }
+  if(!(d.candidati||[]).length) h+=`<p>Nicio definiție divergentă detectată în selecția analizată.</p>`;
+  if(d.trunchiat) h+=`<p>Rezultate parțiale: limita de analiză sau afișare a fost atinsă.</p>`;
+  return h+(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
+}
+async function mArataContradictii(buton){
+  const out=$("#m-contradictii-rand"); if(!out) return;
+  const f=mFiltreCurente(), qs=new URLSearchParams({emitent:buton.dataset.emitent||""});
+  for(const key of ["tip","rang","domeniu"]) if(f[key]) qs.set(key,f[key]);
+  out.textContent="Caut definiții divergente…";
+  buton.disabled=true;
+  try{
+    const response=await fetch("/api/matrice-contradictii?"+qs.toString());
+    if(!response.ok) throw new Error("HTTP "+response.status);
+    const d=await response.json();
+    if(!out.isConnected) return;
+    out.innerHTML=mContradictiiHtml(d);
+    out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+  }catch(e){ out.textContent="Nu am putut compara definițiile. Reîncearcă."; }
+  finally{ buton.disabled=false; }
+}
 function mDosarHtml(d){
   if(!d||!d.gasit){
     return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi dosarul pentru acest rând.");
@@ -3806,6 +3834,7 @@ function mDosarHtml(d){
       +mActiuni(n.actiuni)
       +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
   }
+  if(d.contradictii) h+=mContradictiiHtml(d.contradictii);
   h+=`<div class="parc-h">Referințe UE din actele sursă</div>`;
   if(ue.length){
     h+=ue.map(ref=>{
@@ -3938,7 +3967,8 @@ function mArataRand(el){
     +`${nf(s.amendamente_primite)} amendări primite</div>`
     +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button>`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
-    +`<div id="m-acte-rand"></div><div id="m-dosar-rand"></div>`;
+    +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">Contradicții candidate</button>`
+    +`<div id="m-acte-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){
@@ -3965,6 +3995,7 @@ function mArataRand(el){
   $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
   $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
   $("#m-detalii").querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
+  $("#m-detalii").querySelectorAll(".matrix-contradictii").forEach(b=>b.onclick=()=>mArataContradictii(b));
 }
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
