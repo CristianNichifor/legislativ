@@ -50,8 +50,11 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
 
 - User confirms domain, document/version boundary and intended research questions.
 - Run an actual-document finding-to-proposal workflow without the synthetic bridge.
-  The current issuer-filtered fixture report yields zero findings; that is not proof
-  of absence of legal problems. Issuer spellings differ between the two documents.
+  Use `workflow.actual_report_findings` in the captured rehearsal output for the
+  observed count; it is not a fixed acceptance threshold or proof of absence of
+  legal problems. Issuer spellings differ between the two documents. Precomputed
+  reports are explicitly empty in this bounded rehearsal; ambient `web/data`
+  reports must not contribute findings.
 - Record missing/extraction/false-positive cases and agreed tolerances; no invented
   passing threshold or accuracy claim. Resolve release-blocking findings and rerun.
 - Integrate and assess M3 source-change, M4 applicability and M6 UX changes, plus

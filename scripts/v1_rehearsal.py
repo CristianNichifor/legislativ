@@ -56,8 +56,14 @@ def offline():
         yield
 
 
+class RehearsalState(servicii.Stare):
+    def _incarca_raport(self, nume):
+        """This fixture corpus has no precomputed reports; never read ambient cwd data."""
+        return []
+
+
 def state_at(root):
-    return servicii.Stare(
+    return RehearsalState(
         **{k: str(root / f"{k}.db") for k in ("corpus", "initiative", "graf", "eu")}
     )
 
@@ -189,6 +195,20 @@ def populate_history(state, path, args, baseline, first, original_export, actual
     require(dosare.lista(path)["total"] == 0, "Archived dossier remains in active list")
     require(dosare.lista(path, stare="arhivate")["total"] == 1, "Archived dossier missing")
 
+    draft_values = {
+        "titlu": "SYNTHETIC unfinished proposal",
+        "text": "SYNTHETIC unfinished proposal",
+        "motiv": "Rehearsal only",
+    }
+    retry_payload = {
+        **draft_values,
+        "dosar_id": args[0],
+        "rulare_id": args[1],
+        "constatare_id": args[2],
+        "revizie": 2,
+    }
+    # Match JSON.stringify on the browser's ordered FormData-derived request.
+    retry_fingerprint = json.dumps(retry_payload, ensure_ascii=False, separators=(",", ":"))
     contents = {
         "editor": {"versiune": 1, "text": "SYNTHETIC unfinished editor draft"},
         args[1]: {
@@ -198,8 +218,8 @@ def populate_history(state, path, args, baseline, first, original_export, actual
                     f"proposal:{args[2]}",
                     {
                         "revision": 2,
-                        "values": {"text": "SYNTHETIC unfinished proposal"},
-                        "retry": {"id": "9" * 32},
+                        "values": draft_values,
+                        "retry": {"id": "9" * 32, "fingerprint": retry_fingerprint},
                     },
                 ]
             ],
@@ -402,6 +422,7 @@ def rehearse():
             "python": platform.python_version(),
             "sqlite": sqlite3.sqlite_version,
             "network": "blocked; no model calls",
+            "precomputed_reports": "explicitly empty; ambient cwd reports are not read",
             "temporary_data": "removed on exit",
             "workflow": workflow(root, manifest),
             "upgrade": upgrade(root),

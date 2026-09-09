@@ -6,6 +6,7 @@
   "python": "3.12.12",
   "sqlite": "3.50.4",
   "network": "blocked; no model calls",
+  "precomputed_reports": "explicitly empty; ambient cwd reports are not read",
   "temporary_data": "removed on exit",
   "workflow": {
     "sources": [

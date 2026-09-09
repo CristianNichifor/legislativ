@@ -1,6 +1,9 @@
 import json
+import shutil
 import socket
 import sqlite3
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +46,50 @@ def test_fixture_tampering_fails_before_corpus_write(tmp_path):
 def test_network_is_blocked():
     with rehearsal.offline(), pytest.raises(RuntimeError, match="Network forbidden"):
         socket.create_connection(("127.0.0.1", 9))
+
+
+def test_ambient_reports_are_not_read(tmp_path, monkeypatch):
+    reports = tmp_path / "web/data"
+    reports.mkdir(parents=True)
+    for name in ("vid.json", "neconstitutional.json", "norme_lovite.json", "parlament.json"):
+        (reports / name).write_text("[]")
+    monkeypatch.chdir(tmp_path)
+    original_read = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert not path.resolve().is_relative_to(reports), "Ambient report was read"
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded_read)
+    result = rehearsal.rehearse()
+    assert result["status"] == "fixture_rehearsal_passed"
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_restored_retry_matches_browser_request(tmp_path):
+    with rehearsal.offline():
+        rehearsal.workflow(tmp_path, json.loads(rehearsal.MANIFEST.read_text()))
+    path = dosare.cale(rehearsal.state_at(tmp_path / "restored"))
+    with sqlite3.connect(path) as con:
+        row = con.execute(
+            "SELECT id,dosar_id,continut_json FROM ciorne "
+            "WHERE id != 'editor' AND continut_json != 'null'"
+        ).fetchone()
+    program = (
+        "const assert=require('node:assert/strict');\n"
+        + "\nconst [run,dossier,raw]="
+        + json.dumps(row)
+        + ";\n"
+        + """
+const [key,record]=JSON.parse(raw).drafts[0];
+const values={titlu:record.values.titlu,text:record.values.text,motiv:record.values.motiv};
+const payload={...values,dosar_id:dossier,rulare_id:run,
+  constatare_id:key.slice('proposal:'.length),revizie:record.revision};
+assert.equal(record.retry.fingerprint,JSON.stringify(payload));
+assert.equal(record.retry.id,'9'.repeat(32));
+"""
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
 
 def test_backup_missing_recovery_table_fails(tmp_path, monkeypatch):

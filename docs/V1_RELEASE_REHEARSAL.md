@@ -18,6 +18,11 @@ to stdout; assertion failures exit nonzero, including under `python -O`.
 Network connection/DNS functions are blocked during the run. No model is invoked.
 This is a service-layer workflow, not browser or listening-HTTP-server acceptance.
 
+`RehearsalState` overrides only the precomputed-report loader to return explicitly
+empty reports. This fixture set contains no prebuilt gap/CCR/Parliament reports.
+The harness never reads ambient `web/data` or cwd report files; `date_dir` remains
+unset so production local-write checks still apply. Production code is unchanged.
+
 It builds the actual corpus through the production parser/store, generates and
 reopens a real dossier report, then explicitly injects a synthetic finding to reach
 structured proposal creation against authentic article text. Two immutable proposal
@@ -147,9 +152,9 @@ is 2; the restored active revision is 3. All logical rows and exact analysis exp
 are compared through restore, including after the restored corpus is removed.
 
 The reassessment reports `schimbat` and `comparatie_incompleta=true`; the synthetic
-target change is detected without claiming full-act coverage. On `055ce49`, the
-actual report still produces **0 findings**. The parent's reported **1 finding**
-belongs to a later integrated run and is not substituted for this measured result.
+target change is detected without claiming full-act coverage. The captured isolated
+run reports **0 findings**. Investigation below explains the parent's earlier count
+of **1** without attributing the difference to a code change.
 The pilot remains proposed; domain and release acceptance remain pending.
 
 Validation for this extension: Ruff format/check passed; **78 tests passed in
@@ -158,3 +163,29 @@ Validation for this extension: Ruff format/check passed; **78 tests passed in
 This includes repeatability/cleanup and a negative check that dropping the recovery
 table from a backup fails the rehearsal. The full-suite result earlier in this
 document remains historical; it was not rerun for this extension.
+
+## Isolation and retry correction (2026-09-10)
+
+Reproduced on unchanged loaded service code and Python 3.12.12: running from this
+worktree produced 0 findings, while changing only cwd to the integration worktree
+produced 1. `Stare._incarca_raport` read the latter's `web/data/vid.json` (three
+entries) and `parlament.json`. Excluding only `vid.json` restored the count to 0;
+excluding only Parliament data left it at 1. Thus the extra finding came from an
+ambient precomputed gap report, not the two imported corpus fixtures or Python version.
+
+The harness-only empty report loader now produces the same captured count from
+both directories. A regression test denies reads of ambient reports and passes;
+before the fix it failed at `web/data/vid.json`. The JSON result explicitly records
+the empty-report policy. Counts remain observations, not legal acceptance criteria.
+
+The recovered proposal now includes all three form values and a retry fingerprint
+equal to the browser's `JSON.stringify` request, preserving its request identity.
+The restored SQLite payload passed the strict `restoreFindingDrafts` function read
+from `96365a0:app/index.html` in Node. A retained regression test verifies the
+fingerprint against Node's serialization after backup/restore; before the fix the
+fingerprint was absent. This is a function-level check, not a browser UI rehearsal.
+
+Validation: Ruff format/check passed; **80 focused tests passed in 24.55s**.
+The same-code two-cwd rerun passed at schema 8 with identical finding counts.
+[`v1_rehearsal_current.json`](v1_rehearsal_current.json) contains the updated result.
+M5/schema-9 backup coverage is not included. Pilot and release acceptance remain pending.
