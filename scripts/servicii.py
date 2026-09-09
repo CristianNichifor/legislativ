@@ -1198,7 +1198,8 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
 
 
 def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
-    """Bounded, same-domain definition differences; never a legal conflict verdict."""
+    """Bounded, same-domain definition/deadline differences; never a legal verdict."""
+    from scripts.contradictii_termene import termen_comparabil, termene_diferite
     from scripts.definitii import definitii
     from scripts.text import cheie
 
@@ -1211,20 +1212,26 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
         "acte_total": selectie["total"],
         "prevederi_analizate": 0,
         "definitii_analizate": 0,
+        "termene_analizate": 0,
         "trunchiat": selectie["total"] > len(acte),
         "limitari": [
             "Candidați neconfirmați; necesită jurist. "
-            "Diferența textuală nu dovedește contradicția.",
-            "Se compară definiții din maximum 100 de acte ale rândului, în același domeniu "
-            "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
-            "Limite: 1000 prevederi per act și 5000 definiții; " +
-            "fragmentele extrase pot fi scurtate.",
+            + "Diferența textuală nu dovedește contradicția.",
+            "Se compară definiții și termene din maximum 100 de acte ale rândului, "
+            + "în același domeniu "
+            + "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
+            "Limite: 1000 prevederi per act, 5000 definiții și 5000 termene comparabile; "
+            + "fragmentele definițiilor pot fi scurtate.",
+            "Termenele se compară doar pentru formulări identice ale obligației și "
+            + "evenimentului explicit. Lunile și anii nu sunt convertiți în zile. "
+            + "Excepțiile explicite și ancorele ambigue sunt excluse.",
             "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
             + "absența candidaților nu dovedește compatibilitatea.",
             *selectie["limitari"],
         ],
     }
     grupe = {}
+    grupe_termene = {}
     try:
         with depozit.deschide(stare.corpus, readonly=True) as con:
             for act in acte:
@@ -1238,6 +1245,51 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
                 out["trunchiat"] |= len(rows) > 1000
                 for row in rows[:1000]:
                     out["prevederi_analizate"] += 1
+                    termen_limita = termen_comparabil(row["text"])
+                    if termen_limita:
+                        if out["termene_analizate"] >= 5000:
+                            out["trunchiat"] = True
+                            return out
+                        out["termene_analizate"] += 1
+                        grup_termene = grupe_termene.setdefault(
+                            (domeniu, termen_limita.pop("cheie")), []
+                        )
+                        dovada_termen = {
+                            **termen_limita,
+                            "act_id": act["act_id"],
+                            "locator": row["locator"],
+                            "rang": act["rang"],
+                            "actiuni": _actiuni_prevedere(act["act_id"], row["locator"]),
+                        }
+                        for anterior in grup_termene:
+                            if anterior["act_id"] == act["act_id"] or not termene_diferite(
+                                anterior, dovada_termen
+                            ):
+                                continue
+                            if len(out["candidati"]) == limita:
+                                out["trunchiat"] = True
+                                return out
+                            out["candidati"].append(
+                                {
+                                    "tip": "termen_divergent",
+                                    "status": "candidat_neconfirmat",
+                                    "termen": termen_limita["responsabil"]
+                                    + " "
+                                    + termen_limita["actiune"],
+                                    "domeniu": act["domeniu"],
+                                    "a": anterior,
+                                    "b": dovada_termen,
+                                    "verificari": [
+                                        "Verifică sfera de aplicare și excepțiile din ambele acte.",
+                                        "Verifică dacă evenimentul declanșator este același "
+                                        + "în fapt.",
+                                        "Verifică zilele lucrătoare/calendaristice și "
+                                        + "regulile de calcul; baza neprecizată nu este presupusă.",
+                                    ],
+                                }
+                            )
+                        if dovada_termen not in grup_termene:
+                            grup_termene.append(dovada_termen)
                     for termen in definitii(row["text"]):
                         if out["definitii_analizate"] >= 5000:
                             out["trunchiat"] = True
@@ -1361,7 +1413,12 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
         linii.append(f"- {c['termen']} ({c['domeniu']['eticheta']})")
         for parte in ("a", "b"):
             d = c[parte]
-            linii.append(f"  - {d['act_id']} / {d['locator']}: {d['definitie']}")
+            linii.append(
+                f"  - {d['act_id']} / {d['locator']}: {d.get('text') or d.get('definitie', '')}"
+            )
+            if c["tip"] == "termen_divergent":
+                linii.append(f"    Termen: {d['termen_text']} (bază: {d['baza']})")
+        linii.extend(f"  - {v}" for v in c.get("verificari", []))
     if contradictii.get("trunchiat"):
         linii.append("Rezultate parțiale: limita de analiză sau afișare a fost atinsă.")
     linii.extend(contradictii.get("limitari", []))

@@ -113,6 +113,66 @@ def _act(con, act_id, tip, numar, an, emitent, titlu="T"):
     )
 
 
+def test_deadline_candidates_share_matrix_filters_limits_and_export(tmp_path):
+    stare = _stare(tmp_path)
+    texte = [
+        "Autoritatea contractantă comunică decizia în termen de 30 zile de la primirea cererii.",
+        "Autoritatea contractantă comunică decizia în termen de 60 zile de la primirea cererii.",
+        "Autoritatea contractantă comunică decizia în termen de 90 zile de la primirea cererii.",
+    ]
+    with depozit.deschide(stare.corpus) as con:
+        for i, text in enumerate(texte, 2):
+            act_id = f"lege-{i}-2020"
+            _act(con, act_id, "lege", str(i), 2020, "Parlamentul", "Achiziții publice")
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, 'art1', 1, ?)",
+                (act_id, text),
+            )
+        con.commit()
+    qs = {"emitent": ["Parlamentul"]}
+    out = _matrice_contradictii(qs, stare)
+    assert len(out["candidati"]) == 3
+    assert out["termene_analizate"] == 3
+    for c in out["candidati"]:
+        assert c["tip"] == "termen_divergent"
+        assert c["status"] == "candidat_neconfirmat"
+        assert c["verificari"]
+        assert c["a"]["text"] in texte and c["b"]["text"] in texte
+        assert c["a"]["act_id"] != c["b"]["act_id"]
+        assert c["a"]["actiuni"][0]["locator"] == "art1"
+    partial = _matrice_contradictii({**qs, "limita": ["1"]}, stare)
+    assert partial["trunchiat"] and len(partial["candidati"]) == 1
+    assert not _matrice_contradictii({**qs, "tip": ["hg"]}, stare)["candidati"]
+    assert not _matrice_contradictii({**qs, "domeniu": ["educatie"]}, stare)["candidati"]
+    dosar = _matrice_dosar(qs, stare)
+    assert dosar["contradictii"]["candidati"] == out["candidati"]
+    assert texte[0] in dosar["markdown"]
+    assert "Termen: în termen de 60 zile" in dosar["markdown"]
+    assert "Verifică sfera" in dosar["markdown"]
+
+
+def test_deadline_candidates_exclude_same_act_unknown_and_other_domain(tmp_path):
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.corpus) as con:
+        for act_id, titlu in [("lege-2-2020", "Educația"), ("lege-3-2020", "Alte reguli")]:
+            _act(con, act_id, "lege", "2", 2020, "Parlamentul", titlu)
+        for i, act_id in enumerate(
+            ["lege-98-2016", "lege-98-2016", "lege-2-2020", "lege-3-2020"], 1
+        ):
+            con.execute(
+                "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?, ?, ?, ?)",
+                (
+                    act_id,
+                    f"art{i}",
+                    i,
+                    "Autoritatea contractantă comunică decizia în termen de "
+                    f"{i * 30} zile de la primirea cererii.",
+                ),
+            )
+        con.commit()
+    assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
+
+
 def _ini(plx_id: str, stadiu: str = "pe ordinea de zi") -> Initiativa:
     return Initiativa(
         plx_id=plx_id,
