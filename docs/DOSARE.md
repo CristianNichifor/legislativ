@@ -36,11 +36,12 @@ An authorized local database owner can still bypass these controls by changing t
 database schema; this is not cryptographic immutability.
 
 Schema 2 added `revizuiri`; schema 3 added evidence-check history and recalculation
-links; schema 4 adds reviewer-supplied legal context. Version-1/2/3 stores remain
+links; schema 4 added reviewer-supplied legal context; schema 5 adds linked proposals.
+Version-1/2/3/4 stores remain
 readable without migration; absent history is
 shown as uncaptured, never backfilled. The next explicit dossier/review write upgrades them
 transactionally; failed writes roll back the migration. Backup before upgrading;
-older application code rejects schema 4. Reviews belong to a saved run and never
+older application code rejects schema 5. Reviews belong to a saved run and never
 transfer automatically to a different run, even with similar evidence.
 
 Unsaved review text is retained while filtering or reloading reviews within the
@@ -61,7 +62,7 @@ preferred finding; clearing the filter restores it unless another finding was se
 No workspace state or unsaved notes are written to browser persistent storage. Reloading
 the entire page still loses unsaved work; saved records remain in SQLite.
 
-Review and legal-context drafts survive finding changes and review reloads. A drafts
+Review, legal-context and proposal drafts survive finding changes and review reloads. A drafts
 button returns to an unsaved finding even when filters hide it. Explicit cancel buttons
 discard the corresponding draft; dossier/run selectors and queues block navigation while
 drafts remain. Review retries retain their request identity and original revision across
@@ -411,7 +412,7 @@ automat la alte rulări. Notele de context nesalvate sunt păstrate la filtrare/
 blochează navigarea din cozi și recalcularea, la fel ca notele de revizuire. După un conflict,
 reîncărcarea păstrează textul nesalvat; renunțarea explicită permite pornirea de la noua revizie.
 
-Schema dosarelor este acum **4**. Citirea schemelor 1–3 nu migrează baza; următoarea scriere o
+Schema **4** a introdus contextul juridic. Citirea schemelor vechi nu migrează baza; următoarea scriere o
 actualizează tranzacțional. Tabelul `contexte_juridice` este inclus în backup-ul SQLite al dosarelor.
 Trigger-ele append-only nu protejează împotriva proprietarului local al bazei de date.
 
@@ -422,3 +423,45 @@ octeți a cererii se aplică separat. Interfața încarcă editorul la cerere, l
 Exporturile revizuirii includ contextul curent și ultimele 20 de revizii per țintă, cu marcarea
 trunchierii; istoricul complet rămâne în bază și poate fi parcurs prin API. Varianta statică nu
 oferă scriere sau stocare de context juridic.
+
+## Linked proposals
+
+Each saved finding can have one proposal, with append-only revisions, independently
+of any review decision or declared reviewer. Open `Propunere de modificare` in the
+saved-finding workspace to create or resume it. Title is required (200 characters);
+proposed text (12,000) and rationale (4,000) may be incomplete. Saving never changes
+the general editor, original report, retained evidence, reviews or legal context.
+It does not call AI, fetch current sources or certify a legal conclusion.
+
+The editor appears beside the retained evidence on wide screens and below it on
+mobile. The basis records the exact saved run, deterministic finding ID and
+server-derived report SHA-256. A proposal never transfers to another run, even if
+that run contains the same finding. This is a research draft, not an enacted text.
+
+`GET /api/dosare/propuneri?id=<dossier>&rulare_id=<run>&constatare_id=<finding>`
+returns the latest proposal (or null), saved finding and basis. `POST` accepts exactly
+`id` (32-character retry UUID), `dosar_id`, `rulare_id`, `constatare_id`, `revizie`
+(expected current revision, zero before creation), `titlu`, `text`, and `motiv`.
+Ownership and finding membership are checked server-side. Exact retries return the
+original revision, even after later saves; changed payloads cannot reuse an ID.
+Competing edits serialize in a transaction; a stale revision is rejected.
+
+Draft text, original revision and retry identity survive finding changes, filters
+and review reloads within the same run. Pending saves block reloads. Dossier/run
+navigation is blocked while unsaved drafts exist. `Compară versiunea salvată` reads
+the latest saved text into a separate comparison without overwriting the local draft
+or rebasing its revision. Explicitly discard modifications to resume from the latest
+saved version after a conflict. Cancelling a proposal does not discard review or
+legal-context drafts. Full page reload still loses unsaved work; saved work survives.
+
+Schema **5** adds `propuneri` with UPDATE/DELETE rejection triggers. Reading schemas
+1-4 does not migrate them; the next write upgrades transactionally, with rollback
+on failure. **Back up the dossier database before upgrading.** Older application
+versions reject schema 5. SQLite backups include every proposal revision. The local
+database owner can bypass triggers; this is not a tamper-proof audit trail.
+
+The route uses the existing local Host/Origin restrictions and `no-store` responses.
+Only this POST endpoint permits an 80 KB body; other dossier endpoints retain 16 KB.
+Static deployments cannot store proposals. This batch has no proposal exports,
+revision-history browser, AI checks, automatic legal classification or cross-run
+carryover. Existing review exports do not include proposals; backups do.

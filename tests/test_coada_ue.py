@@ -142,6 +142,7 @@ def test_old_schemas_read_without_migration(state, version):
     with sqlite3.connect(path) as con:
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
+        con.execute("DROP TABLE propuneri")
         con.execute("DROP TABLE recalculari")
         con.execute(f"PRAGMA user_version={version}")
     before = path.read_bytes()

@@ -159,6 +159,7 @@ def test_v3_read_no_migration_and_failed_write_rolls_back(case):
     _, path, run, req = case
     with sqlite3.connect(path) as con:
         con.execute("DROP TABLE contexte_juridice")
+        con.execute("DROP TABLE propuneri")
         con.execute("PRAGMA user_version=3")
     before = path.read_bytes()
     assert (
@@ -175,7 +176,7 @@ def test_v3_read_no_migration_and_failed_write_rolls_back(case):
         ).fetchone()
     revizuiri.context_salveaza(path, req)
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 def test_http_security_bounds_and_local_only(case):

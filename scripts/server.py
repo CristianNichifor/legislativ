@@ -302,6 +302,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/coada",
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
+                "/api/dosare/propuneri",
             ):
                 from scripts import dosare
 
@@ -311,7 +312,16 @@ def face_handler(stare: Stare):
                     path = dosare.cale(stare)
                     qs = parse_qs(ruta.query)
                     ident = qs.get("id", [None])[0]
-                    if ruta.path == "/api/dosare/context":
+                    if ruta.path == "/api/dosare/propuneri":
+                        from scripts.propuneri import citeste
+
+                        out = citeste(
+                            path,
+                            ident,
+                            qs.get("rulare_id", [None])[0],
+                            qs.get("constatare_id", [None])[0],
+                        )
+                    elif ruta.path == "/api/dosare/context":
                         from scripts.revizuiri import context_istoric
 
                         out = context_istoric(
@@ -402,6 +412,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
                 "/api/dosare/context",
+                "/api/dosare/propuneri",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -418,7 +429,9 @@ def face_handler(stare: Stare):
                 self._json({"error": "content-length invalid"}, 400)
                 return
             if lung > (
-                16000
+                80000
+                if ruta == "/api/dosare/propuneri"
+                else 16000
                 if ruta.startswith(("/api/dosare", "/api/surse-proiecte", "/api/ue/surse"))
                 else MAX_CERERE
             ):
@@ -459,6 +472,7 @@ def face_handler(stare: Stare):
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
                 "/api/dosare/context",
+                "/api/dosare/propuneri",
             ):
                 from scripts import dosare
 
@@ -466,7 +480,11 @@ def face_handler(stare: Stare):
                     return
                 try:
                     path = dosare.cale(stare)
-                    if ruta == "/api/dosare/context":
+                    if ruta == "/api/dosare/propuneri":
+                        from scripts.propuneri import salveaza
+
+                        out = salveaza(path, cerere)
+                    elif ruta == "/api/dosare/context":
                         from scripts.revizuiri import context_salveaza
 
                         out = context_salveaza(path, cerere)

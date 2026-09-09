@@ -129,6 +129,7 @@ def test_legacy_read_only_atomic_upgrade_and_limits(saved, monkeypatch):
     with sqlite3.connect(path) as con:
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
+        con.execute("DROP TABLE propuneri")
         con.execute("DROP TABLE recalculari")
         con.execute("PRAGMA user_version=2")
     before = path.read_bytes()
@@ -157,7 +158,7 @@ def test_legacy_read_only_atomic_upgrade_and_limits(saved, monkeypatch):
     monkeypatch.setattr(dosare, "MAX_REPORT_BYTES", 4_000_000)
     checks.salveaza(state, request(run))
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 4
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 @pytest.mark.parametrize("offset", [-1, True, 1_000_001, "0"])
