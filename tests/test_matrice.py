@@ -226,6 +226,55 @@ def test_authority_overlaps_exclude_same_authority_act_and_other_domains(tmp_pat
     assert not _matrice_contradictii({"emitent": ["Parlamentul"]}, stare)["candidati"]
 
 
+def test_draft_comparison_validates_metadata_and_exports_evidence(tmp_path):
+    from scripts.servicii import _conflicte_proiecte, _matrice_proiecte
+
+    stare = _stare(tmp_path)
+    with depozit.deschide(stare.initiative) as con:
+        for id, status in [
+            ("plx-a", "pe ordinea de zi"),
+            ("plx-b", "raport depus"),
+            ("plx-rejected", "respins definitiv"),
+            ("plx-withdrawn", "retras"),
+            ("plx-unknown", "necunoscut"),
+            ("plx-empty", " "),
+        ]:
+            depozit.scrie_initiativa(con, _ini(id, status))
+            con.execute(
+                "INSERT INTO initiative_tinta VALUES (?, ?, ?)", (id, "lege-98-2016", "art7")
+            )
+        con.commit()
+    qs = {"emitent": ["Parlamentul"]}
+    assert {i["plx_id"] for i in _matrice_proiecte(qs, stare)["initiative"]} == {"plx-a", "plx-b"}
+    req = {
+        "emitent": "Parlamentul",
+        "plx_a": "plx-a",
+        "plx_b": "plx-b",
+        "text_a": "Articolul 7 din Legea nr. 98/2016 se abrogă.",
+        "text_b": "Articolul 7 din Legea nr. 98/2016 se modifică și va avea "
+        + 'următorul cuprins: "Text nou."',
+    }
+    out = _conflicte_proiecte(req, stare)
+    assert out["gasit"]
+    c = out["conflicte_proiecte"]["candidati"][0]
+    assert c["tip"] == "abrogare_modificare"
+    assert c["a"]["act_id"] == "plx-a" and c["b"]["stadiu"] == "raport depus"
+    assert c["tinta"]["actiuni"]
+    assert "plx-a" in out["markdown"] and "Text nou." in out["markdown"]
+    for changes in [
+        {"plx_b": "plx-rejected"},
+        {"plx_b": "plx-withdrawn"},
+        {"plx_b": "plx-unknown"},
+        {"plx_b": "plx-empty"},
+        {"plx_b": "plx-a"},
+        {"emitent": "Guvernul"},
+        {"text_a": "x" * 60001},
+        {"text_a": []},
+    ]:
+        assert "error" in _conflicte_proiecte({**req, **changes}, stare)
+    assert "error" in _conflicte_proiecte([], stare)
+
+
 def _ini(plx_id: str, stadiu: str = "pe ordinea de zi") -> Initiativa:
     return Initiativa(
         plx_id=plx_id,

@@ -75,4 +75,34 @@ equivalent duties expressed differently and named institutions outside its gramm
 `atributii_analizate` counts accepted comparable competences, capped at 5000.
 All detector types share the result limit and `trunchiat` partial-coverage flag.
 
-Amendment and repeal conflicts remain separate work.
+## Conflicts between pending drafts
+
+The matrix row's `Compară proiecte` action lists initiatives from its target index
+using `GET /api/matrice-proiecte`. Select two different initiatives and paste their
+draft texts, then submit to `POST /api/conflicte-proiecte` with `emitent`, optional
+matrix filters, `plx_a`, `plx_b`, `text_a`, and `text_b`.
+
+The database currently holds initiative metadata and target references, not full
+draft texts. Supplied texts are transient and their association with an official
+draft version is a user assertion. No document is fetched or saved, and no model
+is called. Status and source links come from stored metadata and may be stale.
+Rejected, withdrawn, promulgated, closed and unknown/empty-status initiatives are
+excluded according to the existing terminal-status markers (empty status is also
+excluded). The server rechecks eligibility on every comparison.
+
+The existing amendment extractor supplies explicit or inherited act targets,
+locators, operation spans and quoted payloads. Only selected-row acts are eligible.
+The comparison detects repeal versus modification (including repeal of an ancestor
+provision), different quoted replacements at the same locator, and duplicate new
+article/paragraph numbering. An insertion is matched on its new locator, not the
+preceding provision. Unknown targets, missing replacement payloads and ambiguous
+multi-article insertions cannot establish those candidate types. Letter/point
+insertions are outside this first slice. No effective-date ordering is inferred.
+
+Limits: newest 100 matching acts; 500 indexed initiatives; 60,000 characters per
+supplied text; first 200 extracted operations per text; 40 result pairs. Partial
+coverage is labelled. The result includes both operation texts, target provision
+drilldown, parliamentary status and collection timestamps, alongside the existing
+matrix dossier. Copy/print includes the transient findings and their limitations.
+An empty result does not establish compatibility. Automatic official-draft text
+ingestion and version tracking remain future work.

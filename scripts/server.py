@@ -74,6 +74,7 @@ from scripts.servicii import (
     _cine_citeaza,
     _citari,
     _compune,
+    _conflicte_proiecte,
     _consolidat,
     _cronologie,
     _deputati,
@@ -89,6 +90,7 @@ from scripts.servicii import (
     _matrice_acte,
     _matrice_contradictii,
     _matrice_dosar,
+    _matrice_proiecte,
     _norma,
     _opinie,
     _opinie_cerere,
@@ -211,6 +213,8 @@ def face_handler(stare: Stare):
                 self._json(_matrice_contradictii(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-dosar":
                 self._json(_matrice_dosar(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice-proiecte":
+                self._json(_matrice_proiecte(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/act":
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/ue/acoperire":
@@ -239,6 +243,7 @@ def face_handler(stare: Stare):
                 "/api/ue",
                 "/api/importa",
                 "/api/docx",
+                "/api/conflicte-proiecte",
             ):
                 self._json({"error": "not found"}, 404)
                 return
@@ -258,6 +263,9 @@ def face_handler(stare: Stare):
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except json.JSONDecodeError:
                 self._json({"error": "json invalid"}, 400)
+                return
+            if ruta == "/api/conflicte-proiecte":
+                self._json(_conflicte_proiecte(cerere, stare))
                 return
             if ruta == "/api/compune":
                 self._json(_compune(cerere.get("interventii", [])))
