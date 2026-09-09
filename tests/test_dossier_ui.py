@@ -9,10 +9,31 @@ APP = Path(__file__).parents[1] / "app/index.html"
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_refresh_waits_for_pending_review_or_context_save():
+    source = (
+        APP.read_text()
+        .split("async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){", 1)[1]
+        .split("const viewKey=", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const status={};const panel={querySelector:()=>status};"
+        "function refresh(){" + source + "throw Error('Unexpected reload');}"
+        "panel.reviewTransactions=new Map([['a',{saving:true}]]);refresh();"
+        "assert.ok(status.textContent.includes('Salvare în curs'));"
+        "panel.reviewTransactions.clear();"
+        "panel.reviewDrafts=new Map([['context:a:a',{saving:true}]]);refresh();"
+        "panel.reviewDrafts.clear();assert.throws(refresh,/Unexpected reload/);"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_cleared_review_draft_does_not_block_recalculation():
     handler = APP.read_text().split("form.oninput=()=>{", 1)[1].split("let retry=null;", 1)[0]
     code = (
-        "const assert=require('node:assert/strict'), drafts=new Map(), form={};"
+        "const assert=require('node:assert/strict'), drafts=new Map(), transactions=new Map();"
+        "const form={querySelector:()=>({})},panel={querySelector:()=>({})},render=()=>{};"
         "const f={id:'a',stare:'unreviewed'};"
         "let values={evaluator:'',motiv:'',stare:'unreviewed'};"
         "class FormData{constructor(){return Object.entries(values)}}"
@@ -195,5 +216,55 @@ def test_context_renderer_escapes_values_and_citations_and_labels_unknown():
         "const f={dovada:{a:{act_id:'A',locator:'art1'}},"
         "context_juridic:{a:{curent:null,istoric:[]}}};"
         "assert.ok(legalContextHtml(f).includes('Context juridic · A'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_workspace_filter_and_saved_evidence_rendering():
+    source = (
+        APP.read_text()
+        .split("function findingSourcesHtml", 1)[1]
+        .split("function reviewFindingHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const fold=s=>s.toLowerCase(),locRo=s=>s,REVIEW_STATES={unreviewed:'Neanalizat'};"
+        "function findingSourcesHtml"
+        + source
+        + "const a={id:'a',tip:'contradictie',stare:'unreviewed',dovada:{termen:'Deadline',"
+        "a:{act_id:'A',locator:'art1',text:'<script>'},b:{act_id:'B',definitie:'<img>'}}};"
+        "const b={id:'b',stare:'dismissed',dovada:{act_id:'C'},verificare:{stare:'schimbat'}};"
+        "assert.deepEqual(workspaceFindings([a,b],'all','deadline'),[a]);"
+        "assert.deepEqual(workspaceFindings([a,b],'unresolved',''),[a]);"
+        "assert.deepEqual(workspaceFindings([a,b],'evidence_changed',''),[b]);"
+        "assert.deepEqual(workspaceFindings([a,b],'all','absent'),[]);"
+        "const h=findingSourcesHtml(a);assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
+        "assert.ok(h.includes('Dovezi păstrate în rulare')&&h.includes('Text curent local'));"
+        "assert.ok(h.includes('A · A')&&h.includes('B · B'));"
+        "assert.ok(!findingSourcesHtml({...a,tip:'proiect'}).includes('data-current-source'));"
+        "assert.ok(workspaceFindingHtml(a,'a',true).includes('aria-current=\"true\"'));"
+        "assert.ok(workspaceFindingHtml(a,'a',true).includes('Note nesalvate'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_workspace_navigation_guard_restores_selectors():
+    source = (
+        APP.read_text()
+        .split("function dossierMayNavigate", 1)[1]
+        .split("async function dossierApi", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');let dirty=true;"
+        "const dossierHasDrafts=()=>dirty,DOSARE_UI={selected:{id:'original'},runId:'run'};"
+        "const nodes={'#dossier-status':{},'#dossier-select':{value:'changed'},"
+        "'#dossier-run-select':{value:'changed'}},$=id=>nodes[id];"
+        "function dossierMayNavigate" + source + "assert.equal(dossierMayNavigate(),false);"
+        "assert.equal(nodes['#dossier-select'].value,'original');"
+        "assert.equal(nodes['#dossier-run-select'].value,'run');"
+        "dirty=false;assert.equal(dossierMayNavigate(),true);"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

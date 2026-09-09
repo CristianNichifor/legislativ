@@ -49,6 +49,26 @@ retry; source-change invalidation and cross-run review carryover remain Phase C 
 
 ## Interface (B2)
 
+The saved-run workspace presents a searchable finding list and one active finding,
+with readable saved evidence, legal context and decision controls together. Full
+report/provenance and check history are collapsible, rather than repeated above every
+finding. Current-local-text buttons explicitly query the current corpus; saved evidence
+remains unchanged. Opening the workspace does not run a new source check.
+
+Within the browser session, each run retains its search, filter, preferred finding,
+selected historical check and check-section state. Filtering can temporarily hide the
+preferred finding; clearing the filter restores it unless another finding was selected.
+No workspace state or unsaved notes are written to browser persistent storage. Reloading
+the entire page still loses unsaved work; saved records remain in SQLite.
+
+Review and legal-context drafts survive finding changes and review reloads. A drafts
+button returns to an unsaved finding even when filters hide it. Explicit cancel buttons
+discard the corresponding draft; dossier/run selectors and queues block navigation while
+drafts remain. Review retries retain their request identity and original revision across
+finding changes/reloads, so stale drafts cannot silently overwrite another revision.
+Failed run/history loads expose retry controls. Exports still contain all retained
+findings and the selected check, not just the currently displayed finding.
+
 The matrix tab's `Dosare salvate` section supports creating a dossier with a title,
 research question and declared domain, browsing 50 dossiers per page and selecting
 a saved analysis. Selecting a dossier keeps it as the save destination while

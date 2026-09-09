@@ -363,6 +363,20 @@
   .legal-context fieldset{min-width:0;margin:.7rem 0;padding:.5rem;border:1px solid var(--rule)}
   .legal-context input,.legal-context textarea,.legal-context select{width:100%;box-sizing:border-box}
   .legal-context [data-context-editor]{max-width:46rem}
+  .review-workspace{display:grid;grid-template-columns:minmax(210px,270px) minmax(0,1fr);gap:1rem;border-top:1px solid var(--rule);margin-top:.7rem}
+  .review-finding-nav{padding:.7rem 0;min-width:0}
+  .review-finding-nav [data-finding-buttons]{max-height:65vh;overflow:auto}
+  .review-finding-nav button{display:block;width:100%;text-align:left;border:0;border-left:3px solid transparent;border-radius:0;padding:.6rem;background:transparent;white-space:normal;overflow-wrap:anywhere;font:inherit}
+  .review-finding-nav button[aria-current=true]{border-color:#18745b;background:#e5f1ec}
+  .review-finding-nav button small{display:block;color:var(--ink-mute);font-size:.75rem;margin-top:.25rem}
+  [data-review-list]{min-width:0}
+  [data-review-list] .finding-review{border-top:0}
+  .finding-sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:1rem}
+  .finding-sources>div{min-width:0;overflow-wrap:anywhere}
+  .finding-sources .source-text{white-space:pre-wrap;max-height:22rem;overflow:auto;font-size:.9rem}
+  .review-checks{border-block:1px solid var(--rule);padding:.6rem 0;margin:.6rem 0}
+  .review-checks>summary{font-size:.85rem}
+  @media(max-width:700px){.review-workspace{grid-template-columns:minmax(0,1fr);gap:0}.review-finding-nav [data-finding-buttons]{max-height:12rem}}
   @media(max-width:600px){.finding-review form{grid-template-columns:minmax(0,1fr)}}
   .matrix-tools input{flex:1 1 18rem}
   .matrix-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -3757,6 +3771,14 @@ function mTextCautare(r){
   return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${det} ${dom} ${vid} ${nec}`);
 }
 const DOSARE_UI={offset:0,selected:null,sequence:0,listSequence:0,request:null,supported:false};
+const DOSSIER_VIEWS=new Map();
+function dossierMayNavigate(){
+  if(!dossierHasDrafts()) return true;
+  $('#dossier-status').textContent='Există note nesalvate. Înregistrează sau renunță la ele înainte de a schimba analiza.';
+  $('#dossier-select').value=DOSARE_UI.selected?.id||'';
+  if($('#dossier-run-select')) $('#dossier-run-select').value=DOSARE_UI.runId||'';
+  return false;
+}
 async function dossierApi(path,body){
   const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
   const data=await response.json();
@@ -3850,18 +3872,19 @@ function dossierTime(value){
   return Number.isNaN(date.getTime())?'Dată necunoscută':new Intl.DateTimeFormat('ro-RO',{dateStyle:'short',timeStyle:'medium',timeZone:'UTC'}).format(date)+' UTC';
 }
 async function openDossierRun(id,runId,token,checkId=null){
+  DOSARE_UI.runId=runId;
   const out=$('#dossier-saved');out.textContent='Încarc analiza salvată…';
   try{
     const run=await dossierApi('/api/dosare/rulari?'+new URLSearchParams({id,rulare_id:runId}));
     if(token!==DOSARE_UI.sequence) return;
-    out.innerHTML=dossierSnapshotHtml(run);
+    out.innerHTML='<details data-saved-report><summary>Raport complet și surse salvate</summary>'+dossierSnapshotHtml(run)+'</details>';
     const reviews=document.createElement('section');reviews.className='finding-reviews';out.prepend(reviews);
     loadFindingReviews(reviews,id,runId,token,checkId);
     out.querySelectorAll('.matrix-prov').forEach(b=>{b.textContent='Text curent';b.title='Prevederea curentă din corpus';b.onclick=()=>mPrevedere(b);});
     const copy=out.querySelector('.matrix-copy-dosar');
     if(copy) copy.onclick=async()=>{try{await navigator.clipboard.writeText(`Analiză salvată: ${run.creat_la}\nSHA-256 raport: ${run.sha256}\n\n${run.raport.markdown||''}`);$('#dossier-status').textContent='Raport copiat.';}catch{$('#dossier-status').textContent='Copierea nu a reușit.';}};
     const print=out.querySelector('.matrix-print-dosar');if(print) print.onclick=()=>window.print();
-  }catch(err){if(token===DOSARE_UI.sequence) out.textContent=err.message;}
+  }catch(err){if(token===DOSARE_UI.sequence){out.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă încărcarea analizei';retry.onclick=()=>openDossierRun(id,runId,token,checkId);out.append(retry);}}
 }
 const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
 const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
@@ -3898,39 +3921,61 @@ function reviewEvidenceHtml(f){
     +`<details><summary>Amprente salvate și curente</summary><pre>${esc(JSON.stringify(f.dependente_verificate,null,2))}</pre></details>`;
 }
 function reviewEventHtml(e){return `<p><b>${esc(REVIEW_STATES[e.stare])}</b> · Revizia ${e.revizie} · ${esc(e.evaluator)} · ${esc(e.creat_la)}<br>${esc(e.motiv)}</p>`;}
+function findingSourcesHtml(f){
+  const paired=['contradictie','proiect'].includes(f.tip);
+  const sources=paired?['a','b'].filter(k=>f.dovada[k]).map(k=>[k.toUpperCase(),f.dovada[k]]):[['',f.dovada]];
+  return '<p class="hint">Dovezi păstrate în rulare</p><div class="finding-sources">'+sources.map(([side,s])=>`<div class="matrix-ex"><h4>${esc(side?side+' · ':'')}${esc(s.act_id||s.act_tinta||'Referință incompletă')} ${esc(s.locator?locRo(s.locator):'')}</h4><div class="source-text">${esc(s.text||s.definitie||s.continut_nou||'Text nepăstrat în această dovadă.')}</div>${f.tip!=='proiect'&&s.act_id?`<button type="button" class="ghost mini" data-current-source data-act="${esc(s.act_id)}" data-loc="${esc(s.locator||'')}" data-et="Text curent local">Text curent local</button>`:''}</div>`).join('')+'</div>';
+}
+function workspaceFindings(findings,filter,query){
+  const needle=fold(query||'');
+  return findings.filter(f=>(filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter||filter==='evidence_changed'&&f.verificare?.stare==='schimbat'||filter==='evidence_unknown'&&(f.verificare?.stare==='indisponibil'||f.verificare?.comparatie_incompleta))&&(!needle||fold(JSON.stringify(f.dovada)).includes(needle)));
+}
+function workspaceFindingHtml(f,selected,dirty){
+  return `<button type="button" data-select-finding="${esc(f.id)}" aria-current="${f.id===selected}"><b>${esc(f.dovada.termen||f.dovada.act_id||f.tip)}</b><small>${esc(REVIEW_STATES[f.stare])}${dirty?' · Note nesalvate':''}</small></button>`;
+}
 function reviewFindingHtml(f){
   const title=f.dovada.termen||f.dovada.act_id||f.tip;
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
     +reviewEvidenceHtml(f)
-    +(f.dovada.text?`<p>${esc(f.dovada.text)}</p>`:'')
+    +findingSourcesHtml(f)
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
-    +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div><button type="submit" class="ghost mini">Înregistrează decizia</button></div></form><p class="hint review-status" role="status"></p>'
+    +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Înregistrează decizia</button><button type="button" class="ghost mini" data-review-cancel>Renunță la notele deciziei</button></div></form><p class="hint review-status" role="status"></p>'
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
 }
 async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
+  if([...(panel.reviewTransactions?.values()||[]),...(panel.reviewDrafts?.values()||[])].some(record=>record.saving)){
+    const status=panel.querySelector('[data-review-status]');if(status)status.textContent='Salvare în curs. Așteaptă înainte de reîncărcare.';return;
+  }
+  const viewKey=dossierId+':'+runId;
+  const view=DOSSIER_VIEWS.get(viewKey)||{filter:'all',query:'',selected:null,checksOpen:false};DOSSIER_VIEWS.set(viewKey,view);
   const generation=(panel.reviewGeneration||0)+1;panel.reviewGeneration=generation;
   const drafts=panel.reviewDrafts||(panel.reviewDrafts=new Map());
-  let filter=panel.querySelector('[data-review-filter]')?.value||'all';
+  const transactions=panel.reviewTransactions||(panel.reviewTransactions=new Map());
+  let filter=panel.querySelector('[data-review-filter]')?.value||view.filter;
   panel.textContent='Încarc revizuirile…';
   const valid=()=>panel.isConnected&&token===DOSARE_UI.sequence&&panel.reviewGeneration===generation;
   try{
     const d=await dossierApi('/api/dosare/revizuiri?'+new URLSearchParams({id:dossierId,rulare_id:runId}));
     if(!valid()) return;
-    panel.innerHTML='<h4>Revizuirea constatărilor</h4><p class="hint">Confirmarea evaluatorului nu este o hotărâre juridică oficială. Identitatea evaluatorului este declarată.</p>'
+    panel.innerHTML='<h4>Constatări și dovezi</h4><p class="hint">Confirmarea evaluatorului nu este o hotărâre juridică oficială. Identitatea evaluatorului este declarată.</p>'
       +`<p class="hint">Constatări revizuibile păstrate: ${d.constatari.length}. Numărătorile agregate fără dovezi individuale nu sunt incluse.</p>`
-      +'<div class="dossier-actions"><button type="button" class="ghost mini" data-evidence-check title="Compară și salvează dovezile din corpusul local">↻ Verifică și salvează dovezile</button><button type="button" class="ghost mini" data-evidence-rerun title="Recalculează raportul; deciziile vechi rămân în rularea inițială">Recalculează pentru reevaluare →</button></div><p class="hint" data-evidence-status role="status">Încarc istoricul verificărilor…</p><div data-check-history></div><div data-run-origins></div><p class="hint">Verificare locală, fără actualizare de la sursele oficiale. Textul istoric integral nu este arhivat. Deciziile rămân asociate rulării în care au fost înregistrate.</p>'
-      +'<div class="dossier-actions"><label>Filtru<select data-review-filter><option value="all">Toate</option><option value="unresolved">Nerezolvate</option>'+Object.entries(REVIEW_STATES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label><button type="button" class="ghost mini" data-review-refresh>Reîncarcă revizuirile</button><button type="button" class="ghost mini" data-review-json>Exportă revizuirea JSON</button><button type="button" class="ghost mini" data-review-copy>Copiază revizuirea Markdown</button></div><p class="hint" data-review-status role="status"></p><div data-review-list></div>';
+      +'<details class="review-checks" data-review-checks><summary data-checks-summary>Verificări, surse UE și recalculări</summary><div class="dossier-actions"><button type="button" class="ghost mini" data-evidence-check title="Compară și salvează dovezile din corpusul local">↻ Verifică și salvează dovezile</button><button type="button" class="ghost mini" data-evidence-rerun title="Recalculează raportul; deciziile vechi rămân în rularea inițială">Recalculează pentru reevaluare →</button></div><p class="hint" data-evidence-status role="status">Încarc istoricul verificărilor…</p><div data-check-history></div><div data-run-origins></div><p class="hint">Verificare locală, fără actualizare de la sursele oficiale. Deciziile rămân asociate rulării în care au fost înregistrate.</p></details>'
+      +'<div class="dossier-actions"><label>Filtru<select data-review-filter><option value="all">Toate</option><option value="unresolved">Nerezolvate</option>'+Object.entries(REVIEW_STATES).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label><button type="button" class="ghost mini" data-review-refresh>Reîncarcă revizuirile</button><button type="button" class="ghost mini" data-review-json>Exportă revizuirea JSON</button><button type="button" class="ghost mini" data-review-copy>Copiază revizuirea Markdown</button></div><p class="hint" data-review-status role="status"></p><button type="button" class="ghost mini" data-show-drafts hidden>Note nesalvate</button><div class="review-workspace"><nav class="review-finding-nav" aria-label="Constatări salvate"><label>Căutare<input type="search" data-finding-search placeholder="Act, articol, termen"></label><p class="hint" data-finding-count></p><div data-finding-buttons></div></nav><div data-review-list></div></div>';
     const list=panel.querySelector('[data-review-list]'), status=panel.querySelector('[data-review-status]'), picker=panel.querySelector('[data-review-filter]');
     picker.add(new Option('Dovezi schimbate · de reevaluat','evidence_changed'));
     picker.add(new Option('Comparație indisponibilă','evidence_unknown'));
     picker.value=filter;
+    const search=panel.querySelector('[data-finding-search]'),checksPanel=panel.querySelector('[data-review-checks]');
+    search.value=view.query;checksPanel.open=view.checksOpen||!!checkId;
+    checksPanel.ontoggle=()=>{view.checksOpen=checksPanel.open;};
     const evidenceStatus=panel.querySelector('[data-evidence-status]');
     const euStatus=document.createElement('div');euStatus.dataset.euCheck='';evidenceStatus.after(euStatus);
     const applyCheck=()=>{
       const check=panel.evidenceCheck;
+      panel.querySelector('[data-checks-summary]').textContent=check?'Verificare salvată · '+dossierTime(check.verificat_la):'Verificări · Nicio verificare selectată';
       euStatus.innerHTML=euCheckHtml(check,!!d.rulare.dovezi.referinte_ue?.length);
       for(const f of d.constatari){
         f.verificare=check?.constatari.find(c=>c.constatare_id===f.id);
@@ -3940,9 +3985,21 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
     };
     applyCheck();
     const render=()=>{
-      filter=picker.value;
-      const findings=d.constatari.filter(f=>filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter||filter==='evidence_changed'&&f.verificare?.stare==='schimbat'||filter==='evidence_unknown'&&(f.verificare?.stare==='indisponibil'||f.verificare?.comparatie_incompleta));
-      list.innerHTML=findings.map(reviewFindingHtml).join('')||(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p>':'<p>Nicio constatare în această selecție.</p>');
+      filter=picker.value;view.filter=filter;view.query=search.value;
+      const findings=workspaceFindings(d.constatari,filter,view.query);
+      const active=findings.find(f=>f.id===view.selected)||findings[0];if(!view.selected&&active) view.selected=active.id;
+      const dirty=id=>[...drafts.keys()].some(k=>k===id||k.startsWith('context:'+id+':'));
+      panel.querySelector('[data-finding-count]').textContent=`${findings.length} din ${d.constatari.length}`;
+      const buttons=panel.querySelector('[data-finding-buttons]');
+      buttons.innerHTML=findings.map(f=>workspaceFindingHtml(f,active?.id,dirty(f.id))).join('');
+      buttons.querySelectorAll('button').forEach(b=>b.onclick=()=>{view.selected=b.dataset.selectFinding;render();});
+      panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
+      list.innerHTML=active?reviewFindingHtml(active):(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p><button type="button" class="ghost mini" data-open-checks>Deschide verificările</button>':'<p>Nicio constatare în această selecție.</p>');
+      const openChecks=list.querySelector('[data-open-checks]');if(openChecks)openChecks.onclick=()=>{checksPanel.open=true;panel.querySelector('[data-evidence-check]').focus();};
+      list.querySelectorAll('[data-current-source]').forEach(b=>b.onclick=async()=>{
+        await mPrevedere(b);const current=b.closest('.matrix-ex').querySelector('.matrix-prev');
+        if(current&&!current.querySelector('[data-source-kind]')){const label=document.createElement('p');label.className='hint';label.dataset.sourceKind='';label.textContent='Text curent din corpusul local';current.prepend(label);}
+      });
       list.querySelectorAll('.finding-review > form').forEach(form=>{
         const f=findings.find(f=>f.id===form.closest('[data-finding]').dataset.finding);
         form.parentElement.querySelectorAll('[data-draft-versions]').forEach(button=>button.onclick=()=>{
@@ -3966,20 +4023,26 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
         if(draft) for(const [key,value] of Object.entries(draft)) form.elements.namedItem(key).value=value;
         form.oninput=()=>{
           const values=Object.fromEntries(new FormData(form));
-          if(values.evaluator||values.motiv||values.stare!==f.stare) drafts.set(f.id,values);
-          else drafts.delete(f.id);
+          if(values.evaluator||values.motiv||values.stare!==f.stare){drafts.set(f.id,values);if(!transactions.has(f.id))transactions.set(f.id,{revision:f.revizie});}
+          else{drafts.delete(f.id);transactions.delete(f.id);}
+          panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
         };
+        form.querySelector('[data-review-cancel]').onclick=()=>{drafts.delete(f.id);transactions.delete(f.id);render();};
         let retry=null;
+        retry=transactions.get(f.id)||null;
+        if(retry?.saving) [...form.elements].forEach(c=>c.disabled=true);
+        form.parentElement.querySelector('.review-status').textContent=retry?.error||'';
         form.onsubmit=async e=>{
           e.preventDefault();const values=Object.fromEntries(new FormData(form)), fingerprint=JSON.stringify(values), message=form.parentElement.querySelector('.review-status');
           const controls=[...form.elements];controls.forEach(c=>c.disabled=true);
           try{
-            if(retry?.fingerprint!==fingerprint) retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
-            await dossierApi('/api/dosare/revizuiri',{...values,id:retry.id,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:f.revizie});
-            drafts.delete(f.id);
+            if(retry?.fingerprint!==fingerprint) retry={fingerprint,id:crypto.randomUUID().replaceAll('-',''),revision:retry?.revision??f.revizie};
+            retry.saving=true;retry.error='';transactions.set(f.id,retry);
+            await dossierApi('/api/dosare/revizuiri',{...values,id:retry.id,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:retry.revision});
+            drafts.delete(f.id);transactions.delete(f.id);
             if(valid()) await loadFindingReviews(panel,dossierId,runId,token);
-          }catch(err){if(valid()) message.textContent=err.message;}
-          finally{controls.forEach(c=>c.disabled=false);}
+          }catch(err){if(retry)retry.error=err.message;if(valid()) message.textContent=err.message;}
+          finally{if(retry)retry.saving=false;controls.forEach(c=>c.disabled=false);if(valid()&&!form.isConnected)render();}
         };
       });
       list.querySelectorAll('[data-context-target]').forEach(section=>{
@@ -3998,6 +4061,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
             const current=values();
             if(Object.keys(initial).every(k=>current[k]===initial[k])) drafts.delete(key);
             else drafts.set(key,{values:current,revision,retry:drafts.get(key)?.retry});
+            panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
           };
           form.oninput=remember;
           if(previous?.saving) [...form.elements].forEach(c=>c.disabled=true);
@@ -4031,7 +4095,9 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
         };
       });
     };
-    picker.onchange=render;render();
+    picker.onchange=render;search.oninput=render;
+    panel.querySelector('[data-show-drafts]').onclick=()=>{const key=drafts.keys().next().value;if(!key)return;view.selected=key.startsWith('context:')?key.split(':')[1]:key;picker.value='all';search.value='';render();};
+    render();
     let historyGeneration=0;
     const history=panel.querySelector('[data-check-history]');
     const loadHistory=async(checkId=null,offset=0)=>{
@@ -4041,6 +4107,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
         const data=await dossierApi('/api/dosare/verificari?'+new URLSearchParams(params));
         if(!valid()||seq!==historyGeneration) return;
         panel.evidenceCheck=data.selectata;panel.runOrigins=data.origini;panel.runOriginsTruncated=data.origini_trunchiate;
+        view.checkId=data.selectata?.id||null;
         applyCheck();render();
         if(!data.selectata) evidenceStatus.textContent='Nicio verificare salvată pentru această rulare.';
         history.innerHTML='<div class="dossier-actions"><label>Istoricul verificărilor<select data-check-select></select></label><button type="button" class="ghost mini" data-check-prev title="Verificări mai noi">←</button><button type="button" class="ghost mini" data-check-next title="Verificări mai vechi">→</button><span class="hint">'+data.total+' verificări salvate</span></div>';
@@ -4055,9 +4122,9 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
         const origins=panel.querySelector('[data-run-origins]');
         origins.innerHTML=data.origini.map((r,i)=>`<p>Recalculată din <button type="button" class="ghost mini" data-origin="${i}">${esc(r.sursa_id)}</button></p>`).join('')+(data.origini_trunchiate?'<p class="hint">Primele 100 de legături afișate; copia bazei păstrează toate legăturile.</p>':'');
         origins.querySelectorAll('[data-origin]').forEach(button=>button.onclick=()=>{if(drafts.size){evidenceStatus.textContent='Există note nesalvate.';return;}selectDossier(dossierId,data.origini[Number(button.dataset.origin)].sursa_id);});
-      }catch(err){if(valid()&&seq===historyGeneration) evidenceStatus.textContent=err.message;}
+      }catch(err){if(valid()&&seq===historyGeneration){evidenceStatus.textContent=err.message;panel.querySelector('[data-checks-summary]').textContent='Verificări · Încărcare eșuată';history.innerHTML='<button type="button" class="ghost mini">Reîncearcă istoricul verificărilor</button>';history.querySelector('button').onclick=()=>loadHistory(checkId,offset);}}
     };
-    loadHistory(checkId);
+    loadHistory(checkId||view.checkId);
     const checkButton=panel.querySelector('[data-evidence-check]');
     checkButton.onclick=async()=>{
       checkButton.disabled=true;++historyGeneration;evidenceStatus.textContent='Verific și salvez dovezile locale…';
@@ -4094,8 +4161,9 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
   }catch(err){if(valid()){panel.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncarcă revizuirile';retry.onclick=()=>loadFindingReviews(panel,dossierId,runId,token);panel.append(retry);}}
 }
 async function selectDossier(id,runId,checkId=null){
+  if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
-  DOSARE_UI.selected=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  DOSARE_UI.selected=null;DOSARE_UI.runId=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
   try{
     const meta=await dossierApi('/api/dosare?id='+encodeURIComponent(id));
@@ -4111,7 +4179,7 @@ async function selectDossier(id,runId,checkId=null){
     const runs=$('#dossier-runs');
     if(!history.rulari.length){runs.textContent='Nicio analiză salvată.';return;}
     runs.innerHTML=`<label>Analize salvate<select id="dossier-run-select"><option value="">Alege o analiză</option>${history.rulari.map((r,i)=>`<option value="${esc(r.id)}">${esc((i+1)+' · '+dossierTime(r.creat_la))}</option>`).join('')}</select></label>`+(history.trunchiat?'<p class="hint">Sunt afișate ultimele 100 de analize.</p>':'');
-    $('#dossier-run-select').onchange=e=>{const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);};
+    $('#dossier-run-select').onchange=e=>{if(!dossierMayNavigate())return;const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);else DOSARE_UI.runId=null;};
     if(runId){
       const picker=$('#dossier-run-select');
       if(![...picker.options].some(o=>o.value===runId)) picker.add(new Option('Rulare din coadă · '+runId,runId));
