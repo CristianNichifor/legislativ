@@ -57,8 +57,12 @@ def test_invalid_create_does_not_initialize(state, patch):
 
 def test_foreign_future_schema_and_atomic_migration(state):
     path = dosare.cale(state)
-    with pytest.raises(RuntimeError), dosare._open(path, write=True):
-        raise RuntimeError("interrupted")
+
+    def interrupt():
+        with dosare._open(path, write=True):
+            raise RuntimeError("interrupted")
+
+    pytest.raises(RuntimeError, interrupt)
     with sqlite3.connect(path) as con:
         assert con.execute("PRAGMA user_version").fetchone()[0] == 0
         assert con.execute("SELECT name FROM sqlite_master").fetchall() == []
