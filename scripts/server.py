@@ -47,6 +47,8 @@ writes, so it coexists with the collectors and answers from more law each time t
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET /api/ue/acoperire` — which CELEX ids cited by local laws/initiatives are already imported.
+- `GET /api/ue/import-queue` — missing cited CELEX ids, with local references and Cellar import
+  guidance.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -80,6 +82,7 @@ from scripts.servicii import (
     _docx,
     _domenii,
     _impact,
+    _import_queue_ue,
     _importa,
     _lint,
     _matrice,
@@ -209,6 +212,8 @@ def face_handler(stare: Stare):
                 self._json(_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/ue/acoperire":
                 self._json(_acoperire_ue(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/ue/import-queue":
+                self._json(_import_queue_ue(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/dictionar":
                 self._json(_dictionar(stare))
             elif ruta.path == "/api/rezumat":

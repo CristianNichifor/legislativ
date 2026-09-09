@@ -1235,6 +1235,7 @@
         <div class="ue-tools">
           <button class="go" id="ue-go">Caută în dreptul UE</button>
           <button class="ghost" id="ue-draft">Folosește proiectul</button>
+          <button class="ghost" id="ue-queue">Coadă import CELEX</button>
           <button class="ghost" id="ue-cover">Acoperire import</button>
           <select id="ue-limba" title="Limba actului UE">
             <option value="">română sau engleză</option>
@@ -1243,6 +1244,7 @@
           </select>
           <span class="hint" id="ue-stat"></span>
         </div>
+        <div id="ue-import-queue"></div>
         <div id="ue-acoperire"></div>
         <div id="ue-out"></div>
       </div>
@@ -4071,6 +4073,51 @@ function ueDosareHtml(dosare, limita){
       +`</article>`;
   }).join("")+`</div>`;
 }
+function ueSurseOficialeHtml(surse){
+  const links=(surse||[]).map(s=>{
+    const href=urlSigur(s.url);
+    return href?`<a href="${esc(href)}" target="_blank" rel="noopener">${esc(s.eticheta||s.tip||"sursa oficială")}</a>`:"";
+  }).filter(Boolean);
+  return links.length?`<div class="ue-meta">${links.join("")}</div>`:"";
+}
+function renderUEImportQueue(d){
+  const out=$("#ue-import-queue");
+  if(!out) return;
+  if(!d || d.error){ out.innerHTML=empty("Nu am putut încărca lista CELEX de importat."); return; }
+  const rr=d.randuri||[];
+  const stats=`<div class="matrix-stats">`
+    +`<div class="matrix-stat"><b>${nf(d.total||0)}</b><span>CELEX în coadă</span></div>`
+    +`<div class="matrix-stat"><b>${esc(d.limba_preferata||"RON")}</b><span>limba preferată</span></div>`
+    +`<div class="matrix-stat"><b>${nf((d.acoperire&&d.acoperire.neimportate)||0)}</b><span>lipsă în acoperire</span></div>`
+    +`</div>`;
+  const rows=rr.length ? `<div class="ue-dosare">`+rr.map(r=>{
+    const refs=(r.referinte_locale||[]).slice(0,2);
+    const refsHtml=refs.length?`<div class="ue-ref-list">`+refs.map(ref=>{
+      const loc=[ref.sursa, ref.id, ref.locator].filter(Boolean).map(esc).join(" · ");
+      const href=urlSigur(ref.url);
+      return `<div class="ue-ref">`
+        +`<span class="ue-loc">${esc(loc)}</span>${esc(ref.titlu||"")}`
+        +(href?` <a href="${esc(href)}" target="_blank" rel="noopener">local</a>`:"")
+        +(ref.fragment?`<br><span class="hint">${esc(ref.fragment)}</span>`:"")
+        +`</div>`;
+    }).join("")+`</div>`:"";
+    const manifestari=(r.manifestari_locale||[]).slice(0,3);
+    const meta=manifestari.length?`<div class="ue-dosar-stat">metadata locală: `
+      +manifestari.map(m=>`${esc(m.limba||"")} ${esc(m.format||"")}`.trim()).filter(Boolean).join(" · ")
+      +`</div>`:"";
+    const comanda=(r.ghid_import&&r.ghid_import.comanda)||"";
+    return `<article class="ue-dosar">`
+      +`<div class="ue-loc">${esc(r.celex||"")}</div>`
+      +`<div class="ue-dosar-title">${esc(r.status||"neimportat")}</div>`
+      +`<div class="ue-dosar-stat">${nf(r.mentionari||0)} menționări · ${esc(r.limba_status||"")}</div>`
+      +meta
+      +ueSurseOficialeHtml(r.surse_oficiale)
+      +(comanda?`<div class="ue-meta"><code>${esc(comanda)}</code></div>`:"")
+      +refsHtml
+      +`</article>`;
+  }).join("")+`</div>` : empty("Nu există CELEX lipsă în acoperirea UE publicată.");
+  out.innerHTML=stats+rows+ueLimitariHtml(d.limitari||[]);
+}
 function renderUEAcoperire(d){
   const out=$("#ue-acoperire");
   if(!out) return;
@@ -4177,7 +4224,22 @@ async function loadUEAcoperire(){
     btn.disabled=false;
   }
 }
+async function loadUEImportQueue(){
+  const out=$("#ue-import-queue"), btn=$("#ue-queue");
+  if(!out || !btn) return;
+  btn.disabled=true; out.innerHTML=`<span class="hint"><span class="spin"></span> încarc coada CELEX…</span>`;
+  try{
+    const r=await fetch("/api/ue/import-queue?limita=50");
+    if(!r.ok) throw new Error((await r.json()).error||r.statusText);
+    renderUEImportQueue(await r.json());
+  }catch(e){
+    out.innerHTML=empty("Eroare: "+esc(e.message||e));
+  }finally{
+    btn.disabled=false;
+  }
+}
 $("#ue-go").onclick=cautaUE;
+$("#ue-queue").onclick=loadUEImportQueue;
 $("#ue-cover").onclick=loadUEAcoperire;
 $("#ue-draft").onclick=()=>{
   pregatesteUEDinDraft(true);

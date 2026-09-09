@@ -194,6 +194,8 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     assert '"ue_acoperire.json"' in text
     assert "_acoperire_ue" in text
     assert "/api/ue/acoperire" in text
+    assert "_import_queue_ue" in text
+    assert "/api/ue/import-queue" in text
 
 
 def test_eu_db_ships_as_schema_when_no_collected_celex(tmp_path, monkeypatch):

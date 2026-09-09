@@ -275,7 +275,7 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
                               _domenii, _matrice, _matrice_acte, _matrice_dosar, _prevedere,
-                              _cine_citeaza, _ue, _acoperire_ue)
+                              _cine_citeaza, _ue, _acoperire_ue, _import_queue_ue)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
                corpus_intreg=__CORPUS_INTREG__)
@@ -314,6 +314,7 @@ def _raspunde(path, query, body):
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
     elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
     elif path == '/api/ue/acoperire': out = _acoperire_ue(qs, _stare)
+    elif path == '/api/ue/import-queue': out = _import_queue_ue(qs, _stare)
     elif path == '/api/compune':
         out = _compune(json.loads(body or '{}').get('interventii', []))
     elif path == '/api/parseaza':
