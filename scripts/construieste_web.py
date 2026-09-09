@@ -288,7 +288,7 @@ def _raspunde(path, query, body):
         try: return int(v) if v not in ('', None) else None
         except ValueError: return None
     if path == '/api/rezumat': out = rezumat(_stare)
-    elif path in ('/api/dosare', '/api/dosare/rulari', '/api/dosare/revizuiri', '/api/dosare/dovezi', '/api/dosare/verificari', '/api/dosare/coada', '/api/dosare/coada-ue', '/api/dosare/context', '/api/dosare/propuneri'):
+    elif path in ('/api/dosare', '/api/dosare/rulari', '/api/dosare/revizuiri', '/api/dosare/dovezi', '/api/dosare/verificari', '/api/dosare/coada', '/api/dosare/coada-ue', '/api/dosare/context', '/api/dosare/propuneri', '/api/dosare/propuneri/previzualizare'):
         out = {'error': 'Dosarele persistente sunt disponibile numai în aplicația locală.'}
     elif path == '/api/inventar-surse':
         from scripts.servicii import _inventar_surse

@@ -1,5 +1,7 @@
 # legislativ
 
+Release scope and remaining work: [v1 completion checklist](docs/RELEASE_V1.md).
+
 A linter for draft Romanian legislation: what a bill contradicts, what it re-names, and what the
 law already required that nobody ever issued.
 

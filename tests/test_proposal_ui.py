@@ -17,6 +17,7 @@ def test_proposal_draft_retry_conflict_and_independent_cancel():
         r"""
 const assert=require('node:assert/strict');
 const bindProposalHistory=()=>{};
+const bindStructuredProposal=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }
 const panel={reviewDrafts:new Map(),proposalOpen:new Set(['finding']),querySelector:()=>({})};
@@ -93,5 +94,27 @@ def test_revision_comparison_renderer_escapes_all_author_text():
         "assert.ok(h.includes('Revizia 2')&&h.includes('Text propus')&&h.includes('Motivare'));"
         "assert.ok(!/<(script|img|svg|iframe)>/.test(h));"
         "assert.ok(h.includes('&lt;script&gt;')&&h.includes('&lt;img&gt;'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_rationale_edits_preserve_structure_but_manual_text_detachment_is_respected():
+    source = (
+        (Path(__file__).parents[1] / "app/index.html")
+        .read_text()
+        .split("function bindFindingProposal", 1)[1]
+        .split("form.oninput=()=>{", 1)[1]
+        .split("form.querySelector('[data-proposal-cancel]')", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');const drafts=new Map(),key='p',revision=1;"
+        "const initial={titlu:'Title',text:'Generated',motiv:''},message={},mark=()=>{};"
+        "const saved={interventie:{cerere:{operatie:'modifica',sha256_tinta:'hash'}}};"
+        "const values=()=>({...initial,motiv:'New rationale'});"
+        "const edit=()=>{"
+        + source
+        + "edit();assert.deepEqual(drafts.get(key).interventie,saved.interventie.cerere);"
+        "drafts.get(key).interventie=null;edit();assert.equal(drafts.get(key).interventie,null);"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

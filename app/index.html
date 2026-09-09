@@ -380,6 +380,7 @@
   .finding-review [data-proposal] form{grid-template-columns:minmax(0,1fr)}
   [data-proposal] textarea{min-height:8rem;resize:vertical}
   [data-proposal] pre{max-height:18rem;overflow:auto}
+  [data-structured-proposal] label[hidden]{display:none}
   .proposal-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem 1rem;border-bottom:1px solid var(--rule);padding:.6rem 0}
   .proposal-row button{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:100%}
   .proposal-row small{grid-column:1/-1;overflow-wrap:anywhere}
@@ -4015,7 +4016,7 @@ async function loadProposalList(dossierId,offset=0){
   }catch(err){if(valid()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă propunerile';retry.onclick=()=>loadProposalList(dossierId,offset);host.append(retry);}}
 }
 function proposalVersionHtml(p){
-  return `<section><h4>Revizia ${p.revizie}</h4><p class="hint">${esc(dossierTime(p.creat_la))}</p>`+[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].map(([k,label])=>`<h5>${label}</h5><pre>${esc(p[k])}</pre>`).join('')+'</section>';
+  return `<section><h4>Revizia ${p.revizie}</h4><p class="hint">${esc(dossierTime(p.creat_la))}</p>`+[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].map(([k,label])=>`<h5>${label}</h5><pre>${esc(p[k])}</pre>`).join('')+(p.interventie?'<h5>Intervenție și țintă capturată</h5><pre>'+esc(JSON.stringify(p.interventie,null,2))+'</pre>':'')+'</section>';
 }
 function bindProposalHistory(host,query,saved,alive){
   if(!saved)return;
@@ -4049,6 +4050,7 @@ function bindProposalHistory(host,query,saved,alive){
       const first=await dossierApi(query+'&revizie='+left);if(!valid()||seq!==comparisonSequence)return;
       const second=await dossierApi(query+'&revizie='+right);if(!valid()||seq!==comparisonSequence)return;
       const changed=[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].filter(([k])=>first.propunere[k]!==second.propunere[k]).map(([,label])=>label);
+      if(JSON.stringify(first.propunere.interventie||null)!==JSON.stringify(second.propunere.interventie||null))changed.push('Intervenție / țintă');
       area.innerHTML='<p class="hint">'+(changed.length?'Câmpuri diferite: '+changed.join(', '):'Conținut identic.')+'</p><div class="proposal-versions">'+proposalVersionHtml(first.propunere)+proposalVersionHtml(second.propunere)+'</div>';
     }catch(err){if(valid()&&seq===comparisonSequence)area.textContent=err.message;}
   };
@@ -4063,6 +4065,57 @@ function bindProposalHistory(host,query,saved,alive){
       message.textContent='Exportată: revizia salvată '+revision+'. Modificările nesalvate nu sunt incluse.';
     }catch(err){if(valid())message.textContent=err.message;}finally{button.disabled=false;}
   };
+}
+function bindStructuredProposal(form,saved,f,drafts,key,revision,initial,identity,alive){
+  const section=document.createElement('details');section.dataset.structuredProposal='';
+  section.innerHTML='<summary>Intervenție structurată</summary><label>Act țintă<input type="text" data-intent="act_id" maxlength="100" placeholder="lege-98-2016"></label><label>Prevedere țintă<input type="text" data-intent="locator" maxlength="100" placeholder="art1"></label><label>Operație<select data-intent="operatie"><option value="modifica">Înlocuiește textul</option><option value="introduce">Introdu un articol după țintă</option><option value="abroga">Abrogă prevederea</option></select></label><label data-new-article-label hidden>Număr articol nou<input type="text" data-intent="articol_nou" maxlength="100" placeholder="1^1"></label><label data-new-text-label>Text nou<textarea data-intent="text_nou" maxlength="11000" rows="5"></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-intent-preview>Previzualizează</button><button type="button" class="ghost mini" data-intent-apply disabled>Aplică formularea în propunere</button><button type="button" class="ghost mini" data-intent-discard>Renunță la intervenție</button></div><p class="hint" data-intent-status role="status"></p><div data-intent-result></div>';
+  form.prepend(section);
+  const previous=drafts.get(key),evidence=f.dovada.a||f.dovada;
+  const choices=document.createElement('datalist');choices.id='proposal-targets-'+f.id;
+  for(const source of [f.dovada.a,f.dovada.b,f.dovada].filter(Boolean)){
+    const id=source.act_tinta||source.act_id;if(!id)continue;
+    const option=document.createElement('option');option.value=id;choices.append(option);
+  }
+  section.append(choices);section.querySelector('[data-intent="act_id"]').setAttribute('list',choices.id);
+  const original=saved?.interventie?.cerere;
+  const defaults=previous?.structura||previous?.interventie||original||{act_id:evidence.act_tinta||evidence.act_id||'',locator:evidence.locator||'',operatie:'modifica',articol_nou:'',text_nou:''};
+  const inputs=[...section.querySelectorAll('[data-intent]')],message=section.querySelector('[data-intent-status]'),apply=section.querySelector('[data-intent-apply]');
+  for(const input of inputs)input.value=defaults[input.dataset.intent]||'';
+  const values=()=>Object.fromEntries(inputs.map(input=>[input.dataset.intent,input.value]));
+  const mode=()=>{const op=values().operatie;section.querySelector('[data-new-article-label]').hidden=op!=='introduce';section.querySelector('[data-new-text-label]').hidden=op==='abroga';};mode();
+  let preview=null,sequence=0;
+  const remember=()=>{
+    const record=drafts.get(key)||{initial,revision,values:Object.fromEntries(new FormData(form)),interventie:original||null};
+    record.structura=values();record.structureDirty=true;drafts.set(key,record);form.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  section.oninput=()=>{++sequence;preview=null;apply.disabled=true;section.querySelector('[data-intent-result]').textContent='';mode();remember();message.textContent='Intervenție neaplicată.';};
+  form.elements.namedItem('text').addEventListener('input',()=>{
+    const record=drafts.get(key)||{initial,revision};record.interventie=null;drafts.set(key,record);message.textContent='Text liber · intervenția nu mai este asociată.';
+  });
+  section.querySelector('[data-intent-discard]').onclick=()=>{
+    const record=drafts.get(key);if(record){delete record.structura;delete record.structureDirty;record.interventie=null;}
+    ++sequence;preview=null;apply.disabled=true;section.open=false;form.dispatchEvent(new Event('input',{bubbles:true}));
+  };
+  section.querySelector('[data-intent-preview]').onclick=async()=>{
+    const seq=++sequence;remember();message.textContent='Citesc ținta locală…';apply.disabled=true;
+    const intent=values();if(intent.operatie==='abroga')intent.text_nou='';if(intent.operatie!=='introduce')intent.articol_nou='';
+    try{
+      const data=await dossierApi('/api/dosare/propuneri/previzualizare',{...identity,interventie:intent});if(!alive()||seq!==sequence)return;preview=data;
+      section.querySelector('[data-intent-result]').innerHTML='<h5>Țintă din corpusul local · separat de dovada istorică</h5><pre>'+esc(data.inainte)+'</pre><h5>'+(intent.operatie==='introduce'?'Articol nou propus':intent.operatie==='abroga'?'După: prevedere propusă pentru abrogare':'Text de înlocuire propus')+'</h5><pre>'+esc(data.dupa)+'</pre><h5>Formulare compusă</h5><pre>'+esc(data.text_compus)+'</pre>';
+      message.textContent=data.verificare.length?data.verificare.join(' '):'Recitire sintactică reușită · nu este o validare juridică.';apply.disabled=false;
+    }catch(err){if(alive()&&seq===sequence)message.textContent=err.message;}
+  };
+  apply.onclick=()=>{
+    if(!preview)return;
+    form.elements.namedItem('text').value=preview.text_compus;
+    const record=drafts.get(key)||{initial,revision};record.interventie=preview.cerere;record.structura=values();record.structureDirty=false;drafts.set(key,record);
+    form.dispatchEvent(new Event('input',{bubbles:true}));message.textContent='Intervenție aplicată · nesalvată.';
+  };
+  if(previous?.structura||original){section.open=true;message.textContent=original?'Intervenție salvată · '+original.operatie+' '+original.act_id+' '+original.locator:'Intervenție neaplicată.';}
+  if(original&&!previous?.structura){
+    section.querySelector('[data-intent-result]').innerHTML='<h5>Țintă păstrată în revizia salvată</h5><pre>'+esc(saved.interventie.inainte)+'</pre><h5>Text propus · '+esc(original.operatie)+'</h5><pre>'+esc(saved.interventie.dupa)+'</pre><p class="hint">SHA-256 țintă: '+esc(original.sha256_tinta)+'</p>';
+  }
+  if(previous?.saving)[...form.elements].forEach(control=>control.disabled=true);
 }
 function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
   const drafts=panel.reviewDrafts,key='proposal:'+f.id;
@@ -4091,8 +4144,8 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       form.oninput=()=>{
         const current=values(),old=drafts.get(key);
         // Keep the original revision and retry identity even after an ambiguous response.
-        if(!old?.retry&&Object.keys(initial).every(k=>current[k]===initial[k]))drafts.delete(key);
-        else drafts.set(key,{...old,values:current,initial,revision});
+        if(!old?.retry&&!old?.interventie&&!old?.structura&&Object.keys(initial).every(k=>current[k]===initial[k]))drafts.delete(key);
+        else drafts.set(key,{...old,values:current,initial,revision,interventie:old&&Object.hasOwn(old,'interventie')?old.interventie:saved?.interventie?.cerere||null});
         message.textContent=drafts.has(key)?'Modificări nesalvate':'Fără modificări';mark();
       };
       form.querySelector('[data-proposal-cancel]').onclick=()=>{drafts.delete(key);render();};
@@ -4108,16 +4161,18 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       };
       form.onsubmit=async e=>{
         e.preventDefault();if(drafts.get(key)?.saving)return;
-        const record=drafts.get(key)||{initial,revision};record.values=values();
-        const payload={...record.values,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:record.revision};
+        if(drafts.get(key)?.structureDirty){message.textContent='Aplică sau renunță la intervenția neaplicată înainte de salvare.';return;}
+        const record=drafts.get(key)||{initial,revision,interventie:saved?.interventie?.cerere||null};record.values=values();
+        const payload={...record.values,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:record.revision,...(record.interventie?{interventie:record.interventie}:{})};
         const fingerprint=JSON.stringify(payload);
         if(record.retry?.fingerprint!==fingerprint)record.retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
-        record.saving=true;record.error='';drafts.set(key,record);mark();controls.forEach(c=>c.disabled=true);message.textContent='Salvare în curs…';
+        record.saving=true;record.error='';drafts.set(key,record);mark();[...form.elements].forEach(c=>c.disabled=true);message.textContent='Salvare în curs…';
         try{
           await dossierApi('/api/dosare/propuneri',{...payload,id:record.retry.id});drafts.delete(key);panel.onProposalSaved?.();
         }catch(err){record.error=err.message;}
         finally{record.saving=false;if(valid())render();}
       };
+      bindStructuredProposal(form,saved,f,drafts,key,revision,initial,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
     }catch(err){if(alive()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă';retry.onclick=()=>{loaded=false;load();};host.append(retry);}}
   };
   section.ontoggle=()=>{if(!alive())return;if(section.open){opened.add(f.id);load();}else opened.delete(f.id);};

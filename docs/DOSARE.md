@@ -41,7 +41,7 @@ Version-1/2/3/4 stores remain
 readable without migration; absent history is
 shown as uncaptured, never backfilled. The next explicit dossier/review write upgrades them
 transactionally; failed writes roll back the migration. Backup before upgrading;
-older application code rejects schema 5. Reviews belong to a saved run and never
+older application code rejects the newer schema. Reviews belong to a saved run and never
 transfer automatically to a different run, even with similar evidence.
 
 Unsaved review text is retained while filtering or reloading reviews within the
@@ -508,7 +508,64 @@ Additional modes of `GET /api/dosare/propuneri`:
 
 These are read-only operations using the existing local Host/Origin and `no-store`
 rules. No source fetch, AI call, schema migration or additional database is introduced;
-schema remains **5**. Older stores return empty lists/history without being migrated.
+these read-only workflows do not change the schema. Older stores return empty lists/history without being migrated.
 API ownership and finding-membership checks apply to history, revision reads and
 export just as they do to proposal editing. Pagination bounds limit metadata responses;
 full export size is bounded by the existing saved-report and proposal limits.
+
+### Structured proposals (v1 milestone 1)
+
+`Interventie structurata` connects a saved proposal to the existing deterministic
+composer. It supports replacement and repeal of an exact indexed numeric article,
+paragraph or letter, and insertion of a new numeric article after an existing
+article. Numbered lege/OUG/OG/HG/ordin/decret IDs are supported; named codes, Roman
+article numbering, whole-act repeal, multi-operation drafting, unindexed/fallback
+targets and inferred renumbering are not silently approximated. Unsupported cases
+remain available as free-text proposals, without a structured preview claim.
+
+The author explicitly chooses the local target ID/locator, operation, new text and
+new article number where relevant. Finding targets appear as suggestions. Preview
+captures the target from the local corpus in a read transaction; it does not fetch
+an official source or mutate the corpus. Multiple indexed rows are accepted only
+when one retained text contains all the others; ambiguous text is rejected. Limits
+are 100 target rows, 80 KB of target text, supported locator bounds, and the existing
+12,000-character proposal ceiling including composed wording. Existing new-article
+locators or descendants block insertion. No temporal applicability is inferred.
+
+The source snapshot is separate from the finding's original report evidence: that
+evidence may be an excerpt and must not masquerade as a full historical article.
+The before text is the explicitly captured local target; replacement shows its new
+text, repeal has no after text, and insertion shows the new article while leaving
+its anchor unchanged. This is a single-operation simulation, not consolidated law.
+
+Preview returns existing composer round-trip warnings. A successful round trip is
+only a parser check, never a legal-validity assessment. Applying generated wording
+is explicit and affects only this proposal, not the general editor. Unapplied intent
+edits block saving until applied or discarded. They survive finding changes and
+block cross-run navigation. Manual edits to the composed proposal detach its
+structured designation; they can be saved as free text. Earlier structured revisions
+remain preserved and visible in history/export.
+
+`POST /api/dosare/propuneri/previzualizare` accepts exactly `dosar_id`, `rulare_id`,
+`constatare_id`, `interventie`. The intervention has `act_id`, `locator`, `operatie`
+(`modifica`, `introduce`, `abroga`), `text_nou` and `articol_nou` (empty unless insertion).
+The returned `cerere` adds `sha256_tinta`; the remaining response contains the
+server-derived snapshot, composed text, before/after text, warnings and limitations.
+
+Proposal save accepts optional `interventie` containing that returned request.
+The server re-reads the current local target and checks its hash, insertion collision
+and generated wording before committing. Changed targets require a new preview.
+This is a recheck at save, not a lock against subsequent corpus updates. Retrying an
+already committed request uses its original snapshot, even if the corpus changed or
+became unavailable after commit. Changed retries still fail. Omitting the optional
+field saves a free-text revision; no target is inferred from its prose.
+
+Schema **6** adds append-only `interventii_propuneri`, keyed by proposal revision ID.
+Existing schemas 1-5 remain readable without migration; the next write migrates
+transactionally and failed writes roll back. **Back up dossiers before upgrading.**
+Older app versions reject schema 6. Backups, exact revision reads and proposal
+exports retain snapshots. Existing reports/reviews/context and old free-text proposal
+responses are unchanged. Preview and save use local Host/Origin controls, no-store
+responses and an 80 KB request ceiling; static deployments cannot perform them.
+
+The remaining seven v1 milestones are tracked in [RELEASE_V1.md](RELEASE_V1.md).
