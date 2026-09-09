@@ -9,7 +9,8 @@ not start here.
 What the documents *do* state is the body that issued them, on every single one: 488 distinct
 issuers, no document without one. That is a real grouping and a useful one — the Ministry of
 Health's orders are the health file in the sense the state itself keeps it — and every act in it is
-there because its own page says so.
+there because its own page says so. The matrix has separate domain hints now, but those are labelled
+as metadata evidence, not as this issuer grouping.
 
 **Its limits, stated rather than discovered.** A ministry is not a subject: the Government issues
 across every field at once and accounts for 51 344 documents on its own, so `Guvernul` is a large

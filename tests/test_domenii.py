@@ -2,8 +2,7 @@
 
 By issuer and not by subject, and the reason is worth keeping in front of whoever reads this next:
 a portal page carries its type, number, year, issuer and text, and no classification of any kind.
-A subject grouping would have to be invented and then shown as though it had been read. The issuer
-is on every one of the 205 321 documents.
+The separate matrix domain hints are explicit metadata matches; this module stays issuer-only.
 """
 
 from __future__ import annotations

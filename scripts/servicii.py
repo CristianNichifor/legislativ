@@ -611,6 +611,7 @@ def _rand_matrice(emitent: str) -> dict:
         "initiative_in_lucru": 0,
         "_vid_exemple": [],
         "_neconst_exemple": [],
+        "_domeniu_exemple": [],
     }
 
 
@@ -704,6 +705,11 @@ def _actiuni_prevedere(act_id: str, locator: str | None) -> list[dict]:
     ]
 
 
+def _adauga_exemplu_domeniu(rand: dict, exemplu: dict) -> None:
+    if len(rand["_domeniu_exemple"]) < 3:
+        rand["_domeniu_exemple"].append(exemplu)
+
+
 def _amendamente_pe_act(stare: Stare) -> dict[str, dict[str, int]]:
     if not stare.are_graf():
         return {}
@@ -760,6 +766,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     tip = (qs.get("tip", [""])[0] or "").strip() or None
     sortare = (qs.get("sort", ["semnale"])[0] or "semnale").strip()
     rang = (qs.get("rang", [""])[0] or "").strip() or None
+    domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
     viduri = _raport_lista(stare.vid)
     neconst = _raport_lista(stare.neconstitutional)
@@ -772,47 +779,107 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         | set(initiative)
     )
 
-    from scripts import rang_normativ
+    from scripts import domenii_juridice, rang_normativ
 
     ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
     rang_filtru = rang if rang in ranguri_valide else None
+    domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
 
     def tip_acceptat(tip_act: str | None) -> bool:
         if tip and tip_act != tip:
             return False
         return not (rang_filtru and rang_normativ.categorie(tip_act) != rang_filtru)
 
+    def domeniu_din_meta(m: dict | None) -> dict:
+        return domenii_juridice.clasifica(
+            titlu=(m or {}).get("titlu", ""),
+            emitent=(m or {}).get("emitent", ""),
+        )
+
+    def domeniu_acceptat(m: dict | None) -> bool:
+        return not domeniu_filtru or (
+            m is not None and domeniu_din_meta(m)["cheie"] == domeniu_filtru
+        )
+
     try:
         with depozit.deschide(stare.corpus, readonly=True) as con:
             randuri: dict[str, dict] = {}
-            conditie = " AND tip = ?" if tip else ""
-            params = (tip,) if tip else ()
-            for r in con.execute(
-                "SELECT COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent,"
-                " tip, count(*) acte, min(an) de_la, max(an) pana_la FROM acte"
-                f" WHERE 1 = 1{conditie} GROUP BY emitent, tip",
-                params,
-            ):
-                tip_act = r["tip"] or ""
-                if not tip_acceptat(tip_act):
-                    continue
-                rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
-                rand["acte"] += r["acte"]
-                rand["_tipuri"][tip_act] = rand["_tipuri"].get(tip_act, 0) + r["acte"]
-                _adauga_rang_matrice(rand, tip_act, r["acte"])
-                ani = [x for x in (r["de_la"], r["pana_la"]) if x]
-                if ani:
-                    rand["de_la"] = (
-                        min([rand["de_la"], *ani]) if rand["de_la"] is not None else min(ani)
+            if domeniu_filtru:
+                for r in con.execute(
+                    "SELECT id, cheie_citare, tip, titlu,"
+                    " COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent,"
+                    " an, publicat FROM acte"
+                ):
+                    tip_act = r["tip"] or ""
+                    if not tip_acceptat(tip_act):
+                        continue
+                    m = {
+                        "id": r["id"],
+                        "cheie_citare": r["cheie_citare"] or r["id"],
+                        "tip": r["tip"],
+                        "titlu": r["titlu"],
+                        "emitent": r["emitent"],
+                        "an": r["an"],
+                        "publicat": r["publicat"],
+                    }
+                    domeniu_act = domeniu_din_meta(m)
+                    if domeniu_act["cheie"] != domeniu_filtru:
+                        continue
+                    rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
+                    rand["acte"] += 1
+                    rand["_tipuri"][tip_act] = rand["_tipuri"].get(tip_act, 0) + 1
+                    _adauga_rang_matrice(rand, tip_act, 1)
+                    if r["an"]:
+                        rand["de_la"] = (
+                            min(rand["de_la"], r["an"]) if rand["de_la"] is not None else r["an"]
+                        )
+                        rand["pana_la"] = (
+                            max(rand["pana_la"], r["an"])
+                            if rand["pana_la"] is not None
+                            else r["an"]
+                        )
+                    _adauga_exemplu_domeniu(
+                        rand,
+                        {
+                            "act_id": r["cheie_citare"] or r["id"],
+                            "titlu": r["titlu"],
+                            "dovezi": domeniu_act["dovezi"]
+                            or ["fără indicator cunoscut în titlu/emitent"],
+                        },
                     )
-                    rand["pana_la"] = (
-                        max([rand["pana_la"], *ani]) if rand["pana_la"] is not None else max(ani)
-                    )
+            else:
+                conditie = " AND tip = ?" if tip else ""
+                params = (tip,) if tip else ()
+                for r in con.execute(
+                    "SELECT COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent,"
+                    " tip, count(*) acte, min(an) de_la, max(an) pana_la FROM acte"
+                    f" WHERE 1 = 1{conditie} GROUP BY emitent, tip",
+                    params,
+                ):
+                    tip_act = r["tip"] or ""
+                    if not tip_acceptat(tip_act):
+                        continue
+                    rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
+                    rand["acte"] += r["acte"]
+                    rand["_tipuri"][tip_act] = rand["_tipuri"].get(tip_act, 0) + r["acte"]
+                    _adauga_rang_matrice(rand, tip_act, r["acte"])
+                    ani = [x for x in (r["de_la"], r["pana_la"]) if x]
+                    if ani:
+                        rand["de_la"] = (
+                            min([rand["de_la"], *ani]) if rand["de_la"] is not None else min(ani)
+                        )
+                        rand["pana_la"] = (
+                            max([rand["pana_la"], *ani])
+                            if rand["pana_la"] is not None
+                            else max(ani)
+                        )
             meta = _meta_acte(con, act_ids)
     except sqlite3.OperationalError:
         return {
             "tip": tip,
             "rang": rang_filtru,
+            "domeniu": domeniu_filtru,
+            "domenii": domenii_juridice.optiuni(),
             "sort": sortare,
             "limita": limita,
             "total": 0,
@@ -831,7 +898,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     def rand_pentru(act_id: str) -> dict | None:
         m = _alege_meta(act_id, meta)
         tip_act = (m or {}).get("tip") or act_id.split("-", 1)[0]
-        if not tip_acceptat(tip_act):
+        if not tip_acceptat(tip_act) or not domeniu_acceptat(m):
             return None
         emitent = (m or {}).get("emitent") or "(act negăsit în corpus)"
         return randuri.setdefault(emitent, _rand_matrice(emitent))
@@ -942,6 +1009,11 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                     "viduri": rand["_vid_exemple"],
                     "neconstitutionale": rand["_neconst_exemple"],
                 },
+                "domeniu": next(
+                    (d for d in domenii_juridice.optiuni() if d["cheie"] == domeniu_filtru),
+                    None,
+                ),
+                "domeniu_exemple": rand["_domeniu_exemple"],
             }
         )
 
@@ -969,13 +1041,19 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     return {
         "tip": tip,
         "rang": rang_filtru,
+        "domeniu": domeniu_filtru,
+        "domenii": domenii_juridice.optiuni(),
         "sort": sortare,
         "limita": limita,
         "total": len(iesire),
         "rezumat": rez,
         "randuri": iesire[:limita],
         "limitari": [
-            "Axa «arie» este emitentul scris pe document, nu o clasificare materială inventată."
+            "Axa «arie» este emitentul scris pe document, nu o clasificare materială inventată.",
+            (
+                "Filtrul de domeniu este orientativ: se aplică doar când titlul sau emitentul "
+                "conține un indicator cunoscut; restul rămâne «domeniu necunoscut»."
+            ),
         ],
     }
 
