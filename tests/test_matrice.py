@@ -162,6 +162,20 @@ def test_matrix_groups_gap_reports_by_issuer(tmp_path):
         }
     ]
     assert rand["exemple"]["viduri"][0]["act_id"] == "lege-98-2016"
+    assert rand["exemple"]["viduri"][0]["actiuni"] == [
+        {
+            "fel": "prevedere",
+            "eticheta": "vezi prevederea",
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+        }
+    ]
+    assert rand["exemple"]["neconstitutionale"][0]["actiuni"][0] == {
+        "fel": "prevedere",
+        "eticheta": "vezi prevederea",
+        "act_id": "lege-98-2016",
+        "locator": "art5.alin7",
+    }
     assert out["limitari"]
 
 

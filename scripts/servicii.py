@@ -689,6 +689,21 @@ def _pune_exemplu(lista: list[dict], exemplu: dict, *, fel: str) -> None:
     del lista[3:]
 
 
+def _actiuni_prevedere(act_id: str, locator: str | None) -> list[dict]:
+    act_id = (act_id or "").strip()
+    locator = (locator or "").strip()
+    if not act_id or not locator:
+        return []
+    return [
+        {
+            "fel": "prevedere",
+            "eticheta": "vezi prevederea",
+            "act_id": act_id,
+            "locator": locator,
+        }
+    ]
+
+
 def _amendamente_pe_act(stare: Stare) -> dict[str, dict[str, int]]:
     if not stare.are_graf():
         return {}
@@ -841,6 +856,10 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 "scadenta": v.get("scadenta"),
                 "zile_intarziere": v.get("zile_intarziere"),
                 "severitate": v.get("severitate", ""),
+                "actiuni": _actiuni_prevedere(
+                    (_alege_meta(act_id, meta) or {}).get("id") or act_id,
+                    v.get("locator", ""),
+                ),
             },
             fel="vid",
         )
@@ -861,6 +880,10 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 "termen": n.get("termen"),
                 "zile_de_la_termen": n.get("zile_de_la_termen"),
                 "severitate": n.get("severitate", ""),
+                "actiuni": _actiuni_prevedere(
+                    (_alege_meta(act_id, meta) or {}).get("id") or act_id,
+                    n.get("locator", ""),
+                ),
             },
             fel="neconst",
         )
