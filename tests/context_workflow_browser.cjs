@@ -1,0 +1,49 @@
+// Run with PLAYWRIGHT_MODULE pointing to an installed Playwright module.
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const {execFileSync}=require('node:child_process');
+const assert=require('node:assert/strict');
+const base=process.env.CONTEXT_BASE_URL||'http://127.0.0.1:8042';
+(async()=>{
+  const browser=await chromium.launch({headless:true});
+  try{for(const width of [1280,390]){
+    const seed=JSON.parse(execFileSync('uv',['run','python','-m','tests.context_workflow_fixture'],{encoding:'utf8'}));
+    const page=await browser.newPage({viewport:{width,height:1000}}),errors=[];
+    page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(base);await page.click('#tab-matrice');
+    await page.locator('#dossier-library > summary').click();
+    await page.selectOption('#dossier-select',seed.id);
+    await page.selectOption('#dossier-run-select',seed.run);
+    const workflow=page.locator('[data-context-workflow]');
+    await workflow.locator('summary').click();
+    await workflow.locator('[data-context-kind]').selectOption('known');
+    assert.equal(await workflow.locator('[data-context-count]').innerText(),'2 din 8 câmpuri');
+    assert.ok((await workflow.locator('[data-context-results]').innerText()).includes('Fixture <img> territory'));
+    assert.equal(await workflow.locator('img').count(),0);
+    await workflow.locator('[data-context-kind]').selectOption('heuristic');
+    assert.equal(await workflow.locator('[data-context-count]').innerText(),'1 din 8 câmpuri');
+    assert.ok((await workflow.locator('[data-context-results]').innerText()).includes('titlu: ape'));
+    await workflow.locator('[data-context-kind]').selectOption('all');
+    await workflow.locator('[data-context-field]').selectOption('teritoriu');
+    await workflow.locator('[data-context-right]').selectOption('1');
+    assert.ok((await workflow.locator('[data-context-results]').innerText()).includes('Valori declarate identice'));
+    const a=page.locator('[data-context-target=a]');
+    await a.locator('summary').first().click();
+    await a.locator('details > summary').click();
+    await a.locator('[data-context-older]').click();
+    await page.waitForFunction(()=>document.querySelectorAll('[data-context-left] option').length===23);
+    await a.locator('[data-context-edit]').click();
+    await a.locator('[name=motiv]').fill('Draft survives context filtering');
+    await workflow.locator('[data-context-query]').fill('absent');
+    assert.equal(await workflow.locator('[data-context-count]').innerText(),'0 din 8 câmpuri');
+    assert.equal(await a.locator('[name=motiv]').inputValue(),'Draft survives context filtering');
+    await a.locator('[data-context-cancel]').click();
+    await workflow.locator('summary').click();
+    await workflow.locator('[data-context-field]').selectOption('teritoriu');
+    await workflow.scrollIntoViewIfNeeded();
+    await page.screenshot({path:`.context-fixture/context-${width}.png`});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    assert.deepEqual(errors,[]);
+    console.log(`${width}: filters, provenance, target/history comparison, older pages, escaping, drafts, no overflow passed`);
+    await page.close();
+  }}finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -3946,13 +3946,72 @@ const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',c
 const EVIDENCE_STATES={schimbat:'Dovezi schimbate · de reevaluat',neschimbat:'Amprentă neschimbată în corpusul local',indisponibil:'Comparație indisponibilă'};
 const CONTEXT_FIELDS={aplicabil_de_la:'Aplicabil de la',aplicabil_pana_la:'Aplicabil până la',teritoriu:'Teritoriu',destinatari:'Destinatari',exceptii:'Excepții',tranzitorii:'Dispoziții tranzitorii',clasificare:'Clasificare normativă'};
 const CONTEXT_CLASSES={'':'Necunoscută',organica:'Organică',ordinara:'Ordinară',alta:'Altă clasificare'};
+const CONTEXT_KINDS={known:'Cunoscut declarat · citare neverificată',unknown:'Necunoscut',heuristic:'Euristic · metadate salvate'};
+const CONTEXT_LOADED_HISTORY=new WeakMap();
+function legalContextValue(event,key){
+  const entry=event?.context?.[key];
+  const known=typeof entry?.valoare==='string'&&!!entry.valoare.trim()&&typeof entry?.citare==='string'&&!!entry.citare.trim();
+  return {kind:known?'known':'unknown',value:known?entry.valoare:'',citation:known?entry.citare:'',event:event?.id||'',revision:event?.revizie||0,author:event?.evaluator||'',time:event?.creat_la||''};
+}
+function legalContextCompare(a,b){
+  if(a.kind==='unknown'||b.kind==='unknown')return 'unknown';
+  if(a.kind==='heuristic'||b.kind==='heuristic')return 'heuristic';
+  return a.value===b.value?'equal':'different';
+}
+function legalContextRows(f,left,right){
+  const rows=Object.entries(CONTEXT_FIELDS).map(([key,label])=>{
+    const a=legalContextValue(left,key),b=legalContextValue(right,key);
+    return {key,label,a,b,comparison:legalContextCompare(a,b)};
+  });
+  // A candidate's domain belongs to the candidate, never to either law's classification.
+  const domain=f.dovada?.domeniu;
+  const evidence=Array.isArray(domain?.dovezi)?domain.dovezi.filter(v=>typeof v==='string'&&v.trim()):[];
+  const hint=domain?.cheie&&domain.cheie!=='necunoscut'&&evidence.length;
+  const a={kind:hint?'heuristic':'unknown',value:hint?(domain.eticheta||domain.cheie):'',citation:hint?evidence.join('; '):''};
+  rows.push({key:'domeniu',label:'Domeniul candidatului (nu al țintelor)',a,b:{kind:'unknown',value:'',citation:''},comparison:hint?'heuristic':'unknown'});
+  return rows;
+}
+function legalContextFilter(rows,{kind='all',query='',comparison='all',field='all'}={}){
+  const q=query.trim().toLocaleLowerCase('ro');
+  return rows.filter(r=>(field==='all'||r.key===field)&&(kind==='all'||(r.key==='domeniu'?[r.a]:[r.a,r.b]).some(v=>v.kind===kind))
+    &&(comparison==='all'||r.comparison===comparison)&&(!q||[r.label,r.a.value,r.b.value,r.a.citation,r.b.citation].join(' ').toLocaleLowerCase('ro').includes(q)));
+}
+function legalContextWorkflowHtml(){
+  return '<details class="legal-context" data-context-workflow><summary>Filtrare și comparație de context</summary><p class="hint">Comparație textuală a declarațiilor salvate, fără verdict de aplicabilitate. Datele necunoscute nu înseamnă interval nelimitat sau absența excepțiilor.</p>'
+    +'<label>Prima țintă / revizie<select data-context-left></select></label><label>A doua țintă / revizie<select data-context-right></select></label>'
+    +'<label>Câmp<select data-context-field><option value="all">Toate</option>'+Object.entries({...CONTEXT_FIELDS,domeniu:'Domeniul candidatului'}).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label>'
+    +'<label>Starea informației<select data-context-kind><option value="all">Toate</option>'+Object.entries(CONTEXT_KINDS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')+'</select></label>'
+    +'<label>Comparație<select data-context-comparison><option value="all">Toate</option><option value="equal">Valori declarate identice</option><option value="different">Valori declarate diferite</option><option value="unknown">Comparație necunoscută</option><option value="heuristic">Indiciu euristic</option></select></label>'
+    +'<label>Valoare sau citare<input type="search" data-context-query></label><p class="hint" data-context-count role="status"></p><div data-context-results></div><p class="hint">Sunt disponibile reviziile încărcate. Reviziile mai vechi se încarcă din istoricul țintei.</p></details>';
+}
+function bindLegalContextWorkflow(host,f){
+  if(!host||host.dataset.bound)return;host.dataset.bound='true';
+  const choices=[];
+  for(const [target,data] of Object.entries(f.context_juridic||{})){
+    const source=target==='constatare'?f.dovada:f.dovada?.[target];
+    const events=[data.curent,...(data.istoric||[]),...(CONTEXT_LOADED_HISTORY.get(data)||[])].filter((e,i,a)=>i===0||e&&!a.slice(0,i).some(v=>v?.revizie===e.revizie));
+    for(const event of events)choices.push({event,target,label:`${target.toUpperCase()} · ${source?.act_id||source?.act_tinta||''} ${source?.locator||''} · Revizia ${event?.revizie||0}`});
+  }
+  const get=name=>host.querySelector('[data-context-'+name+']');
+  for(const name of ['left','right'])get(name).innerHTML=choices.map((v,i)=>`<option value="${i}">${esc(v.label)}</option>`).join('');
+  get('right').value=String(Math.max(0,choices.findIndex(c=>c.target!==choices[0]?.target)));
+  const cell=(v,key)=>`<p><b>${esc(CONTEXT_KINDS[v.kind])}</b>: ${esc(key==='clasificare'&&v.value?(CONTEXT_CLASSES[v.value]||v.value):v.value||'Necunoscut')}<br>${esc(v.citation)}${v.revision?`<br><span class="hint">Revizia ${esc(v.revision)} · Autor declarat: ${esc(v.author)} · ${esc(v.time)} · ${esc(v.event)}</span>`:''}</p>`;
+  const labels={equal:'Valori declarate identice; citările pot diferi',different:'Valori declarate diferite; nu dovedește conflict juridic',unknown:'Comparație necunoscută',heuristic:'Indiciu euristic; nu stabilește aplicabilitatea'};
+  const render=()=>{
+    const left=choices[Number(get('left').value)],right=choices[Number(get('right').value)];
+    const rows=legalContextFilter(legalContextRows(f,left?.event,right?.event),{kind:get('kind').value,field:get('field').value,comparison:get('comparison').value,query:get('query').value});
+    get('count').textContent=`${rows.length} din ${Object.keys(CONTEXT_FIELDS).length+1} câmpuri`;
+    get('results').innerHTML=rows.map(r=>`<section><h4>${esc(r.label)}</h4>${r.key==='domeniu'?cell(r.a,r.key):`<p>${esc(left?.label||'')}</p>${cell(r.a,r.key)}<p>${esc(right?.label||'')}</p>${cell(r.b,r.key)}`}<p class="hint">${esc(labels[r.comparison])}</p></section>`).join('')||'<p>Niciun câmp în această selecție.</p>';
+  };
+  host.oninput=render;host.onchange=render;render();
+}
 function legalContextEventHtml(event){
   if(!event) return '<p class="hint">Context necunoscut.</p>';
-  return `<p class="hint">Revizia ${esc(event.revizie)} · ${esc(event.evaluator)} · ${esc(event.creat_la)}</p>`
+  return `<p class="hint">Revizia ${esc(event.revizie)} · Autor declarat: ${esc(event.evaluator)} (neautentificat) · ${esc(event.creat_la)}</p>`
     +Object.entries(CONTEXT_FIELDS).map(([k,label])=>{const entry=event.context[k];return `<p><b>${esc(label)}</b>: ${esc(entry?.valoare?(k==='clasificare'?CONTEXT_CLASSES[entry.valoare]:entry.valoare):'Necunoscut')} ${entry?.citare?`<br><span class="hint">Citare: ${esc(entry.citare)}</span>`:''}</p>`;}).join('')+`<p>${esc(event.motiv)}</p>`;
 }
 function legalContextHtml(f){
-  return Object.entries(f.context_juridic||{}).map(([target,data])=>{
+  return legalContextWorkflowHtml()+Object.entries(f.context_juridic||{}).map(([target,data])=>{
     const evidence=target==='constatare'?f.dovada:f.dovada[target]||{};
     return `<details class="legal-context" data-context-target="${esc(target)}"><summary>Context juridic${target==='constatare'?'':' · '+target.toUpperCase()} · Revizia ${data.curent?.revizie||0}</summary><p class="hint">${esc(evidence.act_id||evidence.act_tinta||'')} ${esc(evidence.locator||'')} · Evaluare declarată, citări neverificate automat.</p>${legalContextEventHtml(data.curent)}<button type="button" class="ghost mini" data-context-edit>Editează contextul</button><div data-context-editor></div><details><summary>Istoricul contextului</summary><div data-context-events>${data.istoric.map(legalContextEventHtml).join('')||'<p>Nicio revizie.</p>'}</div>${data.istoric_trunchiat?'<button type="button" class="ghost mini" data-context-older>Revizii mai vechi</button>':''}</details><p class="hint" data-context-status role="status"></p></details>`;
   }).join('');
@@ -4368,6 +4427,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
           finally{if(retry)retry.saving=false;controls.forEach(c=>c.disabled=false);if(valid()&&!form.isConnected)render();}
         };
       });
+      if(active)bindLegalContextWorkflow(list.querySelector('[data-context-workflow]'),active);
       list.querySelectorAll('[data-context-target]').forEach(section=>{
         const f=findings.find(f=>f.id===section.closest('[data-finding]').dataset.finding),target=section.dataset.contextTarget,data=f.context_juridic[target];
         const key='context:'+f.id+':'+target,message=section.querySelector('[data-context-status]');
@@ -4412,6 +4472,9 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
             const page=await dossierApi('/api/dosare/context?'+new URLSearchParams({id:dossierId,rulare_id:runId,constatare_id:f.id,tinta:target,offset:String(offset)}));
             if(!valid()||!older.isConnected) return;
             section.querySelector('[data-context-events]').insertAdjacentHTML('beforeend',page.evenimente.map(legalContextEventHtml).join(''));
+            CONTEXT_LOADED_HISTORY.set(data,[...(CONTEXT_LOADED_HISTORY.get(data)||[]),...page.evenimente]);
+            const workflow=list.querySelector('[data-context-workflow]');
+            if(workflow){delete workflow.dataset.bound;bindLegalContextWorkflow(workflow,f);}
             offset+=page.evenimente.length;older.hidden=!page.mai_multe;
           }catch(err){if(valid()) message.textContent=err.message;}
           finally{older.disabled=false;}
