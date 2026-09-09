@@ -1,6 +1,7 @@
 from scripts.triage_ue import (
     aplica_triere,
     aplica_triere_lipsa,
+    matrice_analiza,
     semnale_draft,
     triere_rezultat,
 )
@@ -53,3 +54,35 @@ def test_aplica_triere_ataseaza_etichete_pe_randuri():
 
     assert aplica_triere(randuri) is randuri
     assert [r["triere"]["nivel"] for r in randuri] == ["referinta", "materie"]
+
+
+def test_matrice_analiza_grupeaza_pasii_de_verificare_ue():
+    rezultate = [
+        {"celex": "32018R1805", "potrivire": "referinta"},
+        {"celex": "32019R1111", "potrivire": "text"},
+    ]
+    lipsa = [{"celex": "32014L0024"}]
+    semnale = [{"nivel": "posibila_derogare", "referinte": ["32018R1805"]}]
+
+    out = matrice_analiza(rezultate, lipsa, semnale)
+    randuri = {r["cheie"]: r for r in out["randuri"]}
+
+    assert out["rezumat"] == {
+        "acte_citate": 2,
+        "neimportate": 1,
+        "potriviri_textuale": 1,
+        "semnale": 1,
+    }
+    assert randuri["acoperire_locala"]["nivel"] == "blocking"
+    assert randuri["acoperire_locala"]["celexuri"] == ["32014L0024"]
+    assert randuri["aceeasi_materie"]["numar"] == 1
+    assert randuri["derogare_posibila"]["celexuri"] == ["32018R1805"]
+    assert randuri["lacuna_ue"]["stare"] == "necalculată"
+    assert randuri["contradictie_ue"]["stare"] == "necalculată"
+
+
+def test_matrice_analiza_numara_citari_chiar_fara_rand_afisat():
+    out = matrice_analiza([], [], [], referinte=[{"celex": "32018R1805"}])
+
+    assert out["rezumat"]["acte_citate"] == 1
+    assert out["randuri"][0]["celexuri"] == ["32018R1805"]
