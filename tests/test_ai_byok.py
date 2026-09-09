@@ -1,5 +1,7 @@
 """Static checks for the browser AI boundary."""
 
+from urllib.parse import urlparse
+
 from scripts.construieste_web import ROOT, _csp
 
 
@@ -23,8 +25,13 @@ def test_online_rewrite_is_byok_not_project_default():
 
 def test_static_csp_allows_only_named_byok_destinations():
     surse = _csp_directive("connect-src")
+    origini = set()
+    for sursa in surse:
+        parsed = urlparse(sursa)
+        if parsed.scheme:
+            origini.add((parsed.scheme, parsed.netloc, parsed.path))
 
-    assert "https://api.openai.com" in surse
-    assert "https://api.anthropic.com" in surse
-    assert "https://*.workers.dev" in surse
+    assert ("https", "api.openai.com", "") in origini
+    assert ("https", "api.anthropic.com", "") in origini
+    assert ("https", "*.workers.dev", "") in origini
     assert "'self'" in surse
