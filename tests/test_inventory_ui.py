@@ -77,3 +77,27 @@ def test_static_worker_explicitly_rejects_source_acquisition():
     source = (Path(__file__).parents[1] / "scripts/construieste_web.py").read_text()
     branch = source.split("elif path == '/api/surse-proiecte':", 1)[1].split("elif path", 1)[0]
     assert "'mod': 'static'" in branch and "'error':" in branch
+    eu = source.split("elif path == '/api/ue/surse':", 1)[1].split("elif path", 1)[0]
+    assert "'mod': 'static'" in eu and "'error':" in eu
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_source_language_status_and_provenance_renderer():
+    source = (Path(__file__).parents[1] / "app/index.html").read_text()
+    renderer = source.split("function euSourceLanguage", 1)[1].split(
+        "async function euSourceApi", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const acquisitionLink=(u,t)=>esc(t),dossierTime=s=>s;function euSourceLanguage"
+        + renderer
+        + "assert.equal(euSourceLanguage('RON'),'Română oficială');"
+        "assert.ok(euSourceLanguage('ENG').includes('alternativă'));"
+        "assert.ok(euSourceStatus({stare:'metadate'}).includes('fără text'));"
+        "assert.ok(euSourceStatus({stare:'integritate_invalida'}).includes('neverificabil'));"
+        "const h=euSourceMeta({titlu:'<script>',limba:'ENG',citit_la:'now',text_sha256:'<img>'});"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
+        "assert.ok(h.includes('SHA-256 text extras')&&h.includes('alternativă'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)

@@ -25,6 +25,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html.parser import HTMLParser
+from pathlib import Path
 
 from scripts import instantanee_ue
 from scripts.text import cheie, normalizeaza
@@ -183,7 +184,7 @@ class ProvizieUE:
 def deschide(cale: str = "eu.db", *, readonly: bool = False) -> Iterator[sqlite3.Connection]:
     """Open the EU source database. Readers never run DDL."""
     if readonly:
-        con = sqlite3.connect(f"file:{cale}?mode=ro", uri=True, timeout=30.0)
+        con = sqlite3.connect(Path(cale).resolve().as_uri() + "?mode=ro", uri=True, timeout=30.0)
         con.row_factory = sqlite3.Row
         con.execute("PRAGMA busy_timeout = 30000")
         try:
@@ -742,15 +743,8 @@ def scrie_celex(
         raise
 
 
-def _scrie_celex(
-    con: sqlite3.Connection,
-    celex: str,
-    manifestari: Sequence[ManifestareUE],
-    aleasa: ManifestareUE,
-    text: str,
-) -> int:
-    """Store the selected text and all manifestations that justified the selection."""
-    celex = normalizeaza_celex(celex)
+def scrie_manifestari(con, celex, manifestari):
+    """Store discovered metadata independently of a successful text download."""
     con.execute("DELETE FROM eu_manifestari WHERE celex = ?", (celex,))
     for m in manifestari:
         con.execute(
@@ -771,6 +765,18 @@ def _scrie_celex(
                 m.item_url,
             ),
         )
+
+
+def _scrie_celex(
+    con: sqlite3.Connection,
+    celex: str,
+    manifestari: Sequence[ManifestareUE],
+    aleasa: ManifestareUE,
+    text: str,
+) -> int:
+    """Store the selected text and all manifestations that justified the selection."""
+    celex = normalizeaza_celex(celex)
+    scrie_manifestari(con, celex, manifestari)
 
     con.execute(
         "INSERT OR REPLACE INTO eu_acte (celex, work_uri, expression_uri, manifestation_uri,"
