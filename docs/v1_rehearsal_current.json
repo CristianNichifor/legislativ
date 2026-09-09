@@ -41,6 +41,12 @@
     "synthetic_bridge": true,
     "proposal_revisions": 2,
     "retained_analysis_exports": 2,
+    "eu_link": {
+      "status": "not_exercised_requires_schema9",
+      "fixture_kind": "synthetic_text_and_provenance_not_authentic_eu_law",
+      "retained_links": 0,
+      "offline_retry_after_source_removal": false
+    },
     "reassessment": {
       "source_change": "synthetic_temp_corpus_only",
       "stare": "schimbat",

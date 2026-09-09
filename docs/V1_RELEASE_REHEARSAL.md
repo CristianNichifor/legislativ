@@ -12,7 +12,9 @@ python -m scripts.v1_rehearsal
 python -m pytest tests/test_v1_rehearsal.py tests/test_dosare.py tests/test_propuneri.py tests/test_proposal_workflow.py tests/test_interventii_propuneri.py tests/test_analize_propuneri.py tests/test_etalon.py tests/test_etalon_real.py tests/test_consolidare_gold.py
 ```
 
-The harness uses the standard library only; pytest is a development dependency.
+The schema-8 harness uses the standard library only. The schema-9 EU extension
+reuses `tests.test_instantanee_ue.write`, so use `uv run` with cached development
+dependencies (including pytest) for that fixture path.
 It creates a fresh `TemporaryDirectory` and deletes it even on failure. JSON goes
 to stdout; assertion failures exit nonzero, including under `python -O`.
 Network connection/DNS functions are blocked during the run. No model is invoked.
@@ -44,7 +46,8 @@ dossier must unarchive without changing recovery records.
 SQLite backup APIs preserve corpus and dossier data; fresh paths validate integrity,
 foreign keys, all logical table rows and exact historical exports. Historical exports
 are checked again after the restored corpus is removed. Production data is never used.
-Optional initiative/graph/EU databases are absent, so this is not a full deployment backup.
+Initiative/graph databases are absent, so this is not a full deployment backup.
+On schema 9 the synthetic EU database is included and compared through restore.
 
 ## Upgrade boundary
 
@@ -189,3 +192,53 @@ Validation: Ruff format/check passed; **80 focused tests passed in 24.55s**.
 The same-code two-cwd rerun passed at schema 8 with identical finding counts.
 [`v1_rehearsal_current.json`](v1_rehearsal_current.json) contains the updated result.
 M5/schema-9 backup coverage is not included. Pilot and release acceptance remain pending.
+
+## Bounded synthetic EU-link extension (2026-09-10)
+
+The harness now imports `legaturi_ue` and `legaturi_ue_store` locally when the
+runtime schema is at least 9. Earlier runtimes explicitly report
+`not_exercised_requires_schema9`; missing schema-9 modules fail instead of silently
+skipping. Production/M5 worktree files are not modified.
+
+`tests.test_instantanee_ue.write` supplies a synthetic retained snapshot using the
+fixture CELEX identifier `32018R1805`. Its document title, article title and distinct
+body are explicitly present, satisfying the missing-body gate. The quoted obligation,
+provenance, author and potential-gap hypothesis are synthetic test controls, not
+authentic EU legislation or a finding about public procurement. This does not expand
+the approved domain (still pending) or the authentic-source manifest.
+
+One explicit link is saved against proposal revision 1 from a hash-bound preview.
+Its complete selected history and Markdown export must survive backup; revision 2
+must have no inherited link and must reject the revision-1 link ID. All dossier rows,
+including exactly one `legaturi_ue` row, and all EU database rows are compared.
+The restored national and EU source databases are then deleted; exact history/export
+and idempotent link retry must still return the original retained result.
+
+Validation dynamically imported this harness by absolute file path from the M5
+worktree, leaving `ROOT` on these fixture files while using M5's schema-9 modules.
+[`v1_rehearsal_schema9.json`](v1_rehearsal_schema9.json) retains the successful result,
+runtime base commit and hashes of the six M5 source/fixture files inspected. Those
+hashes were unchanged before/after capture; the M5 tree was still uncommitted, so
+this is provisional runtime evidence to rerun after its final commit.
+
+Results: **8 harness tests passed in 20.07s** under schema 9, including a negative
+check that omitting the EU-link table makes restore fail. Schema-8 compatibility:
+**7 passed, 1 skipped in 17.07s** (only the schema-9-specific negative test skipped).
+Ruff format/check passed. Migration 7 -> 9 was exercised with both frozen historical
+exports preserved, one link restored and offline retry successful. Isolated actual
+report count remained 0. No network calls, inference, or legal acceptance claims.
+
+For a dynamic rerun from the integrated runtime directory:
+
+```sh
+uv run python - <<'PY'
+import importlib.util, json
+spec = importlib.util.spec_from_file_location(
+    "acceptance_rehearsal",
+    "/tmp/legislativ-v1-rehearsal-history/scripts/v1_rehearsal.py",
+)
+harness = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(harness)
+print(json.dumps(harness.rehearse(), indent=2))
+PY
+```

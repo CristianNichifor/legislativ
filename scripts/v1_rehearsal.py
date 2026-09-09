@@ -148,6 +148,62 @@ def analysis_exports(path):
     return [propuneri.exporta(path, *ref) for ref in refs]
 
 
+def populate_eu_link(state, args):
+    if dosare.SCHEMA_VERSION < 9:
+        return None
+    from scripts import achizitii_ue, legaturi_ue
+    from scripts import legaturi_ue_store as store
+    from tests.test_instantanee_ue import write
+
+    body = "Obligatie sintetica pentru repetitie, fara valoare juridica."
+    write(state, "REGULAMENT SINTETIC DE TEST\nArticolul 1\nObligatii de test\n" + body)
+    selected = dict(zip(("dosar_id", "rulare_id", "constatare_id"), args, strict=True)) | {
+        "revizie": 1,
+        "celex": "32018R1805",
+        "locator": "art1",
+        "instantanee": achizitii_ue.detaliu(state, "32018R1805")["curenta"]["id"],
+    }
+    preview = legaturi_ue.preview(state, selected)
+    require(preview["state"] == "ready_for_explicit_link", "Synthetic EU body was not usable")
+    request = selected | {
+        "id": "8" * 32,
+        "baza_sha256": preview["baza_sha256"],
+        "autor": "SYNTHETIC rehearsal author",
+        "ipoteza": "potential_gap",
+        "obligatie": body,
+        "motiv": "Synthetic fixture only; no legal assessment.",
+    }
+    saved = store.salveaza(state, request)
+    history = store.istoric(dosare.cale(state), *args, 1, link_id=saved["id"])
+    require(
+        history["selectata"] == saved and body in history["markdown"],
+        "EU history/export lost retained obligation",
+    )
+    return request, saved, history
+
+
+def verify_eu_link(state, args, link):
+    if link is None:
+        return
+    from scripts import legaturi_ue_store as store
+
+    request, saved, history = link
+    path = dosare.cale(state)
+    require(
+        store.istoric(path, *args, 1, link_id=saved["id"]) == history,
+        "EU exact-revision history/export changed",
+    )
+    require(store.istoric(path, *args, 1)["total"] == 1, "EU retry duplicated link")
+    require(store.istoric(path, *args, 2)["total"] == 0, "EU link leaked to another revision")
+    try:
+        store.istoric(path, *args, 2, link_id=saved["id"])
+    except ValueError:
+        pass
+    else:
+        raise RuntimeError("EU historical link accepted for wrong revision")
+    require(store.salveaza(state, request) == saved, "EU retry changed retained link")
+
+
 def populate_history(state, path, args, baseline, first, original_export, actual):
     # Deliberately mutate only the disposable imported corpus, never the committed fixture.
     with closing(sqlite3.connect(state.corpus)) as con, con:
@@ -331,6 +387,7 @@ def workflow(root, manifest):
     exports = historical_exports(path)
     require(exports[0]["analiza"] == result, "Historical analysis lost")
     require(sha(corpus) == source_before, "Proposal workflow modified corpus")
+    eu_link = populate_eu_link(state, args)
     archived, recovery, reassessment_request, reassessed = populate_history(
         state, path, args, result, first, exports[0], actual
     )
@@ -340,6 +397,8 @@ def workflow(root, manifest):
     require(len(retained_analyses) == 2, "Expected baseline and reassessment history")
     recovery_list = dosare.lista_ciorne(path)
     before = snapshot(path)
+    if eu_link:
+        require(len(before["legaturi_ue"]) == 1, "EU link missing from full-row backup")
     backup = root / "backup.db"
     dosare.backup(path, backup)
     restored_root = root / "restored"
@@ -350,6 +409,13 @@ def workflow(root, manifest):
     ):
         source.backup(target)
     require(snapshot(restored_root / "corpus.db") == snapshot(corpus), "Corpus restore changed")
+    if eu_link:
+        with (
+            closing(sqlite3.connect(state.eu)) as source,
+            closing(sqlite3.connect(restored_root / "eu.db")) as target,
+        ):
+            source.backup(target)
+        require(snapshot(restored_root / "eu.db") == snapshot(state.eu), "EU restore changed")
     restored = dosare.cale(state_at(restored_root))
     shutil.copyfile(backup, restored)
     require(snapshot(restored) == before, "Restore changed logical data")
@@ -362,7 +428,11 @@ def workflow(root, manifest):
     require(dosare.citeste(restored, IDENT) == dossier, "Restored dossier changed")
     require(dosare.rulari(restored, IDENT, actual["id"]) == actual, "Restored report changed")
     require(dosare.rulari(restored, IDENT, run["id"]) == run, "Restored synthetic report changed")
+    verify_eu_link(state_at(restored_root), args, eu_link)
     (restored_root / "corpus.db").unlink()
+    if eu_link:
+        (restored_root / "eu.db").unlink()
+    verify_eu_link(state_at(restored_root), args, eu_link)
     require(historical_exports(restored) == exports, "Historical export needs live corpus")
     require(analysis_exports(restored) == retained_analyses, "Analysis history needs live corpus")
     require(
@@ -390,6 +460,12 @@ def workflow(root, manifest):
         "synthetic_bridge": True,
         "proposal_revisions": len(exports),
         "retained_analysis_exports": len(retained_analyses),
+        "eu_link": {
+            "status": "synthetic_link_verified" if eu_link else "not_exercised_requires_schema9",
+            "fixture_kind": "synthetic_text_and_provenance_not_authentic_eu_law",
+            "retained_links": 1 if eu_link else 0,
+            "offline_retry_after_source_removal": bool(eu_link),
+        },
         "reassessment": {
             "source_change": "synthetic_temp_corpus_only",
             "stare": reassessed["reevaluare"]["stare"],

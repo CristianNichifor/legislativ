@@ -31,6 +31,11 @@ def test_rehearsal_repeatable_and_honest(tmp_path, monkeypatch):
     counts = first["workflow"]["restored_row_counts"]
     assert counts["analize_propuneri"] == 2
     assert counts["dosare_stare"] == 1 and counts["ciorne"] == 3
+    if dosare.SCHEMA_VERSION >= 9:
+        assert counts["legaturi_ue"] == 1
+        assert first["workflow"]["eu_link"]["offline_retry_after_source_removal"]
+    else:
+        assert first["workflow"]["eu_link"]["status"] == "not_exercised_requires_schema9"
     assert first["upgrade"]["actual_schema"] == dosare.SCHEMA_VERSION
     assert first["upgrade"]["migration_exercised"] == (dosare.SCHEMA_VERSION > 7)
 
@@ -99,6 +104,20 @@ def test_backup_missing_recovery_table_fails(tmp_path, monkeypatch):
         backup(path, destination)
         with sqlite3.connect(destination) as con:
             con.execute("DROP TABLE ciorne")
+
+    monkeypatch.setattr(dosare, "backup", incomplete)
+    with rehearsal.offline(), pytest.raises(RuntimeError, match="Restore changed logical data"):
+        rehearsal.workflow(tmp_path, json.loads(rehearsal.MANIFEST.read_text()))
+
+
+@pytest.mark.skipif(dosare.SCHEMA_VERSION < 9, reason="EU link storage requires schema 9")
+def test_backup_missing_eu_link_fails(tmp_path, monkeypatch):
+    backup = dosare.backup
+
+    def incomplete(path, destination):
+        backup(path, destination)
+        with sqlite3.connect(destination) as con:
+            con.execute("DROP TABLE legaturi_ue")
 
     monkeypatch.setattr(dosare, "backup", incomplete)
     with rehearsal.offline(), pytest.raises(RuntimeError, match="Restore changed logical data"):
