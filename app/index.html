@@ -1148,12 +1148,12 @@
       <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
         <p class="hint" style="margin:.2rem 0 .8rem">
           Matrice deterministă pe emitent, tip și rang normativ: lacune legislative, prevederi
-          lovite de Curte rămase nereparate, inițiative pendinte și presiune de amendare. Nu
-          clasifică pe domenii materiale inventate și nu deduce lege organică/ordinară când
-          metadatele nu o spun.
+          lovite de Curte rămase nereparate, inițiative pendinte și presiune de amendare. Domeniul
+          juridic este doar un filtru orientativ, aplicat când titlul sau emitentul conține un
+          indicator cunoscut; altfel actul rămâne în „domeniu necunoscut”.
         </p>
         <div class="matrix-tools">
-          <input type="search" id="m-q" placeholder="filtrează emitent, instrument sau act">
+          <input type="search" id="m-q" placeholder="filtrează emitent, instrument, domeniu sau act">
           <select id="m-tip" title="Filtrează după tipul actului">
             <option value="">toate tipurile</option>
             <option value="lege">lege</option>
@@ -1172,6 +1172,22 @@
             <option value="decret">decret</option>
             <option value="constitutional">constituțional</option>
             <option value="necunoscut">necunoscut</option>
+          </select>
+          <select id="m-domeniu" title="Filtrează după domeniu juridic detectat din metadate">
+            <option value="">toate domeniile</option>
+            <option value="achizitii-publice">achiziții publice</option>
+            <option value="fiscal-bugetar">fiscal / bugetar</option>
+            <option value="sanatate">sănătate</option>
+            <option value="educatie">educație</option>
+            <option value="munca-protectie-sociala">muncă / protecție socială</option>
+            <option value="justitie-penal-civil">justiție / penal / civil</option>
+            <option value="administratie-publica">administrație publică</option>
+            <option value="mediu">mediu</option>
+            <option value="transporturi">transporturi</option>
+            <option value="energie">energie</option>
+            <option value="constructii-urbanism">construcții / urbanism</option>
+            <option value="agricultura">agricultură</option>
+            <option value="necunoscut">domeniu necunoscut</option>
           </select>
           <select id="m-sort" title="Ordonează matricea">
             <option value="semnale">semnale</option>
@@ -3573,16 +3589,20 @@ function mTextCautare(r){
   const vid=(ex.viduri||[]).map(x=>`${x.act_id} ${x.instrument||""} ${x.text||""}`).join(" ");
   const nec=(ex.neconstitutionale||[]).map(x=>`${x.act_id} ${x.decizie||""} ${x.text||""}`).join(" ");
   const ranguri=(r.ranguri||[]).map(x=>`${x.categorie} ${x.eticheta} ${(x.note||[]).join(" ")}`).join(" ");
-  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${ranguri} ${vid} ${nec}`);
+  const dom=(r.domeniu_exemple||[]).map(x=>`${x.act_id} ${x.titlu||""} ${(x.dovezi||[]).join(" ")}`).join(" ");
+  const det=r.domeniu ? `${r.domeniu.cheie} ${r.domeniu.eticheta}` : "";
+  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${ranguri} ${det} ${dom} ${vid} ${nec}`);
 }
 async function loadMatrice(forta){
   if(MATRICE && !forta){ renderMatrice(); return; }
-  const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"", sort=$("#m-sort")?.value||"semnale";
+  const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"",
+        domeniu=$("#m-domeniu")?.value||"", sort=$("#m-sort")?.value||"semnale";
   $("#m-lista").innerHTML=`<span class="spin"></span> încarc…`;
   $("#m-detalii").innerHTML="";
   const qs=new URLSearchParams({limita:"120",sort});
   if(tip) qs.set("tip",tip);
   if(rang) qs.set("rang",rang);
+  if(domeniu) qs.set("domeniu",domeniu);
   MATRICE=await fetch("/api/matrice?"+qs.toString()).then(r=>r.json()).catch(()=>null);
   renderMatrice();
 }
@@ -3599,6 +3619,14 @@ function mActiuni(lista){
     `<button type="button" class="ghost mini matrix-prov" data-act="${esc(a.act_id)}" `
     +`data-loc="${esc(a.locator)}" data-et="${esc(a.eticheta||"vezi prevederea")}">`
     +`${esc(a.eticheta||"vezi prevederea")}</button>`).join("")+`</span>`;
+}
+function mDomeniuExemple(lista){
+  const ex=lista||[];
+  if(!ex.length) return "";
+  return `<div class="parc-h">De ce intră în domeniu</div>`+ex.map(x=>
+    `<div class="matrix-ex note"><span class="dom-cheie">${esc(x.act_id||"")}</span> `
+    +`${esc((x.titlu||"").slice(0,160))}<br><span class="hint">${(x.dovezi||[]).map(esc).join(" · ")}</span></div>`
+  ).join("");
 }
 async function mPrevedere(buton){
   const gazda=buton.closest(".matrix-ex"); if(!gazda) return;
@@ -3678,9 +3706,11 @@ function mArataRand(el){
   let h=`<div class="parc"><div class="parc-h">${esc(r.emitent)} — semnale verificabile</div>`
     +`<div class="watch-meta">${nf(r.acte)} acte`
     +(ranguri?` · ${ranguri}`:"")
+    +(r.domeniu?` · ${esc(r.domeniu.eticheta)}`:"")
     +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`;
+  h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){
     h+=`<div class="parc-h">Exemple de lacune</div>`+vid.map(v=>
@@ -3708,6 +3738,7 @@ function mArataRand(el){
 $("#m-q").addEventListener("input",()=>{ if(MATRICE) renderMatrice(); });
 $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-rang").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-domeniu").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 // ---- Drept UE: candidate CELEX provisions for the draft text ----

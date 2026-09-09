@@ -60,8 +60,16 @@ def _stare(tmp_path: Path, *, graf: bool = False, initiative: bool = False) -> S
     initiative_db = tmp_path / "initiative.db"
     graf_db = tmp_path / "graf.db"
     with depozit.deschide(corpus) as con:
-        _act(con, "lege-98-2016", "lege", "98", 2016, "Parlamentul")
-        _act(con, "hg-1-2017", "hg", "1", 2017, "Guvernul")
+        _act(
+            con,
+            "lege-98-2016",
+            "lege",
+            "98",
+            2016,
+            "Parlamentul",
+            "Lege privind achizițiile publice",
+        )
+        _act(con, "hg-1-2017", "hg", "1", 2017, "Guvernul", "Hotărâre privind educația")
         con.commit()
     with depozit.deschide(initiative_db) as con:
         if initiative:
@@ -205,6 +213,25 @@ def test_matrix_rank_filter_applies_to_counts_and_report_rows(tmp_path):
     assert out["rezumat"]["ranguri"][0]["categorie"] == "primar"
 
     out = _matrice({"rang": ["secundar"]}, stare)
+
+    assert [r["emitent"] for r in out["randuri"]] == ["Guvernul"]
+    assert out["rezumat"]["viduri"] == 0
+
+
+def test_matrix_domain_filter_applies_to_counts_and_report_rows(tmp_path):
+    stare = _stare(tmp_path)
+    stare.vid = [{"act_id": "lege-98-2016", "severitate": "blocking"}]
+
+    out = _matrice({"domeniu": ["achizitii-publice"]}, stare)
+
+    assert out["domeniu"] == "achizitii-publice"
+    assert [r["emitent"] for r in out["randuri"]] == ["Parlamentul"]
+    assert out["rezumat"]["acte"] == 1
+    assert out["rezumat"]["viduri"] == 1
+    assert out["randuri"][0]["domeniu"]["eticheta"] == "achiziții publice"
+    assert out["randuri"][0]["domeniu_exemple"][0]["dovezi"] == ["titlu: achizițiile publice"]
+
+    out = _matrice({"domeniu": ["educatie"]}, stare)
 
     assert [r["emitent"] for r in out["randuri"]] == ["Guvernul"]
     assert out["rezumat"]["viduri"] == 0
