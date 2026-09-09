@@ -274,7 +274,7 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _cronologie, _citari, _supraveghere,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
-                              _domenii, _matrice, _matrice_acte, _prevedere,
+                              _domenii, _matrice, _matrice_acte, _matrice_dosar, _prevedere,
                               _cine_citeaza, _ue, _acoperire_ue)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
@@ -310,6 +310,7 @@ def _raspunde(path, query, body):
     elif path == '/api/domenii': out = _domenii(qs, _stare)
     elif path == '/api/matrice': out = _matrice(qs, _stare)
     elif path == '/api/matrice-acte': out = _matrice_acte(qs, _stare)
+    elif path == '/api/matrice-dosar': out = _matrice_dosar(qs, _stare)
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
     elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
     elif path == '/api/ue/acoperire': out = _acoperire_ue(qs, _stare)
