@@ -1217,7 +1217,7 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
             "Diferența textuală nu dovedește contradicția.",
             "Se compară definiții din maximum 100 de acte ale rândului, în același domeniu "
             "orientativ cunoscut. Domeniile necunoscute sunt excluse.",
-            "Limite: 1000 prevederi per act și 5000 definiții; "
+            "Limite: 1000 prevederi per act și 5000 definiții; " +
             "fragmentele extrase pot fi scurtate.",
             "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
             "absența candidaților nu dovedește compatibilitatea.",
