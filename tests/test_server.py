@@ -21,6 +21,7 @@ from scripts.servicii import (
     Stare,
     _acoperire_ue,
     _cauta,
+    _import_queue_ue,
     _lint,
     _norma,
     _prevedere,
@@ -232,6 +233,75 @@ def test_acoperire_ue_reports_corpus_references_against_eu_db(tmp_path):
     assert out["total"] == 1
     assert out["importate"] == 1
     assert out["referinte"][0]["celex"] == "32018R1805"
+
+
+def test_import_queue_ue_lists_missing_references_not_imported_ones(tmp_path):
+    stare = _build(tmp_path)
+    stare.eu = str(_eu_db(tmp_path))
+    with depozit.deschide(stare.corpus) as con:
+        con.execute(
+            "UPDATE provizii SET text = text || ? WHERE act_id = ?",
+            (
+                " Potrivit Regulamentului (UE) 2018/1805 și Directivei 2014/24/UE.",
+                "lege-98-2016",
+            ),
+        )
+
+    out = _import_queue_ue({"limita": ["10"]}, stare)
+
+    assert out["total"] == 1
+    assert [r["celex"] for r in out["randuri"]] == ["32014L0024"]
+    rand = out["randuri"][0]
+    assert rand["status"] == "neimportat"
+    assert rand["limba_preferata"] == "RON"
+    assert rand["referinte_locale"][0]["id"] == "lege-98-2016"
+    assert rand["ghid_import"]["comanda"] == (
+        "uv run python -m scripts.cellar 32014L0024 --db eu.db --limbi RON,ENG"
+    )
+    assert any(s["eticheta"] == "EUR-Lex RO" for s in rand["surse_oficiale"])
+
+
+def test_import_queue_ue_checks_current_eu_db_against_prebuilt_coverage(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "ue_acoperire.json").write_text(
+        json.dumps(
+            {
+                "total": 2,
+                "importate": 0,
+                "neimportate": 2,
+                "referinte": [
+                    {
+                        "celex": "32018R1805",
+                        "mentionari": 2,
+                        "surse": {"corpus": 2},
+                        "importat": False,
+                        "exemple": [],
+                    },
+                    {
+                        "celex": "32014L0024",
+                        "mentionari": 1,
+                        "surse": {"corpus": 1},
+                        "importat": False,
+                        "exemple": [],
+                    },
+                ],
+                "limitari": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    stare = Stare(
+        str(tmp_path / "corpus.db"),
+        str(tmp_path / "initiative.db"),
+        eu=str(_eu_db(tmp_path)),
+        date_dir=str(data),
+    )
+
+    out = _import_queue_ue({"limita": ["10"]}, stare)
+
+    assert out["sursa"] == "raport"
+    assert [r["celex"] for r in out["randuri"]] == ["32014L0024"]
 
 
 def test_rezumat_reports_local_eu_coverage(tmp_path):

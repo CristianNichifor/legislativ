@@ -1695,19 +1695,41 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     }
 
 
-def _acoperire_ue(qs: dict, stare: Stare) -> dict:
-    limita = _numar_qs(qs, "limita", 50)
+def _raport_acoperire_ue(stare: Stare, limita: int) -> dict:
     if stare.are_rapoarte:
         brut = stare._incarca_raport("ue_acoperire.json")
         if isinstance(brut, dict) and isinstance(brut.get("referinte"), list):
             out = dict(brut)
             out["sursa"] = "raport"
-            out["referinte"] = brut["referinte"][:limita]
+            out["referinte"] = brut["referinte"]
             return out
 
     from scripts.acoperire_ue import raport
 
     return raport(stare.corpus, stare.initiative, stare.eu, limita=limita)
+
+
+def _acoperire_ue(qs: dict, stare: Stare) -> dict:
+    limita = _numar_qs(qs, "limita", 50)
+    out = _raport_acoperire_ue(stare, limita)
+    out["referinte"] = out.get("referinte", [])[:limita]
+    return out
+
+
+def _import_queue_ue(qs: dict, stare: Stare) -> dict:
+    limita = max(1, min(_numar_qs(qs, "limita", 50), 200))
+    acoperire = _raport_acoperire_ue(stare, max(limita, 100))
+    limbi = qs.get("limbi", ["RON,ENG"])[0]
+
+    from scripts.import_queue_ue import coada_import
+
+    return coada_import(
+        acoperire,
+        stare.eu,
+        limita=limita,
+        limbi=limbi,
+        sursa=acoperire.get("sursa", "calculat"),
+    )
 
 
 def _vid_dict(v) -> dict:

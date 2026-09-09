@@ -101,8 +101,10 @@ uv run python -m scripts.acoperire_ue --corpus corpus.db --initiative initiative
 ```
 
 În interfață, fila **Drept UE** are butonul **Acoperire import**, care citește același raport prin
-`/api/ue/acoperire`. Build-ul static scrie și publică `web/data/ue_acoperire.json`, ca browserul să
-nu scaneze baze mari la fiecare vizită.
+`/api/ue/acoperire`. Butonul **Coadă import CELEX** citește `/api/ue/import-queue`: aceeași
+acoperire, filtrată din nou prin starea curentă din `eu.db`, cu referințele locale, sursele
+oficiale și comanda `scripts.cellar` în ordinea de limbi `RON,ENG`. Build-ul static scrie și
+publică `web/data/ue_acoperire.json`, ca browserul să nu scaneze baze mari la fiecare vizită.
 
 Raportul parcurge:
 
