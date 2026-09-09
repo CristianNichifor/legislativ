@@ -191,6 +191,9 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     # Both backends must survive the build — offline reads the same pages from disk.
     assert "prinRange" in text and "dinOpfs" in text and "monteaza" in text
     assert '"eu.db"' in text
+    assert '"ue_acoperire.json"' in text
+    assert "_acoperire_ue" in text
+    assert "/api/ue/acoperire" in text
 
 
 def test_eu_db_ships_as_schema_when_no_collected_celex(tmp_path, monkeypatch):

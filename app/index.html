@@ -1170,6 +1170,7 @@
         <div class="ue-tools">
           <button class="go" id="ue-go">Caută în dreptul UE</button>
           <button class="ghost" id="ue-draft">Folosește proiectul</button>
+          <button class="ghost" id="ue-cover">Acoperire import</button>
           <select id="ue-limba" title="Limba actului UE">
             <option value="">română sau engleză</option>
             <option value="RON">română oficială</option>
@@ -1177,6 +1178,7 @@
           </select>
           <span class="hint" id="ue-stat"></span>
         </div>
+        <div id="ue-acoperire"></div>
         <div id="ue-out"></div>
       </div>
 
@@ -3692,6 +3694,33 @@ function ueDosareHtml(dosare, limita){
       +`</article>`;
   }).join("")+`</div>`;
 }
+function renderUEAcoperire(d){
+  const out=$("#ue-acoperire");
+  if(!out) return;
+  if(!d || d.error){ out.innerHTML=empty("Nu am putut calcula acoperirea UE."); return; }
+  const rr=d.referinte||[];
+  const stats=`<div class="matrix-stats">`
+    +`<div class="matrix-stat"><b>${nf(d.total||0)}</b><span>CELEX citate</span></div>`
+    +`<div class="matrix-stat"><b>${nf(d.importate||0)}</b><span>importate în eu.db</span></div>`
+    +`<div class="matrix-stat"><b>${nf(d.neimportate||0)}</b><span>lipsă din eu.db</span></div>`
+    +`<div class="matrix-stat"><b>${nf(d.mentionari||0)}</b><span>menționări</span></div>`
+    +`</div>`;
+  const rows=rr.length ? `<div class="ue-dosare">`+rr.slice(0,12).map(r=>{
+    const cls=r.importat?"dep-ok":"dep-nu";
+    const ex=(r.exemple||[])[0]||{};
+    const surse=Object.entries(r.surse||{}).map(([k,v])=>`${k} ${nf(v)}`).join(" · ");
+    return `<article class="ue-dosar">`
+      +`<div class="ue-loc">${esc(r.celex||"")}</div>`
+      +`<div class="ue-dosar-title">${r.importat?"importat":"lipsește din eu.db"}</div>`
+      +`<div class="ue-dosar-stat">${nf(r.mentionari||0)} menționări · ${esc(surse)}</div>`
+      +(ex.titlu?`<div class="hint">${esc(ex.titlu)}</div>`:"")
+      +(ex.fragment?`<div class="ue-frag">${esc(ex.fragment)}</div>`:"")
+      +(!r.importat&&r.comanda_import?`<div class="ue-meta"><code>${esc(r.comanda_import)}</code></div>`:"")
+      +`<div class="ue-dosar-stat"><span class="${cls}">${r.importat?"importat":"de importat"}</span></div>`
+      +`</article>`;
+  }).join("")+`</div>` : empty("Nu am găsit citări UE explicite în datele scanate.");
+  out.innerHTML=stats+rows+ueLimitariHtml(d.limitari||[]);
+}
 function renderUE(d){
   const out=$("#ue-out"), stat=$("#ue-stat");
   const rr=(d&&d.rezultate)||[], lim=(d&&d.limitari)||[], dosare=(d&&d.dosare)||[];
@@ -3749,7 +3778,22 @@ async function cautaUE(){
     btn.disabled=false; btn.textContent="Caută în dreptul UE";
   }
 }
+async function loadUEAcoperire(){
+  const out=$("#ue-acoperire"), btn=$("#ue-cover");
+  if(!out || !btn) return;
+  btn.disabled=true; out.innerHTML=`<span class="hint"><span class="spin"></span> calculez acoperirea…</span>`;
+  try{
+    const r=await fetch("/api/ue/acoperire?limita=100");
+    if(!r.ok) throw new Error((await r.json()).error||r.statusText);
+    renderUEAcoperire(await r.json());
+  }catch(e){
+    out.innerHTML=empty("Eroare: "+esc(e.message||e));
+  }finally{
+    btn.disabled=false;
+  }
+}
 $("#ue-go").onclick=cautaUE;
+$("#ue-cover").onclick=loadUEAcoperire;
 $("#ue-draft").onclick=()=>{
   pregatesteUEDinDraft(true);
   $("#ue-text").focus();

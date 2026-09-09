@@ -236,7 +236,7 @@ async function boot(){
   // nothing pulls the corpus.
   // Cu un depozit în spate, graf.db, initiative.db și eu.db se montează de acolo întregi; nu are rost să
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
-  const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json"];
+  const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json","ue_acoperire.json"];
   for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
     // manifest.json is the one that has to describe what is in the repository rather than what
     // the build happened to ship: it carries the headline counts, and counting 3,3 million
@@ -275,7 +275,8 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _cronologie, _citari, _supraveghere,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
-                              _domenii, _matrice, _prevedere, _cine_citeaza, _ue)
+                              _domenii, _matrice, _prevedere, _cine_citeaza, _ue,
+                              _acoperire_ue)
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
                corpus_intreg=__CORPUS_INTREG__)
@@ -311,6 +312,7 @@ def _raspunde(path, query, body):
     elif path == '/api/matrice': out = _matrice(qs, _stare)
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
     elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
+    elif path == '/api/ue/acoperire': out = _acoperire_ue(qs, _stare)
     elif path == '/api/compune':
         out = _compune(json.loads(body or '{}').get('interventii', []))
     elif path == '/api/parseaza':
@@ -589,7 +591,8 @@ const NUCLEU = [
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db", "./data/eu.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
-  "./data/neconstitutional.json", "./data/norme_lovite.json", "./data/considerente.json"
+  "./data/neconstitutional.json", "./data/norme_lovite.json", "./data/considerente.json",
+  "./data/ue_acoperire.json"
 ];
 const eBig = (p) => /\\/data\\/.*\\.db$/.test(p) || p.includes("/data/idx/") || p.includes("/data/acte/");
 // Fonts join the big data on the cache-first path, not the network-first shell path: they are
@@ -899,6 +902,22 @@ def _parlament_json() -> None:
     print(f"  parlament → {DATA / 'parlament.json'} ({n} persoane, {marime:.2f} MB)")
 
 
+def _ue_acoperire_json() -> None:
+    from scripts.acoperire_ue import raport
+
+    corpus = ROOT / "corpus.db" if (ROOT / "corpus.db").is_file() else DATA / "corpus.db"
+    initiative = (
+        ROOT / "initiative.db" if (ROOT / "initiative.db").is_file() else DATA / "initiative.db"
+    )
+    eu = ROOT / "eu.db" if (ROOT / "eu.db").is_file() else DATA / "eu.db"
+    out = raport(corpus, initiative, eu, limita=100)
+    (DATA / "ue_acoperire.json").write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    print(
+        f"  acoperire UE → {DATA / 'ue_acoperire.json'} "
+        f"({out['total']} CELEX, {out['neimportate']} lipsă)"
+    )
+
+
 def _vid_json() -> None:
     """The unmet-obligations report, precomputed over the sliced corpus + its graph and shipped as
     `data/vid.json`. Built here (with full corpus access) so the browser never scans for it."""
@@ -990,9 +1009,9 @@ def _versiune_si_sw() -> str:
     # Hash the browser-facing catalog, not the monolithic corpus.db — the corpus is not shipped to
     # the client and need not even be present (a dataset release carries only the shards). index.json
     # + manifest.json capture the act set and the counts; graf.db the amendment edges; eu.db the
-    # optional CELEX source index.
+    # optional CELEX source index, and ue_acoperire.json the missing-import queue.
     h = hashlib.sha256()
-    for name in ("index.json", "manifest.json", "graf.db", "eu.db"):
+    for name in ("index.json", "manifest.json", "graf.db", "eu.db", "ue_acoperire.json"):
         p = DATA / name
         if p.is_file():
             h.update(p.read_bytes())
@@ -1161,6 +1180,8 @@ def main(
         if not eu.is_file():
             _ue_goala(eu)
             print(f"  UE (gol, lipsea din release) → {eu}")
+        if not (DATA / "ue_acoperire.json").is_file():
+            _ue_acoperire_json()
         print(f"  folosesc datele deja prezente în {DATA}")
     else:
         if sursa == "fixturi":
@@ -1180,6 +1201,7 @@ def main(
         _vid_json()
         _neconstitutional_json()
         _parlament_json()
+        _ue_acoperire_json()
     _bundle()
     _worker(depozit)
     _fonturi()

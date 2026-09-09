@@ -1186,6 +1186,21 @@ def _ue(draft: str, stare: Stare, *, limita=12, limba=None) -> dict:
     }
 
 
+def _acoperire_ue(qs: dict, stare: Stare) -> dict:
+    limita = _numar_qs(qs, "limita", 50)
+    if stare.are_rapoarte:
+        brut = stare._incarca_raport("ue_acoperire.json")
+        if isinstance(brut, dict) and isinstance(brut.get("referinte"), list):
+            out = dict(brut)
+            out["sursa"] = "raport"
+            out["referinte"] = brut["referinte"][:limita]
+            return out
+
+    from scripts.acoperire_ue import raport
+
+    return raport(stare.corpus, stare.initiative, stare.eu, limita=limita)
+
+
 def _vid_dict(v) -> dict:
     """One `vid.Vid` finding as a plain dict for the UI / the shipped report."""
     ob = v.obligatie
