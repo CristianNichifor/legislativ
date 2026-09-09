@@ -1220,7 +1220,7 @@ def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
             "Limite: 1000 prevederi per act și 5000 definiții; " +
             "fragmentele extrase pot fi scurtate.",
             "Verifică domeniul de aplicare, excepțiile, rangul și forma în vigoare; "
-            "absența candidaților nu dovedește compatibilitatea.",
+            + "absența candidaților nu dovedește compatibilitatea.",
             *selectie["limitari"],
         ],
     }
