@@ -3774,11 +3774,17 @@ function mContradictiiHtml(d){
   let h=`<div class="parc-h">Contradicții candidate · neconfirmate · necesită jurist</div>`;
   h+=`<p class="hint">${nf(d.prevederi_analizate||0)} prevederi analizate; ${nf(d.acte_selectate||0)} din ${nf(d.acte_total||0)} acte selectate.</p>`;
   for(const c of d.candidati||[]){
-    h+=`<div class="matrix-ex note"><b>${esc(c.termen)}</b> · ${esc(c.domeniu.eticheta)}`;
-    for(const p of [c.a,c.b]) h+=`<p>${esc(p.act_id)} · ${esc(locRo(p.locator))} ${mActiuni(p.actiuni)}<br>${esc(p.definitie)}</p>`;
+    const deadline=c.tip==="termen_divergent";
+    h+=`<div class="matrix-ex note"><b>${deadline?"Termene diferite: ":"Definiții diferite: "}${esc(c.termen)}</b> · ${esc(c.domeniu.eticheta)}`;
+    for(const p of [c.a,c.b]){
+      h+=`<p>${esc(p.act_id)} · ${esc(locRo(p.locator))} ${mActiuni(p.actiuni)}`;
+      if(deadline) h+=`<br><b>${esc(p.termen_text)}</b> · ${esc(p.baza==="neprecizata"?"bază neprecizată":p.baza)}<br>Eveniment: ${esc(p.eveniment)}`;
+      h+=`<br>${esc(p.text||p.definitie||"")}</p>`;
+    }
+    h+=(c.verificari||[]).map(v=>`<p class="hint">${esc(v)}</p>`).join("");
     h+=`</div>`;
   }
-  if(!(d.candidati||[]).length) h+=`<p>Nicio definiție divergentă detectată în selecția analizată.</p>`;
+  if(!(d.candidati||[]).length) h+=`<p>Nicio definiție sau termen divergent detectat în selecția analizată.</p>`;
   if(d.trunchiat) h+=`<p>Rezultate parțiale: limita de analiză sau afișare a fost atinsă.</p>`;
   return h+(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
 }
@@ -3786,7 +3792,7 @@ async function mArataContradictii(buton){
   const out=$("#m-contradictii-rand"); if(!out) return;
   const f=mFiltreCurente(), qs=new URLSearchParams({emitent:buton.dataset.emitent||""});
   for(const key of ["tip","rang","domeniu"]) if(f[key]) qs.set(key,f[key]);
-  out.textContent="Caut definiții divergente…";
+  out.textContent="Compar definiții și termene…";
   buton.disabled=true;
   try{
     const response=await fetch("/api/matrice-contradictii?"+qs.toString());
@@ -3795,7 +3801,7 @@ async function mArataContradictii(buton){
     if(!out.isConnected) return;
     out.innerHTML=mContradictiiHtml(d);
     out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
-  }catch(e){ out.textContent="Nu am putut compara definițiile. Reîncearcă."; }
+  }catch(e){ out.textContent="Nu am putut compara definițiile și termenele. Reîncearcă."; }
   finally{ buton.disabled=false; }
 }
 function mDosarHtml(d){
