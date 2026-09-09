@@ -1417,6 +1417,25 @@ def _conflicte_proiecte(cerere: dict, stare: Stare) -> dict:
 
     if not isinstance(cerere, dict):
         return {"error": "Cerere invalidă."}
+    cerere = dict(cerere)
+    provenienta = {}
+    for parte in ("a", "b"):
+        id = cerere.get(f"versiune_{parte}")
+        if id:
+            from scripts.documente_proiecte import citeste
+
+            try:
+                if not isinstance(id, str) or not isinstance(cerere.get(f"plx_{parte}"), str):
+                    return {"error": "Versiune invalidă."}
+                doc = citeste(stare, cerere[f"plx_{parte}"], id)
+                if doc["status"] != "extras":
+                    return {"error": "Documentul necesită OCR sau verificare manuală."}
+                cerere[f"text_{parte}"] = doc.pop("text")
+                provenienta[parte] = doc
+            except (OSError, ValueError, sqlite3.Error):
+                return {
+                    "error": "Versiunea importată nu este disponibilă pentru această inițiativă."
+                }
     for key in ("emitent", "plx_a", "plx_b", "text_a", "text_b"):
         if not isinstance(cerere.get(key), str) or not cerere[key].strip():
             return {"error": "Alege două inițiative și completează ambele texte."}
@@ -1481,6 +1500,12 @@ def _conflicte_proiecte(cerere: dict, stare: Stare) -> dict:
             }
         raport["candidati"].append(c)
     dosar["conflicte_proiecte"] = raport
+    raport["documente"] = provenienta
+    if provenienta:
+        raport["limitari"][0] = (
+            "Versiunile importate sunt identificate prin sursă și SHA-256; "
+            "restul textelor sunt furnizate de utilizator. Extragerea necesită verificare."
+        )
     dosar["markdown"] = _markdown_dosar_matrice(dosar)
     return dosar
 
@@ -1583,6 +1608,11 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
     proiecte = dosar.get("conflicte_proiecte") or {}
     if proiecte:
         linii += ["", "## Conflicte între proiecte (neconfirmate)"]
+        for parte, doc in proiecte.get("documente", {}).items():
+            linii.append(
+                f"Proiect {parte.upper()}: {doc['url']} | {doc['preluat_la']} | "
+                f"SHA-256: {doc['sha256']}"
+            )
         for c in proiecte["candidati"]:
             linii.append(f"- {c['termen']}")
             for parte in ("a", "b"):

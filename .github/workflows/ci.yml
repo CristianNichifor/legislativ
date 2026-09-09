@@ -15,6 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
+      - name: PDF extraction dependency
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: Checks
         env:
           # Determinism is a hard requirement: a test that depends on set iteration order or
