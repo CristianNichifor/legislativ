@@ -15,12 +15,11 @@ is given a fixed dictionary and `validare.valideaza` drops any finding citing so
 A model asked to *retrieve and reason* will do the first badly; asked only to reason over supplied
 text, its failure mode collapses to one the validator can catch.
 
-**Nothing leaves the device.** The draft is an unpublished bill, and the page's Content-Security-
-Policy is written so it cannot be sent anywhere. The existing cloud path handles *public* law text
-only. This pass therefore runs on-device or not at all — a local model over a localhost endpoint,
-or WebLLM in the tab. That is a real limitation and it is the right one: an MP pasting a draft
-should not have to trust a promise about a server, when the alternative is a guarantee about a
-socket that is never opened.
+**This pass never leaves the device.** The draft is an unpublished bill. Plain-language rewriting
+can use explicit online BYOK, but the constitutional-opinion pass does not. It runs on-device or
+not at all — a local model over a localhost endpoint, or WebLLM in the tab. That is a real
+limitation and it is the right one: an MP pasting a draft should not have to trust a promise about
+a server, when the alternative is a guarantee about a socket that is never opened.
 
 **A pass that did not run says so.** An empty findings list and a model that was never configured
 are the same screen, and the difference is the whole meaning of the result. `Opinie.a_rulat`
@@ -226,9 +225,8 @@ def model_local(
     """A model on this machine, over an OpenAI-compatible endpoint. `None` when none is configured.
 
     Deliberately localhost-shaped and deliberately not a cloud client. The draft is an unpublished
-    bill; the page's CSP is written so it cannot leave the tab, and this is the server-side half of
-    the same promise. Ollama and llama.cpp both speak this shape, so `LEGISLATIV_MODEL=llama3.1`
-    with Ollama running is the whole of the setup.
+    bill; this is the server-side half of the local-only opinion promise. Ollama and llama.cpp both
+    speak this shape, so `LEGISLATIV_MODEL=llama3.1` with Ollama running is the whole setup.
 
     Returning `None` rather than raising is the point: an absent model must reach `opinie` as "did
     not run", not as an error a caller might mistake for a clean answer.
