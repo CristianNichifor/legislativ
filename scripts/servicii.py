@@ -1459,7 +1459,7 @@ def _conflicte_proiecte(cerere: dict, stare: Stare) -> dict:
         return {"error": "Alege două inițiative diferite."}
     qs = {
         k: [cerere[k]]
-        for k in ("emitent", "tip", "rang", "domeniu")
+        for k in ("emitent", "tip", "rang", "domeniu", "problema")
         if isinstance(cerere.get(k), str)
     }
     selectie = _matrice_proiecte(qs, stare)
@@ -1512,6 +1512,8 @@ def _conflicte_proiecte(cerere: dict, stare: Stare) -> dict:
                 "sursa_url": meta["sursa_url"],
                 "actiuni": [],
             }
+            if parte in provenienta:
+                c[parte]["versiune_id"] = provenienta[parte]["id"]
         raport["candidati"].append(c)
     dosar["conflicte_proiecte"] = raport
     raport["documente"] = provenienta

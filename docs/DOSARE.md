@@ -123,8 +123,8 @@ includes the manifest and retained evidence.
 The report and dependency capture are separate reads. The manifest therefore
 records the corpus observed at save time, not a certified snapshot of the source
 used earlier by every detector. It does not establish current legal applicability
-or freshness. EU references, CCR decision documents and parliamentary drafts are
-not source dependencies in this first contract. Aggregate counts without retained
+or freshness. EU references and CCR decision documents are not source dependencies.
+Parliamentary snapshots use the separate contract below. Aggregate counts without retained
 examples also have no finding dependencies.
 
 The v2 run hash covers canonical `{engine_version, filtre, raport, dovezi}`.
@@ -170,8 +170,66 @@ requires explicit reviewer decisions; earlier decisions remain historical. Unsav
 notes block this action's navigation, including notes entered while recalculation is in flight.
 No acknowledgement on an old run dismisses its evidence-change warning.
 
-The manifest's scope and separate-read limitations still apply. EU documents, CCR
-decision documents and imported parliamentary snapshots are not compared here.
+The manifest's scope and separate-read limitations still apply. EU documents and
+CCR decision documents are not compared here.
+
+## Parliamentary Snapshot Dependencies
+
+The draft comparison form can now save comparisons when **both** inputs are
+selected imported versions. Edited/pasted text remains usable for transient
+comparison but is not represented as an immutable official snapshot. Saving
+recomputes the report server-side from the selected imports; clients cannot submit
+a report, text or source hash for storage through this API.
+
+`POST /api/dosare/rulari` accepts optional `proiecte` with exactly `a` and `b`,
+each containing `plx_id` and `versiune_id`. The initiatives must differ, own their
+snapshots, and pass the existing active-initiative/filter checks. Both snapshots
+must have extracted text and pass byte-hash and content-addressed-ID validation.
+Draft runs use `matrice-proiecte-v1` and retain `raport.selectie_proiecte`.
+Original snapshot IDs appear in candidate evidence, so human review applies to
+the specific retained versions rather than a moving draft.
+
+Draft findings (`proiect`) are included in the existing review workflow. Each
+retained conflict links both imported snapshots and the corpus provisions targeted
+by its two amendment operations. Repeated dependencies are deduplicated. Manifest
+schema 2 adds `proiect_importat` dependencies alongside corpus records; ordinary
+corpus runs retain manifest schema 1. The target law's locator is not interpreted
+as an article locator inside the draft: draft dependencies are whole-document.
+
+Checks read the local `.documente.db` store without discovery, downloads, extraction
+or migrations. They compare against the newest distinct stored import with the
+**same initiative and exact URL**. A different attachment URL is never substituted.
+Tied latest import timestamps are ambiguous and unavailable. Reimporting identical
+bytes does not refresh the old snapshot timestamp in the existing import store;
+therefore this is not a current official-source observation or a reliable signal
+of a source reverting to earlier bytes.
+
+`sha256_octeti` fingerprints original bytes; `sha256_continut` uses SHA-256 over
+the exact UTF-8 extracted text (`sha256-text-import-v1`). Checks expose separate
+`octeti_schimbati` and `text_schimbat` flags. A byte-only change is still flagged
+for review but is not called a textual change. OCR/empty extraction, missing files,
+integrity mismatches, ambiguous ordering or limits produce unavailable comparisons,
+not compatibility or unchanged findings. Bounds follow the importer byte limit
+and cap extracted text at 2 MB per dependency. The report comparator also retains
+its stricter 60,000-character input limit.
+
+The saved finding's version button opens the existing imported-version diff tool.
+Its text diff has its own whitespace/heading normalization and limits, while the
+dependency fingerprint is exact text. Checking the official URL remains a separate
+explicit action in that tool; it never replaces the historical report. Check JSON
+and Markdown exports and the cross-dossier queue include draft dependencies.
+
+Recalculation from a draft run explicitly selects the latest comparable local
+imports at the same URLs, pins their IDs in the resulting run, and records the
+existing recalculation link. It fails on unavailable extraction; it does not fetch
+sources or overwrite draft input. Existing reports and review decisions remain
+unchanged. Directly choosing another attachment requires a new explicit comparison.
+
+No dossier schema migration is needed beyond schema 3. Back up both the dossier
+database and the imported-document database using SQLite's backup mechanism.
+The dossier backup alone preserves reports/checks/links but cannot restore original
+snapshot bytes or full imported text. Missing restored imports remain unavailable.
+EU dependencies and automatic legal-compliance conclusions are outside this batch.
 
 ## Persistent Check History and Queue
 

@@ -197,7 +197,7 @@ def salveaza_rulare(stare, request):
     if (
         not isinstance(request, dict)
         or not {"dosar_id", "filtre"} <= set(request)
-        or set(request) - {"dosar_id", "filtre", "sursa_rulare_id"}
+        or set(request) - {"dosar_id", "filtre", "sursa_rulare_id", "proiecte"}
     ):
         raise ValueError("Cerere invalidă.")
     path = cale(stare)
@@ -216,11 +216,42 @@ def salveaza_rulare(stare, request):
     if not filters.get("emitent"):
         raise ValueError("Emitentul este obligatoriu.")
     parent = request.get("sursa_rulare_id")
+    projects = request.get("proiecte")
+    if "proiecte" in request:
+        from scripts.dependente_proiecte import selectie
+
+        projects = selectie(projects)
     if "sursa_rulare_id" in request:
+        if "proiecte" in request:
+            raise ValueError("Recalcularea foloseste sursele rularii originale.")
         original = rulari(path, ident, _id(parent))
         if original["filtre"] != filters:
             raise ValueError("Recalcularea trebuie sa pastreze filtrele rularii originale.")
-    report = _matrice_dosar({k: [v] for k, v in filters.items()}, stare)
+        if original["raport"].get("selectie_proiecte"):
+            from scripts.dependente_proiecte import actualizeaza
+
+            projects = actualizeaza(
+                stare,
+                original["raport"]["selectie_proiecte"],
+                original["dovezi"].get("manifest") or {},
+            )
+    if projects:
+        from scripts.dependente_proiecte import citeste as snapshot
+        from scripts.servicii import _conflicte_proiecte
+
+        args = dict(filters)
+        for side, ref in projects.items():
+            doc = snapshot(stare, ref["plx_id"], ref["versiune_id"])
+            if doc["stare"] != "capturat":
+                raise ValueError("Versiunea importata nu are text verificabil.")
+            args[f"plx_{side}"] = ref["plx_id"]
+            args[f"versiune_{side}"] = ref["versiune_id"]
+        report = _conflicte_proiecte(args, stare)
+        if report.get("error"):
+            raise ValueError(report["error"])
+        report["selectie_proiecte"] = projects
+    else:
+        report = _matrice_dosar({k: [v] for k, v in filters.items()}, stare)
     if not report.get("gasit"):
         raise ValueError("Selecția nu produce un dosar de analiză.")
     # Preserve the evidence actually returned; do not present report hashes as source-byte hashes.
@@ -233,8 +264,9 @@ def salveaza_rulare(stare, request):
     from scripts.dependente_dovezi import captureaza
 
     evidence["manifest"] = captureaza(stare, report)
+    engine_version = "matrice-proiecte-v1" if projects else ENGINE_VERSION
     payload = _json(
-        {"engine_version": ENGINE_VERSION, "filtre": filters, "raport": report, "dovezi": evidence}
+        {"engine_version": engine_version, "filtre": filters, "raport": report, "dovezi": evidence}
     )
     if len(payload.encode("utf-8")) > MAX_REPORT_BYTES:
         raise ValueError("Raportul depășește limita de 4 MB; restrânge selecția.")
@@ -246,7 +278,7 @@ def salveaza_rulare(stare, request):
                 uuid.uuid4().hex,
                 ident,
                 datetime.now(UTC).isoformat(),
-                ENGINE_VERSION,
+                engine_version,
                 digest,
                 _json(filters),
                 _json(report),
