@@ -16,9 +16,7 @@ def test_cleared_review_draft_does_not_block_recalculation():
         "const f={id:'a',stare:'unreviewed'};"
         "let values={evaluator:'',motiv:'',stare:'unreviewed'};"
         "class FormData{constructor(){return Object.entries(values)}}"
-        "const handle=()=>{"
-        + handler
-        + "handle();assert.equal(drafts.size,0);"
+        "const handle=()=>{" + handler + "handle();assert.equal(drafts.size,0);"
         "values.motiv='note';handle();assert.equal(drafts.size,1);"
         "values.motiv='';handle();assert.equal(drafts.size,0);"
         "values.stare='needs_evidence';handle();assert.equal(drafts.size,1);"
