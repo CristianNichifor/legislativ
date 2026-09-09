@@ -374,6 +374,13 @@
   .finding-sources{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:1rem}
   .finding-sources>div{min-width:0;overflow-wrap:anywhere}
   .finding-sources .source-text{white-space:pre-wrap;max-height:22rem;overflow:auto;font-size:.9rem}
+  .finding-authoring:has([data-proposal][open]){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
+  .finding-authoring>div,.finding-authoring>details{min-width:0}
+  .finding-authoring:has([data-proposal][open]) .finding-sources{grid-template-columns:minmax(0,1fr)}
+  .finding-review [data-proposal] form{grid-template-columns:minmax(0,1fr)}
+  [data-proposal] textarea{min-height:8rem;resize:vertical}
+  [data-proposal] pre{max-height:18rem;overflow:auto}
+  @media(max-width:1000px){.finding-authoring:has([data-proposal][open]){grid-template-columns:minmax(0,1fr)}}
   .review-checks{border-block:1px solid var(--rule);padding:.6rem 0;margin:.6rem 0}
   .review-checks>summary{font-size:.85rem}
   .acquisition-workspace{display:grid;grid-template-columns:minmax(210px,300px) minmax(0,1fr);gap:1rem;margin-top:1rem}
@@ -3964,12 +3971,70 @@ function reviewFindingHtml(f){
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
     +reviewEvidenceHtml(f)
-    +findingSourcesHtml(f)
+    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+'</div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
     +'<label>Evaluator declarat<input type="text" name="evaluator" maxlength="120" required></label><label>Motivare / note<textarea name="motiv" rows="3" maxlength="2000" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Înregistrează decizia</button><button type="button" class="ghost mini" data-review-cancel>Renunță la notele deciziei</button></div></form><p class="hint review-status" role="status"></p>'
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
+}
+function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
+  const drafts=panel.reviewDrafts,key='proposal:'+f.id;
+  const opened=panel.proposalOpen||(panel.proposalOpen=new Set());
+  const host=section.querySelector('[data-proposal-editor]');
+  const alive=()=>valid()&&host.isConnected;
+  const query='/api/dosare/propuneri?'+new URLSearchParams({id:dossierId,rulare_id:runId,constatare_id:f.id});
+  const mark=()=>{panel.querySelector('[data-show-drafts]').hidden=!drafts.size;};
+  let loaded=false;
+  const load=async()=>{
+    if(loaded)return;loaded=true;host.textContent='Încarc propunerea…';
+    try{
+      const data=await dossierApi(query);if(!alive())return;
+      const previous=drafts.get(key),saved=data.propunere;
+      const initial=previous?.initial||{titlu:saved?.titlu||'',text:saved?.text||'',motiv:saved?.motiv||''};
+      const revision=previous?.revision??saved?.revizie??0;
+      host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
+      host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;
+      const form=host.querySelector('form'),message=host.querySelector('[data-proposal-status]');
+      const values=()=>Object.fromEntries(new FormData(form));
+      const controls=[...form.elements];
+      for(const [k,v] of Object.entries(previous?.values||initial))form.elements.namedItem(k).value=v;
+      message.textContent=previous?.error||(previous?.saving?'Salvare în curs…':previous?'Modificări nesalvate · baza: revizia '+revision:saved?'Salvată · revizia '+revision:'Propunere nouă');
+      if(previous?.saving)controls.forEach(c=>c.disabled=true);
+      form.oninput=()=>{
+        const current=values(),old=drafts.get(key);
+        // Keep the original revision and retry identity even after an ambiguous response.
+        if(!old?.retry&&Object.keys(initial).every(k=>current[k]===initial[k]))drafts.delete(key);
+        else drafts.set(key,{...old,values:current,initial,revision});
+        message.textContent=drafts.has(key)?'Modificări nesalvate':'Fără modificări';mark();
+      };
+      form.querySelector('[data-proposal-cancel]').onclick=()=>{drafts.delete(key);render();};
+      form.querySelector('[data-proposal-latest]').onclick=async()=>{
+        const button=form.querySelector('[data-proposal-latest]');button.disabled=true;
+        try{
+          const latest=await dossierApi(query);if(!alive())return;
+          const area=host.querySelector('[data-proposal-comparison]');area.replaceChildren();
+          const heading=document.createElement('h4'),pre=document.createElement('pre');
+          heading.textContent=latest.propunere?'Versiunea salvată · revizia '+latest.propunere.revizie:'Nicio propunere salvată';
+          pre.textContent=latest.propunere?[latest.propunere.titlu,latest.propunere.text,latest.propunere.motiv].join('\n\n'):'';area.append(heading,pre);
+        }catch(err){if(alive())message.textContent=err.message;}finally{button.disabled=!!drafts.get(key)?.saving;}
+      };
+      form.onsubmit=async e=>{
+        e.preventDefault();if(drafts.get(key)?.saving)return;
+        const record=drafts.get(key)||{initial,revision};record.values=values();
+        const payload={...record.values,dosar_id:dossierId,rulare_id:runId,constatare_id:f.id,revizie:record.revision};
+        const fingerprint=JSON.stringify(payload);
+        if(record.retry?.fingerprint!==fingerprint)record.retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
+        record.saving=true;record.error='';drafts.set(key,record);mark();controls.forEach(c=>c.disabled=true);message.textContent='Salvare în curs…';
+        try{
+          await dossierApi('/api/dosare/propuneri',{...payload,id:record.retry.id});drafts.delete(key);
+        }catch(err){record.error=err.message;}
+        finally{record.saving=false;if(valid())render();}
+      };
+    }catch(err){if(alive()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă';retry.onclick=()=>{loaded=false;load();};host.append(retry);}}
+  };
+  section.ontoggle=()=>{if(!alive())return;if(section.open){opened.add(f.id);load();}else opened.delete(f.id);};
+  if(opened.has(f.id)||drafts.has(key)){section.open=true;load();}
 }
 async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
   if([...(panel.reviewTransactions?.values()||[]),...(panel.reviewDrafts?.values()||[])].some(record=>record.saving)){
@@ -4014,13 +4079,14 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       filter=picker.value;view.filter=filter;view.query=search.value;
       const findings=workspaceFindings(d.constatari,filter,view.query);
       const active=findings.find(f=>f.id===view.selected)||findings[0];if(!view.selected&&active) view.selected=active.id;
-      const dirty=id=>[...drafts.keys()].some(k=>k===id||k.startsWith('context:'+id+':'));
+      const dirty=id=>[...drafts.keys()].some(k=>k===id||k==='proposal:'+id||k.startsWith('context:'+id+':'));
       panel.querySelector('[data-finding-count]').textContent=`${findings.length} din ${d.constatari.length}`;
       const buttons=panel.querySelector('[data-finding-buttons]');
       buttons.innerHTML=findings.map(f=>workspaceFindingHtml(f,active?.id,dirty(f.id))).join('');
       buttons.querySelectorAll('button').forEach(b=>b.onclick=()=>{view.selected=b.dataset.selectFinding;render();});
       panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
       list.innerHTML=active?reviewFindingHtml(active):(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p><button type="button" class="ghost mini" data-open-checks>Deschide verificările</button>':'<p>Nicio constatare în această selecție.</p>');
+      if(active)bindFindingProposal(list.querySelector('[data-proposal]'),panel,active,dossierId,runId,valid,render);
       const openChecks=list.querySelector('[data-open-checks]');if(openChecks)openChecks.onclick=()=>{checksPanel.open=true;panel.querySelector('[data-evidence-check]').focus();};
       list.querySelectorAll('[data-current-source]').forEach(b=>b.onclick=async()=>{
         await mPrevedere(b);const current=b.closest('.matrix-ex').querySelector('.matrix-prev');
@@ -4122,7 +4188,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       });
     };
     picker.onchange=render;search.oninput=render;
-    panel.querySelector('[data-show-drafts]').onclick=()=>{const key=drafts.keys().next().value;if(!key)return;view.selected=key.startsWith('context:')?key.split(':')[1]:key;picker.value='all';search.value='';render();};
+    panel.querySelector('[data-show-drafts]').onclick=()=>{const key=drafts.keys().next().value;if(!key)return;view.selected=key.includes(':')?key.split(':')[1]:key;picker.value='all';search.value='';render();};
     render();
     let historyGeneration=0;
     const history=panel.querySelector('[data-check-history]');

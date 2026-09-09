@@ -23,6 +23,7 @@ def test_refresh_waits_for_pending_review_or_context_save():
         "assert.ok(status.textContent.includes('Salvare în curs'));"
         "panel.reviewTransactions.clear();"
         "panel.reviewDrafts=new Map([['context:a:a',{saving:true}]]);refresh();"
+        "panel.reviewDrafts=new Map([['proposal:a',{saving:true}]]);refresh();"
         "panel.reviewDrafts.clear();assert.throws(refresh,/Unexpected reload/);"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
@@ -30,7 +31,12 @@ def test_refresh_waits_for_pending_review_or_context_save():
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_cleared_review_draft_does_not_block_recalculation():
-    handler = APP.read_text().split("form.oninput=()=>{", 1)[1].split("let retry=null;", 1)[0]
+    handler = (
+        APP.read_text()
+        .split("async function loadFindingReviews", 1)[1]
+        .split("form.oninput=()=>{", 1)[1]
+        .split("let retry=null;", 1)[0]
+    )
     code = (
         "const assert=require('node:assert/strict'), drafts=new Map(), transactions=new Map();"
         "const form={querySelector:()=>({})},panel={querySelector:()=>({})},render=()=>{};"

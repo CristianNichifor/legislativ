@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 ENGINE_VERSION = "matrice-dosar-v2"
 MAX_REPORT_BYTES = 4_000_000
 
@@ -77,7 +77,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, 3, 4, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -113,6 +113,20 @@ def _open(path, *, write=False):
                     f"CREATE TRIGGER contexte_no_{operation.lower()} BEFORE {operation} "
                     "ON contexte_juridice BEGIN "
                     "SELECT RAISE(ABORT,'Legal context is append-only'); END"
+                )
+            version = 4
+        if write and version == 4:
+            con.execute(
+                "CREATE TABLE propuneri (id TEXT PRIMARY KEY, rulare_id TEXT NOT NULL "
+                "REFERENCES rulari(id), constatare_id TEXT NOT NULL, revizie INTEGER NOT NULL, "
+                "raport_sha256 TEXT NOT NULL, titlu TEXT NOT NULL, text TEXT NOT NULL, "
+                "motiv TEXT NOT NULL, creat_la TEXT NOT NULL, "
+                "UNIQUE(rulare_id,constatare_id,revizie))"
+            )
+            for operation in ("UPDATE", "DELETE"):
+                con.execute(
+                    f"CREATE TRIGGER propuneri_no_{operation.lower()} BEFORE {operation} "
+                    "ON propuneri BEGIN SELECT RAISE(ABORT,'Proposals are append-only'); END"
                 )
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
