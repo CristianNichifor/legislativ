@@ -1,5 +1,25 @@
 # Source inventory: A1 contract
 
+## Coverage panel (A2)
+
+The Matrice tab loads a global inventory above its filters, independently of the
+matrix request. Each source has a summary of availability, its own stored-record
+count and any measured HTML/extraction problems. Expand a source for all available
+metrics and UTC timestamps. Unknown freshness is always visible; an accessible
+database is not labeled complete or current.
+
+Reopening the matrix reuses the report. `Reîncarcă inventarul` explicitly reloads
+local database counts, not official websites. `Exportă JSON` downloads the exact
+displayed API response, including generation time and limitations. During reload
+the old report is cleared and export is disabled; failures allow retry without
+interrupting the matrix. The static app displays the local-inventory limitation
+and can export that limitation response, not fabricated counts.
+
+The panel does not filter counts with matrix filters or add incompatible
+populations into a combined coverage percentage. It does not infer stale/current
+status from retrieval dates. Production-data auditing and backup/restore checks
+remain separate work.
+
 The local read-only report is available as `GET /api/inventar-surse` and JSON CLI:
 
 ```bash
@@ -61,6 +81,6 @@ private filesystem paths or raw database errors are included in the report.
 
 Tests cover absent versus empty data, old schemas, malformed databases, URI-special
 filenames, unchanged database bytes, mixed HTML results, UTC timestamp ordering,
-extraction states and static fallback. This batch adds the contract and export;
-the visual freshness panel, deployed-corpus audit, backup/restore exercise and
-pilot-domain dataset selection remain separate roadmap work.
+extraction states and static fallback. A2 adds the visual panel and export download.
+The deployed-corpus audit, backup/restore exercise and pilot-domain dataset selection
+remain separate roadmap work.
