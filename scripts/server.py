@@ -333,9 +333,12 @@ def face_handler(stare: Stare):
                     elif ruta.path == "/api/dosare/propuneri/legaturi-ue/obligatii":
                         from scripts.legaturi_ue import obligatii
 
-                        out = obligatii(stare, qs.get("celex", [None])[0],
-                                        qs.get("instantanee", [""])[0],
-                                        int(qs.get("offset", ["0"])[0]))
+                        out = obligatii(
+                            stare,
+                            qs.get("celex", [None])[0],
+                            qs.get("instantanee", [""])[0],
+                            int(qs.get("offset", ["0"])[0]),
+                        )
                     elif ruta.path == "/api/dosare/propuneri/legaturi-ue":
                         from scripts.legaturi_ue_store import citeste_cerere
 

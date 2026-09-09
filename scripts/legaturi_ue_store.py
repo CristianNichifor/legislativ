@@ -1,4 +1,4 @@
-"""Append-only EU links. Schema-9 migration hook awaits the integrated schema-8 base."""
+"""Append-only EU links, exact-revision history and immutable evidence exports."""
 
 import json
 from datetime import UTC, datetime
@@ -6,21 +6,6 @@ from datetime import UTC, datetime
 from scripts import dosare, legaturi_ue, propuneri, revizuiri
 
 SCHEMA_VERSION = 9
-
-
-def migreaza(con):
-    """Called by the owning dossier migration transaction; never commits or stamps version."""
-    con.execute(
-        "CREATE TABLE legaturi_ue (seq INTEGER PRIMARY KEY AUTOINCREMENT, "
-        "id TEXT NOT NULL UNIQUE, propunere_id TEXT NOT NULL REFERENCES propuneri(id), "
-        "creat_la TEXT NOT NULL, cerere_json TEXT NOT NULL, rezultat_json TEXT NOT NULL)"
-    )
-    con.execute("CREATE INDEX legaturi_ue_propunere ON legaturi_ue(propunere_id,seq DESC)")
-    for operation in ("UPDATE", "DELETE"):
-        con.execute(
-            f"CREATE TRIGGER legaturi_ue_no_{operation.lower()} BEFORE {operation} ON legaturi_ue "
-            "BEGIN SELECT RAISE(ABORT,'EU links are append-only'); END"
-        )
 
 
 def _supported(con):
@@ -32,7 +17,7 @@ def _request(request):
     if not isinstance(request, dict) or set(request) != legaturi_ue.SELECTORS | extra:
         raise ValueError("Cerere de salvare a legaturii invalida.")
     selected = legaturi_ue.selection({k: request[k] for k in legaturi_ue.SELECTORS})
-    if request["ipoteza"] not in legaturi_ue.HYPOTHESES:
+    if not isinstance(request["ipoteza"], str) or request["ipoteza"] not in legaturi_ue.HYPOTHESES:
         raise ValueError("Ipoteza nesuportata.")
     return {
         **selected,
@@ -88,6 +73,8 @@ def salveaza(stare, request):
         )
     if result["baza_sha256"] != normalized["baza_sha256"]:
         raise ValueError("Baza s-a schimbat. Refa previzualizarea si confirma explicit.")
+    if normalized["obligatie"] not in legaturi_ue.article_body(result["baza"]["eu_article"]):
+        raise ValueError("Obligatia trebuie citata exact din corpul articolului UE retinut.")
     result.update(
         scope="substantive_candidate",
         state="linked_hypothesis",
@@ -140,8 +127,9 @@ def istoric(path, dossier_id, run_id, finding_id, revision, offset=0, link_id=No
             out["legaturi"] = [
                 dict(r)
                 for r in con.execute(
-                    "SELECT id,creat_la,json_extract(rezultat_json,'$.substantive_candidate.ipoteza') "
-                    "AS ipoteza FROM legaturi_ue WHERE propunere_id=? ORDER BY seq DESC LIMIT 20 OFFSET ?",
+                    "SELECT id,creat_la,"
+                    "json_extract(rezultat_json,'$.substantive_candidate.ipoteza') AS ipoteza "
+                    "FROM legaturi_ue WHERE propunere_id=? ORDER BY seq DESC LIMIT 20 OFFSET ?",
                     (proposal["id"], offset),
                 )
             ]

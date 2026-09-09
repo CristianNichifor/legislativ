@@ -366,6 +366,11 @@
   [data-context-results]>section{margin-top:.75rem;padding-top:.5rem;border-top:1px solid var(--rule-soft)}
   [data-context-results]>section>h4{font-size:.9rem;line-height:1.3;margin:0 0 .35rem}
   [data-context-results]>section>p{margin:.3rem 0}
+  [data-eu-proposal-links]{margin:.75rem 0;overflow-wrap:anywhere}
+  [data-eu-proposal-links] label{display:block;margin:.5rem 0}
+  [data-eu-proposal-links] input,[data-eu-proposal-links] select,[data-eu-proposal-links] textarea{width:100%;box-sizing:border-box}
+  [data-eu-proposal-links] h4{font-size:.9rem;margin:.6rem 0 .3rem}
+  [data-eu-proposal-links] pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}
   .review-workspace{display:grid;grid-template-columns:minmax(210px,270px) minmax(0,1fr);gap:1rem;border-top:1px solid var(--rule);margin-top:.7rem}
   .review-finding-nav{padding:.7rem 0;min-width:0}
   .review-finding-nav [data-finding-buttons]{max-height:65vh;overflow:auto}
@@ -4414,6 +4419,7 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;
       bindProposalHistory(host,query,saved,alive);
       bindProposalAnalysis(host,panel,saved,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
+      bindEuProposalLinks(host,panel,saved,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
       const form=host.querySelector('form'),message=host.querySelector('[data-proposal-status]');
       const values=()=>Object.fromEntries(new FormData(form));
       const controls=[...form.elements];
@@ -5589,6 +5595,126 @@ function renderUEImportQueue(d){
   out.querySelectorAll('[data-eu-source]').forEach(b=>b.onclick=()=>openEuSource(b.dataset.euSource));
 }
 const EU_SOURCE={celex:null,sequence:0,busy:false};
+const EU_LINK_VIEWS=new Map();
+window.addEventListener('beforeunload',event=>{
+  if([...EU_LINK_VIEWS.values()].some(s=>s.dirty||s.retry||s.busy)){event.preventDefault();event.returnValue='';}
+});
+const EU_LINK_API='/api/dosare/propuneri/legaturi-ue';
+const EU_LINK_HYPOTHESES={potential_coverage:'Acoperire potențială',potential_conflict:'Conflict potențial',potential_gap:'Lacună potențială'};
+function euProposalLinkResult(data){
+  if(!data)return '<p class="hint">Nicio bază selectată.</p>';
+  const basis=data.baza,source=basis.eu_snapshot?.sursa,proposal=basis.proposal;
+  return `<p><b>${data.scope==='substantive_candidate'?'Ipoteză salvată, nu verdict juridic':data.blockers.length?'Legătură blocată · doar context':'Bază disponibilă · confirmare explicită necesară'}</b></p>`
+    +(data.blockers.length?`<p role="status">${data.blockers.map(b=>esc(b.side+' · '+b.code)).join('<br>')}</p>`:'')
+    +`<p class="hint">Revizia propunerii ${esc(proposal.revizie)} · ${esc(basis.proposal_sha256)}<br>Bază: ${esc(data.baza_sha256)}<br>Aplicabilitate juridică: necunoscută.</p>`
+    +(data.substantive_candidate?`<p>Autor declarat (neautentificat): ${esc(data.substantive_candidate.autor)}<br>${esc(EU_LINK_HYPOTHESES[data.substantive_candidate.ipoteza])}</p><p>${esc(data.substantive_candidate.obligatie)}</p><p>${esc(data.substantive_candidate.motiv)}</p>`:'')
+    +`<details><summary>Propunere și țintă națională istorică</summary><pre>${esc(proposal.text)}</pre><pre>${esc(proposal.interventie?.tinta?.text||'Țintă națională nerezolvată')}</pre></details>`
+    +(source?`<h4>${esc(source.celex)} · ${esc(basis.eu_article?.locator||'Articol nerezolvat')}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Sursă UE')} · ${esc(source.citit_la)}</p><p class="hint">SHA-256 text: ${esc(source.text_sha256)}</p><pre>${esc(basis.eu_article?.text||'')}</pre><details><summary>Text integral UE păstrat și context</summary><pre>${esc(source.text)}</pre><pre>${esc(JSON.stringify(basis.context,null,2))}</pre></details>`:'');
+}
+function bindEuProposalLinks(host,panel,saved,identity,alive){
+  if(!saved)return;
+  const key=JSON.stringify(identity);
+  const state=EU_LINK_VIEWS.get(key)||{values:{revizie:String(saved.revizie),celex:'',instantanee:'',locator:'',autor:'',ipoteza:'potential_coverage',obligatie:'',motiv:''},snapshots:[],articles:[],history:[],offset:0,total:0,opened:false};
+  EU_LINK_VIEWS.set(key,state);
+  const authoring=host.closest('.finding-authoring');
+  authoring.parentElement.querySelectorAll('[data-eu-proposal-links]').forEach(old=>old.remove());
+  const section=document.createElement('details');section.dataset.euProposalLinks='';authoring.after(section);
+  const valid=()=>alive()&&section.isConnected;
+  const selected=()=>({...identity,revizie:Number(state.values.revizie),celex:state.values.celex,instantanee:state.values.instantanee,locator:state.values.locator});
+  const query=(extra={})=>new URLSearchParams({id:identity.dosar_id,rulare_id:identity.rulare_id,constatare_id:identity.constatare_id,revizie:state.values.revizie,...extra});
+  const history=async(offset=0,id=null)=>{
+    const data=await dossierApi(EU_LINK_API+'?'+query({offset,...(id?{legatura_id:id}:{})}));
+    state.history=data.legaturi;state.offset=offset;state.total=data.total;state.saved=data.selectata;state.markdown=data.markdown;state.loaded=true;
+  };
+  const run=async action=>{
+    if(state.busy)return;state.busy=true;state.error='';state.refresh?.();
+    try{await action();}catch(err){state.error=err.message;}finally{state.busy=false;state.refresh?.();}
+  };
+  const render=()=>{
+    if(!valid())return;
+    const v=state.values;
+    const field=(name,label,body)=>`<label>${label}${body||`<input data-eu-link-field="${name}" value="${esc(v[name])}" ${name==='revizie'?'type="number" min="1" max="1000001" step="1"':name==='autor'?'type="text" maxlength="120"':'type="text" maxlength="50"'}>`}</label>`;
+    section.innerHTML='<summary>Legături UE · obligație și revizie salvate</summary><p class="hint">Ipoteze declarate de autor, fără verdict juridic. Textul național este ținta istorică a propunerii; sursa UE este instantaneea selectată explicit. Ciorna acestei legături rămâne numai în sesiunea paginii.</p>'
+      +field('revizie','Revizia propunerii')+`<p class="hint" data-eu-link-revision-label>Ultima revizie salvată disponibilă: ${esc(saved.revizie)}. Selecția curentă: ${esc(v.revizie)}.</p>`+field('celex','CELEX')
+      +'<button type="button" class="ghost mini" data-eu-link-sources>Citește sursele locale UE</button>'
+      +field('instantanee','Instantanee UE',`<select data-eu-link-field="instantanee"><option value="">Selectează explicit</option>${state.snapshots.map(s=>`<option value="${esc(s.id)}" ${v.instantanee===s.id?'selected':''}>${esc(s.limba||s.sursa?.limba)} · ${esc(s.citit_la||s.sursa?.citit_la)} · ${esc(s.id.slice(0,12))}</option>`).join('')}</select>`)
+      +(state.moreSnapshots?'<button type="button" class="ghost mini" data-eu-link-more-sources>Instantanee mai vechi</button>':'')
+      +field('locator','Articol UE',`<select data-eu-link-field="locator"><option value="">Selectează explicit</option>${state.articles.map(a=>`<option value="${esc(a.locator)}" ${a.selectabil?'':'disabled'} ${v.locator===a.locator?'selected':''}>${esc(a.locator+' · '+a.titlu)}${a.selectabil?'':' · ambiguu'}</option>`).join('')}</select>`)
+      +(state.moreArticles?'<button type="button" class="ghost mini" data-eu-link-more-articles>Alte articole</button>':'')
+      +'<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-preview>Previzualizează baza</button></div>'
+      +field('autor','Autor declarat (neautentificat)')
+      +field('ipoteza','Ipoteză',`<select data-eu-link-field="ipoteza">${Object.entries(EU_LINK_HYPOTHESES).map(([k,label])=>`<option value="${k}" ${v.ipoteza===k?'selected':''}>${label}</option>`).join('')}</select>`)
+      +field('obligatie','Pasajul obligației (citat exact din corpul articolului)',`<textarea rows="3" maxlength="2000" data-eu-link-field="obligatie">${esc(v.obligatie)}</textarea>`)
+      +field('motiv','Motivarea legăturii',`<textarea rows="3" maxlength="4000" data-eu-link-field="motiv">${esc(v.motiv)}</textarea>`)
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-confirm ${!state.preview||state.preview.blockers.length||state.confirmed?'disabled':''}>${state.retry?'Reîncearcă salvarea ipotezei':'Confirmă și salvează ipoteza'}</button><button type="button" class="ghost mini" data-eu-link-cancel>Renunță la ciorna legăturii</button></div>`
+      +`<p class="hint" role="status" data-eu-link-status>${esc(state.busy?'În curs…':state.error||state.status||'')}</p><div data-eu-link-preview-result>${euProposalLinkResult(state.preview)}</div>`
+      +'<h4>Istoric pentru revizia selectată</h4><button type="button" class="ghost mini" data-eu-link-refresh>Reîncarcă istoricul</button>'
+      +`<label>Legătură salvată<select data-eu-link-history><option value="">Ultima legătură</option>${state.history.map(h=>`<option value="${esc(h.id)}" ${state.saved?.id===h.id?'selected':''}>${esc(h.creat_la+' · '+EU_LINK_HYPOTHESES[h.ipoteza])}</option>`).join('')}</select></label>`
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-prev ${!state.offset?'disabled':''} title="Pagina precedentă">←</button><button type="button" class="ghost mini" data-eu-link-next ${state.offset+20>=state.total?'disabled':''} title="Pagina următoare">→</button></div><p class="hint">${state.total} legături · offset ${state.offset}</p><div data-eu-link-saved-result>${euProposalLinkResult(state.saved)}</div>`
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-export="json" ${state.saved?'':'disabled'}>Exportă legătura JSON</button><button type="button" class="ghost mini" data-eu-link-export="md" ${state.saved&&state.markdown?'':'disabled'}>Exportă legătura Markdown</button></div>`;
+    const get=name=>section.querySelector('[data-eu-link-'+name+']');
+    const invalidate=()=>{state.preview=null;state.retry=null;state.confirmed=false;get('confirm').disabled=true;get('preview-result').textContent='Bază neconfirmată.';};
+    section.querySelectorAll('[data-eu-link-field]').forEach(input=>{
+      input.oninput=()=>{
+        const name=input.dataset.euLinkField;v[name]=input.value;
+        state.dirty=true;
+        state.confirmed=false;get('confirm').disabled=!state.preview||!!state.preview.blockers.length;
+        if(['revizie','celex','instantanee','locator'].includes(name))invalidate();
+        if(name==='revizie'){state.saved=null;state.history=[];state.loaded=false;get('saved-result').textContent='Revizie schimbată.';get('revision-label').textContent='Ultima revizie salvată disponibilă: '+saved.revizie+'. Selecția curentă: '+v.revizie+'.';section.querySelectorAll('[data-eu-link-export]').forEach(b=>b.disabled=true);}
+        if(name==='celex'){
+          v.instantanee='';v.locator='';state.snapshots=[];state.articles=[];state.moreSnapshots=false;state.moreArticles=false;
+          section.querySelector('[data-eu-link-field="instantanee"]').innerHTML='<option value="">Selectează explicit</option>';
+          section.querySelector('[data-eu-link-field="locator"]').innerHTML='<option value="">Selectează explicit</option>';
+          if(get('more-sources'))get('more-sources').hidden=true;if(get('more-articles'))get('more-articles').hidden=true;
+        }
+      };
+      input.onchange=()=>{
+        if(input.dataset.euLinkField==='instantanee'){
+          v.locator='';state.articles=[];state.articleOffset=0;state.moreArticles=false;
+          section.querySelector('[data-eu-link-field="locator"]').innerHTML='<option value="">Selectează explicit</option>';
+          if(v.instantanee)run(()=>loadArticles(0));
+        }
+        if(input.dataset.euLinkField==='revizie')run(()=>history());
+      };
+    });
+    const loadSources=async(offset=0)=>{
+      const data=await dossierApi('/api/ue/surse?'+new URLSearchParams({celex:v.celex,offset}));
+      const snapshots=[...(offset?state.snapshots:[]),...(data.curenta?.id?[data.curenta]:[]),...data.instantanee];
+      state.snapshots=snapshots.filter((s,i,a)=>a.findIndex(x=>x.id===s.id)===i);state.sourceOffset=offset;state.moreSnapshots=data.mai_multe;
+      state.status=state.snapshots.length?'Instantanee locale disponibile.':'Text UE lipsă sau nevalidat · legătura substantivă este blocată.';
+    };
+    const loadArticles=async(offset=0)=>{
+      const data=await dossierApi(EU_LINK_API+'/obligatii?'+new URLSearchParams({celex:v.celex,instantanee:v.instantanee,offset}));
+      state.articles=[...(offset?state.articles:[]),...data.articole];state.articleOffset=offset;state.moreArticles=data.mai_multe;
+      state.status=data.blockers.map(b=>b.code).join(', ')||'Articole din instantaneea selectată.';
+    };
+    get('sources').onclick=()=>run(()=>loadSources());
+    if(get('more-sources'))get('more-sources').onclick=()=>run(()=>loadSources(state.sourceOffset+20));
+    if(get('more-articles'))get('more-articles').onclick=()=>run(()=>loadArticles(state.articleOffset+50));
+    get('preview').onclick=()=>run(async()=>{state.preview=await dossierApi(EU_LINK_API+'/previzualizare',selected());state.retry=null;state.confirmed=false;});
+    get('confirm').onclick=()=>run(async()=>{
+      if(!state.preview||state.preview.blockers.length||state.confirmed)throw Error('Baza este blocată sau deja confirmată.');
+      const payload={...selected(),baza_sha256:state.preview.baza_sha256,autor:v.autor,ipoteza:v.ipoteza,obligatie:v.obligatie,motiv:v.motiv};
+      const fingerprint=JSON.stringify(payload);
+      if(state.retry?.fingerprint!==fingerprint)state.retry={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
+      const result=await dossierApi(EU_LINK_API,{...payload,id:state.retry.id});
+      state.retry=null;state.dirty=false;state.confirmed=true;state.saved=result;state.markdown=null;state.status='Ipoteză salvată · '+result.id;await history(0,result.id);
+    });
+    get('cancel').onclick=()=>{Object.assign(v,{autor:'',obligatie:'',motiv:''});invalidate();state.dirty=false;state.error='';render();};
+    get('refresh').onclick=()=>run(()=>history());
+    get('history').onchange=()=>{const id=get('history').value;run(()=>history(state.offset,id||null));};
+    get('prev').onclick=()=>run(()=>history(Math.max(0,state.offset-20)));
+    get('next').onclick=()=>run(()=>history(state.offset+20));
+    section.querySelectorAll('[data-eu-link-export]').forEach(button=>button.onclick=()=>{
+      if(!state.saved)return;const format=button.dataset.euLinkExport;
+      const url=URL.createObjectURL(new Blob([format==='md'?state.markdown:JSON.stringify(state.saved,null,2)],{type:format==='md'?'text/markdown;charset=utf-8':'application/json;charset=utf-8'}));
+      const link=document.createElement('a');link.href=url;link.download='legatura-ue-'+state.saved.id+'.'+format;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    });
+    if(state.busy)section.querySelectorAll('input,select,textarea,button').forEach(c=>c.disabled=true);
+  };
+  state.refresh=render;render();section.open=state.opened;
+  section.ontoggle=()=>{state.opened=section.open;if(section.open&&!state.loaded&&!state.busy)run(()=>history());};
+}
 function euSourceLanguage(language){return language==='RON'?'Română oficială':language==='ENG'?'Engleză oficială · alternativă la textul românesc':'Limbă necunoscută';}
 function euSourceMeta(source){
   return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>SHA-256 text extras: ${esc(source.text_sha256)}</p>`;

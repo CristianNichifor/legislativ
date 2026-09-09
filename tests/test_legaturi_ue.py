@@ -3,8 +3,8 @@ import sqlite3
 
 import pytest
 
-from scripts import achizitii_ue, dosare, interventii_propuneri, legaturi_ue as links
-from scripts import propuneri
+from scripts import achizitii_ue, interventii_propuneri, propuneri
+from scripts import legaturi_ue as links
 from tests import test_interventii_propuneri, test_propuneri
 from tests.test_dosare import request as http
 from tests.test_instantanee_ue import write
@@ -18,7 +18,10 @@ CELEX = "32018R1805"
 def linked_case(structured):
     state, path, run, req, intent = structured
     state.eu = path.with_name("eu.db")
-    write(state, "Articolul 1\nObligatie explicita de test.\nArticolul 2\nExceptii de test.")
+    write(
+        state,
+        "Articolul 1\nObligatii\nObligatie explicita de test.\nArticolul 2\nExceptii de test.",
+    )
     snapshot = achizitii_ue.detaliu(state, CELEX)["curenta"]["id"]
     preview = interventii_propuneri.pregateste(state, intent)
     proposal = propuneri.salveaza(
@@ -117,7 +120,8 @@ def test_hash_tampering_and_bounds(linked_case, monkeypatch):
         con.execute("UPDATE eu_acte SET text_sha256='invalid'")
         con.execute("DROP TRIGGER eu_instantanee_no_update")
         con.execute(
-            "UPDATE eu_instantanee SET snapshot_json=json_set(snapshot_json,'$.sursa.text','Forged')"
+            "UPDATE eu_instantanee "
+            "SET snapshot_json=json_set(snapshot_json,'$.sursa.text','Forged')"
         )
     assert (
         links.preview(state, selection)["blockers"][0]["code"]
@@ -136,3 +140,15 @@ def test_local_http_security_and_read_only_preview(linked_case):
     assert path.read_bytes() == before
     state.date_dir = "static"
     assert http(state, "POST", url, selection)[0] == 400
+
+
+@pytest.mark.parametrize(
+    "text", ["Articolul 1", "Articolul 1\nDefinitii\nArticolul 2\nAlta sectiune"]
+)
+def test_header_or_title_only_article_blocks_missing_body(linked_case, text):
+    state, _, selected = linked_case
+    write(state, text)
+    snapshot = achizitii_ue.detaliu(state, CELEX)["curenta"]["id"]
+    result = links.preview(state, {**selected, "instantanee": snapshot})
+    assert result["state"] == "blocked_missing_text"
+    assert result["substantive_candidate"] is None

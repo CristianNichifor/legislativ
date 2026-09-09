@@ -107,6 +107,7 @@ def test_v1_read_without_migration_then_atomic_upgrade_and_backup(saved, tmp_pat
         con.execute("DROP TABLE revizuiri")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE legaturi_ue")
         con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")

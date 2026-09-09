@@ -279,6 +279,7 @@ def test_schema6_reads_without_migration_and_failed_write_rolls_back(case):
     save_text(path, req)
     with sqlite3.connect(path) as con:
         con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE legaturi_ue")
         con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("PRAGMA user_version=6")

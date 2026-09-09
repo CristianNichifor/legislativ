@@ -18,6 +18,7 @@ def test_proposal_draft_retry_conflict_and_independent_cancel():
 const assert=require('node:assert/strict');
 const bindProposalHistory=()=>{};
 const bindProposalAnalysis=()=>{};
+const bindEuProposalLinks=()=>{};
 const bindStructuredProposal=()=>{};
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }

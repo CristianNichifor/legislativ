@@ -130,6 +130,7 @@ def test_legacy_read_only_atomic_upgrade_and_limits(saved, monkeypatch):
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")
+        con.execute("DROP TABLE legaturi_ue")
         con.execute("DROP TABLE dosare_stare")
         con.execute("DROP TABLE analize_propuneri")
         con.execute("DROP TABLE interventii_propuneri")

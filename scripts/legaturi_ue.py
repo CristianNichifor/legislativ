@@ -93,6 +93,14 @@ def _articles(snapshot):
     return articles, []
 
 
+def article_body(article):
+    """Exclude the parser's heading/title; presence is not a legal-obligation classifier."""
+    lines = article["text"].splitlines()[1:]
+    if lines and article["titlu"] and lines[0].strip() == article["titlu"].strip():
+        lines = lines[1:]
+    return "\n".join(lines).strip()
+
+
 def obligatii(stare, celex, snapshot_id, offset=0):
     """Read-only article selectors derived from the exact retained snapshot."""
     celex = achizitii_ue.celex_valid(celex)
@@ -167,6 +175,8 @@ def preview(stare, request):
             blockers.append(_block("eu", "ambiguous_or_missing_locator"))
         elif len(candidates[0]["text"]) > MAX_ARTICLE_CHARS:
             blockers.append(_block("eu", "capture_limit"))
+        elif not article_body(candidates[0]):
+            blockers.append(_block("eu", "missing_text"))
         else:
             article = candidates[0]
     contexts = revizuiri.lista(path, selected["dosar_id"], selected["rulare_id"])
