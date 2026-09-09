@@ -2,7 +2,9 @@
   "name": "legislativ-indexare",
   "private": true,
   "type": "module",
-  "description": "Doar pentru infra/pagefind.mjs: indexatorul de căutare. Aplicația nu are dependențe npm.",
+  "description": "Instrumente pentru indexarea Pagefind și testele de browser. Aplicația nu are dependențe npm.",
+  "scripts": { "test:browser": "playwright test" },
+  "devDependencies": { "@playwright/test": "1.63.0" },
   "dependencies": {
     "pagefind": "1.5.2"
   }
