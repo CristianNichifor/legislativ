@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -12,7 +13,7 @@ from scripts import dataset_release
 from scripts.publica import DE_ARUNCAT
 
 ROOT = Path(__file__).resolve().parents[1]
-PORT = 8058
+PORT = int(os.environ.get("BROWSER_SOURCE_PORT", "8058"))
 
 
 def fixtures():
@@ -133,6 +134,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    PORT = server.server_port
     server.payloads = fixtures()
     server.mode = "unpublished"
     server.serve_forever()

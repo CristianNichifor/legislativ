@@ -1,8 +1,9 @@
-// Serve the fixture build on 8057 and tests.browser_generation_fixture on 8058.
+// BROWSER_BASE_URL serves the fixture app; BROWSER_SOURCE_PORT selects its loopback source.
 const {chromium} = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const assert = require('node:assert/strict');
 const {execFileSync} = require('node:child_process');
-const base = process.env.BROWSER_BASE_URL || 'http://127.0.0.1:8057', source = 'http://127.0.0.1:8058';
+const base = process.env.BROWSER_BASE_URL || 'http://127.0.0.1:8057';
+const source = `http://127.0.0.1:${process.env.BROWSER_SOURCE_PORT || 8058}`;
 async function api(page, path, body) {
   return page.evaluate(async ({path, body}) => {
     const r = await Promise.race([fetch(path, body === undefined ? undefined : {method:'POST', body:JSON.stringify(body)}),
