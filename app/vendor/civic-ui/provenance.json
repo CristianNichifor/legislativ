@@ -1,0 +1,5 @@
+{
+  "release": "https://github.com/CristianNichifor/civic-ui/releases/download/v0.3.0/civic-ui-css-0.3.0.tgz",
+  "sha256": "644b181b1a061516ddfe7cbcbba9d94101e7e0b4f97f4a52c085cccba1f27226",
+  "files": ["LICENSE", "NATIVE.md", "native.css", "styles.css", "foundations.css", "controls.css", "themes/neutral.css", "themes/usr.css"]
+}

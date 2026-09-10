@@ -5,7 +5,9 @@ for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     const errors = [];
     const external = [];
+    const requests = [];
     page.on('pageerror', error => errors.push(error.message));
+    page.on('request', request => requests.push(request.url()));
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname !== '127.0.0.1') {
@@ -15,6 +17,11 @@ for (const width of [390, 1440]) {
       return route.continue();
     });
     await page.goto('/');
+    await expect(page.locator('#q')).toHaveClass(/civic-input/);
+    await expect(page.locator('#f-tip')).toHaveClass(/civic-select/);
+    await expect(page.locator('#f-an-min')).toHaveClass(/civic-select/);
+    await expect(page.locator('#f-an-max')).toHaveClass(/civic-select/);
+    expect(requests.some(url => url.endsWith('/vendor/civic-ui/styles.css'))).toBe(true);
     await page.locator('#tab-cauta').click();
     await expect(page.locator('#pane-cauta')).toBeVisible();
     await page.locator('#q').fill('registrul demonstrativ');

@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -1334,11 +1335,35 @@ def _client_cautare() -> None:
     print(f"  client de căutare → {tinta} ({n} fișiere)")
 
 
+def _civic_ui() -> None:
+    """Copy the pinned Civic UI assets referenced by the static shell."""
+    allowlist = (
+        Path("civic-ui-adapter.css"),
+        Path("vendor/civic-ui/LICENSE"),
+        Path("vendor/civic-ui/NATIVE.md"),
+        Path("vendor/civic-ui/native.css"),
+        Path("vendor/civic-ui/styles.css"),
+        Path("vendor/civic-ui/foundations.css"),
+        Path("vendor/civic-ui/controls.css"),
+        Path("vendor/civic-ui/themes/neutral.css"),
+        Path("vendor/civic-ui/themes/usr.css"),
+        Path("vendor/civic-ui/provenance.json"),
+    )
+    for relative in allowlist:
+        source = ROOT / "app" / relative
+        if not source.is_file():
+            raise SystemExit(f"lipsește asset-ul Civic UI: {source}")
+        target = WEB / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    print(f"  Civic UI → {WEB / 'vendor/civic-ui'}")
+
+
 def _pagina(
     depozit: str = "", felii_cautare: int = 0, *, channel=PUBLIC_CHANNEL, allow_loopback=False
 ) -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
-    if "<head>" not in sursa or "<body>" not in sursa:
+    if "<head>" not in sursa or not re.search(r"<body(?:\s[^>]*)?>", sursa):
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
     _public_config(channel, allow_loopback)
     policy = _csp(depozit)
@@ -1364,7 +1389,9 @@ def _pagina(
         )
     felii = felii or 1
     boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
-    pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
+    pagina = re.sub(
+        r"<body(?:\s[^>]*)?>", lambda match: f"{match.group(0)}\n{boot}", pagina, count=1
+    )
     # The shared page describes localhost storage; only the browser build changes this copy.
     pagina = pagina.replace(
         "Nu se salvează în browser și nu se trimite altor persoane.",
@@ -1433,6 +1460,7 @@ def main(
     _worker(depozit, channel=channel, allow_loopback=allow_loopback)
     _fonturi()
     _client_cautare()
+    _civic_ui()
     _pagina(depozit, felii_cautare, channel=channel, allow_loopback=allow_loopback)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")

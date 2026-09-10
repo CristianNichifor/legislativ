@@ -1,0 +1,38 @@
+/* Civic UI v0.3.0, checksum-verified from the public CSS-only release. Keep the
+   document-workspace palette in charge; this adapter only maps existing tokens. */
+.civic-legislativ {
+  --civic-bg: var(--paper);
+  --civic-surface: var(--surface);
+  --civic-raised: var(--sunk);
+  --civic-text: var(--ink);
+  --civic-muted: var(--ink-mute);
+  --civic-border: var(--rule);
+  --civic-focus: var(--accent);
+  --civic-action: var(--accent);
+  --civic-action-hover: var(--accent-dark, var(--accent));
+  --civic-accent: var(--red, #b33a2b);
+  --civic-danger: var(--red, #b33a2b);
+  --civic-on-action: #fff;
+}
+.civic-legislativ #q,
+.civic-legislativ #f-tip,
+.civic-legislativ #f-an-min,
+.civic-legislativ #f-an-max {
+  font: inherit;
+  letter-spacing: 0;
+}
+.civic-legislativ #q {
+  min-height: 44px;
+}
+.civic-legislativ .cauta-filtre {
+  align-items: start;
+}
+.civic-legislativ .cauta-filtre .civic-select {
+  min-height: 44px;
+}
+@media (max-width: 700px) {
+  .civic-legislativ .cauta-filtre {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

@@ -1064,6 +1064,9 @@
   footer{margin-top:3rem;padding-top:1rem;border-top:1px solid var(--rule);font-family:var(--sans);
     font-size:.76rem;color:var(--ink-mute)}
 </style>
+<link rel="stylesheet" href="vendor/civic-ui/styles.css">
+<link rel="stylesheet" href="vendor/civic-ui/themes/neutral.css">
+<link rel="stylesheet" href="civic-ui-adapter.css">
 <script>
   // Apply the saved theme before the body paints, so there is no flash of the wrong palette.
   // No value = follow the OS (prefers-color-scheme); "light"/"dark" pin it.
@@ -1071,7 +1074,7 @@
     if(t==="light"||t==="dark") document.documentElement.dataset.theme=t; }catch(e){} })();
 </script>
 </head>
-<body>
+  <body class="civic-scope civic-legislativ">
 <div class="wrap">
   <header>
     <p class="eyebrow">legislativ · verificare și redactare de acte normative</p>
@@ -1404,9 +1407,9 @@
 
       <div id="pane-cauta" role="tabpanel" aria-labelledby="tab-cauta" hidden>
         <label for="q">Caută în text (fără diacritice contează la fel)</label>
-        <input type="search" id="q" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
+        <input type="search" id="q" class="civic-input" placeholder="ex.: anunț de participare, normă metodologică, cumul de funcții">
         <div class="cauta-filtre">
-          <select id="f-tip" title="Filtrează după tipul actului">
+          <select id="f-tip" class="civic-select civic-select--native" title="Filtrează după tipul actului">
             <option value="">toate tipurile</option>
             <option value="lege">lege</option>
             <option value="oug">ordonanță de urgență</option>
@@ -1416,9 +1419,9 @@
             <option value="decizie">decizie</option>
             <option value="decret">decret</option>
           </select>
-          <select id="f-an-min" class="f-an ani" title="Filtrează de la anul"
+          <select id="f-an-min" class="f-an ani civic-select civic-select--native" title="Filtrează de la anul"
             data-gol="an de la"></select>
-          <select id="f-an-max" class="f-an ani" title="Filtrează până la anul"
+          <select id="f-an-max" class="f-an ani civic-select civic-select--native" title="Filtrează până la anul"
             data-gol="până la"></select>
           <span class="hint">Enter pentru a căuta · în toate prevederile din corpus</span>
         </div>

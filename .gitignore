@@ -56,6 +56,8 @@ web/dataset-updates.js
 web/sw.js
 # copied here from app/fonts/ by the build; app/fonts/ is the committed source
 web/fonts/
+web/civic-ui-adapter.css
+web/vendor/civic-ui/
 
 # jurnalul colectării supravegheate
 colector-supravegheat.log

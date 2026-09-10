@@ -72,3 +72,13 @@ the other engines still execute the actual generated worker and Python code.
 This baseline found and guards a no-object-store Pagefind base-path bug: a relative
 `./pagefind/` resolved from the client module to `/pagefind/pagefind/`. Resolving the
 index base against the document URL preserves root and nested deployments.
+
+## Civic UI adoption
+
+The search surface now opts into Civic UI v0.3.0's native CSS contract for its
+search input and type/year selects. The CSS-only archive is vendored under
+`app/vendor/civic-ui/` with its public-release checksum in `provenance.json`;
+there is no React runtime or remote stylesheet dependency. Existing document
+tokens remain authoritative through `civic-ui-adapter.css`. Other editors,
+dialogs, graph controls and domain-specific actions remain on their existing
+styles until each has an equivalent browser baseline.
