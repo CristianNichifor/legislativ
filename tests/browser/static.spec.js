@@ -62,7 +62,7 @@ test(`real worker, Pagefind and warm offline at ${path}`, async ({ page, context
   });
   expect(keys.some(url => url.endsWith('/worker.js'))).toBe(true);
   expect(keys.some(url => url.includes('/pagefind/'))).toBe(true);
-  expect(keys.some(url => url.includes('cdn.jsdelivr.net'))).toBe(false);
+  expect(keys.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
   expect(requests.filter(url => /\/api\/|\/corpus\.db/.test(url))).toEqual([]);
   await page.screenshot({ path: info.outputPath('static-search-online.png'), fullPage: true });
   await context.setOffline(true);
