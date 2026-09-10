@@ -23,6 +23,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
       const page = await browser.newPage({viewport: {width, height: 1000}});
       let status = initial(), unsupported = false, unavailable = true;
       let posts = [], gets = 0, documents = 0;
+      let reconcileWait = null, reconcileRelease;
       const unexpected = [], errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.route('**/*', async route => {
@@ -42,8 +43,8 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
           if (unsupported) return route.fulfill({status: 404, body: '{}'});
           if (request.method() === 'POST') {
             const body = request.postDataJSON(); posts.push(body);
-            assert.deepEqual(Object.keys(body).sort(), body.action === 'check'
-              ? ['action'] : ['action', 'sha256']);
+            assert.deepEqual(Object.keys(body).sort(), ['download', 'activate'].includes(body.action)
+              ? ['action', 'sha256'] : ['action']);
             if (body.action === 'check' && unavailable) {
               return route.fulfill({status: 404, json: {error: 'Canalul nu este publicat.'}});
             }
@@ -53,13 +54,16 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
             };
             if (body.action === 'cancel') status.progress.state = 'cancelled';
             if (body.action === 'activate') {
+              await new Promise(resolve => setTimeout(resolve, width === 1280 ? 11000 : 200));
               status.active = {release: '2026-09-10', generation: 'new', previous: 'old'};
               status.progress.state = 'active';
             }
             if (body.action === 'rollback') {
               status.active = {release: '2026-09-09', generation: 'old', previous: 'new'};
+              reconcileWait = new Promise(resolve => { reconcileRelease = resolve; });
+              return route.abort('connectionfailed');
             }
-          } else gets++;
+          } else { gets++; if (reconcileWait) await reconcileWait; }
           return route.fulfill({json: status});
         }
         unexpected.push(url.href);
@@ -83,13 +87,15 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
       unavailable = false;
       await button('check').click();
       await button('download').waitFor({state: 'visible'});
+      await button('check').click();
+      await page.waitForFunction(() => !document.querySelector('[data-action="check"]').disabled);
       assert.match(await host.locator('[data-offer]').innerText(), /2026-09-10 · 8 MiB/);
       page.once('dialog', dialog => {
         assert.match(dialog.message(), /2026-09-10 \(8 MiB\)/);
         dialog.dismiss();
       });
       await button('download').click();
-      assert.equal(posts.length, 2);
+      assert.equal(posts.length, 3);
       page.once('dialog', dialog => dialog.accept());
       await button('download').click();
       await button('cancel').waitFor({state: 'visible'});
@@ -117,7 +123,18 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
       await page.evaluate(() => { window.unsaved = false; });
       page.once('dialog', dialog => dialog.accept());
       await button('activate').click();
+      await page.waitForFunction(() => document.querySelector('#dataset-updates').getAttribute('aria-busy') === 'true');
+      assert.match(await host.locator('[data-status]').innerText(), /Activez versiunea/);
+      assert.equal(await page.locator('#draft').evaluate(el => !!el.closest('[inert]')), true);
+      const getsDuringActivation = gets;
+      if (width === 1280) {
+        await page.waitForTimeout(10500);
+        assert.match(await host.locator('[data-status]').innerText(), /Activez versiunea/);
+        assert.equal(await button('activate').isDisabled(), true);
+        assert.equal(gets, getsDuringActivation, 'Do not poll while synchronous mutation is pending');
+      }
       await button('reload').waitFor({state: 'visible'});
+      assert.equal(await page.locator('#draft').evaluate(el => !!el.closest('[inert]')), false);
       assert.equal(documents, 1, 'Activation must not reload automatically');
       assert.equal(await page.locator('#draft').inputValue(), 'Ciornă privată');
       await page.evaluate(() => { window.unsaved = true; });
@@ -128,10 +145,17 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
       await page.evaluate(() => { window.unsaved = false; });
       page.once('dialog', dialog => dialog.accept());
       await button('rollback').click();
+      await host.locator('[data-error]').filter({hasText: 'nu este confirmat'}).waitFor();
+      assert.equal(await button('rollback').isDisabled(), true);
+      assert.equal(await page.locator('#draft').evaluate(el => !!el.closest('[inert]')), true);
+      assert.doesNotMatch(await host.innerText(), /Versiunea instalată este păstrată/);
+      assert.match(await host.locator('[data-active]').innerText(), /Ultima versiune confirmată/);
+      reconcileRelease();
       await page.waitForFunction(() => document.querySelector('[data-active]').textContent.includes('2026-09-09'));
+      assert.equal(await page.locator('#draft').evaluate(el => !!el.closest('[inert]')), false);
       status.progress = {state: 'error', error: 'Spațiu insuficient <img src=x>'};
       await host.locator('[data-error]').filter({hasText: 'Spațiu insuficient'}).waitFor();
-      assert.match(await host.innerText(), /Versiunea instalată este păstrată/);
+      assert.match(await host.locator('[data-active]').innerText(), /Versiune instalată: 2026-09-09/);
       assert.equal(await host.locator('img').count(), 0);
       assert.equal(await page.evaluate(() => {
         const host = document.querySelector('#dataset-updates');

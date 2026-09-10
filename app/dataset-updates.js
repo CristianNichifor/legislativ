@@ -43,6 +43,19 @@
   };
   let status = null, busy = false, stopped = false, timer = null;
   let initialGeneration, reloadNeeded = false, message = '';
+  let pendingMutation = '', uncertain = false, locked = [];
+  function lockWorkspace(lock) {
+    if (lock && !locked.length) {
+      for (let child = host; child.parentElement; child = child.parentElement) {
+        for (const sibling of child.parentElement.children) {
+          if (sibling !== child) { locked.push([sibling, sibling.inert]); sibling.inert = true; }
+        }
+        if (child.parentElement === document.body) break;
+      }
+    } else if (!lock) {
+      locked.forEach(([element, inert]) => { element.inert = inert; }); locked = [];
+    }
+  }
   const transfer = () => ['downloading', 'verifying'].includes(status?.progress?.state);
   const offerSize = () => status?.offer?.manifest?.files?.reduce((n, f) => n + f.bytes, 0);
   function render() {
@@ -52,7 +65,8 @@
     host.hidden = false;
     host.dataset.empty = String(!active?.release);
     node('active').textContent = active?.release
-      ? `Versiune instalată: ${active.release}` : 'Nicio bază legislativă instalată.';
+      ? `${uncertain ? 'Ultima versiune confirmată' : 'Versiune instalată'}: ${active.release}`
+      : 'Nicio bază legislativă instalată.';
     node('offer').textContent = offer
       ? `Versiune disponibilă: ${offer.manifest.release} · ${size(offerSize())}` : '';
     const labels = {
@@ -63,6 +77,14 @@
     };
     node('status').textContent = reloadNeeded
       ? 'Datele active s-au schimbat. Reîncarcă pagina când ai păstrat ciornele.' : labels[state] || '';
+    if (pendingMutation || uncertain) {
+      const spinner = document.createElement('span');
+      spinner.className = 'spin'; spinner.setAttribute('aria-hidden', 'true');
+      node('status').replaceChildren(spinner, document.createTextNode(uncertain
+        ? ' Verific starea operației pe server…'
+        : pendingMutation === 'activate' ? ' Activez versiunea…' : ' Revin la versiunea anterioară…'));
+    }
+    host.setAttribute('aria-busy', String(!!pendingMutation || uncertain));
     node('file').textContent = transfer() && progress.file
       ? `${progress.file} · ${size(progress.file_bytes)}` : '';
     const bar = node('progress');
@@ -73,8 +95,7 @@
     } else bar.removeAttribute('value');
     const error = message || progress.error;
     node('error').hidden = !error;
-    node('error').textContent = error
-      ? `${error}${active?.release ? ' Versiunea instalată este păstrată.' : ''}` : '';
+    node('error').textContent = error || '';
     node('private').hidden = status.private_data_uploaded !== false;
     for (const button of buttons) {
       const action = button.dataset.action;
@@ -84,7 +105,7 @@
         rollback: !!active?.previous && !transfer(), reload: reloadNeeded,
       };
       button.hidden = !visible[action];
-      button.disabled = busy || (action === 'check' && transfer());
+      button.disabled = busy || uncertain || (action === 'check' && transfer());
     }
   }
   function accept(data) {
@@ -107,7 +128,7 @@
     return false;
   }
   async function request(action) {
-    if (busy || stopped) return;
+    if (busy || stopped || (uncertain && action)) return;
     if (['activate', 'rollback', 'reload'].includes(action) && !draftsSafe()) return;
     if (action === 'reload') { window.location.reload(); return; }
     const offer = status?.offer;
@@ -118,14 +139,18 @@
       ? `Activezi versiunea ${offer?.manifest?.release || 'verificată'}?`
       : 'Revii la versiunea anterioară?')) return;
     busy = true;
+    const mutation = ['activate', 'rollback'].includes(action);
+    pendingMutation = mutation ? action : '';
+    if (mutation) lockWorkspace(true);
     if (action) message = '';
     clearTimeout(timer); render();
     try {
       const response = await fetch('/api/date', {
         method: action ? 'POST' : 'GET', cache: 'no-store', redirect: 'error',
-        signal: AbortSignal.timeout(10000),
+        ...(!mutation && !uncertain ? {signal: AbortSignal.timeout(10000)} : {}),
         ...(action ? {headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({action, ...(offer?.sha256 ? {sha256: offer.sha256} : {})})} : {}),
+          body: JSON.stringify({action, ...(['download', 'activate'].includes(action)
+            ? {sha256: offer?.sha256} : {})})} : {}),
       });
       if (!status && !action && [404, 405, 501].includes(response.status)) {
         stopped = true; host.hidden = true; return;
@@ -133,16 +158,27 @@
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || (response.status === 404
         ? 'Canalul de actualizări nu este disponibil.' : 'Cererea locală nu a reușit.'));
+      if (status && (data?.mode !== 'local' || !data.progress)) {
+        throw new Error('Starea locală nu poate fi confirmată.');
+      }
+      if (uncertain) { uncertain = false; message = ''; }
       accept(data);
       if (['activate', 'rollback'].includes(action) && status) reloadNeeded = true;
     } catch (error) {
-      message = error.message || 'Starea locală nu poate fi citită.';
+      uncertain ||= mutation;
+      message = uncertain
+        ? 'Rezultatul operației nu este confirmat. Serverul poate continua schimbarea datelor.'
+        : error.message || 'Starea locală nu poate fi citită.';
     } finally {
-      busy = false;
+      busy = false; pendingMutation = '';
+      if (!uncertain) lockWorkspace(false);
       if (!stopped) { render(); timer = setTimeout(() => request(), 2500); }
     }
   }
   buttons.forEach(button => button.addEventListener('click', () => request(button.dataset.action)));
+  window.addEventListener('beforeunload', event => {
+    if (pendingMutation || uncertain) { event.preventDefault(); event.returnValue = ''; }
+  });
   window.addEventListener('pagehide', () => { stopped = true; clearTimeout(timer); });
   request();
 })();

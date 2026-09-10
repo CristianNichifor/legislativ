@@ -143,14 +143,23 @@ owners, outside this change.
 Startup and periodic polling only GET the local `/api/date` status. Unsupported
 endpoints and non-local modes hide the panel. Checking the trusted channel is an
 explicit POST action. Download confirmation shows the offered version and total
-size, and the POST pins the offer's SHA-256. The UI sends only action and offer hash,
-never editor or private workspace contents.
+size. Only `download` and `activate` POST `{action, sha256}` to pin the offer;
+`check`, `cancel` and `rollback` POST exactly `{action}`. The UI never sends editor
+or private workspace contents.
 
 Ready downloads require explicit activation. Activation, rollback and the separate
 reload button honor the app's existing cancellable `beforeunload` draft guards.
 No automatic reload occurs. Transfer failures leave the current version visible;
 the server remains responsible for preserving the active release and validating
 all state transitions. The panel is separate from browser workspace storage UI.
+Activation and rollback have no client deadline: full corpus verification and EU
+merging may take minutes. A spinner marks the pending mutation, update controls
+are disabled, and the surrounding workspace is temporarily inert to prevent edits.
+No status polling runs until that request settles. A lost mutation response is
+treated as uncertain, never as proof that the installed release was preserved;
+only a subsequent successful local status read unlocks the workspace. This read
+also has no deadline while reconciling a mutation. Failed mutations are never
+automatically retried.
 
 Offline browser checks (desktop and mobile, mocked HTTP only):
 
