@@ -232,14 +232,20 @@ def test_recovery_navigation_guard_tracks_edits_and_pending_saves():
 
 
 @pytest.mark.parametrize("route", ["metadate", "ciorne"])
-def test_static_worker_rejects_recovery_and_metadata(route):
-    source = (Path(__file__).parents[1] / "scripts/construieste_web.py").read_text()
-    branch = source.split("    elif path in ('/api/dosare'", 1)[1].split(
-        "    elif path == '/api/inventar-surse'", 1
-    )[0]
-    scope = {"path": "/api/dosare/" + route}
-    exec("if path in ('/api/dosare'" + branch, scope)
-    assert "numai în aplicația locală" in scope["out"]["error"]
+def test_static_worker_routes_recovery_and_metadata_to_private_workspace(state, route):
+    from scripts.browser_workspace import route as browser_route
+
+    state.dosare_db = state.initiative.with_name("browser-private.db")
+    state.date_dir = "public-slices"
+    create(state)
+    body = {"id": ID, "titlu": "Browser dossier", "arhivat": False, "revizie": 0}
+    if route == "ciorne":
+        body = editor()
+    result = browser_route(state, "/api/dosare/" + route, {}, body, "POST")
+    assert result["revizie"] == 1
+    loaded = browser_route(state, "/api/dosare/" + route, {"id": [body["id"]]}, {}, "GET")
+    assert loaded == result
+    assert not state.initiative.with_suffix(".dosare.db").exists()
 
 
 @pytest.mark.parametrize("version", [True, False, 1.0, "1"])

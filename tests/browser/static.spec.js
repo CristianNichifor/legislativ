@@ -65,7 +65,9 @@ test(`real worker, Pagefind and warm offline at ${path}`, async ({ page, context
   expect(keys.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
   expect(requests.filter(url => /\/api\//.test(url))).toEqual([]);
   const fixtureCorpusRequests = requests.filter(url => /\/corpus\.db/.test(url));
-  expect(fixtureCorpusRequests).toEqual([new URL(`${path}data/corpus.db`, page.url()).href]);
+  // Chromium reports both the worker request and its service-worker forwarding.
+  expect([...new Set(fixtureCorpusRequests)]).toEqual([new URL(`${path}data/corpus.db`, page.url()).href]);
+  expect(fixtureCorpusRequests.length).toBeLessThanOrEqual(2);
   await page.screenshot({ path: info.outputPath('static-search-online.png'), fullPage: true });
   await context.setOffline(true);
   await lint(page, 47);
