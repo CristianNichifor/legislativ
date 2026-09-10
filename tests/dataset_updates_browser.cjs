@@ -21,7 +21,8 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
   try {
     for (const width of [1280, 390]) {
       const page = await browser.newPage({viewport: {width, height: 1000}});
-      let status = initial(), unsupported = false, posts = [], gets = 0, documents = 0;
+      let status = initial(), unsupported = false, unavailable = true;
+      let posts = [], gets = 0, documents = 0;
       const unexpected = [], errors = [];
       page.on('pageerror', error => errors.push(error.message));
       await page.route('**/*', async route => {
@@ -43,6 +44,9 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
             const body = request.postDataJSON(); posts.push(body);
             assert.deepEqual(Object.keys(body).sort(), body.action === 'check'
               ? ['action'] : ['action', 'sha256']);
+            if (body.action === 'check' && unavailable) {
+              return route.fulfill({status: 404, json: {error: 'Canalul nu este publicat.'}});
+            }
             if (body.action === 'check') status = {...status, offer, progress: {state: 'checked'}};
             if (body.action === 'download') status.progress = {
               state: 'downloading', bytes: 1024, total: 8388608, file: 'corpus.db', file_bytes: 1024,
@@ -72,6 +76,12 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
       assert.ok(gets >= 2);
       assert.equal(posts.length, 0, 'Startup/poll must never check the remote channel');
       await button('check').click();
+      await host.locator('[data-error]').filter({hasText: 'Canalul nu este publicat'}).waitFor();
+      assert.equal(await host.isVisible(), true);
+      assert.equal(await button('download').isVisible(), false);
+      assert.equal(await button('activate').isVisible(), false);
+      unavailable = false;
+      await button('check').click();
       await button('download').waitFor({state: 'visible'});
       assert.match(await host.locator('[data-offer]').innerText(), /2026-09-10 · 8 MiB/);
       page.once('dialog', dialog => {
@@ -79,7 +89,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
         dialog.dismiss();
       });
       await button('download').click();
-      assert.equal(posts.length, 1);
+      assert.equal(posts.length, 2);
       page.once('dialog', dialog => dialog.accept());
       await button('download').click();
       await button('cancel').waitFor({state: 'visible'});

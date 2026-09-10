@@ -127,11 +127,12 @@
         ...(action ? {headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({action, ...(offer?.sha256 ? {sha256: offer.sha256} : {})})} : {}),
       });
-      if ([404, 405, 501].includes(response.status)) {
+      if (!status && !action && [404, 405, 501].includes(response.status)) {
         stopped = true; host.hidden = true; return;
       }
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Cererea locală nu a reușit.');
+      if (!response.ok) throw new Error(data.error || (response.status === 404
+        ? 'Canalul de actualizări nu este disponibil.' : 'Cererea locală nu a reușit.'));
       accept(data);
       if (['activate', 'rollback'].includes(action) && status) reloadNeeded = true;
     } catch (error) {
