@@ -35,15 +35,53 @@ CORE_COLUMNS = {
             "vigoare",
             "sursa_url",
             "citit_la",
+            "republicat_din",
+            "id_portal",
+            "id_act_portal",
         },
         "provizii": {"act_id", "locator", "ord", "text", "vigoare_de_la", "vigoare_pana_la"},
     },
-    "initiative.db": {"initiative": {"plx_id", "titlu", "obiect", "stadiu", "sursa_url"}},
+    "initiative.db": {
+        "initiative": {
+            "plx_id",
+            "cam",
+            "idp",
+            "senat_id",
+            "tip",
+            "titlu",
+            "obiect",
+            "urgenta",
+            "stadiu",
+            "camera_decizionala",
+            "data_inreg",
+            "sursa_url",
+            "citit_la",
+        }
+    },
     "graf.db": {
         "muchii": {"din_act", "din_locator", "catre_act", "locator", "fel", "incredere", "de_la"}
     },
     "eu.db": {"eu_acte": {"celex", "text", "text_sha256", "limba", "citit_la"}},
 }
+
+
+class CommittedWriteError(OSError):
+    """The pointer changed, but the final directory flush could not be confirmed."""
+
+
+def sync_directory(path):
+    if os.name == "nt":
+        return
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def sync_file(path):
+    with Path(path).open("rb") as stream:
+        os.fsync(stream.fileno())
 
 
 def digest(path):
@@ -62,7 +100,14 @@ def atomic_json(path, data):
             json.dump(data, stream, ensure_ascii=False, sort_keys=True, allow_nan=False)
             stream.flush()
             os.fsync(stream.fileno())
+        sync_directory(path.parent)
         os.replace(temporary, path)
+        try:
+            sync_directory(path.parent)
+        except OSError as exc:
+            raise CommittedWriteError(
+                "Pointer schimbat; persistenta pe disc nu poate fi confirmata."
+            ) from exc
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -176,13 +221,16 @@ class DatasetManager:
                     state="ready" if ready else "checked",
                     total=sum(f["bytes"] for f in offer["manifest"]["files"]),
                 )
+                active = self.active()
+                if active and active["generation"] == offer["sha256"]:
+                    self.progress["state"] = "active"
             except (OSError, ValueError, TypeError, KeyError):
                 self.progress.update(
                     state="error", error="Oferta locala este invalida; verifica din nou sursa."
                 )
 
     def _validate_offer(self, offer):
-        if not isinstance(offer, dict):
+        if not isinstance(offer, dict) or not isinstance(offer.get("manifest_text"), str):
             raise ValueError("Oferta invalida.")
         raw = offer["manifest_text"].encode("utf-8")
         if hashlib.sha256(raw).hexdigest() != offer["sha256"]:
@@ -260,12 +308,18 @@ class DatasetManager:
                 "total": sum(f["bytes"] for f in manifest["files"]),
                 "error": "",
             }
+            active = self.active()
+            if active and active["generation"] == self.offer["sha256"]:
+                self.progress["state"] = "active"
         return self.status()
 
     def start(self, fingerprint):
         with self.lock:
             if not self.offer or fingerprint != self.offer["sha256"]:
                 raise ValueError("Verifica si confirma oferta curenta.")
+            active = self.active()
+            if active and active["generation"] == fingerprint:
+                raise ValueError("Versiunea este deja activa.")
             if self.thread and self.thread.is_alive():
                 return self.status()
             offer = json.loads(json.dumps(self.offer))
@@ -330,6 +384,19 @@ class DatasetManager:
             if path.stat().st_size != item["bytes"] or digest(path) != item["sha256"]:
                 raise ValueError("Integritatea copiei locale nu poate fi confirmata.")
             if path.suffix == ".db":
+                if any(
+                    path.with_name(path.name + suffix).exists()
+                    for suffix in ("-wal", "-shm", "-journal")
+                ):
+                    raise ValueError("Baza descarcata are fisiere SQLite auxiliare nepermise.")
+                with path.open("rb") as stream:
+                    header = stream.read(100)
+                if (
+                    len(header) != 100
+                    or header[:16] != b"SQLite format 3\x00"
+                    or header[18:20] != b"\x01\x01"
+                ):
+                    raise ValueError("Baza descarcata nu este un snapshot SQLite autonom.")
                 with closing(
                     sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
                 ) as con:
@@ -376,14 +443,17 @@ class DatasetManager:
                     self._set(bytes=done)
                 self._set(state="verifying")
                 self.verify(folder, offer["manifest"])
-                (folder / "dataset-release.json").write_text(
-                    offer["manifest_text"], encoding="utf-8"
-                )
+                manifest_path = folder / "dataset-release.json"
+                manifest_path.write_text(offer["manifest_text"], encoding="utf-8")
+                sync_file(manifest_path)
+                sync_directory(folder)
                 destination = self.home / "datasets" / offer["sha256"]
                 if not destination.exists():
                     os.replace(folder, destination)
                 else:
                     self.verify(destination, offer["manifest"])
+                sync_directory(destination.parent)
+                sync_directory(folder.parent)
                 self._set(state="ready", file="", file_bytes=0)
         except Exception as exc:
             self._set(
@@ -408,10 +478,33 @@ class DatasetManager:
             record = self._record(fingerprint, self.offer["manifest"]["release"], old)
             # Build/validate a complete runtime before changing the only active pointer.
             state = state_factory(record)
+            return self._publish(record, state)
+
+    def _publish(self, record, state):
+        folder = self.home / "datasets" / record["generation"]
+        for path in folder.iterdir():
+            if path.is_file():
+                sync_file(path)
+        sync_directory(folder)
+        sync_directory(folder.parent)
+        private = self.home / "private" / "eu-generations" / record["private_generation"]
+        if private.is_dir():
+            for path in private.iterdir():
+                if path.is_file():
+                    sync_file(path)
+            sync_directory(private)
+            sync_directory(private.parent)
+            sync_directory(private.parent.parent)
+        # Flush generation directory entries before making their pointer durable.
+        try:
             atomic_json(self.home / "active.json", record)
+        except CommittedWriteError as exc:
             self.current_state = state
-            self.progress.update(state="active", error="")
-            return self.status()
+            self.progress.update(state="active", error=str(exc))
+            raise
+        self.current_state = state
+        self.progress.update(state="active", error="")
+        return self.status()
 
     @staticmethod
     def _record(fingerprint, release, old):
@@ -439,10 +532,7 @@ class DatasetManager:
             self.verify(folder, manifest)
             record = self._record(previous["generation"], manifest["release"], old)
             state = state_factory(record)
-            atomic_json(self.home / "active.json", record)
-            self.current_state = state
-            self.progress.update(state="active", error="")
-            return self.status()
+            return self._publish(record, state)
 
     def cancel(self):
         self.cancelled.set()

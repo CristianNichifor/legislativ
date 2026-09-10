@@ -217,6 +217,70 @@ def test_tampered_pending_cannot_escape_private_root(setup):
     assert restarted.progress["state"] == "error"
 
 
+@pytest.mark.parametrize("value", [None, [], 12, {}])
+def test_malformed_pending_offer_does_not_prevent_startup(setup, value):
+    manager, transport = setup
+    local.atomic_json(manager.home / "pending.json", {"manifest_text": value})
+    restarted = local.DatasetManager(manager.home, transport=transport)
+    assert restarted.offer is None
+    assert restarted.progress["state"] == "error"
+
+
+@pytest.mark.parametrize("suffix", ["-wal", "-shm", "-journal"])
+def test_unlisted_sqlite_sidecars_prevent_activation(setup, suffix):
+    manager, _ = setup
+    fingerprint = download(manager)
+    folder = manager.home / "datasets" / fingerprint
+    (folder / ("corpus.db" + suffix)).write_bytes(b"unverified")
+    with pytest.raises(ValueError, match="auxiliare"):
+        manager.activate(fingerprint, lambda record: record)
+    assert manager.active() is None
+
+
+def test_wal_header_cannot_pass_even_without_sidecars(setup):
+    manager, transport = setup
+    payload = bytearray(transport.payload)
+    payload[18:20] = b"\x02\x02"
+    transport.payload = bytes(payload)
+    transport.publish("2026-09-11")
+    download(manager)
+    assert manager.progress["state"] == "error"
+    assert "autonom" in manager.progress["error"]
+
+
+def test_generation_flush_failure_keeps_old_pointer(setup, monkeypatch):
+    manager, _ = setup
+    fingerprint = download(manager)
+    manager.current_state = "old"
+
+    def fail(path):
+        raise OSError("flush failed")
+
+    monkeypatch.setattr(local, "sync_directory", fail)
+    with pytest.raises(OSError, match="flush"):
+        manager.activate(fingerprint, lambda record: "new")
+    assert manager.active() is None
+    assert manager.current_state == "old"
+
+
+def test_post_replace_flush_failure_keeps_runtime_consistent_with_pointer(setup, monkeypatch):
+    manager, _ = setup
+    fingerprint = download(manager)
+    original = local.atomic_json
+
+    def uncertain(path, data):
+        original(path, data)
+        raise local.CommittedWriteError("flush uncertain")
+
+    monkeypatch.setattr(local, "atomic_json", uncertain)
+    with pytest.raises(local.CommittedWriteError, match="uncertain"):
+        manager.activate(fingerprint, lambda record: "new")
+    assert manager.active()["generation"] == fingerprint
+    assert manager.current_state == "new"
+    assert manager.progress["state"] == "active"
+    assert manager.progress["error"] == "flush uncertain"
+
+
 def test_activation_rechecks_completed_file(setup):
     manager, _ = setup
     fingerprint = download(manager)
@@ -232,11 +296,27 @@ def test_no_previous_rollback(setup):
         manager.rollback(lambda record: record)
 
 
+def test_rechecking_active_release_does_not_replace_previous_generation(setup):
+    manager, transport = setup
+    first = download(manager)
+    manager.activate(first, lambda record: record)
+    transport.publish("2026-09-11")
+    second = download(manager)
+    manager.activate(second, lambda record: record)
+    old = manager.active()
+    manager.check()
+    assert manager.progress["state"] == "active"
+    with pytest.raises(ValueError, match="deja activa"):
+        manager.start(second)
+    assert manager.active() == old
+    restarted = local.DatasetManager(manager.home, transport=transport)
+    assert restarted.progress["state"] == "active"
+
+
 def test_lock_blocks_another_manager(setup):
     manager, _ = setup
-    with local.update_lock(manager.home), pytest.raises(OSError):
-        with local.update_lock(manager.home):
-            pytest.fail("second writer acquired lock")
+    with local.update_lock(manager.home), pytest.raises(OSError), local.update_lock(manager.home):
+        pytest.fail("second writer acquired lock")
 
 
 def test_low_disk_does_not_start_payload_transfer(setup, monkeypatch):
