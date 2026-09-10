@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -1152,7 +1153,7 @@ def _client_cautare() -> None:
 
 def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
-    if "<head>" not in sursa or "<body>" not in sursa:
+    if "<head>" not in sursa or not re.search(r"<body(?:\s[^>]*)?>", sursa):
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
     csp = f'<meta http-equiv="Content-Security-Policy" content="{_csp(depozit)}">'
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
@@ -1173,7 +1174,7 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
         )
     felii = felii or 1
     boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
-    pagina = pagina.replace("<body>", "<body>\n" + boot, 1)
+    pagina = re.sub(r"<body(?:\s[^>]*)?>", lambda match: f"{match.group(0)}\n{boot}", pagina, count=1)
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
