@@ -114,6 +114,26 @@ def request(httpd, path="/api/date", body=None, *, method=None, headers=None):
 
 
 class LocalRuntimeTests(unittest.TestCase):
+    def test_full_corpus_without_count_report_is_not_reported_as_empty(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with depozit.deschide(root / "corpus.db") as con:
+                con.execute(
+                    "INSERT INTO acte(id,tip,titlu,citit_la) VALUES (?,?,?,?)",
+                    ("test", "LEGE", "Test", "2026-01-01"),
+                )
+            with depozit.deschide(root / "initiative.db"):
+                pass
+            state = Stare(
+                str(root / "corpus.db"),
+                str(root / "initiative.db"),
+                str(root / "missing-graf.db"),
+                str(root / "missing-eu.db"),
+                date_dir=str(root),
+                corpus_intreg=True,
+            )
+            self.assertEqual(rezumat(state)["acte"], 1)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="local runtime ")
         self.addCleanup(self.temp.cleanup)

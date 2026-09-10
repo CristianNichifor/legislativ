@@ -312,7 +312,7 @@ def rezumat(stare: Stare) -> dict:
             **_rezumat_ue(stare),
         }
     cale = stare.report_root / "manifest.json" if stare.are_rapoarte else None
-    if cale is not None and (stare.date_dir is not None or cale.is_file()):
+    if cale is not None and (stare.pe_shard or cale.is_file()):
         m = json.loads(cale.read_text(encoding="utf-8")) if cale.is_file() else {}
         r = {
             "acte": m.get("acte", 0),
