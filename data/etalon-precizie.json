@@ -1,0 +1,970 @@
+{
+  "$schema": "../schema/etalon-precizie.schema.json",
+  "_": "Fișă de verificare pentru precizia extractorului de referințe. Vezi scripts/etalon_precizie.py.",
+  "amprenta": "a0e4ac3f296dfc5537824f2f5c91b9c3",
+  "candidati_total": 283,
+  "in_esantion": 120,
+  "intrebare": "În pasajul de mai jos, `text` este o citare reală a actului `act`? Răspunsul intră în data/etalon-precizie-verdicte.json ca true / false / null.",
+  "elemente": [
+    {
+      "cheie": "decizie-815-2015.html:10422:constitutie",
+      "fisier": "decizie-815-2015.html",
+      "act": "constitutie",
+      "text": "Constituției",
+      "inainte": "portul întocmit de judecătorul-raportor, concluziile reprezentanților părților prezenți la dezbateri, concluziile scrise depuse la dosar, concluziile procurorului, dispozițiile legale criticate, raportate la prevederile ",
+      "dupa": ", precum și Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor art. 146 lit. d) din Constituție, precum și ale art. 1 alin. (2), ale art. 2"
+    },
+    {
+      "cheie": "decizie-815-2015.html:10578:constitutie",
+      "fisier": "decizie-815-2015.html",
+      "act": "constitutie",
+      "text": "art. 146 lit. d) din Constituție",
+      "inainte": "orului, dispozițiile legale criticate, raportate la prevederile Constituției, precum și Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor ",
+      "dupa": ", precum și ale art. 1 alin. (2), ale art. 2, 3, 10 și 29 din Legea nr. 47/1992 , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și 4 d"
+    },
+    {
+      "cheie": "decizie-815-2015.html:10648:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "art. 2, 3, 10 și 29 din Legea nr. 47/1992",
+      "inainte": "tuției, precum și Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor art. 146 lit. d) din Constituție, precum și ale art. 1 alin. (2), ale ",
+      "dupa": " , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013 pentru stabilirea unor măsuri "
+    },
+    {
+      "cheie": "decizie-815-2015.html:10656:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "3, 10 și 29 din Legea nr. 47/1992",
+      "inainte": "precum și Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor art. 146 lit. d) din Constituție, precum și ale art. 1 alin. (2), ale art. 2, ",
+      "dupa": " , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013 pentru stabilirea unor măsuri "
+    },
+    {
+      "cheie": "decizie-815-2015.html:10659:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "10 și 29 din Legea nr. 47/1992",
+      "inainte": "cum și Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor art. 146 lit. d) din Constituție, precum și ale art. 1 alin. (2), ale art. 2, 3, ",
+      "dupa": " , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013 pentru stabilirea unor măsuri "
+    },
+    {
+      "cheie": "decizie-815-2015.html:10665:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "29 din Legea nr. 47/1992",
+      "inainte": " Legea nr. 47/1992 , reține următoarele: 12. Curtea Constituțională a fost legal sesizată și este competentă, potrivit dispozițiilor art. 146 lit. d) din Constituție, precum și ale art. 1 alin. (2), ale art. 2, 3, 10 și ",
+      "dupa": " , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013 pentru stabilirea unor măsuri "
+    },
+    {
+      "cheie": "decizie-815-2015.html:10827:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "4 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": "ție, precum și ale art. 1 alin. (2), ale art. 2, 3, 10 și 29 din Legea nr. 47/1992 , să soluționeze excepția de neconstituționalitate. 13. Obiectul excepției de neconstituționalitate îl constituie dispozițiile art. 1 și ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013, publicată în Monitorul Oficial al României, Partea I, nr. 386 din 28 iunie 2013, aprobată prin Le"
+    },
+    {
+      "cheie": "decizie-815-2015.html:11096:lege-331-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-331-2013",
+      "text": "Legea nr. 331/2013",
+      "inainte": "13 pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013, publicată în Monitorul Oficial al României, Partea I, nr. 386 din 28 iunie 2013, aprobată prin ",
+      "dupa": " , publicată în Monitorul Oficial al României, Partea I, nr. 774 din 11 decembrie 2013, având următorul cuprins: - Art. 1: \"Prezenta ordonanță de urgență se aplică absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\""
+    },
+    {
+      "cheie": "decizie-815-2015.html:13102:constitutie",
+      "fisier": "decizie-815-2015.html",
+      "act": "constitutie",
+      "text": "Constituție",
+      "inainte": "12 la această convenție, privind interzicerea generală a discriminării, raportate la art. 11 privind dreptul internațional și dreptul intern și art. 20 referitor la tratatele internaționale privind drepturile omului din ",
+      "dupa": ". 16. Examinând excepția de neconstituționalitate, Curtea reține că, potrivit art. 21 alin. (1) din Legea nr. 360/2002 privind Statutul polițistului, publicată în Monitorul Oficial al României, Partea I, nr. 440 din 24 i"
+    },
+    {
+      "cheie": "decizie-815-2015.html:14135:oug-54-2011",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-54-2011",
+      "text": "art. 2 din Ordonanța de urgență a Guvernului nr. 54/2011",
+      "inainte": " 10 ani, potrivit angajamentului încheiat în acest sens.\" 17. Cu privire la exonerarea de la plata cheltuielilor de întreținere efectuate pe timpul școlarizării, Curtea reține că relevante sunt următoarele dispoziții: - ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea în limita alocată cheltuielilor de personal din Ministerul Afacerilor Interne pentru anul 2011, publicată în Monitorul Oficial al României, Partea I, nr. 433 din 21 iunie"
+    },
+    {
+      "cheie": "decizie-815-2015.html:15858:lege-213-2012",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-213-2012",
+      "text": "Legea nr. 213/2012",
+      "inainte": " ale instituțiilor de formare profesională inițială din sistemul de apărare națională, ordine publică și siguranță națională, publicată în Monitorul Oficial al României, Partea I, nr. 441 din 3 iulie 2012, aprobată prin ",
+      "dupa": " : \"În lipsa unei oferte de încadrare din partea instituțiilor pentru care s-a realizat formarea profesională, absolvenții promoțiilor anului 2012 din instituțiile de formare profesională inițială prevăzute la art. 1 car"
+    },
+    {
+      "cheie": "decizie-815-2015.html:18969:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "Ordonanței de urgență a Guvernului nr. 65/2013",
+      "inainte": "it căreia exonerarea de la plata cheltuielilor de școlarizare nu a operat și în privința absolvenților din promoția 2010, care au încetat raportul de serviciu cu Ministerul Afacerilor Interne în perioada de activitate a ",
+      "dupa": " , ceea ce creează discriminări, nu poate fi primită. Curtea a statuat în jurisprudența sa că art. 16 din Constituție \"vizează egalitatea în drepturi între cetățeni în ceea ce privește recunoașterea în favoarea acestora "
+    },
+    {
+      "cheie": "decizie-815-2015.html:21367:lege-360-2002",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-360-2002",
+      "text": "art. 70 din Legea nr. 360/2002",
+      "inainte": "ei 2010, care doreau încetarea raporturilor de serviciu cu ministerul în perioada prevăzută de Ordonanța de urgență a Guvernului nr. 65/2013 , adică în perioada 28 iunie 2013-30 noiembrie 2013, li se aplicau prevederile ",
+      "dupa": " , potrivit cărora trebuie să restituie proporțional cheltuielile de școlarizare făcute cu pregătirea pentru nevoile Ministerului Afacerilor Interne. 22. Este adevărat că reglementarea criticată diferă - sub aspectul per"
+    },
+    {
+      "cheie": "decizie-815-2015.html:21727:oug-54-2011",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-54-2011",
+      "text": "Ordonanța de urgență a Guvernului nr. 54/2011",
+      "inainte": "evoile Ministerului Afacerilor Interne. 22. Este adevărat că reglementarea criticată diferă - sub aspectul persoanelor care beneficiază de exonerarea de la plata cheltuielilor de școlarizare - față de cea prevăzută prin ",
+      "dupa": " (aceasta din urmă reglementând faptul că și polițiștii în activitate care încetează raporturile de serviciu cu ministerul în perioada prevăzută beneficiază de exonerare), însă, fiind vorba despre un beneficiu acordat de"
+    },
+    {
+      "cheie": "decizie-815-2015.html:22421:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": " excepției, în sensul exonerării de la plata cheltuielilor de școlarizare și pentru polițiștii deja încadrați, absolvenți ai promoției 2010, care au încetat raporturile de serviciu cu ministerul în perioada prevăzută de ",
+      "dupa": " , adică în perioada 28 iunie 2013-30 noiembrie 2013, situație în care se află autoarea excepției, presupune o completare a textului de lege criticat, ceea ce nu intră în competența Curții Constituționale. 24. Cât priveș"
+    },
+    {
+      "cheie": "decizie-815-2015.html:24170:lege-360-2002",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-360-2002",
+      "text": "art. 70 din Legea nr. 360/2002",
+      "inainte": "erile criticate, ci, eventual, cu plata cheltuielilor de școlarizare, proporțional, în cazul încetării raporturilor de muncă cu Ministerul Afacerilor Interne mai devreme de 10 ani, reglementare prevăzută de dispozițiile ",
+      "dupa": " . 26. În concluzie, ținând cont de criticile aduse textelor de lege atacate și de prevederile art. 2 alin. (3) din Legea nr. 47/1992 , potrivit cărora \"Curtea Constituțională se pronunță numai asupra constituționalități"
+    },
+    {
+      "cheie": "decizie-815-2015.html:24295:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "art. 2 alin. (3) din Legea nr. 47/1992",
+      "inainte": "cu Ministerul Afacerilor Interne mai devreme de 10 ani, reglementare prevăzută de dispozițiile art. 70 din Legea nr. 360/2002 . 26. În concluzie, ținând cont de criticile aduse textelor de lege atacate și de prevederile ",
+      "dupa": " , potrivit cărora \"Curtea Constituțională se pronunță numai asupra constituționalității actelor cu privire la care a fost sesizată, fără a putea modifica sau completa prevederile supuse controlului\", Curtea urmează a re"
+    },
+    {
+      "cheie": "decizie-815-2015.html:24783:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "art. 29 din Legea nr. 47/1992",
+      "inainte": "epția de neconstituționalitate ca inadmisibilă. 27. Pentru considerentele expuse mai sus, în temeiul art. 146 lit. d) și al art. 147 alin. (4) din Constituție, precum și al art. 1-3, al art. 11 alin. (1) lit. A.d) și al ",
+      "dupa": " , cu unanimitate de voturi, CURTEA CONSTITUȚIONALĂ În numele legii DECIDE: Respinge, ca inadmisibilă, excepția de neconstituționalitate a dispozițiilor art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013 pentr"
+    },
+    {
+      "cheie": "decizie-815-2015.html:24975:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "4 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": "1 alin. (1) lit. A.d) și al art. 29 din Legea nr. 47/1992 , cu unanimitate de voturi, CURTEA CONSTITUȚIONALĂ În numele legii DECIDE: Respinge, ca inadmisibilă, excepția de neconstituționalitate a dispozițiilor art. 1 și ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013, excepție ridicată de Claudia Stângă în Dosarul nr. 7.083/2/2014 al Curții de Apel București - Sec"
+    },
+    {
+      "cheie": "decizie-815-2015.html:3260:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "4 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": "ANIEL MARIUS MORARMagistrat-asistent,Ioana Marilena Chiorean\n\nReveniti in topul paginii\n\nForma printabilă\n\nDECIZIE nr. 815 din 24 noiembrie 2015 referitoare la excepția de neconstituționalitate a dispozițiilor art. 1 și ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013 EMITENT CURTEA CONSTITUȚIONALĂ Publicat în\nMONITORUL OFICIAL nr. 44 din 20 ianuarie 2016 Daniel Ma"
+    },
+    {
+      "cheie": "decizie-815-2015.html:6288:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "art. 1 și 4 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": "in 14 mai 2015, pronunțată în Dosarul nr. 7.083/2/2014, Curtea de Apel București - Secția a VIII-a contencios administrativ și fiscal a sesizat Curtea Constituțională cu excepția de neconstituționalitate a dispozițiilor ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013. Excepția de neconstituționalitate a fost ridicată de reclamanta Claudia Stângă într-o cauză având"
+    },
+    {
+      "cheie": "decizie-815-2015.html:6298:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "4 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": "2015, pronunțată în Dosarul nr. 7.083/2/2014, Curtea de Apel București - Secția a VIII-a contencios administrativ și fiscal a sesizat Curtea Constituțională cu excepția de neconstituționalitate a dispozițiilor art. 1 și ",
+      "dupa": " pentru stabilirea unor măsuri privind încadrarea absolvenților Academiei de Poliție \"Alexandru Ioan Cuza\", promoția 2013. Excepția de neconstituționalitate a fost ridicată de reclamanta Claudia Stângă într-o cauză având"
+    },
+    {
+      "cheie": "decizie-815-2015.html:7564:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "art. 1 din Ordonanța de urgență a Guvernului nr. 65/2013",
+      "inainte": " cadrul Academiei de Poliție \"Alexandru Ioan Cuza\", proporțional cu perioada rămasă până la 10 ani.\" 7. În motivarea excepției de neconstituționalitate autoarea acesteia susține că sintagma \"promoția 2013\" din cuprinsul ",
+      "dupa": " la care face referire directă și art. 4 din același act normativ contravine art. 16 alin. (1) din Constituție, art. 14 din Convenția pentru apărarea drepturilor omului și a libertăților fundamentale, Protocolului nr. 12"
+    },
+    {
+      "cheie": "decizie-815-2015.html:7697:constitutie",
+      "fisier": "decizie-815-2015.html",
+      "act": "constitutie",
+      "text": "art. 16 alin. (1) din Constituție",
+      "inainte": "onstituționalitate autoarea acesteia susține că sintagma \"promoția 2013\" din cuprinsul art. 1 din Ordonanța de urgență a Guvernului nr. 65/2013 la care face referire directă și art. 4 din același act normativ contravine ",
+      "dupa": ", art. 14 din Convenția pentru apărarea drepturilor omului și a libertăților fundamentale, Protocolului nr. 12 la aceasta, raportat la art. 11 și art. 20 din Constituție. În acest sens arată că absolvenții Academiei de P"
+    },
+    {
+      "cheie": "decizie-815-2015.html:8266:oug-65-2013",
+      "fisier": "decizie-815-2015.html",
+      "act": "oug-65-2013",
+      "text": "Ordonanței de urgență a Guvernului nr. 65/2013",
+      "inainte": "stitutul Național al Magistraturii în sesiunea organizată în vara anului 2013 și care au demisionat din structurile Ministerului Afacerilor Interne, au fost exonerați de la plata cheltuielilor de școlarizare, în temeiul ",
+      "dupa": " . Însă exonerarea de la plata cheltuielilor de școlarizare nu a operat și în privința sa (promoția 2010), deși a depus raportul de încetare a serviciului cu Ministerul Afacerilor Interne la data de 25 noiembrie 2013, ad"
+    },
+    {
+      "cheie": "decizie-815-2015.html:9235:lege-47-1992",
+      "fisier": "decizie-815-2015.html",
+      "act": "lege-47-1992",
+      "text": "art. 30 alin. (1) din Legea nr. 47/1992",
+      "inainte": "eră alegere a unei profesii. 8. Curtea de Apel București - Secția a VIII-a contencios administrativ și fiscal și-a exprimat opinia în sensul că excepția de neconstituționalitate este întemeiată. 9. Potrivit prevederilor ",
+      "dupa": " , încheierea de sesizare a fost comunicată președinților celor două Camere ale Parlamentului, Guvernului și Avocatului Poporului, pentru a-și exprima punctele de vedere asupra excepției de neconstituționalitate. 10. Avo"
+    },
+    {
+      "cheie": "lege-208-2022.html:26054:lege-99-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-99-2016",
+      "text": "Legea nr. 99/2016",
+      "inainte": "ile dispozițiile Ordonanței Guvernului nr. 2/2001 privind regimul juridic al contravențiilor, aprobată cu modificări și completări prin Legea nr. 180/2002 , cu modificările și completările ulterioare. ...\n+\nArticolul II ",
+      "dupa": " privind achizițiile sectoriale, publicată în Monitorul Oficial al României, Partea I, nr. 391 din 23 mai 2016, cu modificările și completările ulterioare, se modifică și se completează după cum urmează: 1. La articolul "
+    },
+    {
+      "cheie": "lege-208-2022.html:3083:lege-98-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-98-2016",
+      "text": "Legii nr. 98/2016",
+      "inainte": "găm asteptati.\n\n+\nForme act\n\nForma consolidata\n\n+ istoric consolidări\n\n24.05.2024\n\nForma de baza\n\n+\nFișă act\n\nActiuni suferite\n\nActiuni Induse\n\nRefera pe\n\nReferit de\n\nCuprinsul Actului\n\npentru modificarea și completarea ",
+      "dupa": " privind achizițiile publice, Legii nr. 99/2016 privind achizițiile sectoriale, Legii nr. 100/2016 privind concesiunile de lucrări și concesiunile de servicii, precum și a Legii nr. 101/2016 privind remediile și căile de"
+    },
+    {
+      "cheie": "lege-208-2022.html:3180:lege-100-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-100-2016",
+      "text": "Legii nr. 100/2016",
+      "inainte": "\n+\nFișă act\n\nActiuni suferite\n\nActiuni Induse\n\nRefera pe\n\nReferit de\n\nCuprinsul Actului\n\npentru modificarea și completarea Legii nr. 98/2016 privind achizițiile publice, Legii nr. 99/2016 privind achizițiile sectoriale, ",
+      "dupa": " privind concesiunile de lucrări și concesiunile de servicii, precum și a Legii nr. 101/2016 privind remediile și căile de atac în materie de atribuire a contractelor de achiziție publică, a contractelor sectoriale și a "
+    },
+    {
+      "cheie": "lege-208-2022.html:46788:lege-100-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-100-2016",
+      "text": "Legea nr. 100/2016",
+      "inainte": "le dispozițiile Ordonanței Guvernului nr. 2/2001 privind regimul juridic al contravențiilor, aprobată cu modificări și completări prin Legea nr. 180/2002 , cu modificările și completările ulterioare. ...\n+\nArticolul III ",
+      "dupa": " privind concesiunile de lucrări și concesiunile de servicii, publicată în Monitorul Oficial al României, Partea I, nr. 392 din 23 mai 2016, cu modificările și completările ulterioare, se modifică și se completează după "
+    },
+    {
+      "cheie": "lege-208-2022.html:49492:og-2-2001",
+      "fisier": "lege-208-2022.html",
+      "act": "og-2-2001",
+      "text": "Ordonanței Guvernului nr. 2/2001 , aprobată cu modificări și completări prin Legea nr. 180/2002 , cu modificările și completările ulterioare",
+      "inainte": " distinct al normelor metodologice de aplicare a prezentei legi. ... 4. Articolul 113 se modifică și va avea următorul cuprins:\n+\nArticolul 113 În cazul contravențiilor prevăzute la art. 111 sunt aplicabile dispozițiile ",
+      "dupa": ". ...\n+\nArticolul IV Legea nr. 101/2016 privind remediile și căile de atac în materie de atribuire a contractelor de achiziție publică, a contractelor sectoriale și a contractelor de concesiune de lucrări și concesiune d"
+    },
+    {
+      "cheie": "lege-208-2022.html:49653:lege-101-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-101-2016",
+      "text": "Legea nr. 101/2016",
+      "inainte": "nțiilor prevăzute la art. 111 sunt aplicabile dispozițiile Ordonanței Guvernului nr. 2/2001 , aprobată cu modificări și completări prin Legea nr. 180/2002 , cu modificările și completările ulterioare. ...\n+\nArticolul IV ",
+      "dupa": " privind remediile și căile de atac în materie de atribuire a contractelor de achiziție publică, a contractelor sectoriale și a contractelor de concesiune de lucrări și concesiune de servicii, precum și pentru organizare"
+    },
+    {
+      "cheie": "lege-208-2022.html:53151:lege-99-2016",
+      "fisier": "lege-208-2022.html",
+      "act": "lege-99-2016",
+      "text": "Legea nr. 99/2016",
+      "inainte": " 2016, cu modificările și completările ulterioare, Hotărârea Guvernului nr. 394/2016 pentru aprobarea Normelor metodologice de aplicare a prevederilor referitoare la atribuirea contractului sectorial/acordului-cadru din ",
+      "dupa": " privind achizițiile sectoriale , publicată în Monitorul Oficial al României, Partea I, nr. 422 din 6 iunie 2016, cu modificările și completările ulterioare, și Hotărârea Guvernului nr. 867/2016 pentru aprobarea Normelor"
+    },
+    {
+      "cheie": "lege-310-2021.html:142120:oug-57-2019",
+      "fisier": "lege-310-2021.html",
+      "act": "oug-57-2019",
+      "text": "art. 492 și 493 din Ordonanța de urgență a Guvernului nr. 57/2019 privind Codul administrativ, cu modificările și completările ulterioare",
+      "inainte": " că nu a săvârșit cu bună-știință încălcarea reglementărilor anti-doping.\n+\nArticolul 91 (1) Pentru încălcarea reglementărilor anti-doping prevăzute la art. 2 alin. (2) lit. e) și g)-k) , prin derogare de la prevederile ",
+      "dupa": " și ale art. 252 alin. (1) din Legea nr. 53/2003 - Codul muncii, republicată , cu modificările și completările ulterioare, președintele ANAD dispune destituirea din funcție, sau, după caz, încetarea contractului individu"
+    },
+    {
+      "cheie": "lege-310-2021.html:198530:lege-142-2018",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-142-2018",
+      "text": "Legii nr. 142/2018",
+      "inainte": "erite pe parcursul controlului doping intră și sub incidența Legii nr. 143/2000 privind prevenirea și combaterea traficului și consumului ilicit de droguri, republicată, cu modificările și completările ulterioare, sau a ",
+      "dupa": " privind precursorii de droguri, Agenția are obligația de a înștiința Agenția Națională Antidrog și organele de urmărire penală.\n+\nTitlul III Dispoziții tranzitorii și finale\n+\nArticolul 145 (1) Pentru informarea și educ"
+    },
+    {
+      "cheie": "lege-310-2021.html:205481:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "art. 94-103 din Legea nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată",
+      "inainte": ".\n+\nArticolul 157 Dispozițiile cap. XVII din titlul II intră în vigoare la 15 zile de la data intrării în vigoare a prezentei legi.\n+\nArticolul 158 (1) La data intrării în vigoare a prezentei legi se abrogă art. 1-83 și ",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-93 din Legea nr. 227/2006, republicată în Monitorul Oficial al României, Partea"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:205721:lege-227-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-227-2006",
+      "text": "93 din Legea nr. 227/2006, republicată",
+      "inainte": "a nr. 227/2006 privind prevenirea și combaterea dopajului în sport, republicată în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare. (2) Dispozițiile art. 84-",
+      "dupa": " în Monitorul Oficial al României, Partea I, nr. 156 din 1 martie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Pa"
+    },
+    {
+      "cheie": "lege-310-2021.html:206042:constitutie",
+      "fisier": "lege-310-2021.html",
+      "act": "constitutie",
+      "text": "art. 76 alin. (1) din Constituția României",
+      "inainte": "ie 2016, cu modificările și completările ulterioare, se abrogă la 15 zile de la data intrării în vigoare a prezentei legi. Această lege a fost adoptată de Parlamentul României, cu respectarea prevederilor art. 75 și ale ",
+      "dupa": ", republicată . p. PREȘEDINTELE CAMEREI DEPUTAȚILOR, VASILE-DANIEL SUCIU PREȘEDINTELE SENATULUI FLORIN-VASILE CÎȚU București, 23 decembrie 2021. Nr. 310. -----\n\nif (navigator.appVersion.indexOf(\"MSIE 8.\") != -1) {\n$(\"#me"
+    },
+    {
+      "cheie": "lege-310-2021.html:6047:lege-171-1998",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-171-1998",
+      "text": "Legea nr. 171/1998",
+      "inainte": "ta lege reglementează prevenirea și combaterea dopajului în sport. (2) Conform reglementărilor Convenției împotriva dopajului, adoptată, în cadrul Consiliului Europei, la Strasbourg la 16 noiembrie 1989, ratificată prin ",
+      "dupa": " , ale Convenției internaționale împotriva dopajului în sport, adoptată în cadrul Conferinței Generale a Organizației Națiunilor Unite pentru Educație, Știință și Cultură, la Paris la 19 octombrie 2005, acceptată prin Le"
+    },
+    {
+      "cheie": "lege-310-2021.html:70545:lege-367-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-367-2006",
+      "text": "Legea nr. 367/2006",
+      "inainte": ", și prin Convenția internațională împotriva dopajului în sport, adoptată în cadrul Conferinței Generale a Organizației Națiunilor Unite pentru Educație, Știință și Cultură, la Paris la 19 octombrie 2005, acceptată prin ",
+      "dupa": " .\n+\nArticolul 16 Posturile publice de radio și de televiziune pun la dispoziție, gratuit, ANAD un spațiu de emisie de minimum 30 de minute lunar, din care 50% la ore de maximă audiență, pentru difuzarea de emisiuni cu c"
+    },
+    {
+      "cheie": "lege-310-2021.html:73125:lege-171-1998",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-171-1998",
+      "text": "Legea nr. 171/1998",
+      "inainte": "tabilite de către organizațiile guvernamentale și neguvernamentale internaționale, asumate prin Convenția împotriva dopajului, adoptată, în cadrul Consiliului Europei, la Strasbourg la 16 noiembrie 1989, ratificată prin ",
+      "dupa": " , și Convenția internațională împotriva dopajului în sport, adoptată în cadrul Conferinței Generale a Organizației Națiunilor Unite pentru Educație, Știință și Cultură, la Paris la 19 octombrie 2005, acceptată prin Lege"
+    },
+    {
+      "cheie": "lege-310-2021.html:73359:lege-367-2006",
+      "fisier": "lege-310-2021.html",
+      "act": "lege-367-2006",
+      "text": "Legea nr. 367/2006",
+      "inainte": "1998 , și Convenția internațională împotriva dopajului în sport, adoptată în cadrul Conferinței Generale a Organizației Națiunilor Unite pentru Educație, Știință și Cultură, la Paris la 19 octombrie 2005, acceptată prin ",
+      "dupa": " . (2) LCD are obligația de a analiza, anual, numărul minim de probe prevăzut de Standardul internațional pentru laboratoare, în vederea menținerii acreditării, provenite de la organizații antidoping conforme cu Codul.\n+"
+    },
+    {
+      "cheie": "lege-98-2016.html:101745:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": "ntru care se aplică dispozițiile Ordonanței de urgență a Guvernului nr. 114/2011 privind atribuirea anumitor contracte de achiziții publice în domeniile apărării și securității, aprobată cu modificări și completări prin ",
+      "dupa": " , și a celor pentru care nu se aplică dispozițiile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin Legea nr. 195/2012 , potrivit art. 21 , 22 sau art. 56 din Ordonanța de urge"
+    },
+    {
+      "cheie": "lege-98-2016.html:101954:oug-114-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-114-2011",
+      "text": "art. 56 din Ordonanța de urgență a Guvernului nr. 114/2011",
+      "inainte": "etări prin Legea nr. 195/2012 , și a celor pentru care nu se aplică dispozițiile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin Legea nr. 195/2012 , potrivit art. 21 , 22 sau ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 195/2012 . (2) Prezenta lege nu se aplică contractelor de achiziție publică/acordurilor-cadru atribuite și concursurilor de soluții organizate în domeniile apărării "
+    },
+    {
+      "cheie": "lege-98-2016.html:104204:oug-114-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-114-2011",
+      "text": "Ordonanței de urgență a Guvernului nr. 114/2011",
+      "inainte": "că aspecte de apărare sau securitate\n+\nArticolul 38 (1) În cazul contractelor mixte care au ca obiect atât achiziții pentru care se aplică dispozițiile prezentei legi, cât și achiziții pentru care se aplică dispozițiile ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 195/2012 , sau ale altor acte normative/memorandumuri emise în temeiul art. 20 alin. (3) din Ordonanța de urgență a Guvernului nr. 114/2011 , aprobată cu modificări "
+    },
+    {
+      "cheie": "lege-98-2016.html:104490:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": "ficări și completări prin Legea nr. 195/2012 , sau ale altor acte normative/memorandumuri emise în temeiul art. 20 alin. (3) din Ordonanța de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin ",
+      "dupa": " , în legătură cu situațiile prevăzute la art. 346 din TFUE, iar diferitele părți ale unui anumit contract mixt sunt în mod obiectiv separabile, autoritatea contractantă are dreptul de a alege între a atribui contracte d"
+    },
+    {
+      "cheie": "lege-98-2016.html:106308:oug-114-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-114-2011",
+      "text": "Ordonanței de urgență a Guvernului nr. 114/2011",
+      "inainte": "rin Legea nr. 195/2012 , cu condiția ca atribuirea unui singur contract să fie justificată de motive obiective. ... (4) Dispozițiile alin. (3) lit. b) nu aduc atingere pragurilor și excepțiilor prevăzute de dispozițiile ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 195/2012 . (5) În cazul în care, în legătură cu un anumit contract, sunt aplicabile atât dispozițiile alin. (3) lit. a) , cât și ale alin. (3) lit. b) , se aplică di"
+    },
+    {
+      "cheie": "lege-98-2016.html:106400:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": "e motive obiective. ... (4) Dispozițiile alin. (3) lit. b) nu aduc atingere pragurilor și excepțiilor prevăzute de dispozițiile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin ",
+      "dupa": " . (5) În cazul în care, în legătură cu un anumit contract, sunt aplicabile atât dispozițiile alin. (3) lit. a) , cât și ale alin. (3) lit. b) , se aplică dispozițiile alin. (3) lit. a) . (6) Decizia de a atribui un sing"
+    },
+    {
+      "cheie": "lege-98-2016.html:106816:oug-114-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-114-2011",
+      "text": "Ordonanței de urgență a Guvernului nr. 114/2011",
+      "inainte": "lit. a) . (6) Decizia de a atribui un singur contract nu poate fi luată de autoritatea contractantă în temeiul alin. (1) în scopul exceptării atribuirii unor contracte de la aplicarea prevederilor prezentei legi sau ale ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 195/2012 . (7) În cazul contractelor mixte care au ca obiect atât achiziții pentru care se aplică dispozițiile prezentei legi, cât și achiziții pentru care se aplică"
+    },
+    {
+      "cheie": "lege-98-2016.html:107189:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": "ca obiect atât achiziții pentru care se aplică dispozițiile prezentei legi, cât și achiziții pentru care se aplică dispozițiile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin ",
+      "dupa": " , sau ale altor acte normative emise în temeiul art. 20 alin. (3) din Ordonanța de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin Legea nr. 195/2012 , în legătură cu situațiile prevăzute l"
+    },
+    {
+      "cheie": "lege-98-2016.html:107631:oug-114-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-114-2011",
+      "text": "art. 20 alin. (3) din Ordonanța de urgență a Guvernului nr. 114/2011",
+      "inainte": "iile prevăzute la art. 346 din TFUE, iar diferitele părți ale unui anumit contract mixt nu sunt în mod obiectiv separabile, contractul poate fi atribuit în conformitate cu dispozițiile actelor normative emise în temeiul ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 195/2012 , dacă include elemente în legătură cu situațiile prevăzute la art. 346 din TFUE , sau în conformitate cu prevederile Ordonanței de urgență a Guvernului nr."
+    },
+    {
+      "cheie": "lege-98-2016.html:107744:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": "eparabile, contractul poate fi atribuit în conformitate cu dispozițiile actelor normative emise în temeiul art. 20 alin. (3) din Ordonanța de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin ",
+      "dupa": " , dacă include elemente în legătură cu situațiile prevăzute la art. 346 din TFUE , sau în conformitate cu prevederile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin Legea nr."
+    },
+    {
+      "cheie": "lege-98-2016.html:107973:lege-195-2012",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-195-2012",
+      "text": "Legea nr. 195/2012",
+      "inainte": " 195/2012 , dacă include elemente în legătură cu situațiile prevăzute la art. 346 din TFUE , sau în conformitate cu prevederile Ordonanței de urgență a Guvernului nr. 114/2011 , aprobată cu modificări și completări prin ",
+      "dupa": " , în caz contrar.\n+\nParagraful 4 Contracte de achiziție publică/acorduri-cadru și concursuri de soluții care implică aspecte de apărare ori securitate, atribuite sau organizate conform unor norme internaționale\n+\nArtico"
+    },
+    {
+      "cheie": "lege-98-2016.html:125927:lege-286-2009",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-286-2009",
+      "text": "art. 326 din Legea nr. 286/2009 privind Codul penal , cu modificările și completările ulterioare",
+      "inainte": "r. 658 din 24 iulie 2020\n)\n(3) Reprezentantul legal al operatorului economic depune o declarație pe propria răspundere cu privire la deținătorii/beneficiarii reali ai acțiunilor la purtător, sub sancțiunile prevăzute de ",
+      "dupa": ".\n(la 27-07-2020,\nArticolul 53 din Sectiunea 1 , Capitolul II a fost completat de Punctul 1, ARTICOLUL UNIC din LEGEA nr. 148 din 23 iulie 2020, publicată în MONITORUL OFICIAL nr. 658 din 24 iulie 2020\n)\n\n(la 22-12-2017,"
+    },
+    {
+      "cheie": "lege-98-2016.html:276472:lege-286-2009",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-286-2009",
+      "text": "294 din Legea nr. 286/2009 , cu modificările și completările ulterioare",
+      "inainte": "ificările și completările ulterioare, sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - ",
+      "dupa": ", și infracțiuni asimilate infracțiunilor de corupție prevăzute de art. 10 - 13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare, sau "
+    },
+    {
+      "cheie": "lege-98-2016.html:276472:lege-286-2009",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-286-2009",
+      "text": "294 din Legea nr. 286/2009 , cu modificările și completările ulterioare",
+      "inainte": "ificările și completările ulterioare, sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - ",
+      "dupa": ", și infracțiuni asimilate infracțiunilor de corupție prevăzute de art. 10 - 13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare, sau "
+    },
+    {
+      "cheie": "lege-98-2016.html:276610:lege-78-2000",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-78-2000",
+      "text": "art. 10 - 13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare",
+      "inainte": "conomic a fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - 294 din Legea nr. 286/2009 , cu modificările și completările ulterioare, și infracțiuni asimilate infracțiunilor de corupție prevăzute de ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... c) infracțiuni împotriva intereselor financiare ale Uniunii Europene, prevăzute de art. "
+    },
+    {
+      "cheie": "lege-98-2016.html:276620:lege-78-2000",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-78-2000",
+      "text": "13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare",
+      "inainte": "fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - 294 din Legea nr. 286/2009 , cu modificările și completările ulterioare, și infracțiuni asimilate infracțiunilor de corupție prevăzute de art. 10 - ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... c) infracțiuni împotriva intereselor financiare ale Uniunii Europene, prevăzute de art. "
+    },
+    {
+      "cheie": "lege-98-2016.html:276620:lege-78-2000",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-78-2000",
+      "text": "13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare",
+      "inainte": "fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - 294 din Legea nr. 286/2009 , cu modificările și completările ulterioare, și infracțiuni asimilate infracțiunilor de corupție prevăzute de art. 10 - ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... c) infracțiuni împotriva intereselor financiare ale Uniunii Europene, prevăzute de art. "
+    },
+    {
+      "cheie": "lege-98-2016.html:276620:lege-78-2000",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-78-2000",
+      "text": "13 din Legea nr. 78/2000 pentru prevenirea, descoperirea și sancționarea faptelor de corupție, cu modificările și completările ulterioare",
+      "inainte": "fost condamnat; ... b) infracțiuni de corupție, prevăzute de art. 289 - 294 din Legea nr. 286/2009 , cu modificările și completările ulterioare, și infracțiuni asimilate infracțiunilor de corupție prevăzute de art. 10 - ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... c) infracțiuni împotriva intereselor financiare ale Uniunii Europene, prevăzute de art. "
+    },
+    {
+      "cheie": "lege-98-2016.html:276993:lege-78-2000",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-78-2000",
+      "text": "Legea nr. 78/2000 , cu modificările și completările ulterioare",
+      "inainte": "țiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... c) infracțiuni împotriva intereselor financiare ale Uniunii Europene, prevăzute de art. 18^1 - 18^5 din ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... d) acte de terorism, prevăzute de art. 32 - 35 și art. 37 - 38 din Legea nr. 535/2004 pr"
+    },
+    {
+      "cheie": "lege-98-2016.html:277788:lege-535-2004",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-535-2004",
+      "text": "art. 36 din Legea nr. 535/2004 , cu modificările și completările ulterioare",
+      "inainte": "evenirea și sancționarea spălării banilor, precum și pentru instituirea unor măsuri de prevenire și combatere a finanțării terorismului, republicată, cu modificările ulterioare, sau finanțarea terorismului, prevăzută de ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... f) traficul și exploatarea persoanelor vulnerabile, prevăzute de art. 209 - 217 din Lege"
+    },
+    {
+      "cheie": "lege-98-2016.html:278060:lege-286-2009",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-286-2009",
+      "text": "art. 209 - 217 din Legea nr. 286/2009 , cu modificările și completările ulterioare",
+      "inainte": "completările ulterioare, sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... f) traficul și exploatarea persoanelor vulnerabile, prevăzute de ",
+      "dupa": ", sau de dispozițiile corespunzătoare ale legislației penale a statului în care respectivul operator economic a fost condamnat; ... g) fraudă, în sensul articolului 1 din Convenția privind protejarea intereselor financia"
+    },
+    {
+      "cheie": "lege-98-2016.html:286792:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "art. 167 alin. (4) din Legea nr. 98/2016 privind achizițiile publice sunt neconstituționale. Conform art. 147 alin. (1) din CONSTITUȚIA ROMÂNIEI , republicată",
+      "inainte": "1022 din 22 decembrie 2017\n)\n\nNotă ...\nPrin DECIZIA nr. 738 din 20 noiembrie 2018 , publicată în MONITORUL OFICIAL nr. 260 din 4 aprilie 2019, s-a admis excepția de neconstituționalitate, constantându-se că dispozițiile ",
+      "dupa": " în MONITORUL OFICIAL nr. 767 din 31 octombrie 2003, dispozițiile din legile și ordonantele în vigoare, precum și cele din regulamente, constatate ca fiind neconstituționale, își încetează efectele juridice la 45 de zile"
+    },
+    {
+      "cheie": "lege-98-2016.html:287343:constitutie",
+      "fisier": "lege-98-2016.html",
+      "act": "constitutie",
+      "text": "Constituției",
+      "inainte": ", își încetează efectele juridice la 45 de zile de la publicarea deciziei Curții Constituționale dacă, în acest interval, Parlamentul sau Guvernul, după caz, nu pun de acord prevederile neconstițutionale cu dispozițiile ",
+      "dupa": ". Anterior publicării în Monitorul Oficial a acestei decizii, alineatul (4) al articolului 167 a fost abrogat de punctul 22 al articolului I din ORDONANȚA DE URGENȚĂ nr. 107 din 20 decembrie 2017 , publicată în MONITORUL"
+    },
+    {
+      "cheie": "lege-98-2016.html:334425:oug-98-2017",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-98-2017",
+      "text": "Ordonanței de urgență a Guvernului nr. 98/2017",
+      "inainte": "ofertantului clasat pe primul loc după aplicarea criteriului de atribuire, respectiv in termen de o zi lucrătoare de la emiterea avizului conform, în situația în care documentația este supusă controlului ex-ante conform ",
+      "dupa": " privind funcția de control ex-ante al procesului de atribuire a contractelor/acordurilor-cadru de achiziție publică, a contractelor/acordurilor-cadru sectoriale și a contractelor de concesiune de lucrări și concesiune d"
+    },
+    {
+      "cheie": "lege-98-2016.html:334717:lege-186-2018",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-186-2018",
+      "text": "Legea nr. 186/2018 , cu modificările și completările ulterioare",
+      "inainte": "l ex-ante al procesului de atribuire a contractelor/acordurilor-cadru de achiziție publică, a contractelor/acordurilor-cadru sectoriale și a contractelor de concesiune de lucrări și concesiune de servicii, aprobată prin ",
+      "dupa": ", solicită acestuia să prezinte documente justificative actualizate prin care să demonstreze îndeplinirea tuturor criteriilor de calificare și selecție, în conformitate cu informațiile cuprinse în DUAE, cu excepția proce"
+    },
+    {
+      "cheie": "lege-98-2016.html:389324:lege-500-2002",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-500-2002",
+      "text": "art. 2 pct. 27 din Legea nr. 500/2002 privind finanțele publice, cu modificările și completările ulterioare",
+      "inainte": " concesiune/ acordurilor-cadru, aferente obiectivelor/proiectelor de investiții/lucrărilor de întreținere și reparații curente/reparațiilor capitale finanțate, integral sau parțial, din fonduri publice definite potrivit ",
+      "dupa": ", și, respectiv, la art. 2 pct. 32 din Legea nr. 273/2006 privind finanțele publice locale, cu modificările și completările ulterioare, sau din fondurile proprii ale autorităților/entităților contractante prevăzute la ar"
+    },
+    {
+      "cheie": "lege-98-2016.html:389451:lege-273-2006",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-273-2006",
+      "text": "art. 2 pct. 32 din Legea nr. 273/2006 privind finanțele publice locale, cu modificările și completările ulterioare",
+      "inainte": "reparațiilor capitale finanțate, integral sau parțial, din fonduri publice definite potrivit art. 2 pct. 27 din Legea nr. 500/2002 privind finanțele publice, cu modificările și completările ulterioare, și, respectiv, la ",
+      "dupa": ", sau din fondurile proprii ale autorităților/entităților contractante prevăzute la art. 4 alin. (1) din Legea nr. 98/2016 privind achizițiile publice, cu modificările și completările ulterioare, la art. 4 alin. (1) din "
+    },
+    {
+      "cheie": "lege-98-2016.html:389945:lege-100-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-100-2016",
+      "text": "c) din Legea nr. 100/2016 privind concesiunile de lucrări și concesiunile de servicii, cu modificările și completările ulterioare",
+      "inainte": "icările și completările ulterioare, la art. 4 alin. (1) din Legea nr. 99/2016 privind achizițiile sectoriale, cu modificările și completările ulterioare, respectiv la art. 9 lit. b) și c) și art. 10 alin. (1) lit. b) și ",
+      "dupa": ", aflate în derulare la data intrării în vigoare a prezentei ordonanțe de urgență, se ajustează, în condițiile prezentei ordonanțe de urgență, pentru a ține seama de orice creștere sau diminuare a costurilor pe baza căro"
+    },
+    {
+      "cheie": "lege-98-2016.html:390525:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "m) din Legea nr. 98/2016 , cu modificările și completările ulterioare",
+      "inainte": "amentat prețul contractelor. (2) Prevederile alin. (1) se aplică contractelor de achiziție publică/contractelor sectoriale/contractelor de concesiune/ acordurilor-cadru de lucrări definite la art. 3 alin. (1) lit. c) și ",
+      "dupa": ", la art. 3 alin. (1) lit. b) și l) din Legea nr. 99/2016 , cu modificările și completările ulterioare, respectiv la art. 5 alin. (1) lit. g) din Legea nr. 100/2016 , cu modificările și completările ulterioare, inclusiv "
+    },
+    {
+      "cheie": "lege-98-2016.html:392279:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Legii nr. 98/2016 , cu modificările și completările ulterioare",
+      "inainte": "ontractelor de concesiune/ acordurilor-cadru de lucrări prevăzute la alin. (2) și (3) , aflate în derulare la data intrării în vigoare a prezentei ordonanțe de urgență: a) încheiate înainte de data intrării în vigoare a ",
+      "dupa": ", a Legii nr. 99/2016 , cu modificările și completările ulterioare, respectiv a Legii nr. 100/2016 , cu modificările și completările ulterioare, definite potrivit legislației achizițiilor publice în vigoare la data înche"
+    },
+    {
+      "cheie": "lege-98-2016.html:392345:lege-99-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-99-2016",
+      "text": "Legii nr. 99/2016 , cu modificările și completările ulterioare",
+      "inainte": "la alin. (2) și (3) , aflate în derulare la data intrării în vigoare a prezentei ordonanțe de urgență: a) încheiate înainte de data intrării în vigoare a Legii nr. 98/2016 , cu modificările și completările ulterioare, a ",
+      "dupa": ", respectiv a Legii nr. 100/2016 , cu modificările și completările ulterioare, definite potrivit legislației achizițiilor publice în vigoare la data încheierii; b) încheiate după data intrării în vigoare a Legii nr. 98/2"
+    },
+    {
+      "cheie": "lege-98-2016.html:392421:lege-100-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-100-2016",
+      "text": "Legii nr. 100/2016 , cu modificările și completările ulterioare",
+      "inainte": "ntei ordonanțe de urgență: a) încheiate înainte de data intrării în vigoare a Legii nr. 98/2016 , cu modificările și completările ulterioare, a Legii nr. 99/2016 , cu modificările și completările ulterioare, respectiv a ",
+      "dupa": ", definite potrivit legislației achizițiilor publice în vigoare la data încheierii; b) încheiate după data intrării în vigoare a Legii nr. 98/2016 , cu modificările și completările ulterioare, a Legii nr. 99/2016 , cu mo"
+    },
+    {
+      "cheie": "lege-98-2016.html:392755:lege-100-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-100-2016",
+      "text": "Legii nr. 100/2016 , cu modificările și completările ulterioare",
+      "inainte": "e în vigoare la data încheierii; b) încheiate după data intrării în vigoare a Legii nr. 98/2016 , cu modificările și completările ulterioare, a Legii nr. 99/2016 , cu modificările și completările ulterioare, respectiv a ",
+      "dupa": ", indiferent de durata de execuție a acestora, și în cuprinsul cărora nu au fost prevăzute clauze de revizuire cu privire la preț, potrivit prevederilor art. 221 alin. (1) lit. a) din Legea nr. 98/2016 , cu modificările "
+    },
+    {
+      "cheie": "lege-98-2016.html:393452:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "n) din Legea nr. 98/2016 , cu modificările și completările ulterioare",
+      "inainte": "ioare. (5) Prevederile alin. (1) se aplică contractelor de achiziție publică/contractelor sectoriale/acordurilor-cadru de produse, finanțate din fondurile prevăzute la alin. (1) , definite la art. 3 alin. (1) lit. c) și ",
+      "dupa": ", respectiv la art. 3 alin. (1) lit. b) și m) din Legea nr. 99/2016 , cu modificările și completările ulterioare, dacă sunt întrunite cumulativ următoarele condiții: a) contractele/acordurile-cadru sunt în curs de derula"
+    },
+    {
+      "cheie": "lege-98-2016.html:393564:lege-99-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-99-2016",
+      "text": "m) din Legea nr. 99/2016 , cu modificările și completările ulterioare",
+      "inainte": "-cadru de produse, finanțate din fondurile prevăzute la alin. (1) , definite la art. 3 alin. (1) lit. c) și n) din Legea nr. 98/2016 , cu modificările și completările ulterioare, respectiv la art. 3 alin. (1) lit. b) și ",
+      "dupa": ", dacă sunt întrunite cumulativ următoarele condiții: a) contractele/acordurile-cadru sunt în curs de derulare la data intrării în vigoare a prezentei ordonanțe de urgență și în cuprinsul acestora nu au fost prevăzute cl"
+    },
+    {
+      "cheie": "lege-98-2016.html:394569:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Legea nr. 98/2016 , cu modificările și completările ulterioare",
+      "inainte": "ntreținere și reparații curente/reparațiilor capitale, prevăzute la alin. (1) , conform funcțiunii preconizate, sau strict necesare execuției lucrărilor în legătură cu una dintre activitățile prevăzute în anexa nr. 1 la ",
+      "dupa": ", în anexa nr. 1 la Legea nr. 99/2016 , cu modificările și completările ulterioare, respectiv în anexa nr. 1 la Legea nr. 100/2016 , cu modificările și completările ulterioare. (6) Prevederile alin. (1) se aplică și cont"
+    },
+    {
+      "cheie": "lege-98-2016.html:394651:lege-99-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-99-2016",
+      "text": "Legea nr. 99/2016 , cu modificările și completările ulterioare",
+      "inainte": "nform funcțiunii preconizate, sau strict necesare execuției lucrărilor în legătură cu una dintre activitățile prevăzute în anexa nr. 1 la Legea nr. 98/2016 , cu modificările și completările ulterioare, în anexa nr. 1 la ",
+      "dupa": ", respectiv în anexa nr. 1 la Legea nr. 100/2016 , cu modificările și completările ulterioare. (6) Prevederile alin. (1) se aplică și contractelor de achiziție publică/contractelor sectoriale/acordurilor-cadru de produse"
+    },
+    {
+      "cheie": "lege-98-2016.html:395311:og-43-1997",
+      "fisier": "lege-98-2016.html",
+      "act": "og-43-1997",
+      "text": "Ordonanței Guvernului nr. 43/1997 privind regimul drumurilor, republicată, cu modificările și completările ulterioare",
+      "inainte": "ecum și celor care au ca obiect achiziția de produse destinate realizării lucrărilor de întreținere/ reparare/administrare/exploatare a drumurilor de interes național, județean sau local clasificate conform prevederilor ",
+      "dupa": ", iar achiziția este realizată prin atribuirea unui contract distinct. (7) Prevederile alin. (1) se aplică contractelor de achiziție publică/sectoriale/acordurilor-cadru de servicii, finanțate din fondurile prevăzute la "
+    },
+    {
+      "cheie": "lege-98-2016.html:395700:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "o) din Legea nr. 98/2016 , cu modificările și completările ulterioare",
+      "inainte": "contract distinct. (7) Prevederile alin. (1) se aplică contractelor de achiziție publică/sectoriale/acordurilor-cadru de servicii, finanțate din fondurile prevăzute la alin. (1) , definite la art. 3 alin. (1) lit. c) și ",
+      "dupa": ", respectiv la art. 3 alin. (1) lit. b) și n) din Legea nr. 99/2016 , cu modificările și completările ulterioare, al căror obiect îl constituie realizarea studiilor de fezabilitate și/sau a proiectelor tehnice, care incl"
+    },
+    {
+      "cheie": "lege-98-2016.html:395812:lege-99-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-99-2016",
+      "text": "n) din Legea nr. 99/2016 , cu modificările și completările ulterioare",
+      "inainte": "cadru de servicii, finanțate din fondurile prevăzute la alin. (1) , definite la art. 3 alin. (1) lit. c) și o) din Legea nr. 98/2016 , cu modificările și completările ulterioare, respectiv la art. 3 alin. (1) lit. b) și ",
+      "dupa": ", al căror obiect îl constituie realizarea studiilor de fezabilitate și/sau a proiectelor tehnice, care includ componenta de investigare geotehnică a terenului de fundare prin foraje/sondaje pentru infrastructura de tran"
+    },
+    {
+      "cheie": "lege-98-2016.html:396888:lege-281-2021",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-281-2021",
+      "text": "art. III alin. (1) și (2) din Legea nr. 281/2021",
+      "inainte": "nr. 15/2021 privind reglementarea unor măsuri fiscal-bugetare pentru ajustarea prețurilor contractelor de achiziție publică, aprobată cu modificări și completări prin Legea nr. 281/2021 , respectiv potrivit prevederilor ",
+      "dupa": " pentru aprobarea Ordonanței Guvernului nr. 15/2021 privind reglementarea unor măsuri fiscal-bugetare, precum și contractelor de achiziție publică/contractelor sectoriale/contractelor de concesiune/acordurilor-cadru de l"
+    },
+    {
+      "cheie": "lege-98-2016.html:397950:lege-294-2007",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-294-2007",
+      "text": "art. 3 alin. (2) din Legea nr. 294/2007",
+      "inainte": "rdonanțe de urgență; c) proiectelor finanțate prin Programul NATO de Investiții în Securitate, pentru care ajustările de preț se realizează după aprobarea de către structurile de specialitate NATO, potrivit prevederilor ",
+      "dupa": " privind derularea în România a proiectelor finanțate prin Programul NATO de Investiții în Securitate, cu modificările și completările ulterioare. Articolul 3 (1) Ajustarea stabilită conform prevederilor prezentei ordona"
+    },
+    {
+      "cheie": "lege-98-2016.html:402593:hg-907-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "hg-907-2016",
+      "text": "Hotărârea Guvernului nr. 907/2016 , cu modificările și completările ulterioare",
+      "inainte": "hiziției de dotări și/sau utilaje și echipamente tehnologice și funcționale prevăzute la art. 1 alin. (2) și nu include cheltuielile aferente proiectării și asistenței tehnice prevăzute în anexa nr. 6 secțiunea a 3-a la ",
+      "dupa": ", în situația în care și aceasta face parte din contractul de lucrări, sau b) costul, fără profit, aferent achiziției de produse destinate realizării lucrărilor de întreținere/reparare/administrare/ exploatare a drumuril"
+    },
+    {
+      "cheie": "lege-98-2016.html:402967:og-43-1997",
+      "fisier": "lege-98-2016.html",
+      "act": "og-43-1997",
+      "text": "Ordonanței Guvernului nr. 43/1997 , republicată, cu modificările și completările ulterioare",
+      "inainte": ") costul, fără profit, aferent achiziției de produse destinate realizării lucrărilor de întreținere/reparare/administrare/ exploatare a drumurilor de interes național, județean sau local clasificate conform prevederilor ",
+      "dupa": ", iar achiziția este realizată prin atribuirea unui contract distinct. (8) În cazul proiectării prevăzute la art. 1 alin. (2) și al contractelor/acordurilor-cadru de servicii prevăzute la art. 1 alin. (7) , ajustarea se "
+    },
+    {
+      "cheie": "lege-98-2016.html:406575:og-15-2021",
+      "fisier": "lege-98-2016.html",
+      "act": "og-15-2021",
+      "text": "Ordonanței Guvernului nr. 15/2021",
+      "inainte": "n cazul contractelor de achiziție publică/contractelor sectoriale/contractelor de concesiune/acordurilor-cadru de lucrări în cuprinsul cărora a fost introdusă clauza de ajustare a prețului în conformitate cu prevederile ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 281/2021 , cu excepția contractelor prevăzute la art. 2 alin. (8) din aceeași ordonanță și la art. III alin. (3) din Legea nr. 281/2021 , prin actul adițional prevăz"
+    },
+    {
+      "cheie": "lege-98-2016.html:406757:lege-281-2021",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-281-2021",
+      "text": "art. III alin. (3) din Legea nr. 281/2021",
+      "inainte": "ețului în conformitate cu prevederile Ordonanței Guvernului nr. 15/2021 , aprobată cu modificări și completări prin Legea nr. 281/2021 , cu excepția contractelor prevăzute la art. 2 alin. (8) din aceeași ordonanță și la ",
+      "dupa": " , prin actul adițional prevăzut la alin. (3), pe lângă precizarea elementelor obligatorii menționate în același alineat, părțile convin ca formula introdusă în contract potrivit Ordonanței Guvernului nr. 15/2021 , aprob"
+    },
+    {
+      "cheie": "lege-98-2016.html:406977:og-15-2021",
+      "fisier": "lege-98-2016.html",
+      "act": "og-15-2021",
+      "text": "Ordonanței Guvernului nr. 15/2021",
+      "inainte": "art. III alin. (3) din Legea nr. 281/2021 , prin actul adițional prevăzut la alin. (3), pe lângă precizarea elementelor obligatorii menționate în același alineat, părțile convin ca formula introdusă în contract potrivit ",
+      "dupa": " , aprobată cu modificări și completări prin Legea nr. 281/2021 , să fie înlocuită cu formula prevăzută la art. 3 alin. (4) . (5) Netransmiterea de către contractanți a adresei prin care solicită ajustarea valorii pentru"
+    },
+    {
+      "cheie": "lege-98-2016.html:412723:oug-38-2020",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-38-2020",
+      "text": "Ordonanței de urgență a Guvernului nr. 38/2020",
+      "inainte": "lor sectoriale/contractelor de concesiune/ acordurilor-cadru de lucrări/produse se suportă de către beneficiari. (7) Solicitările prevăzute la alin. (3) pot fi emise și depuse în format electronic, potrivit prevederilor ",
+      "dupa": " privind utilizarea înscrisurilor în formă electronică la nivelul autorităților și instituțiilor publice. Articolul 6 (1) Prin derogare de la prevederile art. 47 alin. (9) și (10) din Legea nr. 500/2002 , cu modificările"
+    },
+    {
+      "cheie": "lege-98-2016.html:412923:lege-500-2002",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-500-2002",
+      "text": "art. 47 alin. (9) și (10) din Legea nr. 500/2002 , cu modificările și completările ulterioare",
+      "inainte": "trivit prevederilor Ordonanței de urgență a Guvernului nr. 38/2020 privind utilizarea înscrisurilor în formă electronică la nivelul autorităților și instituțiilor publice. Articolul 6 (1) Prin derogare de la prevederile ",
+      "dupa": ", pe perioada de derulare a programelor naționale pe care le gestionează, determinată potrivit reglementărilor legale care le instituie și/sau pe parcursul derulării contractelor de achiziție publică/contractelor sectori"
+    },
+    {
+      "cheie": "lege-98-2016.html:415880:lege-281-2021",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-281-2021",
+      "text": "Legea nr. 281/2021",
+      "inainte": "clauze de revizuire/actualizare a prețului, stabilite în raport cu rata inflației sau cu alți indici, inclusiv clauza de ajustare prevăzută de Ordonanța Guvernului nr. 15/2021 , aprobată cu modificări și completări prin ",
+      "dupa": " . (3) În aplicarea prevederilor alin. (1) , în situația în care procedurile de atribuire sunt înainte de data-limită de depunere a ofertelor, autoritățile/entitățile contractante sunt obligate să întreprindă diligențele"
+    },
+    {
+      "cheie": "lege-98-2016.html:434991:og-2-2001",
+      "fisier": "lege-98-2016.html",
+      "act": "og-2-2001",
+      "text": "Ordonanței Guvernului nr. 2/2001",
+      "inainte": "rejudiciu. (3) Stabilirea prejudiciului trebuie să țină seama de circumstanțele faptei contravenționale și să fie fundamentată.\n+\nArticolul 228 În cazul contravențiilor prevăzute la art. 224 sunt aplicabile dispozițiile ",
+      "dupa": " privind regimul juridic al contravențiilor, aprobată cu modificări și completări prin Legea nr. 180/2002 , cu modificările și completările ulterioare.\n(la 10-09-2022,\nArticolul 228 din Capitolul VII a fost modificat de "
+    },
+    {
+      "cheie": "lege-98-2016.html:43783:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Art. 6 alin. (3) lit. b) din Legea nr. 98/2016",
+      "inainte": "lor și se aplică direct în toate statele membre. Aceste modificări sunt operate de către Comisia Europeană și au un caracter regulat. Astfel, începând cu data de 1 ianuarie 2024 cuantumul noilor praguri va fi următorul: ",
+      "dupa": " - pentru produse și servicii AC regionale/locale - de la 1 042 363 lei (215 000 EUR) se va majora la 1 090 812 lei (221 000 EUR) c) contractul este în legătură cu un contract de lucrări care face obiectul alin. (1) . .."
+    },
+    {
+      "cheie": "lege-98-2016.html:438646:hg-325-2018",
+      "fisier": "lege-98-2016.html",
+      "act": "hg-325-2018",
+      "text": "Hotărârii Guvernului nr. 325/2018",
+      "inainte": "minată, cu contract individual de muncă, în afara organigramei aprobate potrivit legii, până la cel mult 30% din numărul membrilor comisiei de evaluare, pentru a asigura buna desfășurare a acestora, conform prevederilor ",
+      "dupa": " pentru aprobarea Regulamentului-cadru privind stabilirea condițiilor de înființare a posturilor în afara organigramei și a criteriilor pe baza cărora se stabilește procentul de majorare salarială pentru activitatea pres"
+    },
+    {
+      "cheie": "lege-98-2016.html:442131:oug-13-2015",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-13-2015",
+      "text": "Ordonanța de urgență a Guvernului nr. 13/2015",
+      "inainte": "rezentei legi sunt supuse dispozițiilor legii în vigoare la data când acestea au fost încheiate în tot ceea ce privește încheierea, modificarea, interpretarea, efectele, executarea și încetarea acestora.\n+\nArticolul 237 ",
+      "dupa": " privind înființarea, organizarea și funcționarea Agenției Naționale pentru Achiziții Publice, publicată în Monitorul Oficial al României, Partea I, nr. 362 din 26 mai 2015, aprobată prin Legea nr. 244/2015 , se complete"
+    },
+    {
+      "cheie": "lege-98-2016.html:442364:lege-244-2015",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-244-2015",
+      "text": "Legea nr. 244/2015",
+      "inainte": "urgență a Guvernului nr. 13/2015 privind înființarea, organizarea și funcționarea Agenției Naționale pentru Achiziții Publice, publicată în Monitorul Oficial al României, Partea I, nr. 362 din 26 mai 2015, aprobată prin ",
+      "dupa": " , se completează după cum urmează: La articolul 5, după alineatul (6) se introduce un nou alineat, alineatul (6^1), cu următorul cuprins: (6^1) Numărul funcționarilor publici din cadrul fiecărei structuri regionale ale "
+    },
+    {
+      "cheie": "lege-98-2016.html:442853:oug-34-2006",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-34-2006",
+      "text": "Ordonanța de urgență a Guvernului nr. 34/2006",
+      "inainte": "e de cel puțin 30, din care cel puțin 2 își desfășoară activitatea în municipiile reședință ale județelor arondate fiecărei structuri regionale.\n+\nArticolul 238 La data intrării în vigoare a prezentei legi se abrogă: a) ",
+      "dupa": " privind atribuirea contractelor de achiziție publică, a contractelor de concesiune de lucrări publice și a contractelor de concesiune de servicii, publicată în Monitorul Oficial al României, Partea I, nr. 418 din 15 mai"
+    },
+    {
+      "cheie": "lege-98-2016.html:443167:lege-337-2006",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-337-2006",
+      "text": "Legea nr. 337/2006 , cu modificările și completările ulterioare",
+      "inainte": "lică, a contractelor de concesiune de lucrări publice și a contractelor de concesiune de servicii, publicată în Monitorul Oficial al României, Partea I, nr. 418 din 15 mai 2006, aprobată cu modificări și completări prin ",
+      "dupa": "; ... b) orice alte prevederi contrare cuprinse în orice alte acte normative. ...\n+\nArticolul 239 Anexele nr. 1 și 2 fac parte integrantă din prezenta lege.\n+\nArticolul 240 (1) Prezenta lege intră în vigoare la 3 zile de"
+    },
+    {
+      "cheie": "lege-98-2016.html:446050:constitutie",
+      "fisier": "lege-98-2016.html",
+      "act": "constitutie",
+      "text": "art. 76 alin. (2) din Constituția României",
+      "inainte": " , Articolul VIII din LEGEA nr. 283 din 13 noiembrie 2024, publicată în MONITORUL OFICIAL nr. 1139 din 14 noiembrie 2024\n)\nAceastă lege a fost adoptată de Parlamentul României, cu respectarea prevederilor art. 75 și ale ",
+      "dupa": ", republicată .\nNotă ...\nReproducem prevederile art. VI - VIII din ORDONANȚA DE URGENȚĂ nr. 107 din 20 decembrie 2017 , publicată în Monitorul Oficial nr. 1022 din 22 decembrie 2017: \"Articolul VI (1) Procedurile de atri"
+    },
+    {
+      "cheie": "lege-98-2016.html:447323:lege-99-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-99-2016",
+      "text": "Legii nr. 99/2016",
+      "inainte": "justarea/Revizuirea prețului contractelor de achiziție publică/sectoriale încheiate înainte de intrarea în vigoare a Legii nr. 98/2016 privind achizițiile publice, cu modificările și completările ulterioare, respectiv a ",
+      "dupa": " privind achizițiile sectoriale, se realizează în conformitate cu dispozițiile legale în vigoare la momentul realizării acesteia. (2) Contractele subsecvente încheiate după intrarea în vigoare a prezentei ordonanțe de ur"
+    },
+    {
+      "cheie": "lege-98-2016.html:451861:lege-101-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-101-2016",
+      "text": "Legea nr. 101/2016",
+      "inainte": "rții de Apel București și 10 posturi Tribunalului București. Aceste posturi vor fi alocate exclusiv completurilor specializate în achiziții publice care soluționează cereri ce corespund tipurilor de acțiuni prevăzute de ",
+      "dupa": " privind remediile și căile de atac în materie de atribuire a contractelor de achiziție publică, a contractelor sectoriale și a contractelor de concesiune de lucrări și concesiune de servicii, precum și pentru organizare"
+    },
+    {
+      "cheie": "lege-98-2016.html:455276:lege-500-2002",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-500-2002",
+      "text": "art. 42 alin. (1) lit. a) din Legea nr. 500/2002 , cu modificările și completările ulterioare",
+      "inainte": "i eliberării acestora de către beneficiarul lucrărilor. (2^1) Pentru proiectele de infrastructură de transport de interes național, pentru proiectele de investiții a căror valoare se încadrează în pragurile prevăzute la ",
+      "dupa": ", pentru proiectele de infrastructură implementate de operatorii regionali, astfel cum sunt definiți la art. 2 lit. h) din Legea nr. 51/2006, republicată , cu modificările și completările ulterioare, respectiv pentru pro"
+    },
+    {
+      "cheie": "lege-98-2016.html:455473:lege-51-2006",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-51-2006",
+      "text": "art. 2 lit. h) din Legea nr. 51/2006, republicată , cu modificările și completările ulterioare",
+      "inainte": "pragurile prevăzute la art. 42 alin. (1) lit. a) din Legea nr. 500/2002 , cu modificările și completările ulterioare, pentru proiectele de infrastructură implementate de operatorii regionali, astfel cum sunt definiți la ",
+      "dupa": ", respectiv pentru proiectele de infrastructură de interes public, definite potrivit legii, finanțate din fonduri externe nerambursabile, certificatele de urbanism și avizele/acordurile solicitate prin certificatul de ur"
+    },
+    {
+      "cheie": "lege-98-2016.html:458731:lege-292-2018",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-292-2018",
+      "text": "Legea nr. 292/2018",
+      "inainte": "petentă pentru protecția mediului are obligația de emitere a actului de reglementare în termen de maximum 30 de zile lucrătoare de la data la care s-a finalizat dezbaterea publică prevăzută la art. 19 din anexa nr. 5 la ",
+      "dupa": " privind evaluarea impactului anumitor proiecte publice și private asupra mediului. (5) Pentru proiectele de infrastructură de transport de interes național, pentru proiectele de investiții a căror valoare se încadrează "
+    },
+    {
+      "cheie": "lege-98-2016.html:460239:lege-350-2001",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-350-2001",
+      "text": "art. 63^1 lit. d) din Legea nr. 350/2001 privind amenajarea teritoriului și urbanismul, cu modificările și completările ulterioare",
+      "inainte": " prevăzut la alin. (1) , precum și solicitarea prin certificatul de urbanism a unor avize/acorduri care nu au temei tehnic și legal în raport cu obiectul proiectului și se sancționează cu amendă în cuantumul prevăzut la ",
+      "dupa": ". Inspectoratul de Stat în Construcții constată contravențiile și aplică sancțiunile potrivit prezentului alineat. (7) În termenul prevăzut la alin. (2) , entitățile care emit avizele solicitate prin certificatul de urba"
+    },
+    {
+      "cheie": "lege-98-2016.html:46613:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Art. 7 alin. (1) lit. a) din Legea nr. 98/2016",
+      "inainte": "lor și se aplică direct în toate statele membre. Aceste modificări sunt operate de către Comisia Europeană și au un caracter regulat. Astfel, începând cu data de 1 ianuarie 2026 cuantumul noilor praguri va fi următorul: ",
+      "dupa": " - pentru lucrări - de la 27 334 460 lei (5 538 000 EUR) se va reduce la 26 960 556 lei (5 404 000 EUR) Art. 7 alin. (1) lit. b) din Legea nr. 98/2016 - pentru produse și servicii - de la 705 819 lei (143 000 EUR) se va "
+    },
+    {
+      "cheie": "lege-98-2016.html:46763:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Art. 7 alin. (1) lit. b) din Legea nr. 98/2016",
+      "inainte": " cu data de 1 ianuarie 2026 cuantumul noilor praguri va fi următorul: Art. 7 alin. (1) lit. a) din Legea nr. 98/2016 - pentru lucrări - de la 27 334 460 lei (5 538 000 EUR) se va reduce la 26 960 556 lei (5 404 000 EUR) ",
+      "dupa": " - pentru produse și servicii - de la 705 819 lei (143 000 EUR) se va reduce la 698 460 lei (140 000 EUR) Art. 7 alin. (1) lit. c) din Legea nr. 98/2016 - pentru produse și servicii AC regionale/locale - de la 1 090 812 "
+    },
+    {
+      "cheie": "lege-98-2016.html:48160:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Art. 7 alin. (1) lit. a) din Legea nr. 98/2016",
+      "inainte": "lor și se aplică direct în toate statele membre. Aceste modificări sunt operate de către Comisia Europeană și au un caracter regulat. Astfel, începând cu data de 1 ianuarie 2024 cuantumul noilor praguri va fi următorul: ",
+      "dupa": " - pentru lucrări - de la 26 093 012 lei (5 382 000 EUR) se va majora la 27 334 460 lei (5 538 000 EUR) Art. 7 alin. (1) lit. b) din Legea nr. 98/2016 - pentru produse și servicii - de la 678 748 lei (140 000 EUR) se va "
+    },
+    {
+      "cheie": "lege-98-2016.html:74529:lege-98-2016",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-98-2016",
+      "text": "Art. 19 lit. a) din Legea nr. 98/2016",
+      "inainte": "lor și se aplică direct în toate statele membre. Aceste modificări sunt operate de către Comisia Europeană și au un caracter regulat. Astfel, începând cu data de 1 ianuarie 2026 cuantumul noilor praguri va fi următorul: ",
+      "dupa": " - pentru produse și servicii - loturi - de la 394 864 lei (80 000 EUR) se va majora la 399 120 lei (80 000 EUR), iar pentru lucrări - loturi - de la 4 935 800 lei (1 000 000 EUR) se va majora la 4 989 000 lei (1 000 000"
+    },
+    {
+      "cheie": "lege-98-2016.html:81398:oug-111-2011",
+      "fisier": "lege-98-2016.html",
+      "act": "oug-111-2011",
+      "text": "10 din Ordonanța de urgență a Guvernului nr. 111/2011",
+      "inainte": "vicii de comunicații electronice. (2) În sensul dispozițiilor alin. (1) , noțiunile rețea publică de comunicații electronice și serviciu de comunicații electronice au înțelesurile prevăzute la art. 4 alin. (1) pct. 9 și ",
+      "dupa": " privind comunicațiile electronice, aprobată cu modificări și completări prin Legea nr. 140/2012 , cu modificările și completările ulterioare.\n+\nParagraful 3 Contracte de achiziție publică/acorduri-cadru atribuite și con"
+    },
+    {
+      "cheie": "lege-98-2016.html:96362:lege-287-2009",
+      "fisier": "lege-98-2016.html",
+      "act": "lege-287-2009",
+      "text": "Legii nr. 287/2009 privind Codul civil, republicată, cu modificările ulterioare",
+      "inainte": "ursabile persoanelor fizice ori juridice în condițiile legislației speciale ori constituirea împreună cu persoane fizice ori juridice de societăți sau asocieri fără personalitate juridică în conformitate cu dispozițiile ",
+      "dupa": ". (2) În cazul în care, indiferent de denumirea sau forma utilizată, actele juridice încheiate de persoane care au calitatea de autoritate contractantă potrivit prezentei legi reprezintă contracte de achiziție publică/ac"
+    }
+  ]
+}

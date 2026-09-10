@@ -41,7 +41,14 @@ jobs:
       # README nobody re-reads; test_etalon.py holds the floor it may not drop below.
       - name: Etalon
         run: uv run python -m scripts.etalon
-      # The honest number: reference recall against the portal's own S_LGI marks on committed
+      # The honest number: locator recall against the portal's own S_LGI marks on committed
       # real acts. Guards it in CI so a regression fails the build, not a README nobody re-reads.
       - name: Etalon real
         run: uv run python -m scripts.etalon_real
+      # Reference precision, which no answer key can supply — S_LGI marks locators, not citations
+      # of other acts. Printed on every run rather than asserted, because the verdicts are a
+      # jurist's and are not in yet; while they are missing this prints "nemăsurată — nu este
+      # 100%", which is the sentence that has to stay visible until someone does the reading.
+      # test_etalon_precizie.py holds the plumbing honest in the meantime.
+      - name: Etalon precizie
+        run: uv run python -m scripts.etalon_precizie

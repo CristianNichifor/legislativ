@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cristiannichifor.github.io/romania-reforms/schema/etalon-precizie.schema.json",
+  "title": "Fișă de verificare pentru precizia extractorului de referințe",
+  "description": "Eșantionul de citări pe care extractorul le raportează și pe care un om urmează să le judece. Generată de scripts/etalon_precizie.py, niciodată scrisă de mână: `amprenta` leagă fișa de extractorul care a produs-o, iar dacă referinte.py se schimbă, amprenta se schimbă și fișa trebuie regenerată. Fiecare element poartă textul dinainte și de după, pentru că întrebarea „este o citare reală a acestui act” se răspunde citind fraza, nu spanul.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "amprenta", "candidati_total", "in_esantion", "intrebare", "elemente"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "_": { "type": "string" },
+    "amprenta": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$",
+      "description": "blake2s peste cheile și textele tuturor candidaților, nu doar ale celor din eșantion: un candidat apărut în afara eșantionului schimbă tot ce înseamnă eșantionul."
+    },
+    "candidati_total": { "type": "integer", "minimum": 1 },
+    "in_esantion": { "type": "integer", "minimum": 1 },
+    "intrebare": { "type": "string", "minLength": 20 },
+    "elemente": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cheie", "fisier", "act", "text", "inainte", "dupa"],
+        "properties": {
+          "cheie": {
+            "type": "string",
+            "pattern": "^[^:]+:[0-9]+:[^:]+$",
+            "description": "fișier:poziție:act. Toate trei, ca un verdict să răspundă despre un singur pasaj."
+          },
+          "fisier": { "type": "string", "minLength": 1 },
+          "act": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "inainte": { "type": "string" },
+          "dupa": { "type": "string" }
+        }
+      }
+    }
+  }
+}

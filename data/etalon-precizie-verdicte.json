@@ -1,0 +1,21 @@
+{
+  "$schema": "../schema/etalon-precizie-verdicte.schema.json",
+  "_": "Verdicte omenești pentru data/etalon-precizie.json. Vezi scripts/etalon_precizie.py.",
+  "_cum": [
+    "Pentru fiecare element din fișă, întrebarea este una singură și se răspunde citind pasajul:",
+    "în `inainte` + `text` + `dupa`, este `text` o citare reală a actului `act`?",
+    "",
+    "  true   — da, pasajul citează acel act, iar extractorul l-a identificat corect",
+    "  false  — nu: fie nu e o citare, fie e o citare a altui act decât cel raportat",
+    "  null   — neclar fără a citi actul întreg; se numără separat, nu se ascunde",
+    "",
+    "Formatul unei intrări:",
+    "  \"lege-98-2016.html:12345:lege-51-1995\": { \"corect\": true, \"nota\": \"\", \"de\": \"\", \"la\": \"\" }",
+    "",
+    "`amprenta` de mai jos trebuie să rămână egală cu cea din fișă. Dacă referinte.py se",
+    "schimbă, amprenta se schimbă, testul cade, iar fișa trebuie regenerată și recitită:",
+    "un verdict despre un extractor care nu mai există nu este o măsurătoare."
+  ],
+  "amprenta": "a0e4ac3f296dfc5537824f2f5c91b9c3",
+  "verdicte": {}
+}

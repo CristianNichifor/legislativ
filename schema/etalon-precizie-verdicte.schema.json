@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cristiannichifor.github.io/romania-reforms/schema/etalon-precizie-verdicte.schema.json",
+  "title": "Verdicte omenești pentru fișa de precizie",
+  "description": "Răspunsurile la data/etalon-precizie.json. Nu există cheie de răspuns pentru citările de acte — marcajele S_LGI ale portalului sunt localizatori, nu acte — deci precizia se măsoară prin adjudecare sau nu se măsoară deloc. `amprenta` trebuie să rămână egală cu cea din fișă: un verdict despre un extractor care nu mai există nu este o măsurătoare, iar tests/test_etalon_precizie.py cade dacă cele două se despart.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "amprenta", "verdicte"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "_": { "type": "string" },
+    "_cum": { "type": "array", "items": { "type": "string" } },
+    "amprenta": { "type": "string", "pattern": "^[0-9a-f]{32}$" },
+    "verdicte": {
+      "type": "object",
+      "description": "Cheie de element din fișă → verdict. Absența unei chei înseamnă necitit, ceea ce nu e același lucru cu `null`, care înseamnă citit și neclar.",
+      "propertyNames": { "pattern": "^[^:]+:[0-9]+:[^:]+$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["corect"],
+        "properties": {
+          "corect": {
+            "type": ["boolean", "null"],
+            "description": "true: pasajul citează acel act și extractorul l-a identificat corect. false: nu e o citare, sau e a altui act. null: cititorul nu a putut decide fără actul întreg."
+          },
+          "nota": { "type": "string" },
+          "de": { "type": "string" },
+          "la": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" }
+        },
+        "if": {
+          "properties": { "corect": { "type": "boolean" } },
+          "required": ["corect"]
+        },
+        "then": {
+          "required": ["corect", "de", "la"],
+          "properties": {
+            "de": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Cine a judecat. Cerut doar pentru true/false: un număr de precizie fără adjudecator nu poate fi verificat de nimeni, iar V1_ACCEPTANCE.md cere reviewer și dată. `null` nu îl cere — a spune „nu știu” rămâne ieftin, ca să nu fie tentant să spui altceva."
+            }
+          }
+        }
+      }
+    }
+  }
+}

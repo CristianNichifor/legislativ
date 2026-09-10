@@ -25,13 +25,26 @@ pre-amendment placeholder; it cannot establish historical reconstruction accurac
 
 ## Measurement protocol
 
-Run `python -m scripts.v1_rehearsal`, `python -m scripts.etalon`, and
-`python -m scripts.etalon_real` offline. Preserve output with the tested commit,
-Python/SQLite versions and manifest hash in the acceptance record.
-The authentic reference etalon counts publisher S_LGI marks matched by normalized
-text containment anywhere in the document. This is a proxy for reference recall,
-not exact-span recall, precision, completeness, or legal correctness. No marks means
-not measured; it must not be reported as perfect recall.
+Run `python -m scripts.v1_rehearsal`, `python -m scripts.etalon`,
+`python -m scripts.etalon_real` and `python -m scripts.etalon_precizie` offline.
+Preserve output with the tested commit, Python/SQLite versions and manifest hash in
+the acceptance record.
+
+The authentic etalon counts publisher S_LGI marks matched by normalized text
+containment anywhere in the document. **Those marks are locators, not citations of
+other acts**: over the committed fixtures, 808 of 822 are `lit. e)`-shaped and the
+remaining 14 name the host act, so none points at a different act. The number is
+therefore a proxy for *locator* recall — not exact-span recall, not reference recall,
+not precision, completeness or legal correctness. This section described it as a
+reference-recall proxy until 2026-09-10. No marks means not measured; it must not be
+reported as perfect recall.
+
+External reference recall is consequently **unmeasured**: nothing independent says
+which citations of other acts a real document contains. Reference *precision* is
+measured by adjudication — `data/etalon-precizie.json` holds a deterministic sample of
+120 of the 283 claims the extractor makes over the fixtures, and
+`data/etalon-precizie-verdicte.json` holds the verdicts. Both are empty of verdicts at
+the time of writing, so precision reads `nemăsurată`, not 100%.
 
 Before domain acceptance, freeze reviewer-approved expected items for each source
 and locator, then classify every expected item and emitted candidate in the bounded
