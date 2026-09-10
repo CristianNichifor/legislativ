@@ -18,7 +18,7 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 from scripts.dataset_release import load_channel, load_manifest, validate_release_id
 
-DEFAULT_CHANNEL = "https://date.cnwebify.dev/channel.json"
+DEFAULT_CHANNEL = "https://date.cristian-nichifor.com/channel.json"
 MAX_MANIFEST = 256 * 1024
 CHUNK = 1024 * 1024
 CORE_COLUMNS = {

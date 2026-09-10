@@ -9,8 +9,8 @@ const javascript = fs.readFileSync(path.join(root, 'app/dataset-updates.js'), 'u
 const base = 'http://127.0.0.1:8927';
 const offer = {manifest: {release: '2026-09-10', files: [
   {name: 'corpus.db', bytes: 8388608, sha256: 'a'.repeat(64)},
-]}, url: 'https://date.cnwebify.dev/2026-09-10/dataset-release.json', sha256: 'b'.repeat(64)};
-const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/channel.json',
+]}, url: 'https://date.cristian-nichifor.com/2026-09-10/dataset-release.json', sha256: 'b'.repeat(64)};
+const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.com/channel.json',
   active: null, offer: null, progress: {state: 'idle', bytes: 0, total: 0},
   private_data_uploaded: false});
 

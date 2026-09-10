@@ -66,7 +66,7 @@ jobs:
         run: >-
           uv run python -m scripts.construieste_web
           --sursa ${{ steps.date.outputs.sursa }}
-          --depozit https://date.cnwebify.dev/2026-09-08
+          --depozit https://date.cristian-nichifor.com/2026-09-08
           --felii-cautare 8
       - uses: actions/upload-pages-artifact@v5
         with:

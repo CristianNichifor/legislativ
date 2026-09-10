@@ -128,7 +128,7 @@ uv run python -m scripts.dataset_release verify "$STAGE"
 r2 copyto "$STAGE/dataset-release.json" "r2:$BUCKET/$PREFIX/dataset-release.json" --immutable
 r2 check "$STAGE" "r2:$BUCKET/$PREFIX" --one-way --download --include dataset-release.json
 uv run python -m scripts.dataset_release channel "$STAGE" \
-  --manifest-url "https://date.cnwebify.dev/$PREFIX/dataset-release.json" \
+  --manifest-url "https://date.cristian-nichifor.com/$PREFIX/dataset-release.json" \
   --output "$LUCRU/channel.json"
 if [ "$LATEST" -eq 1 ]; then
   r2 copyto "$LUCRU/channel.json" "r2:$BUCKET/channel.json"
@@ -137,4 +137,4 @@ echo "channel proposal: $LUCRU/channel.json (publish only with explicit --latest
 
 echo
 echo "încărcat. Ultimul pas, un singur rând în .github/workflows/pages.yml:"
-echo "  --depozit https://date.cnwebify.dev/$PREFIX"
+echo "  --depozit https://date.cristian-nichifor.com/$PREFIX"

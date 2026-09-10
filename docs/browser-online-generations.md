@@ -52,7 +52,7 @@ releases; merely checking an offer does not change active-source limitations.
 
 ## Deployment gate
 
-The configured default is `https://date.cnwebify.dev/channel.json`. The parent
+The configured default is `https://date.cristian-nichifor.com/channel.json`. The parent
 reported this endpoint as 404 during integration; this change does not publish it.
 Production selection remains gated on publisher deployment, immutable release
 assets and CORS for the Pages origin. Expose `Accept-Ranges`, `Content-Range` and

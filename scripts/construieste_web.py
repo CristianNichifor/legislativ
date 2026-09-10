@@ -104,7 +104,7 @@ def _csp(depozit: str = "") -> str:
 
 
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
-PUBLIC_CHANNEL = "https://date.cnwebify.dev/channel.json"
+PUBLIC_CHANNEL = "https://date.cristian-nichifor.com/channel.json"
 
 
 def _public_config(channel=PUBLIC_CHANNEL, allow_loopback=False):

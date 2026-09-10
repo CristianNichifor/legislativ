@@ -21,7 +21,7 @@ allocation, so light use can cost **nothing**.
 | **Workers KV** `legislativ-rescrieri` | 100k reads / 1k writes / 1 GB free | the rewrite cache | live (`8a788c53…`) |
 | **Rate-limiting binding** (`RL`) | free | per-IP limit, no KV cost | live |
 | **AI Gateway** `law-legislation-project-gateway` | free | caching + analytics in front of Workers AI | live |
-| **R2** `legislativ` | 10 GB / 1M class A ops per month free | the corpus and the search index, read by the browser over Range | **live** on `date.cnwebify.dev` — see the cost model below |
+| **R2** `legislativ` | 10 GB / 1M class A ops per month free | the corpus and the search index, read by the browser over Range | **live** on `date.cristian-nichifor.com` — see the cost model below |
 
 Account: **CN Webify** `432316a05c0d6000c6e196fe32e47dd7`. Existing maintainer endpoint:
 `https://legislativ-rescrieri.cn-webify.workers.dev/rescrie`. It is not used as the public app
