@@ -1151,6 +1151,30 @@ def _client_cautare() -> None:
     print(f"  client de căutare → {tinta} ({n} fișiere)")
 
 
+def _civic_ui() -> None:
+    """Copy the pinned Civic UI assets referenced by the static shell."""
+    allowlist = (
+        Path("civic-ui-adapter.css"),
+        Path("vendor/civic-ui/LICENSE"),
+        Path("vendor/civic-ui/NATIVE.md"),
+        Path("vendor/civic-ui/native.css"),
+        Path("vendor/civic-ui/styles.css"),
+        Path("vendor/civic-ui/foundations.css"),
+        Path("vendor/civic-ui/controls.css"),
+        Path("vendor/civic-ui/themes/neutral.css"),
+        Path("vendor/civic-ui/themes/usr.css"),
+        Path("vendor/civic-ui/provenance.json"),
+    )
+    for relative in allowlist:
+        source = ROOT / "app" / relative
+        if not source.is_file():
+            raise SystemExit(f"lipsește asset-ul Civic UI: {source}")
+        target = WEB / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+    print(f"  Civic UI → {WEB / 'vendor/civic-ui'}")
+
+
 def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or not re.search(r"<body(?:\s[^>]*)?>", sursa):
@@ -1226,6 +1250,7 @@ def main(
     _worker(depozit)
     _fonturi()
     _client_cautare()
+    _civic_ui()
     _pagina(depozit, felii_cautare)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
