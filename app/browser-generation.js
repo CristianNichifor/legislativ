@@ -179,8 +179,15 @@
       const included = data.legacy_root ? 'versiunea publicata ' + data.legacy_root.split('/').filter(Boolean).pop() : 'datele incluse';
       node('active').textContent = `In aceasta fila: ${data.active?.release || included}. Selectata pentru reincarcare: ${data.selected?.release || included}.`;
       node('offer').textContent = data.offer ? `Oferta: ${data.offer.release} · publicata ${data.offer.created_at} · verificata ${data.offer.checked_at} · rapoarte: ${(data.offer.report_bytes / 1048576).toFixed(2)} MiB` : '';
-      const missing = (data.offer || data.selected)?.missing || data.legacy_missing || [];
-      node('coverage').textContent = missing.length ? `Surse optionale nepublicate; acoperire indisponibila: ${scope.browserSourceLabels(missing)}.` : '';
+      const missing = data.active?.missing || data.legacy_missing || [];
+      const coverage = [];
+      if (data.boot_error) coverage.push('Sursele acestei file nu sunt disponibile: pornirea a esuat.');
+      else if (missing.length) coverage.push(`In aceasta fila, acoperire indisponibila: ${scope.browserSourceLabels(missing)}.`);
+      if (data.selected && data.selected.sha256 !== data.active?.sha256 && data.selected.missing.length) {
+        coverage.push(`Versiunea selectata pentru reincarcare, surse absente: ${scope.browserSourceLabels(data.selected.missing)}.`);
+      }
+      if (data.offer?.missing.length) coverage.push(`Oferta, surse absente: ${scope.browserSourceLabels(data.offer.missing)}.`);
+      node('coverage').textContent = coverage.join(' ');
       node('select').hidden = !data.offer || data.offer.sha256 === data.selected?.sha256;
       node('clear').hidden = !data.selected; node('previous').hidden = !data.previous;
       node('reload').hidden = !data.boot_error && (data.active?.sha256 || null) === (data.selected?.sha256 || null);

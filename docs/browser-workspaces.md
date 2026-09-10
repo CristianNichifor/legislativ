@@ -34,6 +34,9 @@ also compares schema objects against the canonical dossier schema before and
 after migration; imported DDL is not executed. Import and restore check the
 existing draft/inflight guard before replacing state, including after reading an
 import file. A cancelled guard leaves the database and backup history unchanged.
+Snapshot status and backup export are independent of public-source and Python
+boot: the main thread reads IndexedDB under the same private Web Lock. Import and
+restore still require the runtime to boot successfully.
 
 HTTPS or localhost, IndexedDB, Web Locks and Web Crypto are required. Unsupported
 browsers fail dossier operations explicitly. Browser persistence is not immunity

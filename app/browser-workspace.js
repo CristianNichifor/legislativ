@@ -42,6 +42,10 @@
         (await record(item.bytes)).sha256 !== item.sha256) throw new Error('Snapshot invalid; folositi o copie de siguranta.');
   }
   scope.BrowserWorkspace = {
+    readOnly(request) {
+      return request.path === '/api/browser-workspace' && (request.method === 'GET' ||
+        (request.method === 'POST' && JSON.parse(request.body || '{}').action === 'export'));
+    },
     guard() {
       if (typeof document === 'undefined') return;
       const event = new Event('beforeunload', {cancelable: true});
@@ -63,6 +67,7 @@
           await check(item);
           return JSON.stringify({bytes: Array.from(item.bytes)});
         }
+        if (!py) throw new Error('Importul si restaurarea necesita motorul Python disponibil.');
         py.FS.mkdirTree('/workspace');
         const restore = bytes => {
           for (const suffix of ['', '-wal', '-shm', '-journal']) {

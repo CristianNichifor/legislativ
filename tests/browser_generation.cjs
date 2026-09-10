@@ -90,7 +90,23 @@ const pub = '/api/browser-generation', priv = '/api/browser-workspace';
       assert.equal((await good(page, pub)).selected.release, '2026-09-10-a');
     }
     await mode(page, 'b');
+    // A complete offer must not erase limitations of the still-active runtime.
+    await page.evaluate(() => {
+      const original = window.fetch;
+      window.coverageFetch = original;
+      window.fetch = async (...args) => {
+        const response = await original(...args);
+        if (args[0] !== '/api/browser-generation' || !response.ok) return response;
+        const data = await response.json();
+        if (data.offer) data.offer.missing = [];
+        return new Response(JSON.stringify(data), {status:200});
+      };
+    });
     await page.locator('#browser-generation [data-check]').click(); await idle(page);
+    const coverage = await page.locator('#browser-generation [data-coverage]').innerText();
+    assert.ok(coverage.includes('In aceasta fila, acoperire indisponibila:'));
+    assert.ok(coverage.includes('Legislatie UE'), 'Checking a complete offer cannot remove active missing-EU coverage');
+    await page.evaluate(() => {window.fetch = coverageFetch;});
     await page.evaluate(() => {
       const original = window.fetch;
       window.fetch = async (...args) => {
@@ -121,6 +137,8 @@ const pub = '/api/browser-generation', priv = '/api/browser-workspace';
     // A broken selected source must leave recovery controls available.
     await mode(page, 'corpus-failure'); await page.reload(); await good(page, pub);
     assert.equal((await api(page, '/api/rezumat')).status, 503);
+    assert.deepEqual(await good(page, priv), privateBefore, 'Private status independent of public boot');
+    assert.deepEqual(await good(page, priv, {action:'export'}), exported, 'Private export independent of public boot');
     await page.locator('#browser-generation [data-clear]').click(); await idle(page);
     await page.locator('#browser-generation [data-reload]').click(); await page.waitForLoadState('domcontentloaded');
     assert.equal((await good(page, '/api/rezumat')).acte, 4);
@@ -140,6 +158,13 @@ const pub = '/api/browser-generation', priv = '/api/browser-workspace';
     assert.ok(!requests.some(r => r.url.includes('untrusted.invalid')));
     assert.ok(requests.filter(r => r.url.startsWith(source) && r.url.endsWith('/corpus.db') && r.method === 'GET').every(r => r.range), 'No full corpus downloads');
     assert.deepEqual(errors, []);
+    // No Python worker can start: retained snapshots still export on the main thread.
+    const retained = await good(page, priv, {action:'export', backup:0});
+    await page.route('**/worker.js', route => route.abort());
+    await page.reload();
+    assert.deepEqual(await good(page, priv), privateBefore, 'Status survives missing runtime/CDN');
+    assert.deepEqual(await good(page, priv, {action:'export'}), exported);
+    assert.deepEqual(await good(page, priv, {action:'export', backup:0}), retained);
     console.log(`${width}: draft guards, spoof rejection, failed checks/preparation, generation replacement, optional UE, failed-boot recovery, no uploads passed`);
     await context.close();
   }} finally {await browser.close();}

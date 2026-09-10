@@ -494,6 +494,10 @@ onmessage = (e) => { requestQueue = requestQueue.then(() => handle(e.data)); };
 async function handle(request) {
   const {id, path, query, body, method = 'GET'} = request;
   try {
+    if (BrowserWorkspace.readOnly({...request, method})) {
+      const result = await BrowserWorkspace.run(null, {...request, method});
+      postMessage({id, ok:true, result}); return;
+    }
     if (path === '/api/browser-generation') {
       await core; await gata.catch(() => {});
       const result = await publicManager.request(method, body);
@@ -682,6 +686,15 @@ BOOT = """
   if (DEPOZIT_CAUTARE) ready.then(() => {if (!selectedGeneration) incalzesteBanda().catch(()=>{});}).catch(()=>{});
   window.fetch = async function(url, opts){
     const u = (typeof url === "string") ? url : (url && url.url);
+    if (u && u.split('?')[0] === '/api/browser-workspace') {
+      try {
+        const request = {path:'/api/browser-workspace', method:(opts?.method || 'GET').toUpperCase(), body:opts?.body || ''};
+        if (BrowserWorkspace.readOnly(request)) {
+          const result = await BrowserWorkspace.run(null, request);
+          return new Response(result, {status:200, headers:{'Content-Type':'application/json'}});
+        }
+      } catch (e) {return new Response(JSON.stringify({error:String(e)}), {status:500});}
+    }
     if (u && u.indexOf("/api/cauta") === 0) {
       try {
         await ready;

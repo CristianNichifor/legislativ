@@ -21,6 +21,8 @@ databases are probed again. All selected database URLs derive from the manifest
 folder. Pagefind, build search shards and build reports are disabled for selected
 releases; search uses the existing SQLite engine. Dossiers remain in their
 independent private store. No research data is sent to a release host.
+Coverage for the active tab is displayed independently of offered or pending
+releases; merely checking an offer does not change active-source limitations.
 
 ## Integrity and limits
 
@@ -40,6 +42,10 @@ independent private store. No research data is sent to a release host.
   the included generation occurs. Inaccessible IndexedDB also fails explicitly,
   even on first boot, because absence of a previous selection cannot be established.
   A blocked open rejects promptly; it does not leave controls waiting indefinitely.
+- Private snapshot status and current/retained backup export run on the main
+  thread under the existing private Web Lock, without Python or public boot.
+  They remain available when a selected source or the Python CDN cannot load.
+  Import/restore still require successful runtime boot in this bounded version.
 - Missing legacy optional sources show human-readable coverage limitations.
   Required corpus failures still fail boot. A declared optional file in a selected
   manifest must pass validation; omission is different from corruption.
