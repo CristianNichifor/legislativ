@@ -134,7 +134,7 @@ class LocalLaunchTests(unittest.TestCase):
 
     def smoke(self, stub):
         with tempfile.TemporaryDirectory(prefix="launch test ") as directory:
-            base = Path(directory)
+            base = Path(directory).resolve()
             source = ROOT
             if stub:
                 source = base / "source"
@@ -167,13 +167,13 @@ class LocalLaunchTests(unittest.TestCase):
                 preferred = occupied.getsockname()[1]
                 args = ["--data-home", str(data), "--port", str(preferred), "--fara-browser"]
                 if os.name == "nt":
-                    command = ["cmd", "/c", str(extracted / "ruleaza.cmd"), *args]
+                    command = ["cmd", "/d", "/c", "ruleaza.cmd", *args]
                 else:
                     command = ["bash", str(extracted / "ruleaza.sh"), *args]
                 with (base / "output.log").open("w+") as output:
                     proc = subprocess.Popen(
                         command,
-                        cwd=base,
+                        cwd=extracted,
                         env=env,
                         stdout=output,
                         stderr=subprocess.STDOUT,
@@ -182,6 +182,7 @@ class LocalLaunchTests(unittest.TestCase):
                     try:
                         deadline = time.monotonic() + 30
                         body = None
+                        last_probe_error = None
                         while time.monotonic() < deadline and proc.poll() is None:
                             text = (base / "output.log").read_text()
                             if "Pornesc pe http://127.0.0.1:" in text:
@@ -196,12 +197,18 @@ class LocalLaunchTests(unittest.TestCase):
                                     self.assertEqual(response.status, 200)
                                     body = response.read()
                                     break
-                                except OSError:
-                                    pass
+                                except OSError as exc:
+                                    last_probe_error = str(exc)
                                 finally:
                                     connection.close()
                             time.sleep(0.1)
-                        self.assertIsNotNone(body, (base / "output.log").read_text())
+                        if body is None:
+                            diagnostic = (
+                                (base / "output.log").read_text()
+                                + f"\nLast HTTP probe error: {last_probe_error}"
+                            )
+                            print(diagnostic, file=sys.stderr, flush=True)
+                            self.fail(diagnostic)
                         self.assertIn(b"<html", body.lower())
                         self.assertTrue((data / "private").is_dir())
                         self.assertFalse((base / "network.log").exists())

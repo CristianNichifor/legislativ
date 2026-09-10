@@ -185,7 +185,7 @@ def prepare_eu(public_db, previous_effective_db, target_db):
             with closing(sqlite3.connect(temporary)) as con:
                 con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
                 con.execute("PRAGMA journal_mode=DELETE")
-            with temporary.open("rb") as stream:
+            with temporary.open("r+b") as stream:
                 os.fsync(stream.fileno())
             os.link(temporary, target)  # Atomic publication, never replace an existing target.
         finally:

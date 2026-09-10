@@ -197,7 +197,8 @@ def face_handler(stare: Stare, *, runtime=None):
 
         def _dispatch(self, method):
             if runtime is None:
-                return method(stare)
+                method(stare)
+                return
             # Each complete operation, including private writes and response serialization,
             # sees exactly one state. Activation uses the same reentrant lock.
             with runtime.manager.runtime_lock:
@@ -206,8 +207,9 @@ def face_handler(stare: Stare, *, runtime=None):
                 current = runtime.manager.current_state
                 try:
                     if urlparse(self.path).path == "/api/date":
-                        return self._date()
-                    return method(current)
+                        self._date()
+                        return
+                    method(current)
                 except TimeoutError:
                     self.close_connection = True
                     self._json({"error": "Cererea a expirat."}, 408)

@@ -80,7 +80,7 @@ def sync_directory(path):
 
 
 def sync_file(path):
-    with Path(path).open("rb") as stream:
+    with Path(path).open("r+b") as stream:
         os.fsync(stream.fileno())
 
 
@@ -444,7 +444,7 @@ class DatasetManager:
                 self._set(state="verifying")
                 self.verify(folder, offer["manifest"])
                 manifest_path = folder / "dataset-release.json"
-                manifest_path.write_text(offer["manifest_text"], encoding="utf-8")
+                manifest_path.write_text(offer["manifest_text"], encoding="utf-8", newline="")
                 sync_file(manifest_path)
                 sync_directory(folder)
                 destination = self.home / "datasets" / offer["sha256"]

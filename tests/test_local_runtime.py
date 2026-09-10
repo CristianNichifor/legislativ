@@ -73,7 +73,8 @@ def fixture_release(folder, transport, release, title, *, include_eu=True):
             "release": release,
             "created_at": "2026-09-10T00:00:00Z",
             "files": entries,
-        }
+        },
+        indent=2,
     ).encode()
     fingerprint = hashlib.sha256(raw).hexdigest()
     url = f"https://datasets.example/{release}/dataset-release.json"
@@ -117,7 +118,7 @@ class LocalRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="local runtime ")
         self.addCleanup(self.temp.cleanup)
-        self.base = Path(self.temp.name)
+        self.base = Path(self.temp.name).resolve()
         self.home = self.base / "user data"
         self.transport = Transport()
 
@@ -132,7 +133,8 @@ class LocalRuntimeTests(unittest.TestCase):
         self.assertEqual(request(httpd, body={"action": "check"})[0], 200)
         self.assertEqual(request(httpd, body={"action": "download", "sha256": fingerprint})[0], 200)
         runtime.manager.thread.join(timeout=5)
-        self.assertEqual(runtime.manager.status()["progress"]["state"], "ready")
+        status = runtime.manager.status()
+        self.assertEqual(status["progress"]["state"], "ready", status)
         return fingerprint
 
     def activate(self, runtime, httpd, name, title):

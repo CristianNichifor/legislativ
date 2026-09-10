@@ -6,7 +6,7 @@ import os
 import socket
 import subprocess
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 
 def default_data_home(platform=None, environ=None, home=None):
@@ -19,11 +19,11 @@ def default_data_home(platform=None, environ=None, home=None):
             base = ntpath.join(home, "AppData", "Local")
         return ntpath.join(base, "legislativ")
     if platform == "darwin":
-        return str(Path(home) / "Library" / "Application Support" / "legislativ")
+        return str(PurePosixPath(home) / "Library" / "Application Support" / "legislativ")
     base = environ.get("XDG_DATA_HOME", "")
-    if not Path(base).is_absolute():
-        base = str(Path(home) / ".local" / "share")
-    return str(Path(base) / "legislativ")
+    if not PurePosixPath(base).is_absolute():
+        base = str(PurePosixPath(home) / ".local" / "share")
+    return str(PurePosixPath(base) / "legislativ")
 
 
 def available_port(preferred):
