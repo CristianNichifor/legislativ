@@ -67,6 +67,7 @@ class Stare:
         eu: str = "eu.db",
         *,
         date_dir: str | None = None,
+        reports_dir: str | None = None,
         corpus_intreg: bool = False,
     ):
         self.corpus = corpus
@@ -74,6 +75,7 @@ class Stare:
         self.graf = graf
         self.eu = eu
         self.date_dir = Path(date_dir) if date_dir else None
+        self.reports_dir = Path(reports_dir) if reports_dir is not None else None
         self.corpus_intreg = corpus_intreg
         self._titluri: dict[str, str] | None = None
         self._urls: dict[str, str] | None = None
@@ -104,10 +106,13 @@ class Stare:
         return self.date_dir is not None and not self.corpus_intreg
 
     @property
+    def report_root(self) -> Path | None:
+        return self.reports_dir if self.reports_dir is not None else self.date_dir
+
+    @property
     def are_rapoarte(self) -> bool:
-        """Prebuilt JSON is available. True whenever `date_dir` is set, corpus or not: these are
-        whole-corpus scans that are far too slow per request even when the corpus is right there."""
-        return self.date_dir is not None
+        """An explicit report root, independent of whether corpus queries use shards."""
+        return self.report_root is not None
 
     def are_graf(self) -> bool:
         return Path(self.graf).is_file()
@@ -121,7 +126,7 @@ class Stare:
     # same bounded dictionary arrives prebuilt as `termeni.json`.
     def _dictionar(self, limita: int = 800) -> list[Termen]:
         if self.are_rapoarte:
-            cale = self.date_dir / "termeni.json"
+            cale = self.report_root / "termeni.json"
             if not cale.is_file():
                 return []
             brut = json.loads(cale.read_text(encoding="utf-8"))
@@ -142,7 +147,11 @@ class Stare:
     def _incarca_raport(self, nume: str):
         """A prebuilt report. Returns whatever the file holds — the older ones are lists, the
         Parliament one is an object keyed by legislature."""
-        cai = [self.date_dir / nume] if self.are_rapoarte else [Path("web/data") / nume, Path(nume)]
+        cai = (
+            [self.report_root / nume]
+            if self.are_rapoarte
+            else [Path("web/data") / nume, Path(nume)]
+        )
         for cale in cai:
             if cale.is_file():
                 try:
@@ -291,8 +300,19 @@ def rezumat(stare: Stare) -> dict:
     published; recounting them per request costs nothing locally and reads most of the corpus when
     it is behind byte-range requests.
     """
-    if stare.are_rapoarte:
-        cale = stare.date_dir / "manifest.json"
+    if not getattr(stare, "dataset_available", True):
+        return {
+            "acte": 0,
+            "provizii": 0,
+            "acte_structurate": 0,
+            "acte_normative": 0,
+            "initiative": 0,
+            "dataset_available": False,
+            "limitari": ["Setul public de date nu este instalat."],
+            **_rezumat_ue(stare),
+        }
+    cale = stare.report_root / "manifest.json" if stare.are_rapoarte else None
+    if cale is not None and (stare.pe_shard or cale.is_file()):
         m = json.loads(cale.read_text(encoding="utf-8")) if cale.is_file() else {}
         r = {
             "acte": m.get("acte", 0),

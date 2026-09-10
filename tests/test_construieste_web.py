@@ -203,11 +203,11 @@ def test_worker_cu_depozit_monteaza_corpusul(tmp_path, monkeypatch):
     assert "/api/documente-proiect" in text
     assert "/api/importa-proiect" in text
     assert "/api/inventar-surse" in text
-    assert "/api/dosare/rulari" in text
-    assert "/api/dosare/revizuiri" in text
-    assert "/api/dosare/dovezi" in text
-    assert "/api/dosare/verificari" in text
-    assert "/api/dosare/coada" in text
+    assert "from scripts.browser_workspace import route" in text
+    assert "await BrowserWorkspace.run" in text
+    assert "await copiaOffline(nume)" not in text
+    assert 'DEPOZIT && name === "manifest.json"' not in text
+    assert "generatia selectata nu e disponibil" in text
     assert "/api/diferente-versiuni" in text
     assert "/api/actualizare-proiect" in text
 

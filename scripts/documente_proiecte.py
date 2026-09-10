@@ -98,6 +98,8 @@ def descopera(html: str, baza: str) -> list[dict]:
 
 
 def cale_store(stare) -> Path:
+    if hasattr(stare, "documente_db"):
+        return Path(stare.documente_db)
     return Path(stare.initiative).with_suffix(".documente.db")
 
 
