@@ -1,5 +1,6 @@
 """Inherited by smoke-test subprocesses; record and reject external networking."""
 
+import faulthandler
 import os
 import sys
 
@@ -10,6 +11,8 @@ def guard(event, args):
         allowed = isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"}
     elif event == "socket.getaddrinfo":
         allowed = args[0] in {"127.0.0.1", "::1", "localhost"}
+    elif event in {"socket.gethostbyaddr", "socket.gethostbyname"}:
+        allowed = False
     else:
         return
     if not allowed:
@@ -19,3 +22,4 @@ def guard(event, args):
 
 
 sys.addaudithook(guard)
+faulthandler.dump_traceback_later(10)

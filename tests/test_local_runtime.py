@@ -11,7 +11,6 @@ import tempfile
 import threading
 import unittest
 from contextlib import chdir, closing, contextmanager
-from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
@@ -87,7 +86,7 @@ def fixture_release(folder, transport, release, title, *, include_eu=True):
 
 @contextmanager
 def running(runtime):
-    with ThreadingHTTPServer(
+    with server.LoopbackHTTPServer(
         ("127.0.0.1", 0), server.face_handler(runtime.manager.current_state, runtime=runtime)
     ) as httpd:
         httpd.daemon_threads = False

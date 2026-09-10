@@ -65,6 +65,7 @@ import json
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 from scripts.servicii import (
@@ -134,6 +135,15 @@ ASSETS = {
         )
     },
 }
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind numeric loopback without the stdlib HTTPServer reverse-DNS lookup."""
+
+    def server_bind(self):
+        TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
 
 
 def _incalzeste(stare: Stare) -> None:
@@ -829,7 +839,7 @@ def _serveste_local(port, runtime, deschide_browser):
     import webbrowser
 
     handler = face_handler(runtime.manager.current_state, runtime=runtime)
-    with ThreadingHTTPServer(("127.0.0.1", port), handler) as server:
+    with LoopbackHTTPServer(("127.0.0.1", port), handler) as server:
         server.daemon_threads = False
         url = f"http://127.0.0.1:{server.server_port}"
         print(f"legislativ pe {url}\nDate locale: {runtime.home}", flush=True)

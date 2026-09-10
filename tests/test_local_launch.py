@@ -13,6 +13,7 @@ import tempfile
 import time
 import unittest
 import zipfile
+from contextlib import suppress
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,7 +22,8 @@ from scripts.build_runtime import build
 
 ROOT = Path(__file__).resolve().parents[1]
 STUB_SERVER = """import argparse, json, pathlib
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
+from socketserver import TCPServer
 p = argparse.ArgumentParser()
 p.add_argument("--data-home", required=True)
 p.add_argument("--port", required=True, type=int)
@@ -38,7 +40,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(content)
     def log_message(self, *args): pass
-server = HTTPServer(("127.0.0.1", a.port), Handler)
+server = TCPServer(("127.0.0.1", a.port), Handler)
 (pathlib.Path(a.data_home) / "started.json").write_text(json.dumps(vars(a)))
 server.serve_forever()
 """
@@ -220,7 +222,8 @@ class LocalLaunchTests(unittest.TestCase):
                                 check=False,
                             )
                         else:
-                            os.killpg(proc.pid, signal.SIGTERM)
+                            with suppress(ProcessLookupError):
+                                os.killpg(proc.pid, signal.SIGTERM)
                         proc.wait(timeout=10)
 
     def test_packaged_cold_start_contract(self):
