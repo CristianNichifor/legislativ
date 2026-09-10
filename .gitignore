@@ -38,8 +38,17 @@ corpus.db-*
 # every sqlite artifact — the corpus, the initiatives, their WAL/SHM sidecars.
 # Built by the collectors from the API; a release asset if shared, never a committed blob.
 *.db
-*.db-shm
-*.db-wal
+# …and the hand-made checkpoints beside them, which the rules above did not cover.
+# `graf.db-inainte-de-imbogatire`, `graf.db.vechi`, `initiative.db-inainte-de-stenograme`:
+# copies taken before a risky rebuild, named after what they precede. Nine of them were
+# sitting untracked and unignored in a working clone, 855 MB between them, which means
+# `git add -A` staged 855 MB of SQLite and `git status` was unreadable.
+#
+# That is not hypothetical here. `initiative.db` and `initiative.db-wal` are in this
+# repository's history — 11.6 MB across two commits — from before the rules above existed.
+# These two patterns cover the naming actually in use and subsume the -shm/-wal cases.
+*.db-*
+*.db.*
 
 # Release artifacts: gzipped databases for a GitHub release, not source.
 dist/
@@ -73,3 +82,9 @@ colector-4w.log
 /web/pagefind/
 # Doar pentru indexare: `pagefind` e adus din npm, nu e o dependență a aplicației.
 node_modules/
+
+# Local agent state. `.claude/` is scoped to worktrees rather than ignored whole, so shared
+# project configuration can still be committed there; `.omc/` is session and memory state with
+# no shared half. 77 MB and 40 KB respectively in the clone this was written from.
+.claude/worktrees/
+.omc/
