@@ -42,6 +42,12 @@
         (await record(item.bytes)).sha256 !== item.sha256) throw new Error('Snapshot invalid; folositi o copie de siguranta.');
   }
   scope.BrowserWorkspace = {
+    guard() {
+      if (typeof document === 'undefined') return;
+      const event = new Event('beforeunload', {cancelable: true});
+      scope.dispatchEvent(event);
+      if (event.defaultPrevented) throw new Error('Pastrati ciornele si asteptati salvarile in curs inainte de schimbare.');
+    },
     async run(py, request, execute) {
       if (!navigator.locks || !scope.indexedDB) throw new Error('Browserul necesita Web Locks si IndexedDB pentru dosare persistente.');
       return navigator.locks.request(LOCK, async () => {
@@ -147,14 +153,19 @@
     panel.querySelector('[data-export]').onclick = () => act(() => download());
     panel.querySelector('[data-backup-export]').onclick = () => act(() => download(Number(backups.value)));
     panel.querySelector('[data-restore]').onclick = () => act(async () => {
+      scope.BrowserWorkspace.guard();
       if (!confirm('Inlocuiti spatiul de lucru cu aceasta copie? Datele curente raman in copiile anterioare.')) return;
+      scope.BrowserWorkspace.guard();
       await api({action: 'restore', backup: Number(backups.value)}); location.reload();
     });
     panel.querySelector('[data-import]').onchange = e => act(async () => {
       const file = e.target.files[0]; if (!file) return;
+      scope.BrowserWorkspace.guard();
       if (file.size > MAX_BYTES) throw new Error('Limita backup: 128 MiB.');
       if (!confirm('Inlocuiti spatiul de lucru cu backupul selectat?')) return;
-      await api({action: 'import', bytes: Array.from(new Uint8Array(await file.arrayBuffer()))}); location.reload();
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+      scope.BrowserWorkspace.guard();
+      await api({action: 'import', bytes}); location.reload();
     });
     panel.querySelector('[data-persist]').onclick = () => act(async () => {
       if (!await navigator.storage.persist()) throw new Error('Browserul nu a acordat pastrarea persistenta. Exportati un backup.');

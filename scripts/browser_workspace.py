@@ -1,6 +1,7 @@
 """Browser transport for the existing dossier services; no network acquisition."""
 
 import sqlite3
+import tempfile
 from contextlib import closing
 from pathlib import Path
 
@@ -9,14 +10,34 @@ from scripts import dosare
 
 def validate(path):
     """Reject foreign/corrupt databases before replacing a workspace."""
+
+    def shape(con):
+        return {
+            row[0]: tuple(row[1:])
+            for row in con.execute("SELECT name,type,tbl_name,sql FROM sqlite_master ORDER BY name")
+        }
+
+    with (
+        tempfile.TemporaryDirectory() as folder,
+        dosare._open(Path(folder) / "canonical.db", write=True) as canonical,
+    ):
+        expected = shape(canonical)
     with dosare._open(path) as con:
-        if con.execute("PRAGMA quick_check").fetchall()[0][0] != "ok":
+        con.execute("PRAGMA trusted_schema=OFF")
+        actual = shape(con)
+        if not {"dosare", "rulari"} <= actual.keys() or any(
+            name not in expected or definition != expected[name]
+            for name, definition in actual.items()
+        ):
+            raise ValueError("Schema backupului nu corespunde contractului de dosare.")
+        if [row[0] for row in con.execute("PRAGMA quick_check")] != ["ok"]:
             raise ValueError("Backup SQLite corupt.")
         if con.execute("PRAGMA foreign_key_check").fetchone():
             raise ValueError("Backup cu referinte invalide.")
     # Migrate only the isolated candidate, using the same schema as localhost.
-    with dosare._open(path, write=True):
-        pass
+    with dosare._open(path, write=True) as con:
+        if shape(con) != expected:
+            raise ValueError("Schema backupului de dosare este incompleta.")
     # Imported desktop backups may retain WAL mode. Checkpoint into the standalone file.
     with closing(sqlite3.connect(path)) as con:
         con.execute("PRAGMA journal_mode=DELETE")
