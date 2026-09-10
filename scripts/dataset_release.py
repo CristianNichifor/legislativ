@@ -16,6 +16,7 @@ MANIFEST_NAME = "dataset-release.json"
 MAX_MANIFEST_BYTES = 256 * 1024
 MAX_DB_BYTES = 1024**4
 MAX_REPORT_BYTES = 4 * 1024**2
+MAX_INDEX_BYTES = 256 * 1024**2
 DATABASE_NAMES = frozenset({"corpus.db", "initiative.db", "graf.db", "eu.db"})
 REPORT_NAMES = frozenset(
     {
@@ -64,6 +65,12 @@ def _digest(value):
         raise ReleaseError("expected lowercase SHA-256")
 
 
+def file_size_limit(name):
+    if name in DATABASE_NAMES:
+        return MAX_DB_BYTES
+    return MAX_INDEX_BYTES if name == "index.json" else MAX_REPORT_BYTES
+
+
 def validate_manifest(value):
     """Validate an already parsed manifest; return it unchanged, or raise ReleaseError."""
     _fields(value, {"schema_version", "release", "created_at", "app_contract", "files"})
@@ -94,7 +101,7 @@ def validate_manifest(value):
         if type(name) is not str or name not in PUBLIC_NAMES or name in seen:
             raise ReleaseError("unknown or duplicate public filename")
         seen.add(name)
-        _integer(entry["bytes"], 1, MAX_DB_BYTES if name in DATABASE_NAMES else MAX_REPORT_BYTES)
+        _integer(entry["bytes"], 1, file_size_limit(name))
         _digest(entry["sha256"])
     if "corpus.db" not in seen:
         raise ReleaseError("corpus.db is required")
@@ -206,11 +213,7 @@ def build_manifest(folder: Path, release: str, *, created_at: str | None = None)
     validate_release_id(release)
     entries = []
     for path in _payloads(folder):
-        _integer(
-            path.stat().st_size,
-            1,
-            MAX_DB_BYTES if path.name in DATABASE_NAMES else MAX_REPORT_BYTES,
-        )
+        _integer(path.stat().st_size, 1, file_size_limit(path.name))
         if path.name in DATABASE_NAMES:
             _check_sqlite(path)
         size, digest = hash_file(path)
@@ -240,6 +243,16 @@ def _write_new(path, value):
         stream.write(json.dumps(value, indent=2, ensure_ascii=True) + "\n")
 
 
+def _copy_public(source, target):
+    if source.is_symlink() or not source.is_file():
+        raise ReleaseError(f"expected a regular curated source: {source}")
+    _integer(source.stat().st_size, 1, file_size_limit(target.name))
+    if target.name in DATABASE_NAMES:
+        _check_sqlite(source)
+    with target.open("xb") as output, source.open("rb") as input_file:
+        shutil.copyfileobj(input_file, output, 1024 * 1024)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -248,6 +261,16 @@ def main(argv=None):
     build.add_argument("--release", required=True)
     build.add_argument(
         "--published-corpus", type=Path, help="copy a standalone publicat.db into folder/corpus.db"
+    )
+    build.add_argument(
+        "--published-eu",
+        type=Path,
+        help="copy an explicitly curated standalone public EU database to eu.db",
+    )
+    build.add_argument(
+        "--public-reports",
+        type=Path,
+        help="copy only allowlisted reports from an explicitly curated directory",
     )
     verify = commands.add_parser("verify")
     verify.add_argument("folder", type=Path)
@@ -269,12 +292,14 @@ def main(argv=None):
                     or args.published_corpus.is_symlink()
                 ):
                     raise ReleaseError("--published-corpus must name a regular publicat.db")
-                _check_sqlite(args.published_corpus)
-                with (
-                    (args.folder / "corpus.db").open("xb") as target,
-                    args.published_corpus.open("rb") as source,
-                ):
-                    shutil.copyfileobj(source, target, 1024 * 1024)
+                _copy_public(args.published_corpus, args.folder / "corpus.db")
+            if args.published_eu:
+                _copy_public(args.published_eu, args.folder / "eu.db")
+            if args.public_reports:
+                for source in sorted(args.public_reports.iterdir()):
+                    if source.name not in REPORT_NAMES:
+                        raise ReleaseError(f"not an allowed public report: {source.name}")
+                    _copy_public(source, args.folder / source.name)
             manifest = build_manifest(args.folder, args.release)
             _write_new(args.folder / MANIFEST_NAME, manifest)
         else:

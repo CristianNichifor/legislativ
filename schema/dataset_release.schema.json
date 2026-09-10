@@ -32,7 +32,11 @@
           "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         },
         "if": {"properties": {"name": {"enum": ["corpus.db", "initiative.db", "graf.db", "eu.db"]}}},
-        "else": {"properties": {"bytes": {"maximum": 4194304}}}
+        "else": {
+          "if": {"properties": {"name": {"const": "index.json"}}},
+          "then": {"properties": {"bytes": {"maximum": 268435456}}},
+          "else": {"properties": {"bytes": {"maximum": 4194304}}}
+        }
       }
     }
   },

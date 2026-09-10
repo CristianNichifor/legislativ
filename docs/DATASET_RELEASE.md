@@ -30,7 +30,9 @@ Allowed payload names:
 
 - Required: `corpus.db`.
 - Optional databases: `initiative.db`, `graf.db`, `eu.db`; each database <= 1 TiB.
-- Optional reports: `index.json`, `termeni.json`, `manifest.json`, `vid.json`,
+- Optional index: `index.json`, <= 256 MiB (the existing slim index is about 16.8 MB,
+  and the full index about 91 MB; see `scripts/shard.py`).
+- Optional reports: `termeni.json`, `manifest.json`, `vid.json`,
   `neconstitutional.json`, `norme_lovite.json`, `considerente.json`, `parlament.json`,
   `ue_acoperire.json`; each report <= 4 MiB.
 
@@ -96,12 +98,26 @@ Files are hashed in 1 MiB chunks. Existing manifests and output proposals are no
 overwritten. Failed builds may leave a partial staging folder; start a fresh folder.
 Freeze staging files throughout building, verification and uploading.
 
+`--published-eu /path/to/curated-eu.db` explicitly copies a public standalone EU
+database to `eu.db`. The source is checked for WAL/sidecars and private objects
+before copying; it is never checkpointed, mutated or discovered automatically.
+`--public-reports /path/to/curated-reports` copies only allowlisted report filenames
+(including `ue_acoperire.json`). It rejects private/unknown files, directories,
+symlinks and collisions with already staged files. Keep this directory limited to
+additional public reports; generated `index.json`, `termeni.json` and `manifest.json`
+are already staged by the shell publisher. `termeni.json` remains bounded at 4 MiB;
+the existing generator selects at most 800 definitions, and oversize output fails
+explicitly rather than being silently omitted.
+
 ## Publisher sequence
 
 `infra/republica.sh [--latest]` creates fresh public copies and staging files per run.
 It validates the prefix, builds the sidecar, and refuses an occupied remote prefix or
 a failed prefix listing. Run only one publisher for a given release ID: the listing
 is not a distributed lock. Failed partial uploads require a new release suffix.
+Set optional `EU_PUBLIC_DB` and `PUBLIC_REPORTS_DIR` to pass the explicitly curated
+EU database and additional public reports into this sequence. An ordinary `eu.db`
+in the collector workspace is never implicitly selected.
 
 1. Upload listed payloads to a new immutable `<release>/` prefix.
 2. Upload legacy browser search assets (outside this consumer contract).

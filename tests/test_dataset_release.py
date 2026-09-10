@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -110,6 +111,36 @@ def test_duplicates_missing_corpus_and_report_limit(manifest):
     manifest["files"] = [entry | {"bytes": 1}]
     with pytest.raises(release.ReleaseError):
         release.validate(manifest)
+
+
+@pytest.mark.parametrize(
+    ("name", "limit"),
+    [
+        ("index.json", 256 * 1024**2),
+        ("termeni.json", 4 * 1024**2),
+        ("ue_acoperire.json", 4 * 1024**2),
+    ],
+)
+def test_per_file_size_caps_match_schema(manifest, name, limit):
+    schema = Draft202012Validator(
+        json.loads((ROOT / "schema/dataset_release.schema.json").read_text())
+    )
+    entry = {"name": name, "bytes": limit, "sha256": "a" * 64}
+    manifest["files"].append(entry)
+    release.validate(manifest)
+    schema.validate(manifest)
+    entry["bytes"] += 1
+    with pytest.raises(release.ReleaseError):
+        release.validate(manifest)
+    assert list(schema.iter_errors(manifest))
+
+
+def test_build_accepts_realistic_index_size(tmp_path):
+    database(tmp_path / "corpus.db")
+    with (tmp_path / "index.json").open("wb") as stream:
+        stream.truncate(17 * 1024**2)
+    manifest = release.build_manifest(tmp_path, "2026-09-10")
+    assert next(f for f in manifest["files"] if f["name"] == "index.json")["bytes"] == 17 * 1024**2
 
 
 @pytest.mark.parametrize(
@@ -253,6 +284,87 @@ def test_reject_private_table_and_symlink(tmp_path):
 def test_bad_channel(url):
     with pytest.raises(release.ReleaseError):
         release.validate_channel({"schema_version": 1, "manifest": url, "sha256": "a" * 64})
+
+
+@pytest.mark.parametrize("explicit_eu", [False, True])
+def test_shell_stages_eu_only_when_explicitly_supplied(tmp_path, explicit_eu):
+    work = tmp_path / "work"
+    work.mkdir()
+    database(work / "publicat.db")
+    (work / "manifest.json").write_text("{}")
+    index = tmp_path / "idx"
+    index.mkdir()
+    for name in ("index.json", "termeni.json"):
+        (index / name).write_text("[]")
+    eu = database(tmp_path / "eu.db")
+    original = eu.read_bytes()
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "ue_acoperire.json").write_text("{}")
+    block = (
+        (ROOT / "infra/republica.sh").read_text().split("STAGE=", 1)[1].split('echo "── 4/5', 1)[0]
+    )
+    environment = os.environ | {
+        "LUCRU": str(work),
+        "IDX": str(index),
+        "PREFIX": "2026-09-10",
+        "TEST_PYTHON": sys.executable,
+        "PYTHONPATH": str(ROOT),
+    }
+    for name in ("EU_PUBLIC_DB", "PUBLIC_REPORTS_DIR"):
+        environment.pop(name, None)
+    if explicit_eu:
+        environment |= {"EU_PUBLIC_DB": str(eu), "PUBLIC_REPORTS_DIR": str(reports)}
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            'set -euo pipefail\nuv(){ shift; shift; "$TEST_PYTHON" "$@"; }\nSTAGE=' + block,
+        ],
+        cwd=tmp_path,
+        env=environment,
+        check=True,
+        capture_output=True,
+    )
+    manifest = release.verify_release(work / "payload")
+    names = {f["name"] for f in manifest["files"]}
+    assert ("eu.db" in names) == explicit_eu
+    assert ("ue_acoperire.json" in names) == explicit_eu
+    assert eu.read_bytes() == original
+
+
+@pytest.mark.parametrize("unsafe", ["private", "wal", "report"])
+def test_curated_eu_sources_fail_closed(tmp_path, unsafe):
+    source = database(tmp_path / "eu-public.db")
+    if unsafe == "private":
+        con = sqlite3.connect(source)
+        con.execute("CREATE TABLE documente (text TEXT)")
+        con.close()
+    if unsafe == "wal":
+        source.with_name(source.name + "-wal").write_bytes(b"pending")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    if unsafe == "report":
+        (reports / "dossier.json").write_text("{}")
+    folder = tmp_path / "release"
+    folder.mkdir()
+    database(folder / "corpus.db")
+    before = source.read_bytes()
+    with pytest.raises(SystemExit):
+        release.main(
+            [
+                "build",
+                str(folder),
+                "--release",
+                "2026-09-10",
+                "--published-eu",
+                str(source),
+                "--public-reports",
+                str(reports),
+            ]
+        )
+    assert not (folder / release.MANIFEST_NAME).exists()
+    assert source.read_bytes() == before
 
 
 @pytest.mark.parametrize(

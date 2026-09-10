@@ -21,6 +21,8 @@
 #   BUCKET          R2 bucket                                   (default: legislativ)
 #   PREFIX          dated prefix                                (default: today)
 #   FELII           slices the search index is built in         (default: 8)
+#   EU_PUBLIC_DB    explicitly curated standalone public EU DB (optional, never auto-discovered)
+#   PUBLIC_REPORTS_DIR curated allowlisted reports, e.g. ue_acoperire.json (optional)
 
 set -euo pipefail
 
@@ -95,7 +97,10 @@ for name in graf initiative; do
 done
 cp "$LUCRU/manifest.json" "$STAGE/manifest.json"
 cp "$IDX/index.json" "$IDX/termeni.json" "$STAGE/"
-uv run python -m scripts.dataset_release build "$STAGE" --release "$PREFIX" --published-corpus "$LUCRU/publicat.db"
+release_args=(build "$STAGE" --release "$PREFIX" --published-corpus "$LUCRU/publicat.db")
+[ -z "${EU_PUBLIC_DB:-}" ] || release_args+=(--published-eu "$EU_PUBLIC_DB")
+[ -z "${PUBLIC_REPORTS_DIR:-}" ] || release_args+=(--public-reports "$PUBLIC_REPORTS_DIR")
+uv run python -m scripts.dataset_release "${release_args[@]}"
 
 echo "── 4/5 acreditări ───────────────────────────────────────────────"
 . infra/acreditari-r2.sh
