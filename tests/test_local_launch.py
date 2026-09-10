@@ -87,7 +87,15 @@ class LocalLaunchTests(unittest.TestCase):
             with patch("scripts.launcher.subprocess.call", return_value=7) as call:
                 self.assertEqual(
                     launcher.main(
-                        ["--data-home", directory, "--port", str(port), "--fara-browser"]
+                        [
+                            "--data-home",
+                            directory,
+                            "--port",
+                            str(port),
+                            "--fara-browser",
+                            "--data-channel",
+                            "https://datasets.example/channel.json",
+                        ]
                     ),
                     7,
                 )
@@ -97,6 +105,10 @@ class LocalLaunchTests(unittest.TestCase):
                 command[command.index("--data-home") + 1], str(Path(directory).resolve())
             )
             self.assertIn("--fara-browser", command)
+            self.assertEqual(
+                command[command.index("--data-channel") + 1],
+                "https://datasets.example/channel.json",
+            )
             self.assertEqual(call.call_args.kwargs["cwd"], Path(directory).resolve())
             self.assertTrue((Path(directory) / "private").is_dir())
 

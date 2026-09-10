@@ -40,6 +40,7 @@ def main(argv=None):
     ap.add_argument("--data-home", type=Path, default=Path(default_data_home()))
     ap.add_argument("--port", type=int, default=8000)
     ap.add_argument("--fara-browser", action="store_true")
+    ap.add_argument("--data-channel", help="canalul HTTPS de actualizare configurat")
     args = ap.parse_args(argv)
     if sys.version_info < (3, 12):  # noqa: UP036 - downloaded runtime may use older Python
         ap.error("Python 3.12+ este necesar; Python nu este inclus.")
@@ -63,6 +64,8 @@ def main(argv=None):
     ]
     if args.fara_browser:
         command.append("--fara-browser")
+    if args.data_channel:
+        command.extend(["--data-channel", args.data_channel])
     print(f"Date locale: {data_home}\nPornesc pe http://127.0.0.1:{port}", flush=True)
     try:
         return subprocess.call(command, cwd=data_home)
