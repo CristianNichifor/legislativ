@@ -1,5 +1,6 @@
 """The shell cache identifies both the runtime and its public catalogs."""
 
+import hashlib
 import json
 import shutil
 import subprocess
@@ -34,6 +35,32 @@ def test_unchanged_rebuild_and_manifest_key_order_are_stable(web):
 def test_initially_missing_manifest_is_stable(web):
     (cw.DATA / "manifest.json").unlink()
     assert cw._versiune_si_sw() == cw._versiune_si_sw()
+
+
+def test_worker_and_precache_share_content_qualified_bundle_url(web):
+    urls = []
+    for content in (b"python version one", b"python version two"):
+        (web / "bundle.zip").write_bytes(content)
+        cw._worker()
+        cw._versiune_si_sw()
+        url = "bundle.zip?v=" + hashlib.sha256(content).hexdigest()
+        worker = (web / "worker.js").read_text(encoding="utf-8")
+        sw = (web / "sw.js").read_text(encoding="utf-8")
+        assert f'fetch("{url}")' in worker
+        assert f'"./{url}"' in sw
+        assert 'fetch("bundle.zip")' not in worker
+        assert '"./bundle.zip"' not in sw
+        urls.append(url)
+    assert urls[0] != urls[1]
+
+
+def test_missing_unit_fixture_bundle_uses_same_empty_tag_without_fallback(web):
+    cw._worker()
+    cw._versiune_si_sw()
+    worker = (web / "worker.js").read_text(encoding="utf-8")
+    assert 'fetch("bundle.zip?v=")' in worker
+    assert '"./bundle.zip?v="' in (web / "sw.js").read_text(encoding="utf-8")
+    assert 'fetch("bundle.zip")' not in worker
 
 
 @pytest.mark.parametrize(
@@ -136,4 +163,37 @@ handlers.activate({waitUntil: promise => promise.then(() => {
 """
     script = script.replace("CURRENT", json.dumps("legislativ-shell-" + version))
     script = script.replace("SOURCE", json.dumps((web / "sw.js").read_text(encoding="utf-8")))
+    subprocess.run([node, "-e", script], check=True, capture_output=True, text=True, timeout=20)
+
+
+def test_active_cache_cannot_match_old_bundle_to_new_qualified_request(web):
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node is required to execute the generated service worker")
+    (web / "bundle.zip").write_bytes(b"new Python runtime")
+    cw._versiune_si_sw()
+    source = (web / "sw.js").read_text(encoding="utf-8")
+    script = """
+const vm = require('node:vm'), assert = require('node:assert/strict');
+const handlers = {}, origin = 'https://example.invalid', fetched = [];
+const oldEntries = new Map([
+  [origin + '/bundle.zip', {old: true}],
+  [origin + '/bundle.zip?v=old', {old: true}],
+]);
+const sandbox = {
+  URL, location: {origin},
+  self: {addEventListener: (type, handler) => handlers[type] = handler},
+  caches: {open: async () => ({match: async req => oldEntries.get(req.url), put: () => {}})},
+  fetch: async req => {fetched.push(req.url); return {fresh: true, ok: false};},
+};
+vm.runInNewContext(SOURCE, sandbox);
+handlers.fetch({request: {method:'GET', url:origin + '/' + BUNDLE}, respondWith: promise =>
+  promise.then(result => {
+    assert.equal(result.fresh, true);
+    assert.deepEqual(fetched, [origin + '/' + BUNDLE]);
+  }).catch(error => {console.error(error); process.exitCode = 1;})});
+"""
+    script = script.replace("SOURCE", json.dumps(source)).replace(
+        "BUNDLE", json.dumps(cw._bundle_url())
+    )
     subprocess.run([node, "-e", script], check=True, capture_output=True, text=True, timeout=20)

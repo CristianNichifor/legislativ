@@ -35,7 +35,7 @@ const remote = http.createServer((req, res) => {
   send(req, res, asset && !(asset.corpus ? missingCorpus : missingCatalog) ? asset : undefined);
 });
 const app = http.createServer((req, res) => {
-  send(req, res, appAssets.get(req.url));
+  send(req, res, appAssets.get(req.url.split('?')[0]));
 });
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 (async () => {
@@ -43,6 +43,8 @@ const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', re
   try {
     await listen(remote); await listen(app);
     const origin = `http://127.0.0.1:${remote.address().port}`;
+    // The isolated worker must qualify the same bundle bytes that its server exposes.
+    fs.copyFileSync(path.join(root, 'web/bundle.zip'), path.join(output, 'bundle.zip'));
     const code = `import importlib.util, pathlib, sys\np=pathlib.Path(sys.argv[1])\ns=importlib.util.spec_from_file_location('legacy_builder',p)\nb=importlib.util.module_from_spec(s)\ns.loader.exec_module(b)\nb.ROOT=pathlib.Path(sys.argv[2]); b.WEB=pathlib.Path(sys.argv[3]); b.DATA=b.ROOT/'web/data'\nb._worker(sys.argv[4]); b._pagina(sys.argv[4],1)`;
     execFileSync('uv', ['run', 'python', '-c', code, process.env.BROWSER_BUILD_MODULE || path.join(root, 'scripts/construieste_web.py'), root, output, origin], {cwd: root});
     // Snapshot generated public assets before accepting browser traffic; request URLs never

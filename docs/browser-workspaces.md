@@ -64,6 +64,10 @@ The shell identity includes the Python bundle, worker, page, browser scripts,
 fonts, Pagefind client and public catalogs. Runtime-only deployments therefore
 retire old cached Python bundles too. Hashing streams these assets, excludes the
 monolithic corpus and private files, and ignores the generated manifest version.
+The worker fetches `bundle.zip?v=<SHA-256>` and precache uses the identical URL.
+An old active service worker cannot match its unqualified or older bundle entry
+to this request while a new shell is still installing. There is no retry through
+an unqualified bundle URL. Unit fixtures without a bundle use an empty tag.
 
 Fixture/slice builds load their existing corpus file only when it is at most
 32 MiB; this enables matrix dossier analysis over that slice. Larger published

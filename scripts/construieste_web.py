@@ -263,7 +263,7 @@ async function boot(){
   const pyodide = await loadPyodide();
   runtime = pyodide;
   await pyodide.loadPackage("sqlite3");  // unvendored in Pyodide; the corpus is SQLite
-  const zip = await fetch("bundle.zip").then(r=>r.arrayBuffer());
+  const zip = await fetch("__BUNDLE_URL__").then(r=>r.arrayBuffer());
   pyodide.unpackArchive(zip, "zip");
   try { pyodide.FS.mkdir("data"); } catch (e) {}
   const contract = pyodide.runPython(`
@@ -744,7 +744,7 @@ SW = """
 const VERSIUNE = "__VERSION__";
 const CACHE = "legislativ-shell-" + VERSIUNE;
 const NUCLEU = [
-  "./", "./index.html", "./worker.js", "./browser-workspace.js", "./browser-generation.js", "./bundle.zip",
+  "./", "./index.html", "./worker.js", "./browser-workspace.js", "./browser-generation.js", "./__BUNDLE_URL__",
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db", "./data/eu.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
@@ -1140,11 +1140,24 @@ def _bundle() -> None:
     print(f"  bundle → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
+def _bundle_url() -> str:
+    bundle = WEB / "bundle.zip"
+    tag = ""
+    if bundle.is_file():
+        digest = hashlib.sha256()
+        with bundle.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        tag = digest.hexdigest()
+    return "bundle.zip?v=" + tag
+
+
 def _worker(depozit: str = "", *, channel=PUBLIC_CHANNEL, allow_loopback=False) -> None:
     corpus = DATA / "corpus.db"
     local_corpus = not depozit and corpus.is_file() and corpus.stat().st_size <= 32 * 1024 * 1024
     text = (
         WORKER.replace("__PYODIDE__", PYODIDE)
+        .replace("__BUNDLE_URL__", _bundle_url())
         .replace("__PUBLIC_CONFIG__", json.dumps(_public_config(channel, allow_loopback)))
         .replace("__LOCAL_CORPUS__", "true" if local_corpus else "false")
         .replace("__DEPOZIT__", depozit)
@@ -1208,7 +1221,11 @@ def _versiune_si_sw() -> str:
     # Precache exactly the fonts that were copied, rather than a list kept in sync by hand.
     fonturi = sorted(p.name for p in (WEB / "fonts").glob("*.woff2"))
     lista = ", ".join(f'"./fonts/{n}"' for n in fonturi)
-    sw = SW.replace("__VERSION__", versiune).replace("__FONTURI__", lista)
+    sw = (
+        SW.replace("__VERSION__", versiune)
+        .replace("__FONTURI__", lista)
+        .replace("__BUNDLE_URL__", _bundle_url())
+    )
     (WEB / "sw.js").write_text(sw, encoding="utf-8")
     date["versiune"] = versiune
     manifest.write_text(json.dumps(date, ensure_ascii=False), encoding="utf-8")
