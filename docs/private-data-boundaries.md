@@ -6,7 +6,7 @@ switch `active.json`, configure the server, download sources, or move dossiers.
 
 ## Parent integration contract
 
-Published generations remain immutable under `ROOT/datasets/<release>/`.
+Published generations remain immutable under `ROOT/datasets/<manifest-sha256>/`.
 The parent creates private directories with appropriate permissions and passes:
 
 - `state.dosare_db = ROOT/private/dosare.db` (owned by the dossier/browser work).
@@ -28,8 +28,8 @@ ROOT/private/eu-generations/<active.private_generation>/eu.db
 
 The server factory uses that exact path on startup/restart. Restart does not
 prepare a new DB or fall back to published `eu.db`; a missing recorded private DB
-is an error requiring recovery. A second activation of the same public release
-still gets a fresh UUID. `prepare_eu` rejects an existing target, including a target
+is an error requiring recovery. Reactivation after rollback gets a fresh UUID;
+downloading the already-active release is rejected. `prepare_eu` rejects an existing target, including a target
 containing recent imports, instead of overwriting it.
 
 The `.previous` record stores only previous public generation/release information.

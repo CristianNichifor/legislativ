@@ -66,6 +66,7 @@ new runtime never grants permission to overwrite an existing personal database.
 - [Manifest, publisher and channel promotion](DATASET_RELEASE.md).
 - [Private EU merge and preservation contract](private-data-boundaries.md).
 - [Browser persistence and backup limitations](browser-workspaces.md).
+- [Browser online release selection and its integrity limits](browser-online-generations.md).
 
 The runtime package contains application code and assets, not Python, the corpus
 or private research. Python 3.12+ must be installed separately. First launch does
