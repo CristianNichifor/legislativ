@@ -1161,21 +1161,48 @@ def _worker(depozit: str = "", *, channel=PUBLIC_CHANNEL, allow_loopback=False) 
 
 
 def _versiune_si_sw() -> str:
-    """A content hash of the corpus and graph, written into the service worker and the manifest.
-
-    Same data → same version → the browser keeps its cache; changed data → new version → the new
-    sw.js retires the old cache. The corpus file already reflects every provision, so hashing it
-    (and the graph) captures any change that matters to what the app shows.
-    """
-    # Hash the browser-facing catalog, not the monolithic corpus.db — the corpus is not shipped to
-    # the client and need not even be present (a dataset release carries only the shards). index.json
-    # + manifest.json capture the act set and the counts; graf.db the amendment edges; eu.db the
-    # optional CELEX source index, and ue_acoperire.json the missing-import queue.
-    h = hashlib.sha256()
-    for name in ("index.json", "manifest.json", "graf.db", "eu.db", "ue_acoperire.json"):
-        p = DATA / name
-        if p.is_file():
-            h.update(p.read_bytes())
+    """Version the runtime and public catalogs without scanning the monolithic corpus."""
+    manifest = DATA / "manifest.json"
+    date = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    date.pop("versiune", None)  # Generated output must not become its own next hash input.
+    catalogs = (
+        "index.json",
+        "manifest.json",
+        "termeni.json",
+        "graf.db",
+        "initiative.db",
+        "eu.db",
+        "ue_acoperire.json",
+        "vid.json",
+        "neconstitutional.json",
+        "norme_lovite.json",
+        "considerente.json",
+        "parlament.json",
+    )
+    runtime = (
+        "bundle.zip",
+        "worker.js",
+        "index.html",
+        "browser-workspace.js",
+        "browser-generation.js",
+        "dataset-updates.js",
+    )
+    files = [("data/" + name, DATA / name) for name in catalogs]
+    files.extend((name, WEB / name) for name in runtime)
+    files.extend(("fonts/" + p.name, p) for p in (WEB / "fonts").glob("*.woff2"))
+    files.extend(("pagefind/" + name, WEB / "pagefind" / name) for name in CLIENT_CAUTARE)
+    h = hashlib.sha256(SW.encode("utf-8"))
+    for name, path in sorted(files):
+        content = hashlib.sha256()
+        if path == manifest:
+            content.update(json.dumps(date, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        elif path.is_file():
+            with path.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    content.update(chunk)
+        else:
+            continue
+        h.update(name.encode("utf-8") + b"\0" + content.digest())
     versiune = h.hexdigest()[:12]
 
     # Precache exactly the fonts that were copied, rather than a list kept in sync by hand.
@@ -1183,8 +1210,6 @@ def _versiune_si_sw() -> str:
     lista = ", ".join(f'"./fonts/{n}"' for n in fonturi)
     sw = SW.replace("__VERSION__", versiune).replace("__FONTURI__", lista)
     (WEB / "sw.js").write_text(sw, encoding="utf-8")
-    manifest = DATA / "manifest.json"
-    date = json.loads(manifest.read_text()) if manifest.is_file() else {}
     date["versiune"] = versiune
     manifest.write_text(json.dumps(date, ensure_ascii=False), encoding="utf-8")
     print(f"  sw + versiune → {versiune}")

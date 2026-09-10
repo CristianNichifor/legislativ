@@ -60,6 +60,10 @@ validation instead of silently falling back to a different generation.
 Future verified caches must be keyed to the parent's release identity and hashes.
 Shell cache cleanup is restricted to `legislativ-shell-*`; it does not delete
 other same-origin caches belonging to the parent's public dataset manager.
+The shell identity includes the Python bundle, worker, page, browser scripts,
+fonts, Pagefind client and public catalogs. Runtime-only deployments therefore
+retire old cached Python bundles too. Hashing streams these assets, excludes the
+monolithic corpus and private files, and ignores the generated manifest version.
 
 Fixture/slice builds load their existing corpus file only when it is at most
 32 MiB; this enables matrix dossier analysis over that slice. Larger published
