@@ -6,28 +6,36 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..'), output = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-legacy-'));
 let missingCorpus = false, missingCatalog = false;
 const requests = [];
-function send(req, res, file, remote) {
-  if (!fs.existsSync(file)) {res.writeHead(404); res.end(); return;}
-  const raw = fs.readFileSync(file), range = req.headers.range?.match(/^bytes=(\d+)-(\d+)$/);
+const appAssets = new Map(), remoteAssets = new Map();
+const mime = {'.js': 'application/javascript', '.html': 'text/html', '.json': 'application/json',
+  '.css': 'text/css', '.wasm': 'application/wasm', '.woff2': 'font/woff2'};
+function readAsset(file) {
+  return {raw: fs.readFileSync(file), type: mime[path.extname(file)] || 'application/octet-stream'};
+}
+function collectAssets(directory, prefix = '/') {
+  for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+    const file = path.join(directory, entry.name), url = prefix + entry.name;
+    if (entry.isDirectory()) collectAssets(file, url + '/');
+    else if (entry.isFile()) appAssets.set(url, readAsset(file));
+  }
+}
+function send(req, res, asset) {
+  if (!asset) {res.writeHead(404, {'Access-Control-Allow-Origin': '*'}); res.end(); return;}
+  const {raw, type} = asset, range = req.headers.range?.match(/^bytes=(\d+)-(\d+)$/);
   const start = range ? Number(range[1]) : 0, end = range ? Math.min(Number(range[2]), raw.length - 1) : raw.length - 1;
   const headers = {'Content-Length': end - start + 1, 'Accept-Ranges': 'bytes', 'Access-Control-Allow-Origin': '*',
     'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Length, Content-Range'};
   if (range) headers['Content-Range'] = `bytes ${start}-${end}/${raw.length}`;
-  if (file.endsWith('.js')) headers['Content-Type'] = 'application/javascript';
-  if (file.endsWith('.html')) headers['Content-Type'] = 'text/html';
+  headers['Content-Type'] = type;
   res.writeHead(range ? 206 : 200, headers); res.end(req.method === 'HEAD' ? undefined : raw.subarray(start, end + 1));
 }
 const remote = http.createServer((req, res) => {
   requests.push(req.url);
-  const name = req.url.split('/').pop();
-  if ((name === 'corpus.db' && !missingCorpus) || (!missingCatalog && ['index.json', 'termeni.json', 'manifest.json'].includes(name))) {
-    send(req, res, path.join(root, 'web/data', name), true);
-  } else {res.writeHead(404, {'Access-Control-Allow-Origin': '*'}); res.end();}
+  const asset = remoteAssets.get(req.url);
+  send(req, res, asset && !(asset.corpus ? missingCorpus : missingCatalog) ? asset : undefined);
 });
 const app = http.createServer((req, res) => {
-  const name = req.url === '/' ? 'index.html' : req.url.slice(1);
-  const file = path.join(output, name);
-  send(req, res, fs.existsSync(file) ? file : path.join(root, 'web', name));
+  send(req, res, appAssets.get(req.url));
 });
 const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 (async () => {
@@ -37,6 +45,29 @@ const listen = server => new Promise(resolve => server.listen(0, '127.0.0.1', re
     const origin = `http://127.0.0.1:${remote.address().port}`;
     const code = `import importlib.util, pathlib, sys\np=pathlib.Path(sys.argv[1])\ns=importlib.util.spec_from_file_location('legacy_builder',p)\nb=importlib.util.module_from_spec(s)\ns.loader.exec_module(b)\nb.ROOT=pathlib.Path(sys.argv[2]); b.WEB=pathlib.Path(sys.argv[3]); b.DATA=b.ROOT/'web/data'\nb._worker(sys.argv[4]); b._pagina(sys.argv[4],1)`;
     execFileSync('uv', ['run', 'python', '-c', code, process.env.BROWSER_BUILD_MODULE || path.join(root, 'scripts/construieste_web.py'), root, output, origin], {cwd: root});
+    // Snapshot generated public assets before accepting browser traffic; request URLs never
+    // reach a filesystem API. Directory entries are trusted build output; symlinks are skipped.
+    collectAssets(path.join(root, 'web'));
+    collectAssets(output);
+    for (const [url, asset] of [...appAssets]) appAssets.set('/nested' + url, asset);
+    appAssets.set('/', appAssets.get('/index.html'));
+    appAssets.set('/nested/', appAssets.get('/index.html'));
+    for (const name of ['corpus.db', 'index.json', 'termeni.json', 'manifest.json']) {
+      const file = path.join(root, 'web/data', name);
+      if (fs.existsSync(file)) remoteAssets.set('/' + name, {...readAsset(file), corpus: name === 'corpus.db'});
+    }
+    const status = (server, url) => new Promise((resolve, reject) => {
+      http.get({hostname: '127.0.0.1', port: server.address().port, path: url}, response => {
+        response.resume(); response.on('end', () => resolve(response.statusCode));
+      }).on('error', reject);
+    });
+    for (const server of [app, remote]) {
+      for (const url of ['/../package.json', '/%2e%2e/package.json', '/nested/../../package.json', '/other/corpus.db']) {
+        assert.equal(await status(server, url), 404, `Unexpected asset access: ${url}`);
+      }
+    }
+    assert.equal(await status(app, '/'), 200);
+    assert.equal(await status(app, '/nested/'), 200);
     browser = await chromium.launch({headless: true, ...(process.env.CHROMIUM_PATH ? {executablePath: process.env.CHROMIUM_PATH} : {})});
     for (const noCatalog of [false, true]) {
       missingCatalog = noCatalog;
