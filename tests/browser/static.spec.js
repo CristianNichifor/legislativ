@@ -57,13 +57,15 @@ test(`real worker, Pagefind and warm offline at ${path}`, async ({ page, context
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
   const keys = await page.evaluate(async () => {
     const cachesFound = await caches.keys();
-    const cache = await caches.open(cachesFound.find(name => name.startsWith('legislativ-')));
+    const cache = await caches.open(cachesFound.find(name => name.startsWith('legislativ-shell-')));
     return (await cache.keys()).map(request => request.url);
   });
   expect(keys.some(url => url.endsWith('/worker.js'))).toBe(true);
   expect(keys.some(url => url.includes('/pagefind/'))).toBe(true);
   expect(keys.every(url => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
-  expect(requests.filter(url => /\/api\/|\/corpus\.db/.test(url))).toEqual([]);
+  expect(requests.filter(url => /\/api\//.test(url))).toEqual([]);
+  const fixtureCorpusRequests = requests.filter(url => /\/corpus\.db/.test(url));
+  expect(fixtureCorpusRequests).toEqual([new URL(`${path}data/corpus.db`, page.url()).href]);
   await page.screenshot({ path: info.outputPath('static-search-online.png'), fullPage: true });
   await context.setOffline(true);
   await lint(page, 47);
@@ -76,7 +78,8 @@ test(`real worker, Pagefind and warm offline at ${path}`, async ({ page, context
   await page.locator('#q').press('Enter');
   await expect(page.locator('#cauta-out')).toContainText('98');
   expect(errors).toEqual([]);
-  expect(requests.filter(url => /\/api\/|\/corpus\.db/.test(url))).toEqual([]);
+  expect(requests.filter(url => /\/api\//.test(url))).toEqual([]);
+  expect(requests.filter(url => /\/corpus\.db/.test(url))).toEqual(fixtureCorpusRequests);
   expect(fallbackWarnings).toEqual([]);
   await page.screenshot({ path: info.outputPath('static-search-warm-offline.png'), fullPage: true });
   // Firefox/WebKit reject Playwright offline navigation before exposing the cached shell.

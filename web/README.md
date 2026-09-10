@@ -27,7 +27,8 @@ load an uncached shell. The cache name carries a
 changes `sw.js` with that version and deletes older caches on activation; a complete
 update-cycle test is not included yet. The browser baseline verifies service-worker
 control and actual cached worker-shell and Pagefind entries after a warmed search.
-It also verifies that the tested catalog-mode workflow does not download `corpus.db`.
+The fixture workflow loads its bounded four-act `corpus.db` once for dossier
+analysis, while keeping API requests inside the worker.
 
 The automated [static browser baseline](../docs/BROWSER_BASELINE.md#static-worker-baseline)
 uses the real worker and Pagefind at root and nested URLs. It checks a deliberately
@@ -44,16 +45,14 @@ collect.yml`: a manual, bounded walk of the SOAP service that extends the corpus
 Collection is server-side and slow; it never runs in a browser. Monitorul Oficial is a second
 source to add to that job later.
 
-The browser never downloads the whole `corpus.db`. Every corpus-reading pass now reads a small
-prebuilt catalog instead: titles from `index.json`, counts from `manifest.json`, the terminology
-dictionary from `termeni.json`, and the amendment graph and initiatives from their (small) own
-databases. Search reads per-act shards on demand. Verified in a browser: a full session — rezumat,
-lint with targets and terminology, search, connections — makes **zero** requests for `corpus.db`.
-The same `servicii` functions back the localhost server, where `corpus.db` *is* the source of
-truth; the seam is `Stare`, which answers `titlu`/`cunoscut`/`termeni`/`rezumat` from SQL there and
-from the catalog here. `corpus.db` stays in the dataset (it is what the shards are built from) but
-is never on the client's path. The graph is the next thing to shard as the corpus reaches the full
-body of law.
+Catalog builds use precomputed titles, counts and terminology, plus Pagefind or
+per-act search shards. A fixture/slice corpus no larger than 32 MiB is also loaded
+for dossier analysis. Builds configured with a remote dataset use online SQLite
+Range reads instead of implicitly downloading the full corpus. Unversioned OPFS
+files are not accepted as replacements for the selected public generation.
+The same `servicii` functions back localhost and browser modes; coverage remains
+limited to the sources actually present. Private dossiers use a separate
+IndexedDB workspace with explicit backups, not the replaceable public caches.
 
 ## The UI never freezes
 

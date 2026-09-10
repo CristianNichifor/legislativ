@@ -21,6 +21,14 @@ The local update command is download-only:
    new private EU view from the latest private observations; it does not restore
    an old private-workspace backup.
 
+On POSIX, generation files and directory entries are flushed before the active
+pointer is published. Windows uses file flushes and atomic replacement; the
+standard-library implementation does not claim POSIX-style directory flushing.
+If the pointer replacement succeeds but its final flush fails, the running state
+still follows the new pointer and reports that persistence could not be confirmed.
+An interrupted response is not proof that activation failed; check local status
+before retrying or shutting down.
+
 The channel and manifest must remain on the configured origin. Redirects and
 arbitrary file URLs are rejected. The channel is trusted through HTTPS; hashes
 detect corruption and inconsistent publication, not compromise of the publisher.
