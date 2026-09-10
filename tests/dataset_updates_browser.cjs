@@ -4,9 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
-const html = fs.readFileSync(path.join(root, 'app/index.html'), 'utf8')
-  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, '')
-  .replace('</body>', '<script src="dataset-updates.js"></script></body>');
+const htmlSource = fs.readFileSync(path.join(root, 'app/index.html'), 'utf8');
 const javascript = fs.readFileSync(path.join(root, 'app/dataset-updates.js'), 'utf8');
 const base = 'http://127.0.0.1:8927';
 const offer = {manifest: {release: '2026-09-10', files: [
@@ -19,6 +17,20 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
 (async () => {
   const browser = await chromium.launch({headless: true});
   try {
+    const preparationPage = await browser.newPage();
+    let html;
+    try {
+      html = await preparationPage.evaluate(source => {
+        const document = new DOMParser().parseFromString(source, 'text/html');
+        document.querySelectorAll('script').forEach(script => script.remove());
+        const script = document.createElement('script');
+        script.setAttribute('src', 'dataset-updates.js');
+        document.body.append(script);
+        return '<!doctype html>\n' + document.documentElement.outerHTML;
+      }, htmlSource);
+    } finally {
+      await preparationPage.close();
+    }
     for (const width of [1280, 390]) {
       const page = await browser.newPage({viewport: {width, height: 1000}});
       let status = initial(), unsupported = false, unavailable = true;
