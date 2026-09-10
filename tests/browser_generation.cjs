@@ -133,6 +133,7 @@ const pub = '/api/browser-generation', priv = '/api/browser-workspace';
     await good(page, pub, {action:'select', sha256:status.offer.sha256, expected:status.selected.sha256});
     await page.reload(); status = await good(page, pub);
     assert.equal(status.active.release, '2026-09-10-minimal'); assert.ok(status.active.missing.includes('eu.db'));
+    assert.equal((await good(page, '/api/rezumat')).acte, 4, 'Corpus-only release counts come from SQLite without a manifest report');
     assert.equal((await good(page, '/api/cauta?q=achizitii&limita=1')).results[0].titlu, 'GENERATION MINIMAL');
     // A broken selected source must leave recovery controls available.
     await mode(page, 'corpus-failure'); await page.reload(); await good(page, pub);
