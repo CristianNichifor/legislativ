@@ -65,6 +65,7 @@ import json
 import sqlite3
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import parse_qs, urlparse
 
 from scripts.servicii import (
@@ -114,6 +115,35 @@ APP = Path(__file__).resolve().parent.parent / "app"
 # The largest request body this server will read into memory: a `.docx` at `fisiere.MAX_INCARCARE`
 # plus the third that base64 adds, plus room for the rest of the JSON.
 MAX_CERERE = 30 * 1024 * 1024
+MAX_DATE_CERERE = 4096
+ASSETS = {
+    "/dataset-updates.js": ("dataset-updates.js", "text/javascript; charset=utf-8"),
+    "/browser-workspace.js": ("browser-workspace.js", "text/javascript; charset=utf-8"),
+    **{
+        f"/fonts/{name}.woff2": (f"fonts/{name}.woff2", "font/woff2")
+        for name in (
+            "aileron-400",
+            "aileron-400i",
+            "aileron-600",
+            "aileron-700",
+            "plex-mono-400",
+            "plex-mono-600",
+            "spectral-400",
+            "spectral-400i",
+            "spectral-600",
+            "spectral-700",
+        )
+    },
+}
+
+
+class LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind numeric loopback without the stdlib HTTPServer reverse-DNS lookup."""
+
+    def server_bind(self):
+        TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
 
 
 def _incalzeste(stare: Stare) -> None:
@@ -128,13 +158,24 @@ def _incalzeste(stare: Stare) -> None:
         _lint("Articolul 1 Prezenta lege intră în vigoare la 30 de zile de la publicare.", stare)
 
 
-def face_handler(stare: Stare):
+def face_handler(stare: Stare, *, runtime=None):
     class Handler(BaseHTTPRequestHandler):
+        def setup(self):
+            super().setup()
+            if runtime is not None:
+                self.connection.settimeout(30)
+
         def _dosare_permis(self):
             hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
             origin = self.headers.get("Origin")
+            if runtime is not None and (
+                len(self.headers.get_all("Host", [])) != 1
+                or len(self.headers.get_all("Origin", [])) > 1
+            ):
+                self._json({"error": "Origine nepermisa."}, 403)
+                return False
             if self.headers.get("Host") not in hosts or (
-                origin and origin not in {"http://" + host for host in hosts}
+                origin is not None and origin not in {"http://" + host for host in hosts}
             ):
                 self._json({"error": "Origine nepermisă."}, 403)
                 return False
@@ -146,7 +187,7 @@ def face_handler(stare: Stare):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corp)))
             if urlparse(self.path).path.startswith(
-                ("/api/dosare", "/api/surse-proiecte", "/api/ue/surse")
+                ("/api/dosare", "/api/surse-proiecte", "/api/ue/surse", "/api/date")
             ):
                 self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -164,10 +205,85 @@ def face_handler(stare: Stare):
             self.end_headers()
             self.wfile.write(corp)
 
+        def _dispatch(self, method):
+            if runtime is None:
+                method(stare)
+                return
+            # Each complete operation, including private writes and response serialization,
+            # sees exactly one state. Activation uses the same reentrant lock.
+            with runtime.manager.runtime_lock:
+                if not self._dosare_permis():
+                    return
+                current = runtime.manager.current_state
+                try:
+                    if urlparse(self.path).path == "/api/date":
+                        self._date()
+                        return
+                    method(current)
+                except TimeoutError:
+                    self.close_connection = True
+                    self._json({"error": "Cererea a expirat."}, 408)
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Datele locale nu sunt disponibile."}, 503)
+                except Exception:
+                    self._json({"error": "Eroare interna a aplicatiei locale."}, 500)
+
+        def _date(self):
+            if self.command == "GET":
+                try:
+                    self._json(runtime.manager.status())
+                except (ValueError, OSError) as exc:
+                    self._json({"error": str(exc)}, 503)
+                return
+            lengths = self.headers.get_all("Content-Length", [])
+            if len(lengths) != 1 or self.headers.get("Transfer-Encoding") is not None:
+                self._json({"error": "Content-Length unic este necesar."}, 400)
+                return
+            if not lengths[0].isascii() or not lengths[0].isdecimal():
+                self._json({"error": "Content-Length invalid."}, 400)
+                return
+            length = int(lengths[0])
+            if length > MAX_DATE_CERERE:
+                self._json({"error": "Cerere prea mare."}, 413)
+                return
+            if self.headers.get_content_type() != "application/json":
+                self._json({"error": "Content-Type trebuie sa fie application/json."}, 415)
+                return
+            body = self.rfile.read(length)
+            if len(body) != length:
+                self._json({"error": "Cerere incompleta."}, 400)
+                return
+            try:
+                body = json.loads(body)
+            except (ValueError, UnicodeError, RecursionError):
+                self._json({"error": "JSON invalid."}, 400)
+                return
+            from scripts.date_locale import CommittedWriteError
+            from scripts.local_runtime import DatasetConflict
+
+            try:
+                self._json(runtime.command(body))
+            except DatasetConflict as exc:
+                self._json({"error": str(exc)}, 409)
+            except CommittedWriteError as exc:
+                self._json(
+                    {"error": str(exc), "committed": True, "active": runtime.manager.active()}, 503
+                )
+
         def do_GET(self) -> None:  # noqa: N802
+            self._dispatch(self._get)
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._dispatch(self._post)
+
+        def _get(self, stare) -> None:
             ruta = urlparse(self.path)
             if ruta.path == "/":
                 self._fisier("index.html", "text/html; charset=utf-8")
+            elif ruta.path in ASSETS:
+                self._fisier(*ASSETS[ruta.path])
             elif ruta.path == "/api/cauta":
                 qs = parse_qs(ruta.query)
 
@@ -418,7 +534,7 @@ def face_handler(stare: Stare):
             else:
                 self._json({"error": "not found"}, 404)
 
-        def do_POST(self) -> None:  # noqa: N802
+        def _post(self, stare) -> None:
             ruta = urlparse(self.path).path
             if ruta not in (
                 "/api/lint",
@@ -481,6 +597,9 @@ def face_handler(stare: Stare):
                 cerere = json.loads(self.rfile.read(lung) or b"{}")
             except (json.JSONDecodeError, UnicodeDecodeError):
                 self._json({"error": "json invalid"}, 400)
+                return
+            if not isinstance(cerere, dict):
+                self._json({"error": "cererea trebuie sa fie un obiect JSON"}, 400)
                 return
             if ruta == "/api/ue/surse":
                 from scripts.achizitii_ue import importa
@@ -678,7 +797,15 @@ def serveste(
     graf: str = "graf.db",
     deschide_browser: bool = True,
     eu: str = "eu.db",
+    *,
+    data_home: str | None = None,
+    data_channel: str | None = None,
 ):
+    if data_home is not None:
+        from scripts.local_runtime import DEFAULT_CHANNEL, open_runtime
+
+        with open_runtime(data_home, data_channel or DEFAULT_CHANNEL) as runtime:
+            return _serveste_local(port, runtime, deschide_browser)
     stare = Stare(corpus, initiative, graf, eu)
     server = ThreadingHTTPServer(("127.0.0.1", port), face_handler(stare))
     grafic = "cu graf" if stare.are_graf() else "fără graf"
@@ -707,6 +834,28 @@ def serveste(
         print("\noprit.")
 
 
+def _serveste_local(port, runtime, deschide_browser):
+    import threading
+    import webbrowser
+
+    handler = face_handler(runtime.manager.current_state, runtime=runtime)
+    with LoopbackHTTPServer(("127.0.0.1", port), handler) as server:
+        server.daemon_threads = False
+        url = f"http://127.0.0.1:{server.server_port}"
+        print(f"legislativ pe {url}\nDate locale: {runtime.home}", flush=True)
+        timer = None
+        if deschide_browser:
+            timer = threading.Timer(0.5, lambda: webbrowser.open(url))
+            timer.start()
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\noprit.")
+        finally:
+            if timer is not None:
+                timer.cancel()
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -717,5 +866,21 @@ if __name__ == "__main__":
     ap.add_argument("--graf", default="graf.db")
     ap.add_argument("--eu", default="eu.db")
     ap.add_argument("--fara-browser", action="store_true", help="nu deschide browserul")
+    ap.add_argument("--data-home", help="directorul persistent de date locale")
+    ap.add_argument("--data-channel", help="canalul HTTPS de actualizare configurat")
     a = ap.parse_args()
-    serveste(a.port, a.corpus, a.initiative, a.graf, deschide_browser=not a.fara_browser, eu=a.eu)
+    if a.data_channel and not a.data_home:
+        ap.error("--data-channel necesita --data-home")
+    try:
+        serveste(
+            a.port,
+            a.corpus,
+            a.initiative,
+            a.graf,
+            deschide_browser=not a.fara_browser,
+            eu=a.eu,
+            data_home=a.data_home,
+            data_channel=a.data_channel,
+        )
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        ap.exit(1, f"Pornirea aplicatiei a esuat: {exc}\n")

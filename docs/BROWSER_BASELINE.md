@@ -44,7 +44,9 @@ Chromium, Firefox and WebKit test both `/` and `/nested/` deployments:
 - Real worker boot and lint results; the main thread has no `loadPyodide`.
 - Successful Pagefind index/fragment responses and search, without silent fallback.
 - Service-worker control and actual CacheStorage shell/search entries.
-- No outgoing `/api/` requests or full `corpus.db` download in the tested workflow.
+- No outgoing `/api/` requests. The four-act fixture corpus is fetched once from
+  the same origin to support dossier analysis. Fixture/slice loading is capped at
+  32 MiB; this is not a production full-corpus download or offline guarantee.
 - New lint results and a repeated search while the already-loaded tab is offline.
 - In Chromium, an offline reload with CDN requests explicitly aborted: the cached shell loads,
   but the new worker reports the unavailable runtime instead of completing lint.

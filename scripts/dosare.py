@@ -18,6 +18,9 @@ MAX_REPORT_BYTES = 4_000_000
 
 
 def cale(stare):
+    # Trusted runtime configuration, never a request-supplied filename.
+    if getattr(stare, "dosare_db", None) is not None:
+        return Path(stare.dosare_db)
     if getattr(stare, "date_dir", None) is not None:
         raise ValueError("Dosarele persistente sunt disponibile numai în aplicația locală.")
     return Path(stare.initiative).with_suffix(".dosare.db")

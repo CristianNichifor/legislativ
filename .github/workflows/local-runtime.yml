@@ -1,0 +1,49 @@
+name: Local runtime package
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'scripts/launcher.py'
+      - 'scripts/_launch_server.py'
+      - 'scripts/build_runtime.py'
+      - 'scripts/local_runtime.py'
+      - 'scripts/server.py'
+      - 'scripts/servicii.py'
+      - 'scripts/date_locale.py'
+      - 'scripts/date_personale.py'
+      - 'scripts/dataset_release.py'
+      - 'scripts/dosare.py'
+      - 'scripts/documente_proiecte.py'
+      - 'app/**'
+      - 'tests/**'
+      - 'ruleaza.*'
+      - 'docs/local-launch.md'
+      - '.github/workflows/local-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependency-free checks including integrated cold start
+        env:
+          LEGISLATIV_REQUIRE_INTEGRATION: '1'
+        run: python -m unittest discover -s tests -p 'test_local_*.py' -v
+      - name: Build application bundle
+        run: python -m scripts.build_runtime
+      - uses: actions/upload-artifact@v4
+        with:
+          name: legislativ-local-${{ matrix.os }}
+          path: dist/runtime/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publication boundary
+        run: echo "Artifacts only. A maintainer must review and approve any release publication."

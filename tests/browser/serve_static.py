@@ -1,6 +1,7 @@
 """Build and serve an isolated static app from tracked public fixtures, never local corpora."""
 
 import functools
+import os
 import shutil
 import signal
 import subprocess
@@ -53,5 +54,6 @@ with TemporaryDirectory(prefix="legislativ-static-browser-") as directory:
     ]:
         subprocess.run(command, cwd=root, check=True)
     handler = functools.partial(StaticHandler, directory=root / "web")
-    with ThreadingHTTPServer(("127.0.0.1", 5191), handler) as server, suppress(KeyboardInterrupt):
+    port = int(os.environ.get("BROWSER_STATIC_PORT", "5191"))
+    with ThreadingHTTPServer(("127.0.0.1", port), handler) as server, suppress(KeyboardInterrupt):
         server.serve_forever()
