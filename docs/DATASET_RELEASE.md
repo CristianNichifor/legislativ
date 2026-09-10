@@ -79,7 +79,11 @@ requested channel that is not yet published must produce an honest availability 
 Stop writers and curate a dedicated folder containing only allowed public payloads.
 The builder rejects unknown files, directories, symlinks, SQLite WAL/SHM/journal
 sidecars, WAL-mode database headers, invalid databases and private/build-time SQLite
-objects containing `private`, `dossier`, `dosar` or `documente`. This is a guardrail,
+objects containing `private`, `dossier`, `dosar`, `documente` or `eu_achizitii`.
+The presence of `eu_achizitii` marks a managed private EU generation, even when
+empty: its personal acquisition-attempt metadata is not public. Passing such a
+database as `--published-eu` fails before copying it or writing a release manifest.
+Public law-text history such as `eu_instantanee` remains permitted. This is a guardrail,
 not a general privacy classifier: the operator must curate report contents and DBs.
 Do not rename a collector or private database into the allowlist.
 

@@ -333,6 +333,45 @@ def test_shell_stages_eu_only_when_explicitly_supplied(tmp_path, explicit_eu):
     assert eu.read_bytes() == original
 
 
+@pytest.mark.parametrize("rows", [0, 1])
+def test_reject_managed_private_eu_generation_before_copy(tmp_path, rows):
+    source = tmp_path / "managed-private/eu-generations/generation/eu.db"
+    source.parent.mkdir(parents=True)
+    database(source)
+    con = sqlite3.connect(source)
+    con.execute("CREATE TABLE eu_achizitii (attempt TEXT)")
+    if rows:
+        con.execute("INSERT INTO eu_achizitii VALUES ('personal attempt metadata')")
+    con.commit()
+    con.close()
+    original = source.read_bytes()
+    folder = tmp_path / "release"
+    folder.mkdir()
+    database(folder / "corpus.db")
+    with pytest.raises(SystemExit):
+        release.main(
+            ["build", str(folder), "--release", "2026-09-10", "--published-eu", str(source)]
+        )
+    assert not (folder / "eu.db").exists()
+    assert not (folder / release.MANIFEST_NAME).exists()
+    assert source.read_bytes() == original
+
+
+def test_public_eu_law_history_remains_publishable(tmp_path):
+    source = database(tmp_path / "public-eu.db")
+    con = sqlite3.connect(source)
+    con.execute("CREATE TABLE eu_instantanee (text TEXT)")
+    con.execute("INSERT INTO eu_instantanee VALUES ('public law text')")
+    con.commit()
+    con.close()
+    folder = tmp_path / "release"
+    folder.mkdir()
+    database(folder / "corpus.db")
+    release.main(["build", str(folder), "--release", "2026-09-10", "--published-eu", str(source)])
+    assert (folder / "eu.db").read_bytes() == source.read_bytes()
+    release.verify_release(folder)
+
+
 @pytest.mark.parametrize("unsafe", ["private", "wal", "report"])
 def test_curated_eu_sources_fail_closed(tmp_path, unsafe):
     source = database(tmp_path / "eu-public.db")

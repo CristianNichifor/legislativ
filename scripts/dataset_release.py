@@ -189,7 +189,7 @@ def _check_sqlite(path):
     con = sqlite3.connect(path.resolve().as_uri() + "?mode=ro&immutable=1", uri=True)
     try:
         names = [row[0].lower() for row in con.execute("SELECT name FROM sqlite_master")]
-        if any(re.search(r"private|dossier|dosar|documente", name) for name in names):
+        if any(re.search(r"private|dossier|dosar|documente|eu_achizitii", name) for name in names):
             raise ReleaseError(f"private/build-time tables in {path.name}")
         if con.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
             raise ReleaseError(f"SQLite quick_check failed: {path.name}")
