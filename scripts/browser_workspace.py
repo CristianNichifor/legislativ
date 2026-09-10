@@ -1,9 +1,11 @@
 """Browser transport for the existing dossier services; no network acquisition."""
 
+import json
 import sqlite3
 import tempfile
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from scripts import dosare
 
@@ -47,6 +49,33 @@ def initialize(path):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with dosare._open(path, write=True):
         pass
+
+
+def public_contract(kind, raw, channel, allow_loopback=False):
+    """Use the publisher's contract, including duplicate-key and optional-file rules."""
+    from scripts import dataset_release as release
+
+    configured = urlsplit(channel)
+    origin = f"{configured.scheme}://{configured.netloc}"
+    if kind == "channel":
+        if configured.scheme == "http":
+            if not allow_loopback or configured.hostname not in {"127.0.0.1", "localhost", "::1"}:
+                raise ValueError("Canalul necesita HTTPS.")
+            value = release._parse(raw)
+            url = value.get("manifest", "") if isinstance(value, dict) else ""
+            if not url.startswith(origin + "/"):
+                raise ValueError("Origine nepermisa.")
+            release.validate_channel(
+                {**value, "manifest": "https" + url[4:]},
+                trusted_origin="https" + origin[4:],
+            )
+        else:
+            value = release.load_channel(raw, trusted_origin=origin)
+    elif kind == "manifest":
+        value = release.load_manifest(raw)
+    else:
+        raise ValueError("Contract necunoscut.")
+    return json.dumps(value)
 
 
 def route(stare, route, qs, body, method="GET"):

@@ -8,6 +8,7 @@ playwright-report/
 .ruff_cache/
 /.context-fixture/
 /.eu-link-fixture/
+/.browser-generation-fixture/
 
 # Fetched pages. The parser's fixtures are the exception and are un-ignored by name in
 # sources/README.md's terms — a parser test against a page nobody else can fetch is not a test.
@@ -50,6 +51,7 @@ web/bundle.zip
 web/index.html
 web/worker.js
 web/browser-workspace.js
+web/browser-generation.js
 web/dataset-updates.js
 web/sw.js
 # copied here from app/fonts/ by the build; app/fonts/ is the committed source

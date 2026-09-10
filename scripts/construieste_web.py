@@ -103,6 +103,31 @@ def _csp(depozit: str = "") -> str:
 
 
 PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
+PUBLIC_CHANNEL = "https://date.cnwebify.dev/channel.json"
+
+
+def _public_config(channel=PUBLIC_CHANNEL, allow_loopback=False):
+    parsed = urlparse(channel)
+    local = (
+        allow_loopback
+        and parsed.scheme == "http"
+        and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+    )
+    if (
+        (parsed.scheme != "https" and not local)
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.path != "/channel.json"
+        or parsed.query
+        or parsed.fragment
+        or "\\" in channel
+    ):
+        raise ValueError(
+            "Canalul browser necesita HTTPS /channel.json; HTTP loopback doar pentru test explicit."
+        )
+    return {"channel": channel, "allowLoopback": bool(local)}
+
 
 # The worker: Pyodide, the engines, and all the data — off the main thread. It loads Pyodide and
 # its sqlite3 package, unpacks the engines and fixtures into its own filesystem, mounts the data,
@@ -111,8 +136,13 @@ PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"
 WORKER = """
 importScripts("__PYODIDE__");
 importScripts("browser-workspace.js");
-let raspunde, cautaJson, runtime;
+importScripts("browser-generation.js");
+let raspunde, cautaJson, runtime, publicManager, generation;
 const bootMissing = [];
+let resolveCore, rejectCore;
+const core = new Promise((resolve, reject) => {resolveCore = resolve; rejectCore = reject;});
+core.catch(() => {});
+const PUBLIC_CONFIG = __PUBLIC_CONFIG__;
 
 // De unde se citește corpusul întreg. Gol = comportamentul vechi (doar catalogul mic + felii).
 const DEPOZIT = "__DEPOZIT__";
@@ -153,7 +183,7 @@ function cuMemorie(adu, lungime){
 // O bucată scurtă nu e o bucată: SQLite ar primi o pagină ciuntită și ar citi din ea numere care
 // arată ca niște numere. De aceea nimic sub lungimea cerută nu e acceptat, iar un 429 (depozitul
 // public are limită de ritm) se reîncearcă în loc să treacă drept date.
-function aduBucata(url, de, la, incercari){
+function aduBucata(url, de, la, incercari, expectedTotal){
   const cati = la - de + 1;
   let ultima = "";
   for (let i = 0; i < incercari; i++) {
@@ -167,6 +197,10 @@ function aduBucata(url, de, la, incercari){
     x.responseType = "arraybuffer";
     x.setRequestHeader("Range", `bytes=${de}-${la}`);
     try { x.send(); } catch (e) { ultima = e.message; continue; }
+    if (expectedTotal && (x.responseURL !== url || x.status !== 206 ||
+        x.getResponseHeader('Content-Range') !== `bytes ${de}-${la}/${expectedTotal}`)) {
+      throw new Error('Generatia online a returnat un interval sau o redirectare incompatibila.');
+    }
     if (x.status !== 206 && x.status !== 200) { ultima = "HTTP " + x.status; continue; }
     const b = new Uint8Array(x.response || 0);
     if (b.length !== cati) { ultima = `${b.length} din ${cati} octeți`; continue; }
@@ -232,6 +266,31 @@ async function boot(){
   const zip = await fetch("bundle.zip").then(r=>r.arrayBuffer());
   pyodide.unpackArchive(zip, "zip");
   try { pyodide.FS.mkdir("data"); } catch (e) {}
+  const contract = pyodide.runPython(`
+import sys
+if '.' not in sys.path: sys.path.insert(0, '.')
+from scripts.browser_workspace import public_contract
+public_contract
+  `);
+  publicManager = new BrowserGeneration({...PUBLIC_CONFIG, legacyRoot: DEPOZIT}, contract);
+  publicManager.legacyMissing = bootMissing;
+  resolveCore();
+  generation = await publicManager.load();
+  if (generation) {
+    for (const [name, bytes] of Object.entries(generation.reports)) pyodide.FS.writeFile('data/' + name, bytes);
+    for (const entry of generation.manifest.files.filter(f => f.name.endsWith('.db'))) {
+      const url = generation.folder + entry.name;
+      const source = cuMemorie((de, la) => aduBucata(url, de, la, 2, entry.bytes), entry.bytes);
+      monteaza(pyodide, source, entry.name);
+    }
+    if (!generation.manifest.files.some(f => f.name === 'initiative.db')) {
+      pyodide.runPython(`
+from scripts import depozit
+with depozit.deschide('data/initiative.db'):
+    pass
+      `);
+    }
+  } else {
   // The whole corpus (corpus.db) is NOT shipped — only the small catalog the engines need: titles
   // (index.json), counts (manifest.json), the terminology dictionary (termeni.json), the graph,
   // the initiatives and the optional EU index. Search reads per-act shards over HTTP on demand;
@@ -239,8 +298,6 @@ async function boot(){
   // Cu un depozit în spate, graf.db, initiative.db și eu.db se montează de acolo întregi; nu are rost să
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
   const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json","ue_acoperire.json"];
-  // The historical publisher exposes these three files, not the optional reports.
-  // Never substitute bundled reports for an unrelated pinned remote corpus.
   const legacyCatalog = ['index.json', 'termeni.json', 'manifest.json'];
   if (DEPOZIT) bootMissing.push(...catalog.filter(name => !legacyCatalog.includes(name)));
   for (const name of (DEPOZIT ? legacyCatalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
@@ -279,7 +336,7 @@ async function boot(){
         try { sursa = prinRange(`${baza}/${nume}`); deUnde = "depozit"; }
         catch (e2) {
           if (nume === 'corpus.db') throw new Error(`${nume} din generatia selectata nu e disponibil: ${e2.message}`);
-          bootMissing.push(nume);
+          publicManager.legacyMissing.push(nume);
         }
       }
       if (sursa) {
@@ -287,6 +344,14 @@ async function boot(){
         console.log(`${nume} montat (${deUnde}): ${(sursa.lungime/1e9).toFixed(2)} GB`);
       }
     }
+  }
+  }
+  if (!pyodide.FS.analyzePath('data/initiative.db').exists) {
+    pyodide.runPython(`
+from scripts import depozit
+with depozit.deschide('data/initiative.db'):
+    pass
+    `);
   }
   raspunde = pyodide.runPython(`
 import sys, json
@@ -302,15 +367,9 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _matrice_contradictii,
                               _matrice_proiecte, _conflicte_proiecte,
                               _cine_citeaza, _ue, _acoperire_ue, _import_queue_ue)
-if __CORPUS_INTREG__:
-    from pathlib import Path
-    if not Path('data/initiative.db').exists():
-        from scripts import depozit
-        with depozit.deschide('data/initiative.db'):
-            pass
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
-               corpus_intreg=__CORPUS_INTREG__)
+               corpus_intreg=${generation ? 'True' : '__CORPUS_INTREG__'})
 _stare.dosare_db = '/workspace/dosare.db'
 def _raspunde(path, query, body, method='GET'):
     qs = parse_qs(query or '')
@@ -425,14 +484,21 @@ async def _cauta_json(query):
     return _json.dumps(r, ensure_ascii=False)
 _cauta_json
   `);
+  publicManager.active = generation;
 }
-const gata = boot().then(()=>postMessage({type:"ready", limitations:bootMissing}))
-                   .catch(e=>{ postMessage({type:"error", error:String(e)}); throw e; });
+const gata = boot().then(()=>postMessage({type:"ready", limitations:bootMissing, generation: generation ? generation.manifest.release : null}))
+                   .catch(e=>{ if (publicManager) publicManager.bootError = String(e); rejectCore(e); postMessage({type:"error", error:String(e)}); throw e; });
+gata.catch(() => {});
 let requestQueue = Promise.resolve();
 onmessage = (e) => { requestQueue = requestQueue.then(() => handle(e.data)); };
 async function handle(request) {
   const {id, path, query, body, method = 'GET'} = request;
   try {
+    if (path === '/api/browser-generation') {
+      await core; await gata.catch(() => {});
+      const result = await publicManager.request(method, body);
+      postMessage({id, ok:true, result}); return;
+    }
     await gata;
     // Căutarea trece mereu prin index, nu prin corpus. Măsurat pe corpusul montat: ordonarea a
     // 6.478 potriviri după bm25 a cerut ~1.000 de citiri împrăștiate și 291 de secunde, fiindcă
@@ -440,7 +506,7 @@ async function handle(request) {
     const execute = () => raspunde(path, query, body, method);
     const res = (path === '/api/dosare' || path.startsWith('/api/dosare/') || path === '/api/browser-workspace')
       ? await BrowserWorkspace.run(runtime, {...request, method}, execute)
-      : (path === "/api/cauta")
+      : (path === "/api/cauta" && !generation)
       ? await cautaJson(query || "")
       : execute();
     postMessage({id, ok:true, result:res});
@@ -457,6 +523,7 @@ async function handle(request) {
 # already redirected by the time the page makes its first call.
 BOOT = """
 <script src="browser-workspace.js"></script>
+<script src="browser-generation.js"></script>
 <script>
 (function(){
   const origFetch = window.fetch.bind(window);
@@ -575,16 +642,18 @@ BOOT = """
   let resolveReady, rejectReady;
   const ready = new Promise((res, rej)=>{ resolveReady=res; rejectReady=rej; });
   const worker = new Worker("worker.js");
+  let selectedGeneration = null;
   const pending = new Map(); let seq = 0;
   worker.onmessage = (e)=>{
     const m = e.data;
     if (m.type === "ready"){
+      selectedGeneration = m.generation;
       window.browserSourceLimitations = m.limitations || [];
       if (window.browserSourceLimitations.length) {
         const note = document.createElement('p'); note.id = 'browser-source-limitations';
         note.className = 'hint'; note.setAttribute('role', 'status');
         note.style.overflowWrap = 'anywhere';
-        note.textContent = 'Acoperire indisponibila pentru sursele optionale: ' + window.browserSourceLimitations.join(', ');
+        note.textContent = 'Acoperire indisponibila pentru sursele optionale: ' + window.browserSourceLabels(window.browserSourceLimitations);
         document.querySelector('header')?.after(note);
       }
       resolveReady(); return;
@@ -610,21 +679,24 @@ BOOT = """
       worker.postMessage({id, path, query, body, method});
     });
   }
-  if (DEPOZIT_CAUTARE) incalzesteBanda().catch(()=>{});
+  if (DEPOZIT_CAUTARE) ready.then(() => {if (!selectedGeneration) incalzesteBanda().catch(()=>{});}).catch(()=>{});
   window.fetch = async function(url, opts){
     const u = (typeof url === "string") ? url : (url && url.url);
     if (u && u.indexOf("/api/cauta") === 0) {
       try {
+        await ready;
+        if (!selectedGeneration) {
         const parsed = new URL(u, location.origin);
         const out = await cauta(parsed.searchParams);
         return new Response(JSON.stringify(out), {status:200, headers:{"Content-Type":"application/json; charset=utf-8"}});
+        }
       } catch (e) {
         // Fără index publicat, căutarea rămâne cea din motor — mai lentă, dar prezentă.
         console.warn("căutarea prin index a eșuat, revin la motor:", e && e.message);
       }
     }
     if (u && u.indexOf("/api/") === 0) {
-      try { await ready; }
+      try { if (!u.startsWith('/api/browser-generation')) await ready; }
       catch(e){ return new Response(JSON.stringify({error:"motor indisponibil: "+e}), {status:503}); }
       try {
         const parsed = new URL(u, location.origin);
@@ -659,7 +731,7 @@ SW = """
 const VERSIUNE = "__VERSION__";
 const CACHE = "legislativ-shell-" + VERSIUNE;
 const NUCLEU = [
-  "./", "./index.html", "./worker.js", "./browser-workspace.js", "./bundle.zip",
+  "./", "./index.html", "./worker.js", "./browser-workspace.js", "./browser-generation.js", "./bundle.zip",
   __FONTURI__,
   "./data/graf.db", "./data/initiative.db", "./data/eu.db",
   "./data/index.json", "./data/termeni.json", "./data/manifest.json", "./data/vid.json",
@@ -1055,11 +1127,12 @@ def _bundle() -> None:
     print(f"  bundle → {tinta} ({tinta.stat().st_size / 1e6:.1f} MB)")
 
 
-def _worker(depozit: str = "") -> None:
+def _worker(depozit: str = "", *, channel=PUBLIC_CHANNEL, allow_loopback=False) -> None:
     corpus = DATA / "corpus.db"
     local_corpus = not depozit and corpus.is_file() and corpus.stat().st_size <= 32 * 1024 * 1024
     text = (
         WORKER.replace("__PYODIDE__", PYODIDE)
+        .replace("__PUBLIC_CONFIG__", json.dumps(_public_config(channel, allow_loopback)))
         .replace("__LOCAL_CORPUS__", "true" if local_corpus else "false")
         .replace("__DEPOZIT__", depozit)
         # With a repository behind it the corpus is really there, so counts, titles and search
@@ -1206,11 +1279,18 @@ def _client_cautare() -> None:
     print(f"  client de căutare → {tinta} ({n} fișiere)")
 
 
-def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
+def _pagina(
+    depozit: str = "", felii_cautare: int = 0, *, channel=PUBLIC_CHANNEL, allow_loopback=False
+) -> None:
     sursa = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
     if "<head>" not in sursa or "<body>" not in sursa:
         raise SystemExit("app/index.html nu are <head>/<body> — nu știu unde să injectez")
-    csp = f'<meta http-equiv="Content-Security-Policy" content="{_csp(depozit)}">'
+    _public_config(channel, allow_loopback)
+    policy = _csp(depozit)
+    origin = _origine(channel)
+    if origin != _origine(depozit):
+        policy = policy.replace("connect-src 'self'", f"connect-src 'self' {origin}")
+    csp = f'<meta http-equiv="Content-Security-Policy" content="{policy}">'
     pagina = sursa.replace("<head>", "<head>\n" + csp, 1)
     # Prepend the manager block right after <body> so it runs before the app's own inline script.
     # The slice count is baked in rather than discovered: the client would otherwise have to probe
@@ -1236,6 +1316,7 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
         "Se salveaza in acest browser; nu se trimite altor persoane. Exportati copii de siguranta: stergerea datelor site-ului elimina dosarele.",
     )
     shutil.copy2(ROOT / "app" / "browser-workspace.js", WEB / "browser-workspace.js")
+    shutil.copy2(ROOT / "app" / "browser-generation.js", WEB / "browser-generation.js")
     # Local update controls own their unsupported-endpoint state in the shared page.
     updates = ROOT / "app" / "dataset-updates.js"
     if updates.is_file():
@@ -1245,7 +1326,13 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
 
 
 def main(
-    sursa: str, *, tot_parlamentul: bool = False, depozit: str = "", felii_cautare: int = 0
+    sursa: str,
+    *,
+    tot_parlamentul: bool = False,
+    depozit: str = "",
+    felii_cautare: int = 0,
+    channel=PUBLIC_CHANNEL,
+    allow_loopback=False,
 ) -> None:
     DATA.mkdir(parents=True, exist_ok=True)
     print(f"construiesc web/ (sursă: {sursa}) …")
@@ -1288,10 +1375,10 @@ def main(
         _parlament_json()
         _ue_acoperire_json()
     _bundle()
-    _worker(depozit)
+    _worker(depozit, channel=channel, allow_loopback=allow_loopback)
     _fonturi()
     _client_cautare()
-    _pagina(depozit, felii_cautare)
+    _pagina(depozit, felii_cautare, channel=channel, allow_loopback=allow_loopback)
     _versiune_si_sw()
     print("gata. servește cu:  uv run python -m http.server -d web 8080")
 
@@ -1337,7 +1424,16 @@ if __name__ == "__main__":
             "numărul trebuie dat, altfel construcția se oprește."
         ),
     )
+    ap.add_argument("--canal-browser", default=PUBLIC_CHANNEL)
+    ap.add_argument(
+        "--permite-http-local-browser", action="store_true", help="Doar fixturi pe loopback."
+    )
     a = ap.parse_args()
     main(
-        a.sursa, tot_parlamentul=a.tot_parlamentul, depozit=a.depozit, felii_cautare=a.felii_cautare
+        a.sursa,
+        tot_parlamentul=a.tot_parlamentul,
+        depozit=a.depozit,
+        felii_cautare=a.felii_cautare,
+        channel=a.canal_browser,
+        allow_loopback=a.permite_http_local_browser,
     )

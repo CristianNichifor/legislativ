@@ -29,7 +29,11 @@ SQLite integrity and foreign keys in a separate candidate file, migrates support
 older schemas using the existing migrations, and converts WAL mode to a standalone
 file. The replaced current snapshot remains in backup history. Import/recovery
 can replace an unreadable current snapshot without first opening it. Exported
-files contain private research; there is no upload endpoint or account.
+files contain private research; there is no upload endpoint or account. Import
+also compares schema objects against the canonical dossier schema before and
+after migration; imported DDL is not executed. Import and restore check the
+existing draft/inflight guard before replacing state, including after reading an
+import file. A cancelled guard leaves the database and backup history unchanged.
 
 HTTPS or localhost, IndexedDB, Web Locks and Web Crypto are required. Unsupported
 browsers fail dossier operations explicitly. Browser persistence is not immunity
@@ -40,13 +44,16 @@ times the file size. This is intended for research workspaces, not corpus storag
 
 ## Public data boundary
 
-The parent owns `dataset-release.json`, channel selection and public update UI.
-This implementation introduces no competing manifest. Legacy unversioned OPFS
+The publisher owns the shared `dataset-release.json` and channel contract.
+Browser selection uses that contract, with no competing manifest; see
+[Browser online generations](browser-online-generations.md). Legacy unversioned OPFS
 corpus files are never mounted: they cannot prove membership in the selected
-remote generation. A configured remote database that cannot be mounted causes an
-explicit boot failure rather than a silent fallback to a different generation.
-Remote reports are fetched from the same release root as the databases, rather
-than mixed with reports shipped in the application build.
+remote generation. A required corpus failure causes an explicit boot failure.
+The legacy pinned release tolerates missing optional databases and historical
+catalogs, with unavailable coverage explicitly reported. Other build reports are
+not mounted alongside that remote release. Selected manifest releases use only
+declared assets from the same manifest folder; declared but broken assets fail
+validation instead of silently falling back to a different generation.
 Future verified caches must be keyed to the parent's release identity and hashes.
 Shell cache cleanup is restricted to `legislativ-shell-*`; it does not delete
 other same-origin caches belonging to the parent's public dataset manager.
@@ -54,8 +61,8 @@ other same-origin caches belonging to the parent's public dataset manager.
 Fixture/slice builds load their existing corpus file only when it is at most
 32 MiB; this enables matrix dossier analysis over that slice. Larger published
 datasets continue through remote range reads. The slice does not establish full
-corpus coverage. No full 9 GB offline download is promised. Public generation
-selection and small-package downloads remain parent integration work.
+corpus coverage. No full 9 GB offline download is promised. Browser selection
+retains only metadata and small verified reports, not offline database packages.
 
 The build copies `app/dataset-updates.js` when that parent-owned file exists.
 Its controls must hide when their API is unavailable in the static runtime.

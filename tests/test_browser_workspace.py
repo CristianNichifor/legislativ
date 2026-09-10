@@ -134,6 +134,7 @@ def test_build_copies_optional_parent_update_script(tmp_path, monkeypatch):
     app.mkdir()
     (app / "index.html").write_text('<head></head><body><script src="dataset-updates.js"></script>')
     (app / "browser-workspace.js").write_text("// workspace")
+    (app / "browser-generation.js").write_text("// generations")
     (app / "dataset-updates.js").write_text("// parent update controls")
     web = tmp_path / "web"
     web.mkdir()
