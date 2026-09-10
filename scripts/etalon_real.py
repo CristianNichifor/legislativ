@@ -1,24 +1,37 @@
-"""The honest number: extraction measured against the publisher's own marks.
+"""The honest number: locator extraction measured against the publisher's own marks.
 
 `etalon.py` scores the extractors on thirty-six sentences written by the same hand that wrote the
 patterns. That measures whether they do what they were designed to do; it cannot measure how much
-of real law they catch, because there is no independent truth in it. This module supplies the
-independent truth: the portal wraps every legislative reference it recognises in the running text
-in an `S_LGI` span, so those spans are the Ministry's own answer key, and this checks the
-extractor against it over real acts.
+of real law they catch, because there is no independent truth in it. This module supplies an
+independent truth over real acts: the portal wraps positions inside the text in an `S_LGI` span,
+so those spans are the Ministry's own answer key for *where a provision is*.
 
-**Recall against `S_LGI`, on committed fixtures.** For every span the publisher marked, did
-`referinte.py` find a reference overlapping it. The acts are the ones already saved in `sources/`
-that carry marks — a citation-dense law cites hundreds of others, and two such acts hold over
-eight hundred marks between them, which is a larger and more real sample than the hand-written
-set. Fixtures rather than a live fetch, so the number is reproducible and CI can hold it.
+**Locator recall against `S_LGI`, on committed fixtures.** For every span the publisher marked,
+did `referinte.py` find a reference overlapping it. The acts are the ones already saved in
+`sources/` that carry marks; two of them hold over eight hundred marks between them, which is a
+larger and more real sample than the hand-written set. Fixtures rather than a live fetch, so the
+number is reproducible and CI can hold it.
 
-**What this is not.** It measures recall, not precision: `S_LGI` says where a reference *is*, not
-where one *is not*, so it cannot catch a reference the extractor invents. And a short act that
-cites nothing carries no marks and contributes nothing — the sample is citation-heavy law, which
-is exactly where the linter earns its keep. The synthetic set still guards precision and the
-amendment and deadline extractors; this guards reference recall against the real world, and the
-two together are the measurement, neither alone.
+**`S_LGI` marks locators, not citations of other acts.** This said the opposite until 2026-09-10
+— "the portal wraps every legislative reference it recognises" — and the number was read as
+reference recall on that basis. Counted over the same fixtures the harness scores:
+
+    lege-310-2021    242 marks     0 carry an act number    (100% locators)
+    lege-98-2016     580 marks    14 carry an act number    (97,6% locators)
+
+All fourteen name the host act. Not one of the 822 marks points at a *different* act — they are
+`lit. e)`, `anexa nr. 1`, `art. 107 alin. (1)-(3)`. So this measures locator extraction, which is
+real and worth guarding, and says nothing about whether `Legea nr. 171/1998` is found in a
+sentence that cites it. The parser and the regex below were compared span for span to be sure
+this is not a truncation artefact: 242/242 and 580/580, identical.
+
+**What this is not.** It is not reference recall, per the above. It is not precision either:
+an answer key says where something *is*, not where it *is not*, so nothing here can catch an
+invention — see `etalon_precizie.py`, which asks a person instead, because for act citations
+there is no key to ask. And a short act that cites nothing carries no marks and contributes
+nothing. The synthetic set still guards precision on thirty-six sentences and guards the
+amendment and deadline extractors; this guards locator recall against the real world; the
+adjudicated sample guards reference precision. No one of the three is the measurement.
 
 Run: `python -m scripts.etalon_real`.
 """
@@ -81,7 +94,7 @@ def recall_global(masuri: list[Masura]) -> float:
 
 def raport(surse: Path = SURSE) -> str:
     masuri = masoara(surse)
-    linii = ["recall referințe vs marcajele S_LGI ale portalului:", ""]
+    linii = ["recall localizatori vs marcajele S_LGI ale portalului:", ""]
     for m in masuri:
         linii.append(f"  {m.act:22} {m.gasite:>4}/{m.marcaje:<4} {m.recall:.1%}")
     total = sum(m.marcaje for m in masuri)
