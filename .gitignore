@@ -1,4 +1,7 @@
 __pycache__/
+test-results/
+test-results-static/
+playwright-report/
 *.py[cod]
 .venv/
 .pytest_cache/

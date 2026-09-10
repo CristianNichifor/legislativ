@@ -453,7 +453,7 @@ BOOT = """
   let pagefind = null;
   async function motorulDeCautare(){
     if (pagefind) return pagefind;
-    const baza = DEPOZIT_CAUTARE ? DEPOZIT_CAUTARE.replace(/\\/$/, "") + "/" : "./";
+    const baza = DEPOZIT_CAUTARE ? DEPOZIT_CAUTARE.replace(/\\/$/, "") + "/" : new URL("./", location.href).href;
     const cale = i => FELII_CAUTARE > 1 ? `${baza}pagefind-${i}/` : `${baza}pagefind/`;
     const m = await import("./pagefind/pagefind.js");
     await m.options({basePath: cale(0), language: "ro"});
