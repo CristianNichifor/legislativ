@@ -204,9 +204,8 @@ class LocalLaunchTests(unittest.TestCase):
                             time.sleep(0.1)
                         if body is None:
                             diagnostic = (
-                                (base / "output.log").read_text()
-                                + f"\nLast HTTP probe error: {last_probe_error}"
-                            )
+                                base / "output.log"
+                            ).read_text() + f"\nLast HTTP probe error: {last_probe_error}"
                             print(diagnostic, file=sys.stderr, flush=True)
                             self.fail(diagnostic)
                         self.assertIn(b"<html", body.lower())
