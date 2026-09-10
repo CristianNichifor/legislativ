@@ -67,7 +67,8 @@ const pub = '/api/browser-generation', priv = '/api/browser-workspace';
     await page.evaluate(() => {window.auditPosts = [];});
     await page.locator('#tab-lint').click(); await page.locator('#draft').fill('UNSAVED PUBLIC SWITCH GUARD');
     await page.locator('#browser-generation [data-select]').click(); await idle(page);
-    assert.deepEqual(await page.evaluate(() => auditPosts), []);
+    // Typing may trigger the debounced, read-only terminology lookup.
+    assert.deepEqual(await page.evaluate(() => auditPosts.filter(path => path !== '/api/termeni')), []);
     page.once('dialog', dialog => dialog.accept());
     await page.reload(); await good(page, pub);
     await page.locator('#browser-generation [data-check]').click(); await idle(page);
