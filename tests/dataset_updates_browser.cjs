@@ -51,6 +51,9 @@ const initial = () => ({mode: 'local', channel: 'https://date.cnwebify.dev/chann
         if (url.pathname.startsWith('/fonts/')) {
           return route.fulfill({path: path.join(root, 'app', url.pathname.slice(1))});
         }
+        if (url.pathname === '/civic-ui-adapter.css' || url.pathname.startsWith('/vendor/civic-ui/')) {
+          return route.fulfill({path: path.join(root, 'app', url.pathname.slice(1))});
+        }
         if (url.pathname === '/api/date') {
           if (unsupported) return route.fulfill({status: 404, body: '{}'});
           if (request.method() === 'POST') {
