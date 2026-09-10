@@ -22,7 +22,17 @@ jobs:
       options: --ipc=host
     steps:
       - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.12'
+      - run: uv sync --all-groups
       - run: npm ci --ignore-scripts
+      - name: Local dataset controls (mocked HTTP)
+        run: node tests/dataset_updates_browser.cjs
+        timeout-minutes: 5
+      - name: Local dataset updates (real server)
+        run: node tests/local_updates_browser.cjs
+        timeout-minutes: 5
       - run: npm run test:browser
         env:
           # Firefox requires HOME to belong to the container's current user.
