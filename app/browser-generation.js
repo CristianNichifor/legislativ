@@ -163,9 +163,10 @@
   if (typeof document === 'undefined') return;
   document.addEventListener('DOMContentLoaded', () => {
     const panel = document.createElement('section'); panel.id = 'browser-generation';
-    panel.style.cssText = 'margin:0 0 1rem;padding:.75rem 0;border-bottom:1px solid var(--rule);min-width:0;font-size:.85rem';
+    panel.style.cssText = 'margin:0 0 1rem;padding:.75rem 0;border-bottom:1px solid var(--rule);min-width:0;font: .85rem var(--sans);letter-spacing:0';
     panel.innerHTML = '<h2 style="font-size:1rem;margin:0">Date legislative online</h2><p data-active></p><p data-offer></p><p class="hint" data-coverage></p><p class="hint">Citire online a bazelor SQLite; hash-ul integral al bazelor nu este verificat. Fara copie offline a corpusului complet.</p><p role="status" data-status></p><div class="dossier-actions"><button type="button" class="ghost mini" data-check>Verifica actualizarile</button><button type="button" class="ghost mini" data-select hidden>Schimba versiunea online</button><button type="button" class="ghost mini" data-previous hidden>Versiunea precedenta</button><button type="button" class="ghost mini" data-clear hidden>Revino la datele incluse</button><button type="button" class="ghost mini" data-reload hidden>Reincarca pagina</button></div>';
     document.querySelector('header').after(panel);
+    panel.querySelector('.dossier-actions').style.cssText = 'display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem';
     panel.querySelectorAll('p').forEach(p => {p.style.overflowWrap = 'anywhere'; p.style.margin = '.4rem 0';});
     panel.querySelectorAll('button').forEach(b => {b.style.maxWidth = '100%'; b.style.whiteSpace = 'normal';});
     const node = key => panel.querySelector(`[data-${key}]`);

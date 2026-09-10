@@ -14,6 +14,9 @@ uv, pip, dependinte de dezvoltare sau un cont.
 Pornirea nu descarca date, nu colecteaza surse si nu apeleaza inferenta platita.
 Descarcarea necesita internet si o actiune explicita in interfata. Fara date,
 analiza care necesita corpus ramane indisponibila.
+Importul PDF al documentelor parlamentare necesita separat Poppler (`pdftotext`).
+Pachetul nu include Poppler, modele AI sau un server Ollama; functiile respective
+raman conditionate de configurarea lor explicita.
 
 Datele persistente sunt separate de aplicatie:
 

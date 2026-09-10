@@ -23,8 +23,9 @@ repeat a warmed search. The service worker does **not** cache the external Pyodi
 runtime: an offline reload needs those assets to survive in the browser's separate
 HTTP cache, so an offline restart is not guaranteed. A fresh offline browser cannot
 load an uncached shell. The cache name carries a
-**content hash of the corpus and graph** (`versiune` in `manifest.json`). The implementation
-changes `sw.js` with that version and deletes older caches on activation; a complete
+**content hash of the public catalog and runtime assets** (`versiune` in
+`manifest.json`). Code-only changes rotate the shell cache as well. The implementation
+changes `sw.js` with that version and deletes only older `legislativ-shell-*` caches on activation; a complete
 update-cycle test is not included yet. The browser baseline verifies service-worker
 control and actual cached worker-shell and Pagefind entries after a warmed search.
 The fixture workflow loads its bounded four-act `corpus.db` once for dossier
