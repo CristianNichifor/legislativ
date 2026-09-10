@@ -1198,7 +1198,9 @@ def _pagina(depozit: str = "", felii_cautare: int = 0) -> None:
         )
     felii = felii or 1
     boot = BOOT.replace("__DEPOZIT__", depozit).replace("__FELII_CAUTARE__", str(felii))
-    pagina = re.sub(r"<body(?:\s[^>]*)?>", lambda match: f"{match.group(0)}\n{boot}", pagina, count=1)
+    pagina = re.sub(
+        r"<body(?:\s[^>]*)?>", lambda match: f"{match.group(0)}\n{boot}", pagina, count=1
+    )
     (WEB / "index.html").write_text(pagina, encoding="utf-8")
     print(f"  pagină (cu CSP) → {WEB / 'index.html'}")
 
