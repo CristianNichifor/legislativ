@@ -21,11 +21,46 @@ allocation, so light use can cost **nothing**.
 | **Workers KV** `legislativ-rescrieri` | 100k reads / 1k writes / 1 GB free | the rewrite cache | live (`8a788c53…`) |
 | **Rate-limiting binding** (`RL`) | free | per-IP limit, no KV cost | live |
 | **AI Gateway** `law-legislation-project-gateway` | free | caching + analytics in front of Workers AI | live |
-| **R2** | — | *planned* for the bulk data shards | not enabled |
+| **R2** `legislativ` | 10 GB / 1M class A ops per month free | the corpus and the search index, read by the browser over Range | **live** on `date.cnwebify.dev` — see the cost model below |
 
 Account: **CN Webify** `432316a05c0d6000c6e196fe32e47dd7`. Existing maintainer endpoint:
 `https://legislativ-rescrieri.cn-webify.workers.dev/rescrie`. It is not used as the public app
 default.
+
+## R2 — what a republish actually costs
+
+Measured 2026-09-10, bucket `legislativ`: **~10 GB across ~256.000 objects**, one dated prefix
+(`2026-09-08`), which is also the only prefix the published page references. Almost all of that
+object count is the search index — a corpus file is one object, a Pagefind slice is thousands of
+fragments.
+
+A republish writes a **new** dated prefix, so each one costs roughly:
+
+| | per republish | free tier |
+|---|---|---|
+| Class A operations (writes) | ~256.000 | 1.000.000 / month |
+| Storage added | ~10 GB, cumulative | 10 GB total |
+
+Three republishes a month is free. **Daily republishing is ~7,7M class A operations, about
+$30/month**, and storage grows by ~10 GB every time because nothing deletes the old prefixes.
+
+Two things follow, and one thing that looks like a fix is not one:
+
+- **Storage needs a lifecycle rule.** Old dated prefixes are never referenced once the page moves
+  to a new one, and nothing removes them. An expiry rule on the bucket is the fix. It needs an API
+  token with *Account · Workers R2 Storage · Edit*; neither `wrangler login`'s OAuth scope nor a
+  read-only connection can set it.
+- **The operation count is inherent to the dated-prefix design**, not to a flag. A new prefix is
+  empty, so every fragment is a new object no matter how it is uploaded.
+- **`--no-traverse` is not the cause.** It skips listing the destination, and the destination is a
+  fresh prefix with nothing in it to skip. Removing it would add class B list operations and save
+  nothing. It is correct where it is.
+
+Publishing the index under a content-stable prefix instead, so unchanged fragments could be
+skipped, does **not** work here either: `infra/pagefind.mjs` slices the corpus **by position in the
+file**, so adding acts shifts every later record into a different slice and changes essentially
+every fragment. Making that pay off would mean slicing by a stable key first, which is a real
+change and not currently worth it — the corpus is republished rarely.
 
 ## Deploy
 

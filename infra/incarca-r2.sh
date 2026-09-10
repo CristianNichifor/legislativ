@@ -38,12 +38,18 @@ echo "încarc $FISIER → r2:$BUCKET/$CHEIE"
 if [ -d "$FISIER" ]; then
   # A directory is a search index slice: thousands of small fragments, where the cost is the number
   # of requests rather than the number of bytes. Parallel transfers, and no chunking to speak of.
+  #
+  # This is where the money is. The whole index is ~256.000 objects, so one republish is ~256.000
+  # class A operations against 1M free per month — three republishes a month is free, daily is not.
+  # That is a property of writing to a *new* dated prefix, not of any flag here: the destination is
+  # empty, so nothing could be skipped even if we listed it. --no-traverse is right; see infra/README.md.
   rclone copy "$FISIER" "r2:$BUCKET/$CHEIE" \
     --transfers 32 --checkers 32 \
     --no-traverse --stats 30s --stats-one-line --progress
 else
-  # 100 MiB parts: ~67 for a 6,7 GB file, well inside the 10.000-part ceiling and the 1M free
-  # class A operations per month. --no-traverse skips listing a bucket we are only writing to.
+  # 100 MiB parts: ~67 for a 6,7 GB file, well inside the 10.000-part ceiling. A corpus upload is
+  # ~67 operations; it is the index branch above, not this one, that approaches the free tier.
+  # --no-traverse skips listing a bucket we are only writing to.
   rclone copyto "$FISIER" "r2:$BUCKET/$CHEIE" \
     --s3-chunk-size 100M --s3-upload-concurrency 4 \
     --no-traverse --stats 30s --stats-one-line --progress
