@@ -138,7 +138,7 @@ def validate(manifest):
     return validate_manifest(manifest)
 
 
-def validate_channel(value, *, trusted_origin="https://date.cnwebify.dev"):
+def validate_channel(value, *, trusted_origin="https://date.cristian-nichifor.com"):
     """Validate a separate channel pointer, restricted to the configured HTTPS origin."""
     _fields(value, {"schema_version", "manifest", "sha256"})
     _integer(value["schema_version"], 1, 1)
@@ -164,7 +164,7 @@ def validate_channel(value, *, trusted_origin="https://date.cnwebify.dev"):
     return value
 
 
-def load_channel(raw: bytes | str, *, trusted_origin="https://date.cnwebify.dev"):
+def load_channel(raw: bytes | str, *, trusted_origin="https://date.cristian-nichifor.com"):
     return validate_channel(_parse(raw), trusted_origin=trusted_origin)
 
 
@@ -277,7 +277,7 @@ def main(argv=None):
     channel = commands.add_parser("channel", help="write a local proposal after verifying payloads")
     channel.add_argument("folder", type=Path)
     channel.add_argument("--manifest-url", required=True)
-    channel.add_argument("--trusted-origin", default="https://date.cnwebify.dev")
+    channel.add_argument("--trusted-origin", default="https://date.cristian-nichifor.com")
     channel.add_argument("--output", required=True, type=Path)
     args = parser.parse_args(argv)
     try:

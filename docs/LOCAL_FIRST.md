@@ -74,7 +74,10 @@ not fetch legislation, collect sources or invoke paid AI.
 
 The new production channel `https://date.cnwebify.dev/channel.json` returned HTTP
 404 during the integration check on 2026-09-10. Building this feature does not
-publish that channel. A maintainer must publish and verify a curated public
+publish that channel. The host has since moved to `date.cristian-nichifor.com`;
+the sentence above is left as it was written, because it records what was checked
+on the day and against which host, and rewriting it would claim an observation
+nobody made. A maintainer must publish and verify a curated public
 release, explicitly promote the channel, review the application PR, and approve
 release distribution. No R2 credentials or private research are included in
 runtime artifacts. No pull requests are merged automatically.
