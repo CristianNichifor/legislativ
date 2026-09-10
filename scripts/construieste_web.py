@@ -112,6 +112,7 @@ WORKER = """
 importScripts("__PYODIDE__");
 importScripts("browser-workspace.js");
 let raspunde, cautaJson, runtime;
+const bootMissing = [];
 
 // De unde se citește corpusul întreg. Gol = comportamentul vechi (doar catalogul mic + felii).
 const DEPOZIT = "__DEPOZIT__";
@@ -238,15 +239,24 @@ async function boot(){
   // Cu un depozit în spate, graf.db, initiative.db și eu.db se montează de acolo întregi; nu are rost să
   // descărcăm feliile lor de câteva sute de acte doar ca să le înlocuim imediat.
   const catalog = ["index.json","termeni.json","manifest.json","vid.json","neconstitutional.json","norme_lovite.json","considerente.json","parlament.json","ue_acoperire.json"];
-  for (const name of (DEPOZIT ? catalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
+  // The historical publisher exposes these three files, not the optional reports.
+  // Never substitute bundled reports for an unrelated pinned remote corpus.
+  const legacyCatalog = ['index.json', 'termeni.json', 'manifest.json'];
+  if (DEPOZIT) bootMissing.push(...catalog.filter(name => !legacyCatalog.includes(name)));
+  for (const name of (DEPOZIT ? legacyCatalog : ["graf.db","initiative.db","eu.db"].concat(catalog))) {
     // Reports and databases must describe the same selected generation.
     const url = DEPOZIT
       ? DEPOZIT.replace(/\\/$/, "") + "/" + name
       : "data/" + name;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
-    const buf = new Uint8Array(await response.arrayBuffer());
-    pyodide.FS.writeFile("data/"+name, buf);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+      const buf = new Uint8Array(await response.arrayBuffer());
+      pyodide.FS.writeFile("data/"+name, buf);
+    } catch (error) {
+      if (!DEPOZIT) throw error;
+      bootMissing.push(name);
+    }
   }
   // Only a bounded build-time slice, never an implicit full dataset download.
   if (!DEPOZIT && __LOCAL_CORPUS__) {
@@ -267,7 +277,10 @@ async function boot(){
       // a selected remote release; the dataset protocol owns future verified caches.
       {
         try { sursa = prinRange(`${baza}/${nume}`); deUnde = "depozit"; }
-        catch (e2) { throw new Error(`${nume} din generatia selectata nu e disponibil: ${e2.message}`); }
+        catch (e2) {
+          if (nume === 'corpus.db') throw new Error(`${nume} din generatia selectata nu e disponibil: ${e2.message}`);
+          bootMissing.push(nume);
+        }
       }
       if (sursa) {
         monteaza(pyodide, sursa, nume);
@@ -289,6 +302,12 @@ from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _matrice_contradictii,
                               _matrice_proiecte, _conflicte_proiecte,
                               _cine_citeaza, _ue, _acoperire_ue, _import_queue_ue)
+if __CORPUS_INTREG__:
+    from pathlib import Path
+    if not Path('data/initiative.db').exists():
+        from scripts import depozit
+        with depozit.deschide('data/initiative.db'):
+            pass
 _stare = Stare('data/corpus.db', 'data/initiative.db', 'data/graf.db', 'data/eu.db',
                date_dir='data',
                corpus_intreg=__CORPUS_INTREG__)
@@ -407,7 +426,7 @@ async def _cauta_json(query):
 _cauta_json
   `);
 }
-const gata = boot().then(()=>postMessage({type:"ready"}))
+const gata = boot().then(()=>postMessage({type:"ready", limitations:bootMissing}))
                    .catch(e=>{ postMessage({type:"error", error:String(e)}); throw e; });
 let requestQueue = Promise.resolve();
 onmessage = (e) => { requestQueue = requestQueue.then(() => handle(e.data)); };
@@ -559,7 +578,17 @@ BOOT = """
   const pending = new Map(); let seq = 0;
   worker.onmessage = (e)=>{
     const m = e.data;
-    if (m.type === "ready"){ resolveReady(); return; }
+    if (m.type === "ready"){
+      window.browserSourceLimitations = m.limitations || [];
+      if (window.browserSourceLimitations.length) {
+        const note = document.createElement('p'); note.id = 'browser-source-limitations';
+        note.className = 'hint'; note.setAttribute('role', 'status');
+        note.style.overflowWrap = 'anywhere';
+        note.textContent = 'Acoperire indisponibila pentru sursele optionale: ' + window.browserSourceLimitations.join(', ');
+        document.querySelector('header')?.after(note);
+      }
+      resolveReady(); return;
+    }
     if (m.type === "error"){
       rejectReady(new Error(m.error));
       const s = document.getElementById("stat");
