@@ -337,6 +337,10 @@
   .source-card-ok{border-color:var(--accent)}
   .source-card-attention,.source-card-blocked{border-color:var(--material)}
   .source-next{color:var(--ink-mute)}
+  .source-freshness{grid-column:1/-1;border-left:3px solid var(--material);padding:.45rem .6rem;background:var(--surface);font-size:.76rem;line-height:1.45}
+  .source-freshness-ok{border-color:var(--accent)}
+  .source-freshness p{margin:.15rem 0}
+  .source-freshness ul{margin:.25rem 0 .15rem 1rem;padding:0}
   .source-inventory .source-total{display:inline-block}
   .source-inventory .source-actions{display:flex;gap:.4rem;flex-wrap:wrap}
   .source-inventory details{border-top:1px solid var(--rule-soft);padding:.5rem 0}
@@ -1340,6 +1344,7 @@
               <label>Titlu<input name="titlu" required maxlength="200"></label>
               <label>Întrebarea de cercetare<textarea name="intrebare" maxlength="4000" rows="2"></textarea></label>
               <label>Domeniu declarat<input name="domeniu" maxlength="200"></label>
+              <div id="dossier-source-warning" class="source-freshness"><p>Verific sursele locale înainte de analiză…</p></div>
               <div><button type="submit" class="ghost mini">Creează dosarul</button></div>
             </form></details>
             <div class="dossier-actions">
@@ -5017,6 +5022,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       if(drafts.size){evidenceStatus.textContent='Există note nesalvate. Înregistrează deciziile înainte de a schimba rularea.';return;}
       rerunButton.disabled=true;
       try{
+        evidenceStatus.textContent='Recalculez cu inventarul local. '+await sourceFreshnessStatus();
         const run=await dossierApi('/api/dosare/rulari',{dosar_id:dossierId,filtre:d.rulare.filtre,sursa_rulare_id:runId});
         if(!valid()) return;
         if(drafts.size){evidenceStatus.textContent='Recalcularea a fost salvată în istoricul dosarului. Notele nesalvate au fost păstrate în această rulare.';return;}
@@ -5089,7 +5095,7 @@ function bindDossierMetadata(meta){
     catch(err){status.textContent=err.message;}
   };
 }
-$('#dossier-library').ontoggle=()=>{if($('#dossier-library').open) loadDossiers();};
+$('#dossier-library').ontoggle=()=>{if($('#dossier-library').open){loadDossiers();renderDossierSourceFreshness();}};
 $('#dossier-filter').onchange=()=>loadDossiers(0);
 $('#dossier-reload').onclick=()=>loadDossiers();
 $('#dossier-prev').onclick=()=>loadDossiers(Math.max(0,DOSARE_UI.offset-50));
@@ -5101,6 +5107,7 @@ $('#dossier-create').onsubmit=async e=>{
   const inputs=[...form.querySelectorAll('input,textarea')], selectionAtStart=DOSARE_UI.sequence;
   inputs.forEach(input=>input.disabled=true);
   try{
+    await renderDossierSourceFreshness();
     if(DOSARE_UI.request?.fingerprint!==fingerprint) DOSARE_UI.request={fingerprint,id:crypto.randomUUID().replaceAll('-','')};
     const saved=await dossierApi('/api/dosare',{...fields,id:DOSARE_UI.request.id});
     if(selectionAtStart===DOSARE_UI.sequence) await selectDossier(saved.id);
@@ -5120,6 +5127,7 @@ function dossierSaveControls(out,filters,projects=null){
     if(selected.arhivat){status.textContent='Dosarul ales este arhivat. Restaurează-l înainte de a salva o analiză nouă.';return;}
     button.disabled=true;status.textContent=(filters?.act?'Salvez fișa în: ':'Recalculez și salvez în: ')+selected.titlu;
     try{
+      status.textContent+=(await sourceFreshnessStatus()).replace(/^/,' · ');
       const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters,...(projects?{proiecte:projects}:{})});
       status.textContent='Analiză salvată în: '+selected.titlu+'. '+run.creat_la;
       if(DOSARE_UI.selected?.id===selected.id) await selectDossier(selected.id,run.id);
@@ -5211,10 +5219,48 @@ function sourceInventoryHtml(d){
   h+='<details><summary>Limitele inventarului</summary>'+limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')+'</details>';
   return h;
 }
-let SOURCE_REPORT=null, SOURCE_LOADING=false;
+function sourceFreshnessWarnings(d){
+  if(!d) return ['Inventarul surselor locale nu este încărcat.'];
+  if(d.mod==='static') return ['Inventarul bazei locale nu este disponibil în versiunea statică.'];
+  const states={disponibil:'bază accesibilă',partial:'date parțiale',lipsa:'bază lipsă',inaccesibil:'bază inaccesibilă'};
+  const warnings=[];
+  for(const [key,[label,total]] of Object.entries(SOURCE_LABELS)){
+    const s=d.surse?.[key], metrics=s?.metrici||{}, health=sourceHealth(s,metrics,total);
+    if(health.tone==='ok') continue;
+    const details=sourceIssues(metrics);
+    warnings.push(`${label}: ${health.label.toLowerCase()} (${states[s?.stare]||'stare necunoscută'}). ${details[0]||sourceFreshness(key,metrics)}`);
+  }
+  return warnings;
+}
+function sourceFreshnessPanelHtml(d){
+  const warnings=sourceFreshnessWarnings(d), ok=!warnings.length;
+  return `<div id="dossier-source-warning" class="source-freshness ${ok?'source-freshness-ok':''}"><p><strong>${ok?'Sursele locale par utilizabile pentru o analiză nouă.':'Atenție la sursele locale înainte de analiză.'}</strong></p>${ok?'<p>Inventarul nu semnalează surse lipsă, goale sau cu erori măsurate.</p>':`<ul>${warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>`}<p class="hint">Nu blochează salvarea; spune doar ce știe copia locală în acest moment.</p></div>`;
+}
+function sourceFreshnessStatus(){
+  return loadSourceInventory().then(d=>{
+    const warnings=sourceFreshnessWarnings(d);
+    return warnings.length?'Surse locale cu atenționări: '+warnings.slice(0,2).join(' · ')+(warnings.length>2?' · …':''):'Surse locale fără atenționări măsurate.';
+  }).catch(()=>'Inventarul surselor locale nu a putut fi verificat.');
+}
+async function renderDossierSourceFreshness(){
+  const target=$('#dossier-source-warning');
+  if(!target) return SOURCE_REPORT;
+  target.innerHTML='<p>Verific sursele locale înainte de analiză…</p>';
+  try{
+    const report=await loadSourceInventory();
+    target.outerHTML=sourceFreshnessPanelHtml(report);
+    return report;
+  }catch{
+    target.innerHTML='<p><strong>Atenție la sursele locale înainte de analiză.</strong></p><p>Inventarul surselor locale nu a putut fi verificat.</p>';
+    return null;
+  }
+}
+let SOURCE_REPORT=null, SOURCE_LOADING=false, SOURCE_PROMISE=null;
 async function loadSourceInventory(force=false){
-  if(SOURCE_LOADING||SOURCE_REPORT&&!force) return;
+  if(SOURCE_PROMISE&&!force) return SOURCE_PROMISE;
+  if(SOURCE_REPORT&&!force) return SOURCE_REPORT;
   SOURCE_LOADING=true; SOURCE_REPORT=null;
+  SOURCE_PROMISE=(async()=>{
   const refresh=$('#source-refresh'), save=$('#source-export'), status=$('#source-status'), content=$('#source-content');
   refresh.disabled=true;save.disabled=true;content.innerHTML='';status.textContent='Încarc inventarul local…';
   try{
@@ -5224,8 +5270,11 @@ async function loadSourceInventory(force=false){
     if(data.schema_version!==1||!['local_readonly','static'].includes(data.mod)||!Array.isArray(data.limitari)) throw new Error('Contract invalid');
     content.innerHTML=sourceInventoryHtml(data);SOURCE_REPORT=data;save.disabled=false;
     status.textContent=data.mod==='static'?'Inventar local indisponibil.':`Raport generat: ${data.generat_la||'necunoscut'}. Sursele oficiale nu au fost reconsultate.`;
-  }catch{status.textContent='Inventarul nu a putut fi încărcat. Reîncearcă.';}
-  finally{SOURCE_LOADING=false;refresh.disabled=false;}
+    return SOURCE_REPORT;
+  }catch{status.textContent='Inventarul nu a putut fi încărcat. Reîncearcă.';return null;}
+  finally{SOURCE_LOADING=false;SOURCE_PROMISE=null;refresh.disabled=false;}
+  })();
+  return SOURCE_PROMISE;
 }
 $('#source-refresh').onclick=()=>loadSourceInventory(true);
 $('#source-export').onclick=()=>{
