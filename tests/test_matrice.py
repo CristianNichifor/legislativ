@@ -14,6 +14,7 @@ from scripts.cdep import Initiativa
 from scripts.graf import _deschide_graf
 from scripts.servicii import (
     Stare,
+    _fisa_act,
     _matrice,
     _matrice_acte,
     _matrice_contradictii,
@@ -471,6 +472,50 @@ def test_watch_state_exposes_project_targets_and_source_status(tmp_path):
     missing = _supraveghere("lege-98-2016", absent)
     assert missing["initiative_status"] == "surse_indisponibile"
     assert missing["initiative"] == []
+
+
+def test_law_workbench_collects_act_scoped_next_actions(tmp_path):
+    stare = _stare(tmp_path, graf=True, initiative=True)
+    with depozit.deschide(stare.corpus) as con:
+        con.execute(
+            "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?,?,?,?)",
+            (
+                "lege-98-2016",
+                "art7",
+                1,
+                "Se aplică Directiva 2014/24/UE privind achizițiile publice.",
+            ),
+        )
+        con.commit()
+    stare.vid = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "text": "Guvernul aprobă normele metodologice.",
+            "instrument": "hg",
+            "severitate": "blocking",
+        }
+    ]
+    stare.neconstitutional = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art5.alin7",
+            "text": "Normă lovită și nereparată.",
+            "decizie": "decizie-9-1994",
+            "severitate": "blocking",
+        }
+    ]
+
+    out = _fisa_act({"act": ["lege-98-2016"]}, stare)
+
+    assert out["gasit"] is True
+    assert out["act_id"] == "lege-98-2016"
+    assert out["viduri"][0]["actiuni"][0]["eticheta"] == "vezi prevederea"
+    assert out["neconstitutionale"][0]["decizie"] == "decizie-9-1994"
+    assert out["initiative"][0]["plx_id"] == "plx-1-2024"
+    assert out["referinte_ue"][0]["celex"] == "32014L0024"
+    assert any("nu este verdict juridic" in x for x in out["limitari"])
+    assert any("compară proiectele pendinte" in x for x in out["pasi"])
 
 
 def test_matrix_type_filter_applies_to_counts_and_report_rows(tmp_path):

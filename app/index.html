@@ -3517,9 +3517,62 @@ function cardCauta(x){
   const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
   const actions=`<button type="button" class="ghost mini impact-proiecte" data-act="${esc(x.act_id)}">proiecte care îl ating</button>`
     +`<button type="button" class="ghost mini impact-watch" data-act="${esc(x.act_id)}">supraveghează</button>`
+    +`<button type="button" class="ghost mini law-workbench-btn" data-act="${esc(x.act_id)}">fișă de lucru</button>`
     +`<span class="hint project-impact-count" data-act="${esc(x.act_id)}"></span>`
+    +`<div class="law-workbench" data-act="${esc(x.act_id)}" hidden></div>`
     +`<div class="project-impact" data-act="${esc(x.act_id)}" hidden></div>`;
   return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"","",actions);
+}
+function fisaActHtml(d){
+  if(d.eroare) return `<p class="empty">Nu pot încărca fișa pentru ${esc(d.act_id)}.</p>`;
+  if(!d.gasit) return `<p class="empty">${esc((d.limitari||[])[0]||"Actul nu este în corpusul local.")}</p>`;
+  const vid=d.viduri||[], nec=d.neconstitutionale||[], inits=d.initiative||[], ue=d.referinte_ue||[];
+  let h=`<div class="parc"><div class="parc-h">Fișă de lucru — ${esc(d.act_id)}</div>`
+    +`<p class="watch-meta">${esc((d.titlu||"").slice(0,150))}</p>`
+    +`<p class="watch-meta"><b>${d.citari||0}</b> acte îl citează · amendat de <b>${d.amendat||0}</b>`
+    +` · <b>${vid.length}</b> lacune · <b>${nec.length}</b> CCR · <b>${inits.length}</b> inițiative`
+    +(ue.length?` · <b>${ue.length}</b> CELEX`:"")+`</p>`;
+  h+=`<div class="parc-h">Următorii pași</div>`+(d.pasi||[]).map(p=>`<div class="matrix-ex note">${esc(p)}</div>`).join("");
+  if(vid.length) h+=`<div class="parc-h">Lacune pe acest act</div>`+vid.map(v=>`<div class="matrix-ex ${esc(v.severitate||"material")}">`
+    +`<span class="dom-cheie">${esc(v.act_id)}</span> ${esc(locRo(v.locator||""))} `
+    +(v.instrument?`· <b>${esc(v.instrument)}</b> `:"")+mActiuni(v.actiuni)
+    +`<br><span class="hint">${esc(v.text||"")}</span></div>`).join("");
+  if(nec.length) h+=`<div class="parc-h">CCR nereparat pe acest act</div>`+nec.map(n=>`<div class="matrix-ex blocking">`
+    +`<span class="dom-cheie">${esc(n.act_id)}</span> ${esc(locRo(n.locator||""))} `
+    +(n.decizie?`· ${esc(n.decizie)} `:"")+mActiuni(n.actiuni)
+    +`<br><span class="hint">${esc(n.text||"")}</span></div>`).join("");
+  h+=`<div class="parc-h">Inițiative pendinte</div>`;
+  if(inits.length) h+=inits.map(i=>`<div class="matrix-ex note"><span class="plx">${esc(i.plx_id)}</span> `
+    +`${esc((i.titlu||"").slice(0,130))} <span class="hint">[${esc(i.stadiu||"")}]</span>`
+    +(i.locatoare?.length?`<br><span class="hint">Ținte în act: ${esc(i.locatoare.map(locRo).join(", "))}</span>`:"")
+    +` <button type="button" class="ghost mini parc-buton" data-plx="${esc(i.plx_id)}">parcurs</button>`
+    +`<div class="parc-loc" data-loc="${esc(i.plx_id)}"></div></div>`).join("");
+  else h+=`<p class="hint">Nicio inițiativă parlamentară în lucru nu atinge acest act în indexul instalat.</p>`;
+  if(inits.length>1) h+=`<div class="dossier-actions"><button type="button" class="ghost mini impact-compare" data-act="${esc(d.act_id)}">compară proiecte pe acest act</button></div>`;
+  h+=`<div class="parc-h">Referințe UE</div>`;
+  if(ue.length) h+=ue.map(ref=>`<div class="matrix-ex note"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
+    +`${ref.importat?"importat":"lipsește"} · ${nf(ref.mentionari||0)} menționări</div>`).join("");
+  else h+=`<p class="hint">Nu există referințe CELEX explicite în acest act în datele locale.</p>`;
+  h+=(d.limitari||[]).map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("");
+  return h+`</div>`;
+}
+async function comutaFisaAct(button){
+  const act=button.dataset.act, card=button.closest(".card");
+  const out=card.querySelector(`.law-workbench[data-act="${CSS.escape(act)}"]`);
+  if(!out) return;
+  if(!out.hidden){ out.hidden=true; button.textContent="fișă de lucru"; return; }
+  out.hidden=false; button.disabled=true; button.textContent="încarc fișa…";
+  try{
+    const d=await fetch("/api/fisa-act?act="+encodeURIComponent(act)).then(r=>r.json());
+    out.innerHTML=fisaActHtml(d);
+    out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+    out.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+    out.querySelectorAll(".impact-compare").forEach(b=>b.onclick=()=>deschideComparatieImpact(out,d));
+    button.textContent="ascunde fișa";
+  }catch(e){
+    out.innerHTML=`<p class="empty">Nu am putut construi fișa de lucru.</p>`;
+    button.textContent="reîncearcă fișa";
+  }finally{button.disabled=false;}
 }
 function proiectImpactHtml(d){
   const inits=d.initiative||[];
@@ -3593,6 +3646,7 @@ async function runSearch(append=false){
       const b=$("#cauta-more-btn"); if(b) b.onclick=()=>runSearch(true);
     }
     $("#cauta-list").querySelectorAll(".impact-proiecte").forEach(b=>b.onclick=()=>comutaImpactProiecte(b));
+    $("#cauta-list").querySelectorAll(".law-workbench-btn").forEach(b=>b.onclick=()=>comutaFisaAct(b));
     $("#cauta-list").querySelectorAll(".impact-watch").forEach(b=>b.onclick=()=>{
       watchAdd(b.dataset.act); b.textContent="supravegheat"; b.disabled=true;
     });
