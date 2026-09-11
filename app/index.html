@@ -393,6 +393,14 @@
   .proposal-row button{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:100%}
   .proposal-row small{grid-column:1/-1;overflow-wrap:anywhere}
   .proposal-row>span{min-width:0;overflow-wrap:anywhere}
+  .manual-notes{border-top:1px solid var(--rule);padding:.7rem 0}
+  .manual-notes form{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .manual-notes form label:nth-child(n+5),.manual-notes form .dossier-actions,.manual-notes form [data-note-editing]{grid-column:1/-1}
+  .manual-note{border-top:1px solid var(--rule-soft);padding:.65rem 0;overflow-wrap:anywhere}
+  .manual-note h5{font-size:.88rem;margin:0 0 .25rem}
+  .manual-note pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:14rem;overflow:auto}
+  .manual-note-meta{font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);display:flex;flex-wrap:wrap;gap:.25rem .7rem;margin:.25rem 0}
+  @media(max-width:650px){.manual-notes form{grid-template-columns:minmax(0,1fr)}}
   [data-proposal-history-list]{max-height:16rem;overflow:auto}
   [data-proposal-history] pre{max-height:18rem;overflow:auto}
   [data-proposal-analysis]{margin:.7rem 0;overflow-wrap:anywhere}
@@ -1308,7 +1316,7 @@
               <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
               <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
-            <div id="dossier-meta"></div><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
+            <div id="dossier-meta"></div><section id="dossier-notes"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
         </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
@@ -4334,6 +4342,88 @@ function reviewFindingHtml(f){
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
 }
 let proposalListSequence=0;
+const MANUAL_NOTE_TYPES={
+  lacuna:'Lacună',loophole:'Loophole',contradictie:'Contradicție',necorelare:'Necorelare',
+  risc_ue:'Risc UE',constitutionalitate:'Constituționalitate'
+};
+const MANUAL_NOTE_STATUS={
+  draft:'Ciornă',needs_evidence:'Necesită dovezi',ready_for_review:'Pregătită pentru revizie',
+  reviewed:'Revizuită',resolved:'Rezolvată'
+};
+const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null};
+
+function manualNoteHtml(note,index){
+  const source=note.source_url?` · <a href="${esc(note.source_url)}" target="_blank" rel="noopener">sursa</a>`:'';
+  return `<article class="manual-note" data-note-index="${index}"><h5>${esc(note.title)}</h5>`
+    +`<div class="manual-note-meta"><span>${esc(MANUAL_NOTE_TYPES[note.type]||note.type)}</span><span>${esc(MANUAL_NOTE_STATUS[note.status]||note.status)}</span><span>Revizia ${esc(note.revizie)}</span><span>Modificat: ${esc(dossierTime(note.modificat_la))}</span></div>`
+    +`<p>${esc([note.act_id,note.locator].filter(Boolean).join(' · ')||'Fără act sau locator atașat')}${source}</p>`
+    +(note.source_hash?`<p class="hint">SHA-256 sursă: ${esc(note.source_hash)}</p>`:'')
+    +(note.evidence_quote?`<details open><summary>Citat dovadă</summary><pre>${esc(note.evidence_quote)}</pre></details>`:'')
+    +(note.reasoning?`<details open><summary>Raționament</summary><pre>${esc(note.reasoning)}</pre></details>`:'')
+    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button></div></article>';
+}
+function manualNoteFormHtml(editing=null){
+  const v=(name,fallback='')=>esc(editing?.[name]??fallback);
+  const options=(items,current)=>Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+  return `<form data-manual-note-form><p class="hint" data-note-editing>${editing?`Editezi nota · revizia ${esc(editing.revizie)}`:'Notă nouă. Salvează aici lacune, loopholes, contradicții sau riscuri UE observate manual.'}</p>`
+    +`<label>Titlu<input name="title" required maxlength="200" value="${v('title')}"></label>`
+    +`<label>Tip<select name="type">${options(MANUAL_NOTE_TYPES,editing?.type||'lacuna')}</select></label>`
+    +`<label>Stare<select name="status">${options(MANUAL_NOTE_STATUS,editing?.status||'draft')}</select></label>`
+    +`<label>Act / proiect<input name="act_id" maxlength="200" value="${v('act_id')}"></label>`
+    +`<label>Locator<input name="locator" maxlength="120" value="${v('locator')}"></label>`
+    +`<label>URL sursă<input name="source_url" type="url" maxlength="1000" value="${v('source_url')}"></label>`
+    +`<label>SHA-256 sursă<input name="source_hash" maxlength="64" value="${v('source_hash')}"></label>`
+    +`<label>Citat dovadă<textarea name="evidence_quote" rows="3" maxlength="4000">${v('evidence_quote')}</textarea></label>`
+    +`<label>Raționament<textarea name="reasoning" rows="4" maxlength="8000">${v('reasoning')}</textarea></label>`
+    +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
+}
+function manualNotePayload(form,dossierId,note){
+  const values=Object.fromEntries(new FormData(form));
+  return {id:note?.id||crypto.randomUUID().replaceAll('-',''),dosar_id:dossierId,revizie:note?.revizie||0,
+    title:values.title,type:values.type,act_id:values.act_id,locator:values.locator,
+    evidence_quote:values.evidence_quote,source_url:values.source_url,source_hash:values.source_hash,
+    reasoning:values.reasoning,status:values.status};
+}
+function manualNoteStatusOptions(current){
+  return Object.entries(MANUAL_NOTE_STATUS).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+}
+async function loadManualNotes(dossierId,offset=0){
+  const host=$('#dossier-notes'),seq=++MANUAL_NOTES_UI.sequence;
+  const valid=()=>seq===MANUAL_NOTES_UI.sequence&&DOSARE_UI.selected?.id===dossierId;
+  const currentStatus=host.querySelector?.('[data-note-status-filter]')?.value||'';
+  const status=currentStatus==='toate'?'':currentStatus;
+  host.innerHTML='<details class="manual-notes" open><summary>Note manuale</summary><p role="status">Încarc notele…</p></details>';
+  try{
+    const params=new URLSearchParams({id:dossierId,offset:String(offset)});
+    if(status) params.set('status',status);
+    const data=await dossierApi('/api/dosare/note?'+params);if(!valid())return;
+    MANUAL_NOTES_UI.offset=offset;
+    const editing=MANUAL_NOTES_UI.editing;
+    host.innerHTML='<details class="manual-notes" open><summary>Note manuale</summary>'
+      +'<p class="hint">Spațiu de lucru verificabil: observații manuale, citate și raționament, păstrate local în dosar.</p>'
+      +manualNoteFormHtml(editing)
+      +`<div class="dossier-actions"><label>Filtru stare<select data-note-status-filter><option value="toate">Toate</option>${manualNoteStatusOptions(status)}</select></label><button type="button" class="ghost mini" data-notes-refresh title="Reîncarcă notele">↻</button></div>`
+      +`<div data-note-list>${data.note.map(manualNoteHtml).join('')||'<p>Nicio notă manuală.</p>'}</div>`
+      +`<p class="hint" role="status" data-note-list-status>${data.total?`${offset+1}–${Math.min(offset+data.note.length,data.total)} din ${data.total}`:'Nicio notă pentru filtrul ales.'}</p>`
+      +'<div class="dossier-actions"><button type="button" class="ghost mini" data-notes-prev title="Note mai noi">←</button><button type="button" class="ghost mini" data-notes-next title="Note mai vechi">→</button></div></details>';
+    const form=host.querySelector('[data-manual-note-form]'),saveStatus=host.querySelector('[data-note-save-status]');
+    host.querySelector('[data-note-status-filter]').value=status||'toate';
+    host.querySelector('[data-note-status-filter]').onchange=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,0);};
+    host.querySelector('[data-notes-refresh]').onclick=()=>loadManualNotes(dossierId,offset);
+    host.querySelector('[data-notes-prev]').disabled=offset===0;
+    host.querySelector('[data-notes-next]').disabled=offset+data.note.length>=data.total;
+    host.querySelector('[data-notes-prev]').onclick=()=>loadManualNotes(dossierId,Math.max(0,offset-50));
+    host.querySelector('[data-notes-next]').onclick=()=>loadManualNotes(dossierId,offset+50);
+    host.querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=()=>{MANUAL_NOTES_UI.editing=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];loadManualNotes(dossierId,offset);});
+    host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
+    form.onsubmit=async e=>{
+      e.preventDefault();if(!form.reportValidity())return;
+      const controls=[...form.elements];controls.forEach(c=>c.disabled=true);saveStatus.textContent='Salvez nota…';
+      try{const saved=await dossierApi('/api/dosare/note',manualNotePayload(form,dossierId,MANUAL_NOTES_UI.editing));MANUAL_NOTES_UI.editing=saved;await loadManualNotes(dossierId,0);}
+      catch(err){saveStatus.textContent=err.message+' Reîncarcă nota dacă a fost modificată în altă fereastră.';controls.forEach(c=>c.disabled=false);}
+    };
+  }catch(err){if(valid()){host.innerHTML='<details class="manual-notes" open><summary>Note manuale</summary><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-notes-retry>Reîncearcă notele</button></details>';host.querySelector('[data-notes-retry]').onclick=()=>loadManualNotes(dossierId,offset);}}
+}
 async function loadProposalList(dossierId,offset=0){
   const host=$('#dossier-proposals'),seq=++proposalListSequence;
   const valid=()=>seq===proposalListSequence&&DOSARE_UI.selected?.id===dossierId;
@@ -4830,12 +4920,14 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
   if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
   DOSARE_UI.selected=null;DOSARE_UI.runId=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  $('#dossier-notes').textContent='';++MANUAL_NOTES_UI.sequence;MANUAL_NOTES_UI.editing=null;
   $('#dossier-proposals').textContent='';++proposalListSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
   try{
     const meta=await dossierApi('/api/dosare/metadate?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
+    loadManualNotes(id);
     loadProposalList(id);
     const picker=$('#dossier-select');
     if(![...picker.options].some(option=>option.value===id)) picker.add(new Option(meta.titlu,id));
