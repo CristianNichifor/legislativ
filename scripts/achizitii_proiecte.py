@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from scripts import documente_proiecte as documente
+from scripts.lifecycle import normalize_stage_label, watchlist_lifecycle
 
 PAGE_SIZE = 25
 MAX_RECORDS = 100
@@ -48,6 +49,8 @@ def _metadata(row):
     )
     out["limba"] = None  # Parliamentary imports do not record an independently verified language.
     out["actualitate"] = "necunoscuta"
+    out["lifecycle"] = normalize_stage_label(out.get("stadiu"))
+    out["watchlist"] = watchlist_lifecycle(out)
     return out
 
 

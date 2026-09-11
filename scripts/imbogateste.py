@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from scripts import depozit
 from scripts.dublura import tinte
+from scripts.lifecycle import is_active_stage, normalize_stage_label
 
 
 def imbogateste(cale_db: str = "initiative.db", *, log=print) -> int:
@@ -43,7 +44,6 @@ def imbogateste(cale_db: str = "initiative.db", *, log=print) -> int:
 
 def initiative_pe_act(con, act_id: str, *, doar_vii: bool = True) -> list[dict]:
     """Pending initiatives that touch a given act, newest first — the reverse lookup the index is for."""  # noqa: E501
-    from scripts.dublura import STADII_MOARTE
     from scripts.text import cheie
 
     randuri = con.execute(
@@ -57,7 +57,12 @@ def initiative_pe_act(con, act_id: str, *, doar_vii: bool = True) -> list[dict]:
     ).fetchall()
     out = []
     for r in randuri:
-        viu = not any(m in cheie(r["stadiu"] or "") for m in STADII_MOARTE)
+        lifecycle = normalize_stage_label(r["stadiu"])
+        viu = is_active_stage(r["stadiu"])
+        if lifecycle["key"] == "unknown":
+            viu = not any(
+                m in cheie(r["stadiu"] or "") for m in ("respins", "retras", "clasat", "promulgat")
+            )
         if doar_vii and not viu:
             continue
         out.append(
@@ -70,6 +75,7 @@ def initiative_pe_act(con, act_id: str, *, doar_vii: bool = True) -> list[dict]:
                 "locatoare": [x for x in (r["locatoare"] or "").split(",") if x],
                 "tinte": r["tinte"],
                 "in_viata": viu,
+                "lifecycle": lifecycle,
             }
         )
     return out
