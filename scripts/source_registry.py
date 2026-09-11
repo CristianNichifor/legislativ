@@ -29,6 +29,7 @@ MAX_TEXT = 1000
 MAX_PAGE = 50
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
+PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 
 
 def cale(stare) -> Path:
@@ -80,6 +81,13 @@ def _token(value, *, required=False) -> str:
     value = _text(value, limit=120, required=required)
     if value and not TOKEN.fullmatch(value):
         raise ValueError("Identificator sursă invalid.")
+    return value
+
+
+def _identifier(value) -> str:
+    value = _text(value, limit=300)
+    if any(ord(ch) < 32 for ch in value):
+        raise ValueError("Identificator public invalid.")
     return value
 
 
@@ -182,6 +190,19 @@ def lista(stare, qs: dict | None = None) -> dict:
             + " ORDER BY updated_at DESC, id LIMIT ? OFFSET ?",
             [*params, MAX_PAGE, offset],
         ).fetchall()
+        attempts: dict[str, list[dict]] = {row["id"]: [] for row in rows}
+        if attempts:
+            placeholders = ",".join("?" for _ in attempts)
+            for attempt in con.execute(
+                "SELECT source_id,attempted_at,state,http_status,error_category,content_hash,"
+                "parser_version,note FROM source_attempts WHERE source_id IN ("
+                + placeholders
+                + ") ORDER BY attempted_at DESC, seq DESC",
+                list(attempts),
+            ):
+                bucket = attempts[attempt["source_id"]]
+                if len(bucket) < 3:
+                    bucket.append(_row(attempt))
         counts = {
             f"{r['family']}:{r['state']}": r["c"]
             for r in con.execute(
@@ -192,7 +213,7 @@ def lista(stare, qs: dict | None = None) -> dict:
         "schema_version": SCHEMA_VERSION,
         "families": families(),
         "states": list(SYNC_STATES),
-        "sources": [_row(row) for row in rows],
+        "sources": [dict(_row(row), attempts=attempts.get(row["id"], [])) for row in rows],
         "total": total,
         "offset": offset,
         "more": offset + len(rows) < total,
@@ -202,7 +223,7 @@ def lista(stare, qs: dict | None = None) -> dict:
 
 def descopera(stare, data: dict) -> dict:
     family = _family(data.get("family", ""))
-    identifier = _token(data.get("identifier", ""))
+    identifier = _identifier(data.get("identifier", ""))
     url = _url(data.get("url", ""))
     label = _text(data.get("label", ""), limit=300) or identifier or url
     ident = _id(family, identifier, url)
@@ -319,6 +340,95 @@ def _eu_hash(stare, celex: str) -> str:
     return row["text_sha256"] if row else ""
 
 
+def _project_identifier(row: dict) -> str:
+    identifier = _text(row.get("identifier", ""), limit=120, required=True)
+    return identifier
+
+
+def _stable_hash(data: object) -> str:
+    import json
+
+    return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
+def _sync_state(previous_hash: str, content_hash: str) -> str:
+    return "unchanged" if previous_hash and previous_hash == content_hash else "changed"
+
+
+def sincronizeaza_proiect(stare, source_id: str) -> dict:
+    """Run one bounded sync for a registered parliamentary project source."""
+    row = _source(stare, source_id)
+    if row["family"] not in PROJECT_FAMILIES:
+        raise ValueError("Doar sursele parlamentare pot fi sincronizate aici.")
+    if row["state"] != "queued":
+        row = pune_in_coada(stare, source_id)
+    plx = _project_identifier(row)
+    from scripts import achizitii_proiecte
+
+    try:
+        if row.get("url"):
+            result = achizitii_proiecte.executa(
+                stare, {"plx": plx, "operatie": "importa", "url": row["url"]}
+            )
+            content_hash = result.get("sha256") or _stable_hash(result)
+            note = f"Document parlamentar importat pentru {plx}."
+            needs_review = result.get("status") != "extras"
+        else:
+            result = achizitii_proiecte.executa(stare, {"plx": plx, "operatie": "descopera"})
+            content_hash = _stable_hash(
+                {
+                    "fisa_url": result.get("fisa_url"),
+                    "documente": result.get("documente", []),
+                    "trunchiat": result.get("trunchiat", False),
+                }
+            )
+            note = f"Fișa parlamentară {plx} consultată."
+            needs_review = not result.get("documente")
+    except ValueError as exc:
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "failed",
+                "error_category": "fetch_failed",
+                "note": str(exc)[:500],
+            },
+        )
+    inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "fetched",
+            "http_status": 200,
+            "content_hash": content_hash,
+            "parser_version": "achizitii_proiecte.v1",
+            "note": note,
+        },
+    )
+    if needs_review:
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "needs_review",
+                "http_status": 200,
+                "content_hash": content_hash,
+                "parser_version": "achizitii_proiecte.v1",
+                "note": "Sursa a fost citită, dar rezultatul necesită verificare manuală.",
+            },
+        )
+    return inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": _sync_state(row.get("last_hash", ""), content_hash),
+            "http_status": 200,
+            "content_hash": content_hash,
+            "parser_version": "achizitii_proiecte.v1",
+        },
+    )
+
+
 def sincronizeaza_ue(stare, source_id: str) -> dict:
     """Run one bounded CELEX sync for one registry row, using the existing EU importer."""
     row = _source(stare, source_id)
@@ -384,5 +494,10 @@ def executa(stare, data: dict) -> dict:
     if action == "record":
         return inregistreaza(stare, data)
     if action == "sync":
-        return sincronizeaza_ue(stare, data.get("id", ""))
+        row = _source(stare, data.get("id", ""))
+        if row["family"] == "ue_cellar":
+            return sincronizeaza_ue(stare, row["id"])
+        if row["family"] in PROJECT_FAMILIES:
+            return sincronizeaza_proiect(stare, row["id"])
+        raise ValueError("Familia de surse nu are sincronizare directă.")
     raise ValueError("Acțiune registru necunoscută.")

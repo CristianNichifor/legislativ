@@ -5346,8 +5346,10 @@ function sourceRegistryRowHtml(row,families){
   const source=row.url?`<br><a href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:'';
   const attempt=row.last_attempt_at?`Ultima încercare: ${esc(dossierTime(row.last_attempt_at))}`:'Fără încercare de sync.';
   const hash=row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:'';
-  const sync=row.family==='ue_cellar'?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">Sincronizează CELEX</button>`:'';
-  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button>${sync}</div></article>`;
+  const canSync=['ue_cellar','parlament','camera','senat'].includes(row.family);
+  const sync=canSync?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">${row.family==='ue_cellar'?'Sincronizează CELEX':'Sincronizează sursa'}</button>`:'';
+  const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
+  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button>${sync}</div></article>`;
 }
 async function loadSourceRegistry(offset=0){
   const status=$('#source-registry-status'), list=$('#source-registry-list');

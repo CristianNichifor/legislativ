@@ -607,6 +607,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/actualizare-proiect",
                 "/api/surse-proiecte",
                 "/api/ue/surse",
+                "/api/registru-surse",
                 "/api/dosare",
                 "/api/dosare/metadate",
                 "/api/dosare/ciorne",
