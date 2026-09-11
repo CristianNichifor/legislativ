@@ -2780,6 +2780,17 @@ def _fisa_act(qs: dict, stare: Stare) -> dict:
         if n.get("act_id") == act_id
     ][:5]
     referinte_ue = _referinte_ue_dosar(stare, {act_id}, limita=8)
+    acte = {
+        "total": 1,
+        "acte": [
+            {
+                "act_id": act_id,
+                "cheie_citare": act_id,
+                "titlu": watch.get("titlu", ""),
+                "emitent": watch.get("emitent", ""),
+            }
+        ],
+    }
     pasi = ["Deschide prevederile afectate înainte de a scrie sau modifica text."]
     if viduri:
         pasi.append("Pentru lacune: verifică obligația, termenul și instrumentul lipsă.")
@@ -2789,9 +2800,25 @@ def _fisa_act(qs: dict, stare: Stare) -> dict:
         pasi.append("Pentru inițiative: compară proiectele pendinte înainte de text nou.")
     if referinte_ue:
         pasi.append("Pentru UE: verifică actele CELEX importate sau importă cele lipsă.")
-    return {
+    report = {
         **watch,
+        "tip_dosar": "fisa-act",
         "gasit": True,
+        "acte": acte,
+        "rand": {
+            "emitent": watch.get("emitent") or "",
+            "acte": 1,
+            "semnale": {
+                "viduri": len(viduri),
+                "neconstitutionale": len(neconstitutionale),
+                "initiative_in_lucru": len(watch.get("initiative") or []),
+                "amendamente_primite": watch.get("amendat") or 0,
+            },
+            "exemple": {
+                "viduri": viduri,
+                "neconstitutionale": neconstitutionale,
+            },
+        },
         "viduri": viduri,
         "neconstitutionale": neconstitutionale,
         "referinte_ue": referinte_ue,
@@ -2801,6 +2828,52 @@ def _fisa_act(qs: dict, stare: Stare) -> dict:
             *list(watch.get("limitari") or []),
         ],
     }
+    report["markdown"] = _markdown_fisa_act(report)
+    return report
+
+
+def _markdown_fisa_act(report: dict) -> str:
+    lines = [
+        f"# Fișă de lucru: {report.get('act_id') or ''}",
+        "",
+        report.get("titlu") or "",
+        "",
+        (
+            "Semnale: "
+            f"{len(report.get('viduri') or [])} lacune, "
+            f"{len(report.get('neconstitutionale') or [])} CCR, "
+            f"{len(report.get('initiative') or [])} inițiative, "
+            f"{len(report.get('referinte_ue') or [])} referințe UE"
+        ),
+        "",
+        "## Pași",
+        *[f"- {p}" for p in report.get("pasi") or []],
+    ]
+    if report.get("viduri"):
+        lines += ["", "## Lacune"]
+        for v in report["viduri"]:
+            lines.append(
+                f"- {v.get('act_id')} / {v.get('locator')}: "
+                f"{v.get('instrument') or ''} {v.get('text') or ''}".strip()
+            )
+    if report.get("neconstitutionale"):
+        lines += ["", "## CCR"]
+        for n in report["neconstitutionale"]:
+            lines.append(
+                f"- {n.get('act_id')} / {n.get('locator')}: "
+                f"{n.get('decizie') or ''} {n.get('text') or ''}".strip()
+            )
+    if report.get("initiative"):
+        lines += ["", "## Inițiative pendinte"]
+        for i in report["initiative"]:
+            lines.append(f"- {i.get('plx_id')} ({i.get('stadiu') or ''}) — {i.get('titlu') or ''}")
+    if report.get("referinte_ue"):
+        lines += ["", "## Referințe UE"]
+        for ref in report["referinte_ue"]:
+            state = "importat" if ref.get("importat") else "lipsește"
+            lines.append(f"- {ref.get('celex')} ({state}) — {ref.get('mentionari', 0)} menționări")
+    lines += ["", "## Limitări", *[f"- {x}" for x in report.get("limitari") or []]]
+    return "\n".join(line for line in lines if line is not None).strip()
 
 
 def _redacteaza(qs: dict) -> dict:

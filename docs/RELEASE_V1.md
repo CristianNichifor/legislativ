@@ -39,6 +39,10 @@ Ruff checks, desktop/mobile workflows and a fresh dependency-free Python rehears
 Passing unit tests does not establish source completeness or legal accuracy.
 The baseline has 1,205 passing tests, proposal revision comparison/export, source
 inventory/acquisition, immutable saved evidence and manual evidence checking.
+The act workbench save flow reuses local dossiers for search-origin law dossiers:
+`filtre.act` runs save as `fisa-act-v1`, preserve act-scoped gap/CCR examples,
+project and UE context, and reopen through the same saved-run UI. Focused storage,
+review/evidence and desktop/mobile browser checks pass.
 
 ## Execution order
 

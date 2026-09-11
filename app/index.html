@@ -3565,6 +3565,7 @@ async function comutaFisaAct(button){
   try{
     const d=await fetch("/api/fisa-act?act="+encodeURIComponent(act)).then(r=>r.json());
     out.innerHTML=fisaActHtml(d);
+    if(d.gasit) dossierSaveControls(out,{act:d.act_id});
     out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
     out.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
     out.querySelectorAll(".impact-compare").forEach(b=>b.onclick=()=>deschideComparatieImpact(out,d));
@@ -4146,9 +4147,10 @@ async function loadDossiers(offset=DOSARE_UI.offset){
   }catch(err){if(token===DOSARE_UI.listSequence){DOSARE_UI.supported=false;$('#dossier-local').hidden=true;status.textContent=err.message;}}
 }
 function dossierSnapshotHtml(run){
+  const reportHtml=run.raport?.tip_dosar==='fisa-act'?fisaActHtml(run.raport):mDosarHtml(run.raport);
   return `<h4>Analiză salvată</h4><p class="hint">Salvată: ${esc(run.creat_la)} · Motor: ${esc(run.engine_version)}<br>SHA-256 raport: ${esc(run.sha256)}</p>`
     +'<p class="hint">Raport istoric, nu recalculare. Legăturile și butoanele „Text curent” consultă sursa actuală, nu o versiune arhivată.</p>'
-    +mDosarHtml(run.raport)+dossierEuSnapshotsHtml(run);
+    +reportHtml+dossierEuSnapshotsHtml(run);
 }
 function dossierEuSnapshotsHtml(run){
   const evidence=run.dovezi||{}, saved=evidence.surse_ue;
@@ -4878,14 +4880,15 @@ $('#dossier-create').onsubmit=async e=>{
 };
 function dossierSaveControls(out,filters,projects=null){
   const area=document.createElement('div');area.className='dossier-actions';
-  area.innerHTML='<button type="button" class="ghost mini">Recalculează și salvează în dosarul ales</button><p class="hint" role="status"></p>';
+  const label=filters?.act?'Salvează fișa în dosarul ales':'Recalculează și salvează în dosarul ales';
+  area.innerHTML=`<button type="button" class="ghost mini">${label}</button><p class="hint" role="status"></p>`;
   out.prepend(area);
   const button=area.querySelector('button'), status=area.querySelector('p');
   button.onclick=async()=>{
     const selected=DOSARE_UI.selected;
     if(!selected||!DOSARE_UI.supported){$('#dossier-library').open=true;status.textContent='Alege sau creează un dosar în „Dosare salvate”.';return;}
     if(selected.arhivat){status.textContent='Dosarul ales este arhivat. Restaurează-l înainte de a salva o analiză nouă.';return;}
-    button.disabled=true;status.textContent='Recalculez și salvez în: '+selected.titlu;
+    button.disabled=true;status.textContent=(filters?.act?'Salvez fișa în: ':'Recalculez și salvez în: ')+selected.titlu;
     try{
       const run=await dossierApi('/api/dosare/rulari',{dosar_id:selected.id,filtre:filters,...(projects?{proiecte:projects}:{})});
       status.textContent='Analiză salvată în: '+selected.titlu+'. '+run.creat_la;
