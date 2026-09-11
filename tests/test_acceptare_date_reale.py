@@ -1,5 +1,11 @@
+import csv
+import json
+from pathlib import Path
+
 from scripts import acceptare_date_reale as acceptance
 from scripts.dosare import LAW_WORKBENCH_ENGINE_VERSION
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_real_data_acceptance_runs_workbench_without_synthetic_bridge(monkeypatch):
@@ -61,3 +67,27 @@ def test_real_data_acceptance_reports_when_no_act_can_be_selected(monkeypatch):
         "status": "skipped_no_search_act",
         "finding_to_proposal": "not_exercised_no_act",
     }
+
+
+def test_checked_in_acceptance_record_matches_measurement_row():
+    record = json.loads((ROOT / "docs/v1_acceptance_pilot_2026-09-11.json").read_text())
+    rows = {
+        row["case_id"]: row
+        for row in csv.DictReader((ROOT / "data/v1_acceptance_measurements.csv").open())
+    }
+    workflow = rows["workflow-001"]
+
+    assert record["acceptance_output"]["workbench"]["status"] == "passed"
+    assert (
+        record["acceptance_output"]["workbench"]["engine_version"] == LAW_WORKBENCH_ENGINE_VERSION
+    )
+    assert record["acceptance_output"]["dossier_survived_rollback"]
+    assert record["acceptance_output"]["workbench"]["reviewable_findings"] == 0
+    assert (
+        record["acceptance_output"]["workbench"]["finding_to_proposal"]
+        == "not_exercised_no_authentic_gap_or_ccr_finding"
+    )
+    assert workflow["source_sha256"] == record["release"]["manifest_sha256"]
+    assert workflow["observed_count"] == "1"
+    assert workflow["true_positive"] == "1"
+    assert workflow["blocker"] == "no"
