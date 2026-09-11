@@ -173,7 +173,10 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "assert.ok(h.includes('Schimbată'));"
         "assert.ok(h.includes('Drept UE'));"
         "assert.ok(h.includes('data-source-queue=\"src_1\"'));"
+        "assert.ok(h.includes('data-source-sync=\"src_1\"'));"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>')&&!h.includes('<x>'));"
+        "assert.ok(!sourceRegistryRowHtml({id:'src_2',family:'ccr',identifier:'d1',"
+        "url:'',label:'CCR',state:'queued'},{}).includes('data-source-sync'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 

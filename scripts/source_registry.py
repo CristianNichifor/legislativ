@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+from scripts import cellar
 from scripts.source_sync import SYNC_STATES, can_transition, normalize_state
 
 FAMILIES = {
@@ -285,6 +286,95 @@ def inregistreaza(stare, data: dict) -> dict:
         return _row(updated)
 
 
+def _source(stare, source_id: str) -> dict:
+    source_id = _token(source_id, required=True)
+    with closing(_open(cale(stare))) as con:
+        init(con)
+        row = con.execute("SELECT * FROM source_registry WHERE id=?", (source_id,)).fetchone()
+    if row is None:
+        raise ValueError("Sursa nu există în registru.")
+    return _row(row)
+
+
+def _celex_from_source(row: dict) -> str:
+    value = row.get("identifier") or row.get("url") or ""
+    try:
+        return cellar.normalizeaza_celex(value)
+    except ValueError:
+        pass
+    if row.get("url"):
+        try:
+            return cellar.normalizeaza_celex(row["url"])
+        except ValueError:
+            pass
+    raise ValueError("Sursa UE nu are identificator CELEX valid.") from None
+
+
+def _eu_hash(stare, celex: str) -> str:
+    path = Path(stare.eu)
+    if not path.exists():
+        return ""
+    with cellar.deschide(path, readonly=True) as con:
+        row = con.execute("SELECT text_sha256 FROM eu_acte WHERE celex=?", (celex,)).fetchone()
+    return row["text_sha256"] if row else ""
+
+
+def sincronizeaza_ue(stare, source_id: str) -> dict:
+    """Run one bounded CELEX sync for one registry row, using the existing EU importer."""
+    row = _source(stare, source_id)
+    if row["family"] != "ue_cellar":
+        raise ValueError("Doar sursele UE Cellar/EUR-Lex pot fi sincronizate aici.")
+    if row["state"] != "queued":
+        row = pune_in_coada(stare, source_id)
+    celex = _celex_from_source(row)
+    from scripts import achizitii_ue
+
+    try:
+        result = achizitii_ue.importa(stare, {"celex": celex})
+    except ValueError as exc:
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "failed",
+                "error_category": "fetch_failed",
+                "note": str(exc)[:500],
+            },
+        )
+    if result.get("stare") == "metadate":
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "needs_review",
+                "parser_version": "achizitii_ue.v1",
+                "note": "Metadate UE disponibile, dar fără text RON/ENG compatibil.",
+            },
+        )
+    content_hash = _eu_hash(stare, celex)
+    inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "fetched",
+            "http_status": 200,
+            "content_hash": content_hash,
+            "parser_version": "achizitii_ue.v1",
+            "note": f"CELEX {celex} importat în limba {result.get('limba', 'necunoscută')}.",
+        },
+    )
+    return inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "changed" if result.get("schimbat") else "unchanged",
+            "http_status": 200,
+            "content_hash": content_hash,
+            "parser_version": "achizitii_ue.v1",
+        },
+    )
+
+
 def executa(stare, data: dict) -> dict:
     action = _text(data.get("action", "discover"), limit=40) or "discover"
     if action == "discover":
@@ -293,4 +383,6 @@ def executa(stare, data: dict) -> dict:
         return pune_in_coada(stare, data.get("id", ""))
     if action == "record":
         return inregistreaza(stare, data)
+    if action == "sync":
+        return sincronizeaza_ue(stare, data.get("id", ""))
     raise ValueError("Acțiune registru necunoscută.")
