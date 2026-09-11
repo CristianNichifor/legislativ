@@ -414,6 +414,15 @@ def face_handler(stare: Stare, *, runtime=None):
                 from scripts.servicii import _inventar_surse
 
                 self._json(_inventar_surse(stare))
+            elif ruta.path == "/api/registru-surse":
+                from scripts.source_registry import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error):
+                    self._json({"error": "Registrul surselor nu este disponibil."}, 503)
             elif ruta.path == "/api/surse-proiecte":
                 from scripts import achizitii_proiecte
 
@@ -632,7 +641,9 @@ def face_handler(stare: Stare, *, runtime=None):
                 else 80000
                 if ruta in ("/api/dosare/propuneri", "/api/dosare/propuneri/previzualizare")
                 else 16000
-                if ruta.startswith(("/api/dosare", "/api/surse-proiecte", "/api/ue/surse"))
+                if ruta.startswith(
+                    ("/api/dosare", "/api/surse-proiecte", "/api/ue/surse", "/api/registru-surse")
+                )
                 else MAX_CERERE
             ):
                 self._json({"error": "cerere prea mare"}, 413)
@@ -668,6 +679,18 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Sursele locale nu sunt disponibile."}, 503)
+                return
+            if ruta == "/api/registru-surse":
+                from scripts.source_registry import executa
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(executa(stare, cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Registrul surselor nu este disponibil."}, 503)
                 return
             if ruta in (
                 "/api/dosare",

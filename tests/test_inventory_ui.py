@@ -155,6 +155,29 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_source_registry_renderer_escapes_and_labels_states():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("const SOURCE_REGISTRY=", 1)[1].split("const PROJECT_WATCH_KEY=", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');const dossierTime=s=>s;"
+        "const node={querySelector:()=>({}),querySelectorAll:()=>[],reset:()=>{},value:''};"
+        "const $=()=>node;const SOURCE_REGISTRY="
+        + source
+        + "const h=sourceRegistryRowHtml({id:'src_1',family:'ue_cellar',"
+        "identifier:'32014L0024',url:'https://example.test/?q=<x>',label:'<script>',"
+        "state:'changed',last_attempt_at:'now',last_hash:'a'.repeat(64),last_error:'<img>'},"
+        "{ue_cellar:'Drept UE'});"
+        "assert.ok(h.includes('Schimbată'));"
+        "assert.ok(h.includes('Drept UE'));"
+        "assert.ok(h.includes('data-source-queue=\"src_1\"'));"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<img>')&&!h.includes('<x>'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
 def test_static_worker_explicitly_rejects_source_acquisition():
     source = (Path(__file__).parents[1] / "scripts/construieste_web.py").read_text()
     branch = source.split("elif path == '/api/surse-proiecte':", 1)[1].split("elif path", 1)[0]

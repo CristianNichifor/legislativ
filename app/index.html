@@ -351,6 +351,9 @@
   .source-inventory dd{font-family:var(--mono)}
   .source-inventory .source-warning{color:var(--material)}
   .source-inventory .source-note{color:var(--ink-mute)}
+  .source-registry-row{border-top:1px solid var(--rule-soft);padding:.55rem 0;overflow-wrap:anywhere}
+  .source-registry-row h4{font-size:.82rem;margin:.05rem 0 .2rem}
+  .source-registry-row p{font-size:.76rem;margin:.2rem 0;line-height:1.45}
   .dossier-library{font-family:var(--sans);border-bottom:1px solid var(--rule);padding:.6rem 0;margin-bottom:1rem}
   .dossier-library summary{cursor:pointer;font-size:.9rem;font-weight:600}
   .dossier-library form{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:.6rem;margin:.6rem 0}
@@ -1302,6 +1305,19 @@
           </div></div>
           <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
           <div id="source-content"></div>
+          <details id="source-registry"><summary>Registru surse urmărite</summary>
+            <form id="source-registry-add" class="dossier-actions">
+              <label>Familie<select name="family"></select></label>
+              <label>Identificator<input name="identifier" maxlength="120" placeholder="CELEX, PL-x, id portal"></label>
+              <label>URL oficial<input name="url" type="url" maxlength="1000" placeholder="https://…"></label>
+              <label>Etichetă<input name="label" maxlength="300"></label>
+              <button type="submit" class="ghost mini">Adaugă sursa</button>
+            </form>
+            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option></select></label><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
+            <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
+            <div id="source-registry-list"></div>
+            <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled>Pagina următoare</button></div>
+          </details>
         </section>
         <details class="dossier-library" id="lifecycle-tracker">
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
@@ -5304,6 +5320,62 @@ $('#source-export').onclick=()=>{
     setTimeout(()=>URL.revokeObjectURL(url),1000);
     $('#source-status').textContent='Export JSON inițiat.';
   }catch{$('#source-status').textContent='Exportul nu a reușit.';}
+};
+const SOURCE_REGISTRY={offset:0,families:null,states:null};
+const SOURCE_STATE_LABELS={
+  discovered:'Descoperită',queued:'În coadă',fetched:'Preluată',unchanged:'Neschimbată',
+  changed:'Schimbată',failed:'Eșuată',unavailable:'Indisponibilă',
+  rate_limited:'Limitată',needs_review:'Necesită revizie'
+};
+async function sourceRegistryApi(body=null,params=null){
+  const path='/api/registru-surse'+(params?'?'+params.toString():'');
+  const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const data=await response.json().catch(()=>({error:'Răspuns invalid.'}));
+  if(!response.ok||data.error) throw new Error(data.error||'Registrul surselor nu este disponibil.');
+  return data;
+}
+function sourceRegistryConfigure(data){
+  if(!data||SOURCE_REGISTRY.families) return;
+  SOURCE_REGISTRY.families=data.families;SOURCE_REGISTRY.states=data.states;
+  const family=$('#source-registry-add select[name="family"]');
+  family.innerHTML=Object.entries(data.families).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join('');
+  $('#source-registry-state').innerHTML='<option value="">Toate</option>'+data.states.map(s=>`<option value="${esc(s)}">${esc(SOURCE_STATE_LABELS[s]||s)}</option>`).join('');
+}
+function sourceRegistryRowHtml(row,families){
+  const state=SOURCE_STATE_LABELS[row.state]||row.state, family=families[row.family]||row.family;
+  const source=row.url?`<br><a href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:'';
+  const attempt=row.last_attempt_at?`Ultima încercare: ${esc(dossierTime(row.last_attempt_at))}`:'Fără încercare de sync.';
+  const hash=row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:'';
+  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button></div></article>`;
+}
+async function loadSourceRegistry(offset=0){
+  const status=$('#source-registry-status'), list=$('#source-registry-list');
+  const params=new URLSearchParams({offset:String(offset)});
+  const state=$('#source-registry-state').value;if(state)params.set('state',state);
+  status.textContent='Încarc registrul surselor…';list.textContent='';
+  try{
+    const data=await sourceRegistryApi(null,params);sourceRegistryConfigure(data);SOURCE_REGISTRY.offset=offset;
+    list.innerHTML=data.sources.map(row=>sourceRegistryRowHtml(row,data.families)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
+    $('#source-registry-prev').disabled=offset===0;$('#source-registry-next').disabled=!data.more;
+    status.textContent=`${data.total} surse urmărite. Sync-ul este explicit, câte o sursă, fără rebuild.`;
+    list.querySelectorAll('[data-source-queue]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;status.textContent='Pun sursa în coadă…';
+      try{await sourceRegistryApi({action:'queue',id:button.dataset.sourceQueue});await loadSourceRegistry(SOURCE_REGISTRY.offset);}
+      catch(err){status.textContent=err.message;button.disabled=false;}
+    });
+  }catch(err){status.textContent=err.message;}
+}
+$('#source-registry').ontoggle=()=>{if($('#source-registry').open) loadSourceRegistry(0);};
+$('#source-registry-refresh').onclick=()=>loadSourceRegistry(SOURCE_REGISTRY.offset);
+$('#source-registry-state').onchange=()=>loadSourceRegistry(0);
+$('#source-registry-prev').onclick=()=>loadSourceRegistry(Math.max(0,SOURCE_REGISTRY.offset-50));
+$('#source-registry-next').onclick=()=>loadSourceRegistry(SOURCE_REGISTRY.offset+50);
+$('#source-registry-add').onsubmit=async e=>{
+  e.preventDefault();const form=e.currentTarget,status=$('#source-registry-status'),button=form.querySelector('button');
+  button.disabled=true;status.textContent='Adaug sursa în registru…';
+  try{await sourceRegistryApi({action:'discover',...Object.fromEntries(new FormData(form))});form.reset();await loadSourceRegistry(0);}
+  catch(err){status.textContent=err.message;}
+  finally{button.disabled=false;}
 };
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null};
