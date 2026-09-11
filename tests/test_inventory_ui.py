@@ -47,6 +47,24 @@ assert.ok(fresh.includes('Ultima înregistrare stocată (UTC): 09.09.2026 12:30:
 const s=sourceInventoryHtml({mod:'static'});
 assert.ok(s.includes('nu este disponibil'));
 assert.ok(!s.includes('Acte stocate'));
+const warnings=sourceFreshnessWarnings({mod:'local_readonly',surse:{
+ corpus:{stare:'partial',metrici:{acte:{stare:'masurat',valoare:3},
+ surse_esuate:{stare:'masurat',valoare:1}}},
+ ue:{stare:'lipsa',metrici:{acte:{stare:'indisponibil',valoare:null}}},
+ importuri:{stare:'disponibil',metrici:{versiuni:{stare:'masurat',valoare:2}}}
+},limitari:[]});
+assert.equal(warnings.length,3);
+assert.ok(warnings[0].includes('Legislație română'));
+assert.ok(warnings[0].includes('Surse HTML eșuate: 1'));
+const panel=sourceFreshnessPanelHtml({mod:'local_readonly',surse:{corpus:{stare:'disponibil',
+ metrici:{acte:{stare:'masurat',valoare:1}}},
+ initiative:{stare:'disponibil',metrici:{initiative:{stare:'masurat',valoare:1}}},
+ ue:{stare:'disponibil',metrici:{acte:{stare:'masurat',valoare:1}}},
+ importuri:{stare:'disponibil',metrici:{versiuni:{stare:'masurat',valoare:1}}}}});
+assert.ok(panel.includes('id="dossier-source-warning"'));
+assert.ok(panel.includes('source-freshness-ok'));
+assert.ok(panel.includes('Sursele locale par utilizabile'));
+assert.ok(sourceFreshnessPanelHtml({mod:'static'}).includes('versiunea statică'));
 """
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, text=True, timeout=10)

@@ -81,6 +81,13 @@ def test_library_is_in_matrix_tab():
     assert parser.found
 
 
+def test_dossier_creation_surfaces_source_freshness_warning():
+    source = APP.read_text()
+    assert 'id="dossier-source-warning"' in source
+    assert "renderDossierSourceFreshness" in source
+    assert "sourceFreshnessStatus" in source
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_saved_run_provenance_is_escaped_and_labeled_historical():
     source = (
