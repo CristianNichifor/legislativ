@@ -27,6 +27,13 @@ for (const width of [390, 1440]) {
     await page.locator('#q').fill('registrul demonstrativ');
     await page.locator('#q').press('Enter');
     await expect(page.locator('#cauta-out')).toContainText('999999');
+    const projectButton = page.locator('#cauta-out .impact-proiecte').first();
+    await expect(projectButton).toBeVisible();
+    await projectButton.click();
+    await expect(page.locator('#cauta-out .project-impact').first()).toContainText('plx-999999-2026');
+    await expect(page.locator('#cauta-out .project-impact').first()).toContainText('raport depus');
+    await page.locator('#cauta-out .impact-watch').first().click();
+    await expect(page.locator('#cauta-out .impact-watch').first()).toContainText('supravegheat');
     await page.screenshot({ path: info.outputPath(`search-${width}.png`), fullPage: true });
     await page.locator('#tab-lint').click();
     await page.locator('#draft').fill('In termen de 30 de zile, Guvernul aproba normele metodologice.');
