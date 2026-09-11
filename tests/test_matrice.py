@@ -464,6 +464,7 @@ def test_watch_state_exposes_project_targets_and_source_status(tmp_path):
     first = next(i for i in out["initiative"] if i["plx_id"] == "plx-1-2024")
     assert first["locatoare"] == ["art7"]
     assert first["tinte"] == 1
+    assert first["lifecycle"]["key"] == "plenary_scheduled"
 
     absent_dir = tmp_path / "absent"
     absent_dir.mkdir()
@@ -516,6 +517,7 @@ def test_law_workbench_collects_act_scoped_next_actions(tmp_path):
     assert out["viduri"][0]["actiuni"][0]["eticheta"] == "vezi prevederea"
     assert out["neconstitutionale"][0]["decizie"] == "decizie-9-1994"
     assert out["initiative"][0]["plx_id"] == "plx-1-2024"
+    assert out["initiative"][0]["lifecycle"]["known"] is True
     assert out["referinte_ue"][0]["celex"] == "32014L0024"
     assert any("nu este verdict juridic" in x for x in out["limitari"])
     assert any("compară proiectele pendinte" in x for x in out["pasi"])

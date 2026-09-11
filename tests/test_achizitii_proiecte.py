@@ -51,6 +51,8 @@ def test_local_browsing_paginates_and_does_not_fetch_or_write(state, monkeypatch
     detail = ap.detaliu(state, "plx-000")
     assert detail["stare"] == "metadate" and detail["limba"] is None
     assert detail["actualitate"] == "necunoscuta" and detail["versiuni"] == []
+    assert detail["lifecycle"]["key"] == "unavailable"
+    assert detail["watchlist"]["needs_attention"] is True
     assert state.initiative.read_bytes() == before
     assert not dp.cale_store(state).exists()
 
