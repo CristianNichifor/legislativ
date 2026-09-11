@@ -30,12 +30,20 @@ const h=sourceInventoryHtml({mod:'local_readonly',surse:{
  importuri:{stare:'disponibil',metrici:{ocr_necesar:{stare:'masurat',valoare:2}}}
 },limitari:['<img src=x onerror=alert(1)>']});
 assert.ok(h.includes('Date parțial disponibile'));
+assert.ok(h.includes('source-dashboard'));
+assert.ok(h.includes('Necesită atenție'));
+assert.ok(h.includes('Următorul pas: Actualizează corpusul local'));
 assert.ok(h.includes('Surse HTML eșuate: 3'));
 assert.ok(h.includes('Necesită OCR / verificare: 2'));
 assert.ok(h.includes('Stare necunoscută'));
-assert.ok(h.includes('Actualitate necunoscută'));
+assert.ok(h.includes('Actualitate locală necunoscută'));
 assert.ok(h.includes('&lt;img'));
 assert.ok(!h.includes('<img'));
+const fresh=sourceInventoryHtml({mod:'local_readonly',surse:{ue:{stare:'disponibil',
+ metrici:{acte:{stare:'masurat',valoare:4},
+ ultima_inregistrare_stocata:{stare:'masurat',valoare:'2026-09-09 12:30:00'}}}}});
+assert.ok(fresh.includes('Utilizabilă local'));
+assert.ok(fresh.includes('Ultima înregistrare stocată (UTC): 09.09.2026 12:30:00'));
 const s=sourceInventoryHtml({mod:'static'});
 assert.ok(s.includes('nu este disponibil'));
 assert.ok(!s.includes('Acte stocate'));

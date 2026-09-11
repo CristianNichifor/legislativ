@@ -54,6 +54,31 @@ project that targets the watched act.
 No frontend migration is required for this PR. Existing UI can ignore the new
 fields, while future watchlist screens can render them directly.
 
+`GET /api/lifecycle-proiecte` exposes the same state as a feed for future
+project and consultation tracking screens. Query parameters:
+
+- `q`: optional literal search over project id/title
+- `limit`: 1-100, default 50
+- `offset`: pagination offset
+- `stale_days`: how old `citit_la` may be before the row is marked stale
+
+Each project in the response includes:
+
+- `source_name`
+- `project_id`
+- `title`
+- `status`
+- `stage`
+- `last_seen`
+- `last_updated`
+- `consultation_deadline`, currently `null` for parliamentary rows
+- `url`
+- `source_state`: `ok`, `stale`, `unknown` or `unavailable`
+- `needs_attention`
+
+The feed returns unavailable/empty/stale/review states explicitly, so a UI can
+show missing source coverage without pretending the project has no lifecycle.
+
 ## Watchlist intent
 
 The first watchlist scaffold marks a row as `needs_attention` when its lifecycle
