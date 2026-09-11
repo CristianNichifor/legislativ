@@ -12,7 +12,7 @@ deterministic research and drafting; no reviewer required to operate the app.
 | 4. Domain/applicability workflow | Merged in PR142 for saved-finding context | Filter and compare loaded target/context revisions by field, declared-known/unknown/heuristic state, value and citation. Dates, territory, recipients, exceptions and classification retain author/source provenance; no applicability verdict or global cross-domain inference. See APPLICABILITY_WORKFLOW.md. |
 | 5. Bounded Romanian/EU assessment | Implemented for structured proposals / retained EU articles; awaiting PR review | Explicit saved proposal revision, retained EU snapshot/article and exact body quote; author-declared potential coverage/conflict/gap with reason. Missing bodies, unresolved targets and invalid hashes block linking. Schema 9 retains immutable basis, retry, history/export; no automated compliance verdict. See LEGATURI_UE.md. |
 | 6. Everyday UX | Merged in PR143 for local dossiers/editor | Rename/archive and restore dossiers, explicitly preserve/recover/delete editor and finding drafts, keyboard tab navigation, conflict/retry states and local storage/sharing disclosures. Recovery is manual, not autosave; see DOSARE.md for excluded transient forms. Schema 8 adds dossier metadata and recovery copies. |
-| 7. Real-data acceptance | Prepared, not complete | Proposed public-procurement manifest, measurement sheet and acceptance procedure exist in V1_ACCEPTANCE.md. Domain approval, authentic end-to-end cases, missing/extraction/false-positive measurements and blocker fixes remain. Fixtures alone do not satisfy this gate. |
+| 7. Real-data acceptance | Workbench runner instrumented, not complete | Proposed public-procurement manifest, measurement sheet and executable `scripts.acceptare_date_reale` workbench step exist in V1_ACCEPTANCE.md. The approved release folder still must be run, missing/extraction/false-positive measurements recorded, authentic finding-to-proposal wording reviewed, and blockers fixed. Fixtures alone do not satisfy this gate. |
 | 8. Release readiness | Rehearsal implemented; deployment sign-off pending | Isolated clean-runtime, populated backup/restore and schema 7 -> 9 rehearsal in V1_RELEASE_REHEARSAL.md. Actual deployment inventory, install/update, complete database/document backup, AI cost ownership and versioned release remain unverified. |
 
 Each implementation PR must update this checklist with evidence and remaining scope.
@@ -43,6 +43,11 @@ The act workbench save flow reuses local dossiers for search-origin law dossiers
 `filtre.act` runs save as `fisa-act-v1`, preserve act-scoped gap/CCR examples,
 project and UE context, and reopen through the same saved-run UI. Focused storage,
 review/evidence and desktop/mobile browser checks pass.
+The real-data acceptance runner now exercises the public-release activation path,
+search, private dossier persistence, law workbench save as `fisa-act-v1` and
+rollback survival without a synthetic finding. Domain acceptance remains pending
+until it is run against the approved release folder and reviewer-approved
+finding/proposal evidence exists.
 
 ## Execution order
 

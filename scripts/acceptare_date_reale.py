@@ -17,9 +17,11 @@ import threading
 import time
 from contextlib import closing, contextmanager, nullcontext
 from pathlib import Path
+from urllib.parse import quote, urlencode
 
 from scripts import depozit, server
 from scripts.dataset_release import MANIFEST_NAME, verify_release
+from scripts.dosare import LAW_WORKBENCH_ENGINE_VERSION
 from scripts.local_runtime import open_runtime
 
 CHANNEL = "https://datasets.example/channel.json"
@@ -172,6 +174,73 @@ def activate(runtime, httpd, fingerprint: str):
     print("activate: complete", flush=True)
 
 
+def _first_act_id(results: dict) -> str:
+    for row in results.get("results") or []:
+        act_id = row.get("act_id") or row.get("id")
+        if isinstance(act_id, str) and act_id.strip():
+            return act_id.strip()
+    return ""
+
+
+def _proposal_candidate(findings: list[dict]) -> dict | None:
+    for finding in findings:
+        if finding.get("tip") not in {"lacuna", "ccr"}:
+            continue
+        evidence = finding.get("dovada") or {}
+        act_id = evidence.get("act_tinta") or evidence.get("act_id")
+        if act_id and evidence.get("locator"):
+            return finding
+    return None
+
+
+def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str = "") -> dict:
+    """Exercise the real law-workbench-to-dossier path without a synthetic finding."""
+    selected = act_id.strip() or _first_act_id(search_results)
+    if not selected:
+        return {
+            "status": "skipped_no_search_act",
+            "finding_to_proposal": "not_exercised_no_act",
+        }
+    workbench = request(httpd, "/api/fisa-act?act=" + quote(selected, safe=""))
+    if not workbench.get("gasit"):
+        raise AssertionError(workbench)
+    run = request(
+        httpd,
+        "/api/dosare/rulari",
+        {"dosar_id": dossier_id, "filtre": {"act": selected}},
+    )
+    if run["engine_version"] != LAW_WORKBENCH_ENGINE_VERSION:
+        raise AssertionError(run)
+    query = urlencode({"id": dossier_id, "rulare_id": run["id"]})
+    review = request(httpd, "/api/dosare/revizuiri?" + query)
+    findings = review.get("constatari") or []
+    candidate = _proposal_candidate(findings)
+    signals = ((run.get("raport") or {}).get("rand") or {}).get("semnale") or {}
+    return {
+        "status": "passed",
+        "act_id": selected,
+        "engine_version": run["engine_version"],
+        "signals": {
+            "viduri": int(signals.get("viduri") or 0),
+            "neconstitutionale": int(signals.get("neconstitutionale") or 0),
+            "initiative_in_lucru": int(signals.get("initiative_in_lucru") or 0),
+            "amendamente_primite": int(signals.get("amendamente_primite") or 0),
+            "referinte_ue": len(run.get("raport", {}).get("referinte_ue") or []),
+        },
+        "reviewable_findings": len(findings),
+        "finding_to_proposal": (
+            "eligible_real_finding_available"
+            if candidate
+            else "not_exercised_no_authentic_gap_or_ccr_finding"
+        ),
+        "proposal_candidate_id": candidate["id"] if candidate else None,
+        "limitations": [
+            "No synthetic bridge is used by this acceptance runner.",
+            "Proposal save is not automated until a real reviewer-approved finding/wording exists.",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("release_dir", type=Path)
@@ -183,6 +252,11 @@ def main(argv=None):
     parser.add_argument("--keep", action="store_true", help="keep the generated data home")
     parser.add_argument("--min-acts", type=int, default=1000)
     parser.add_argument("--skip-search", action="store_true", help="only for tiny smoke fixtures")
+    parser.add_argument(
+        "--pilot-act",
+        default="",
+        help="act id to open in the real-data law workbench; defaults to the first search result",
+    )
     args = parser.parse_args(argv)
 
     release_dir = args.release_dir.resolve()
@@ -220,6 +294,9 @@ def main(argv=None):
                     "revizie": 0,
                 },
             )
+            workbench = pilot_workbench(
+                httpd, dossier_id, search_results=results, act_id=args.pilot_act
+            )
             before = request(httpd, "/api/dosare?id=" + dossier_id)
             request(httpd, body={"action": "rollback"})
             after = request(httpd, "/api/dosare?id=" + dossier_id)
@@ -231,6 +308,7 @@ def main(argv=None):
                         "release": release,
                         "acte": summary["acte"],
                         "search_results": len(results["results"]),
+                        "workbench": workbench,
                         "dossier_survived_rollback": True,
                         "seconds": round(time.monotonic() - started, 2),
                         "data_home": str(home),

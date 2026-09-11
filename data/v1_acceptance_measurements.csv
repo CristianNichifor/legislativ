@@ -2,3 +2,4 @@ case_id,source_kind,act_id,locator,source_sha256,source_url,retrieved_at,categor
 missing-001,authentic_retrieved_portal_snapshot,lege-99-2016,,,,,missing_source,Full text if approved in scope,Not in committed pilot,,,,,,,,,,pending_scope_approval,unknown
 extraction-001,authentic_retrieved_portal_snapshot,lege-98-2016,,,,,extraction,Independently labeled locator/reference outcomes,Not adjudicated,,,,,,,,,,pending_measurement,unknown
 falsepositive-001,authentic_retrieved_portal_snapshot,,,,,,false_positive,Adjudicate all emitted candidates,Not adjudicated,,,,,,,,,,pending_measurement,unknown
+workflow-001,prepared_public_dataset,lege-98-2016,,,,,actual_workflow,Open and save real law workbench without synthetic bridge,Instrumented in scripts.acceptare_date_reale; pending run against approved release folder,,,,,,,,,,pending_real_run,unknown

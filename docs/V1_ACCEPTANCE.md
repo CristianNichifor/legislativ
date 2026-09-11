@@ -1,7 +1,7 @@
 # V1 acceptance preparation
 
-Status: proposed public-procurement pilot, pending the user's domain approval
-requested by the coordinating workstream. Neither M7 nor M8 is accepted here.
+Status: proposed public-procurement pilot, with an executable workbench acceptance
+step added to `scripts.acceptare_date_reale`. Neither M7 nor M8 is accepted here.
 
 ## Bounded source set
 
@@ -27,8 +27,14 @@ pre-amendment placeholder; it cannot establish historical reconstruction accurac
 
 Run `python -m scripts.v1_rehearsal`, `python -m scripts.etalon`,
 `python -m scripts.etalon_real` and `python -m scripts.etalon_precizie` offline.
-Preserve output with the tested commit, Python/SQLite versions and manifest hash in
-the acceptance record.
+For a prepared public dataset folder, run
+`python -m scripts.acceptare_date_reale <release_dir> --pilot-act <act_id>`.
+The acceptance runner activates the release through the production local-runtime
+update path, searches the corpus unless skipped for a tiny fixture, creates a
+private dossier, opens and saves a real law workbench run (`fisa-act-v1`), records
+signal/finding counts, verifies private dossier data survives rollback, and emits
+JSON. It does not synthesize a finding or proposal. Preserve output with the tested
+commit, Python/SQLite versions and manifest hash in the acceptance record.
 
 The authentic etalon counts publisher S_LGI marks matched by normalized text
 containment anywhere in the document. **Those marks are locators, not citations of
@@ -62,12 +68,12 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
 ## Remaining M7 gates
 
 - User confirms domain, document/version boundary and intended research questions.
-- Run an actual-document finding-to-proposal workflow without the synthetic bridge.
-  Use `workflow.actual_report_findings` in the captured rehearsal output for the
-  observed count; it is not a fixed acceptance threshold or proof of absence of
-  legal problems. Issuer spellings differ between the two documents. Precomputed
-  reports are explicitly empty in this bounded rehearsal; ambient `web/data`
-  reports must not contribute findings.
+- Run the real-data workbench acceptance command against the approved release
+  folder. Use `workbench.reviewable_findings` and `workbench.finding_to_proposal`
+  from the emitted JSON for the observed state; zero findings is a measured
+  limitation, not proof of absence of legal problems. Proposal save remains
+  unexercised until an authentic gap/CCR finding and reviewer-approved wording
+  exist. The synthetic rehearsal bridge must not be used for this gate.
 - Record missing/extraction/false-positive cases and agreed tolerances; no invented
   passing threshold or accuracy claim. Resolve release-blocking findings and rerun.
 - Integrate and assess M3 source-change, M4 applicability and M6 UX changes, plus
