@@ -96,6 +96,19 @@ uv run python -m scripts.dataset_release channel /tmp/release-2026-09-10 \
   --output /tmp/channel-proposal.json
 ```
 
+Before uploading or promoting the channel, run the real-data local-runtime
+acceptance against the prepared folder. Use a filesystem with enough free space for
+another copy of the release:
+
+```bash
+uv run python -m scripts.acceptare_date_reale /tmp/release-2026-09-10
+```
+
+The runner prints download progress, activates the release through `/api/date`,
+runs a real search, creates and updates a private dossier, rolls back to a prior
+release and confirms the private dossier survived. It uses a file-backed HTTPS
+transport, so it does not publish or upload anything.
+
 The optional `--published-corpus` copies a regular, standalone `publicat.db` to
 `corpus.db`, never mutating its source. Alternatively curate `corpus.db` directly.
 Files are hashed in 1 MiB chunks. Existing manifests and output proposals are not
