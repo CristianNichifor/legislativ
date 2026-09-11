@@ -193,6 +193,41 @@ def _proposal_candidate(findings: list[dict]) -> dict | None:
     return None
 
 
+def _eu_availability(httpd, references: list[dict]) -> dict:
+    rows = []
+    for ref in references:
+        celex = ref.get("celex")
+        if not isinstance(celex, str) or not celex:
+            continue
+        detail = request(httpd, "/api/ue/surse?" + urlencode({"celex": celex}))
+        current = detail.get("curenta") or {}
+        source = current.get("sursa") or {}
+        language = source.get("limba") or ""
+        rows.append(
+            {
+                "celex": celex,
+                "mentionari": int(ref.get("mentionari") or 0),
+                "importat": detail.get("stare") == "text_disponibil",
+                "stare": detail.get("stare") or "neimportat",
+                "text_romanian": language == "RON",
+                "text_english": language == "ENG",
+                "limba_text": language or None,
+                "manifestari": len(detail.get("manifestari") or []),
+                "instantanee": len(detail.get("instantanee") or []),
+                "comanda_import": ref.get("comanda_import") or None,
+            }
+        )
+    return {
+        "total": len(rows),
+        "text_importat": sum(1 for row in rows if row["importat"]),
+        "text_romanian": sum(1 for row in rows if row["text_romanian"]),
+        "text_english": sum(1 for row in rows if row["text_english"]),
+        "metadata_only": sum(1 for row in rows if row["stare"] == "metadate"),
+        "neimportate": sum(1 for row in rows if row["stare"] == "neimportat"),
+        "referinte": rows,
+    }
+
+
 def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str = "") -> dict:
     """Exercise the real law-workbench-to-dossier path without a synthetic finding."""
     selected = act_id.strip() or _first_act_id(search_results)
@@ -216,6 +251,8 @@ def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str
     findings = review.get("constatari") or []
     candidate = _proposal_candidate(findings)
     signals = ((run.get("raport") or {}).get("rand") or {}).get("semnale") or {}
+    references = run.get("raport", {}).get("referinte_ue") or []
+    availability = _eu_availability(httpd, references)
     return {
         "status": "passed",
         "act_id": selected,
@@ -225,8 +262,9 @@ def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str
             "neconstitutionale": int(signals.get("neconstitutionale") or 0),
             "initiative_in_lucru": int(signals.get("initiative_in_lucru") or 0),
             "amendamente_primite": int(signals.get("amendamente_primite") or 0),
-            "referinte_ue": len(run.get("raport", {}).get("referinte_ue") or []),
+            "referinte_ue": len(references),
         },
+        "eu_availability": availability,
         "reviewable_findings": len(findings),
         "finding_to_proposal": (
             "eligible_real_finding_available"

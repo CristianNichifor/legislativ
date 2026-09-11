@@ -50,9 +50,9 @@ until it is run against the approved release folder and reviewer-approved
 finding/proposal evidence exists.
 The 2026-09-11 bounded pilot run is recorded in
 `docs/v1_acceptance_pilot_2026-09-11.json`: 2 authentic acts, 1,635 provisions,
-3 search results, 8 EU references signaled, 0 reviewable gap/CCR findings, and
-rollback survival passed. It proves the local/public runtime path, not legal
-coverage or proposal correctness.
+3 search results, 8 EU references signaled, 0 imported EU texts, 0 reviewable
+gap/CCR findings, and rollback survival passed. It proves the local/public runtime
+path, not legal coverage, EU-law assessment or proposal correctness.
 
 ## Execution order
 
