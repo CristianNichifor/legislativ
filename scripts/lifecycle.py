@@ -13,7 +13,6 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from scripts import source_registry
 from scripts.text import cheie
 
 
