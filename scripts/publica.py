@@ -142,7 +142,13 @@ def _gb(cale: Path) -> float:
     return cale.stat().st_size / 1e9
 
 
-def publica(sursa: Path, tinta: Path, *, de_aruncat: tuple[str, ...] = DE_ARUNCAT) -> Path:
+def publica(
+    sursa: Path,
+    tinta: Path,
+    *,
+    de_aruncat: tuple[str, ...] = DE_ARUNCAT,
+    verifica: str = "corpus",
+) -> Path:
     """Write `tinta` as the published copy of `sursa`. Returns the path written.
 
     `de_aruncat` empty means "keep everything" — the companion databases need the WAL folded in
@@ -191,8 +197,8 @@ def publica(sursa: Path, tinta: Path, *, de_aruncat: tuple[str, ...] = DE_ARUNCA
         if vecin.is_file():
             os.remove(vecin)
 
-    _verifica(tinta) if de_aruncat else _verifica_orice(tinta)
-    if de_aruncat:
+    _verifica(tinta) if verifica == "corpus" else _verifica_orice(tinta)
+    if verifica == "corpus":
         _manifest(tinta)
 
     marime = _gb(tinta)
@@ -211,15 +217,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--tinta", type=Path, default=Path("publicat.db"))
     ap.add_argument(
         "--fel",
-        choices=("corpus", "auxiliar"),
+        choices=("corpus", "auxiliar", "initiative-public"),
         default="corpus",
         help=(
-            "'corpus' aruncă tabelele de construire; 'auxiliar' (graf.db, initiative.db) păstrează "
-            "tot și doar scoate WAL-ul și rescrie fișierul, fiindcă immutable=1 refuză un -wal"
+            "'corpus' aruncă tabelele de construire; 'auxiliar' păstrează tot; "
+            "'initiative-public' aruncă importurile private, dar păstrează traseul parlamentar"
         ),
     )
     a = ap.parse_args(argv)
-    publica(a.sursa, a.tinta, de_aruncat=DE_ARUNCAT if a.fel == "corpus" else ())
+    if a.fel == "corpus":
+        publica(a.sursa, a.tinta, de_aruncat=DE_ARUNCAT, verifica="corpus")
+    elif a.fel == "initiative-public":
+        publica(a.sursa, a.tinta, de_aruncat=DE_ARUNCAT, verifica="auxiliar")
+    else:
+        publica(a.sursa, a.tinta, de_aruncat=(), verifica="auxiliar")
 
 
 if __name__ == "__main__":

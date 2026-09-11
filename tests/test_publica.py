@@ -113,3 +113,32 @@ def test_cautarea_supravietuieste_rescrierii(tmp_path):
 def test_refuza_o_sursa_care_lipseste(tmp_path):
     with pytest.raises(SystemExit):
         publica(tmp_path / "nu-exista.db", tmp_path / "publicat.db")
+
+
+def test_publica_initiative_fara_importuri_private(tmp_path):
+    sursa = tmp_path / "initiative.db"
+    con = sqlite3.connect(sursa)
+    try:
+        con.execute("CREATE TABLE initiative(plx_id TEXT PRIMARY KEY, titlu TEXT)")
+        con.execute("CREATE TABLE initiative_tinta(plx_id TEXT, act_id TEXT)")
+        con.execute("CREATE TABLE documente(id TEXT, plx_id TEXT, text TEXT)")
+        con.execute("CREATE TABLE surse(id TEXT, html TEXT)")
+        con.execute("CREATE TABLE cache(k TEXT, v TEXT)")
+        con.execute("CREATE TABLE progres(k TEXT, v TEXT)")
+        con.execute("INSERT INTO initiative VALUES ('plx-1', 'Proiect public')")
+        con.execute("INSERT INTO initiative_tinta VALUES ('plx-1', 'lege-1')")
+        con.execute("INSERT INTO documente VALUES ('doc-1', 'plx-1', 'privat')")
+        con.execute("INSERT INTO surse VALUES ('src-1', '<html>')")
+        con.commit()
+    finally:
+        con.close()
+
+    tinta = publica(sursa, tmp_path / "initiative-publicat.db", verifica="auxiliar")
+    con = sqlite3.connect(f"file:{tinta}?immutable=1", uri=True)
+    try:
+        ramase = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        assert {"initiative", "initiative_tinta"} <= ramase
+        assert not ramase & set(DE_ARUNCAT)
+        assert con.execute("SELECT titlu FROM initiative").fetchone()[0] == "Proiect public"
+    finally:
+        con.close()

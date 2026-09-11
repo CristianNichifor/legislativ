@@ -19,7 +19,7 @@
   document.head.append(style);
   host.innerHTML = `
     <h2>Date legislative locale</h2>
-    <p data-active></p><p data-offer></p>
+    <p data-active></p><p data-offer></p><p class="hint" data-coverage></p>
     <p data-status role="status" aria-live="polite"></p>
     <progress data-progress hidden aria-label="Descărcarea datelor"></progress>
     <p data-file class="hint"></p><p data-error role="alert" hidden></p>
@@ -44,6 +44,19 @@
   let status = null, busy = false, stopped = false, timer = null;
   let initialGeneration, reloadNeeded = false, message = '';
   let pendingMutation = '', uncertain = false, locked = [];
+  const labels = {
+    'corpus.db': 'Legislatie romana',
+    'initiative.db': 'Traseu parlamentar',
+    'graf.db': 'Legaturi intre acte',
+    'eu.db': 'Legislatie UE',
+    'ue_acoperire.json': 'Acoperirea legislatiei UE',
+  };
+  const optional = ['initiative.db', 'graf.db', 'eu.db', 'ue_acoperire.json'];
+  const missing = manifest => {
+    const files = new Set(manifest?.files?.map(file => file.name) || []);
+    return optional.filter(name => !files.has(name));
+  };
+  const sourceLabels = files => [...new Set(files.map(name => labels[name] || name))].join(', ');
   function lockWorkspace(lock) {
     if (lock && !locked.length) {
       for (let child = host; child.parentElement; child = child.parentElement) {
@@ -69,6 +82,10 @@
       : 'Nicio bază legislativă instalată.';
     node('offer').textContent = offer
       ? `Versiune disponibilă: ${offer.manifest.release} · ${size(offerSize())}` : '';
+    const absent = missing(offer?.manifest);
+    node('coverage').textContent = absent.length
+      ? `Surse indisponibile in aceasta versiune: ${sourceLabels(absent)}.`
+      : offer ? 'Sursele optionale publicabile sunt incluse in aceasta versiune.' : '';
     const labels = {
       idle: '', checked: offer ? 'Verificare încheiată.' : 'Nicio versiune nouă disponibilă.',
       downloading: `Se descarcă: ${size(progress.bytes)} / ${size(progress.total)}`,

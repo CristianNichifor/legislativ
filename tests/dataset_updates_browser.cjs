@@ -105,6 +105,8 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
       await button('check').click();
       await page.waitForFunction(() => !document.querySelector('[data-action="check"]').disabled);
       assert.match(await host.locator('[data-offer]').innerText(), /2026-09-10 · 8 MiB/);
+      assert.match(await host.locator('[data-coverage]').innerText(), /Traseu parlamentar/);
+      assert.match(await host.locator('[data-coverage]').innerText(), /Legislatie UE/);
       page.once('dialog', dialog => {
         assert.match(dialog.message(), /2026-09-10 \(8 MiB\)/);
         dialog.dismiss();
