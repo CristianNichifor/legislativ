@@ -81,6 +81,34 @@ def test_acquisition_renderers_distinguish_states_and_escape_sources():
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_lifecycle_renderer_filters_and_opens_project_sources():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("const LIFECYCLE=", 1)[1].split("const ACQUISITION=", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "const dossierTime=s=>s;const LIFECYCLE="
+        + source
+        + "const base={project_id:'PL-x 1',title:'<script>',source_name:'Camera',"
+        "source_state:'ok',needs_attention:false,last_seen:'2026-09-10',"
+        "last_updated:'2026-09-10',url:'https://www.cdep.ro/p',stage:{label:'Raport depus'}};"
+        "let h=lifecycleListHtml({projects:[base,{...base,project_id:'PL-x 2',"
+        "source_state:'stale',needs_attention:true}]},'attention');"
+        "assert.ok(h.includes('PL-x 2')&&!h.includes('PL-x 1'));"
+        "assert.ok(h.includes('Date vechi'));"
+        "assert.ok(h.includes('data-lifecycle-open=\"0\"'));"
+        "assert.ok(!h.includes('<script>'));"
+        "h=lifecycleListHtml({projects:[{...base,source_state:'unknown',"
+        "needs_attention:true,stage:{key:'unknown',label:'Etapă nouă'}}]},'unknown');"
+        "assert.ok(h.includes('Etapă necunoscută'));"
+        "assert.ok(lifecycleListHtml({projects:[base]},'stale').includes('Niciun proiect'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
 def test_static_worker_explicitly_rejects_source_acquisition():
     source = (Path(__file__).parents[1] / "scripts/construieste_web.py").read_text()
     branch = source.split("elif path == '/api/surse-proiecte':", 1)[1].split("elif path", 1)[0]
