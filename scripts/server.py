@@ -24,6 +24,8 @@ to a separate `initiative.documente.db` beside the initiative database.
   member's record. Identity is (legislature, chamber, id); anything less merges people.
 - `GET /api/parcurs?plx=` — one bill's passage: sponsors, timeline, avize, recorded votes. A step
   that was debated carries the transcript's locator, `{ids, idm}` — the sitting and the item.
+- `GET /api/lifecycle-proiecte[?q=&limit=&offset=&stale_days=]` — project lifecycle/status feed
+  from local parliamentary metadata, including stale, unavailable and unknown-stage states.
 - `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
   (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
 - `POST /api/importa` — an uploaded `.docx`, `.md` or `.txt` into the editor's block tree. Base64
@@ -189,7 +191,13 @@ def face_handler(stare: Stare, *, runtime=None):
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Content-Length", str(len(corp)))
             if urlparse(self.path).path.startswith(
-                ("/api/dosare", "/api/surse-proiecte", "/api/ue/surse", "/api/date")
+                (
+                    "/api/dosare",
+                    "/api/lifecycle-proiecte",
+                    "/api/surse-proiecte",
+                    "/api/ue/surse",
+                    "/api/date",
+                )
             ):
                 self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -332,6 +340,22 @@ def face_handler(stare: Stare, *, runtime=None):
                 self._json(_deputati(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/parcurs":
                 self._json(_parcurs(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/lifecycle-proiecte":
+                from scripts.lifecycle import project_lifecycle_summary
+
+                qs = parse_qs(ruta.query)
+                try:
+                    self._json(
+                        project_lifecycle_summary(
+                            stare,
+                            query=qs.get("q", [""])[0],
+                            limit=int(qs.get("limit", ["50"])[0] or 50),
+                            offset=int(qs.get("offset", ["0"])[0] or 0),
+                            stale_days=int(qs.get("stale_days", ["30"])[0] or 30),
+                        )
+                    )
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/stenograma":
                 self._json(_stenograma(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/rol":

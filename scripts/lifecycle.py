@@ -7,7 +7,11 @@ unknown instead of guessing.
 
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from scripts.text import cheie
 
@@ -46,6 +50,8 @@ STAGES: tuple[LifecycleStage, ...] = (
 )
 
 _BY_KEY = {stage.key: stage for stage in STAGES}
+DEFAULT_STALE_DAYS = 30
+MAX_PROJECTS = 100
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -242,3 +248,168 @@ def watchlist_lifecycle(row: dict) -> dict:
         "lifecycle": lifecycle,
         "needs_attention": lifecycle["key"] in {"unknown", "unavailable"},
     }
+
+
+def _readonly(path):
+    con = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=1)
+    con.row_factory = sqlite3.Row
+    con.execute("PRAGMA query_only=ON")
+    budget = 0
+
+    def stop():
+        nonlocal budget
+        budget += 1
+        return budget > 20_000
+
+    con.set_progress_handler(stop, 10_000)
+    return con
+
+
+def _parse_time(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    with_timezone = datetime.fromisoformat(text)
+    if with_timezone.tzinfo is None:
+        return with_timezone.replace(tzinfo=UTC)
+    return with_timezone.astimezone(UTC)
+
+
+def _is_stale(last_seen: str | None, *, now: datetime, stale_days: int) -> bool:
+    try:
+        parsed = _parse_time(last_seen)
+    except ValueError:
+        return True
+    return parsed is None or parsed < now - timedelta(days=stale_days)
+
+
+def _project_url(row: dict) -> str:
+    url = row.get("sursa_url") or ""
+    if url:
+        return url
+    cam, idp = row.get("cam"), row.get("idp")
+    if cam in (1, 2) and idp and str(idp).isdigit():
+        return f"https://www.cdep.ro/pls/proiecte/upl_pck2015.proiect?cam={cam}&idp={idp}"
+    return ""
+
+
+def project_lifecycle_item(
+    row: dict, *, now: datetime | None = None, stale_days: int = DEFAULT_STALE_DAYS
+) -> dict:
+    """Public lifecycle/status shape for one project row from a source registry."""
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    lifecycle = normalize_stage_label(row.get("stadiu"))
+    last_seen = row.get("citit_la") or ""
+    stale = _is_stale(last_seen, now=now, stale_days=stale_days)
+    url = _project_url(row)
+    source_state = "ok"
+    if not url or lifecycle["key"] == "unavailable":
+        source_state = "unavailable"
+    elif lifecycle["key"] == "unknown":
+        source_state = "unknown"
+    elif stale:
+        source_state = "stale"
+    return {
+        "source_name": row.get("source_name") or "Camera Deputaților",
+        "project_id": row.get("plx_id") or "",
+        "title": row.get("titlu") or "",
+        "status": row.get("stadiu") or "",
+        "stage": lifecycle,
+        "last_seen": last_seen,
+        "last_updated": row.get("data_inreg") or last_seen,
+        "consultation_deadline": row.get("consultation_deadline"),
+        "url": url,
+        "source_state": source_state,
+        "stale": stale,
+        "unavailable": source_state == "unavailable",
+        "needs_attention": source_state in {"stale", "unknown", "unavailable"},
+    }
+
+
+def project_lifecycle_summary(
+    stare,
+    *,
+    query: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    stale_days: int = DEFAULT_STALE_DAYS,
+    now: datetime | None = None,
+) -> dict:
+    """Return a bounded lifecycle status feed from the local parliamentary initiative store."""
+    if not isinstance(query, str) or len(query) > 200:
+        raise ValueError("Căutare prea lungă.")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= MAX_PROJECTS:
+        raise ValueError("Limită invalidă.")
+    if not isinstance(offset, int) or isinstance(offset, bool) or not 0 <= offset <= 100_000:
+        raise ValueError("Pagină invalidă.")
+    if (
+        not isinstance(stale_days, int)
+        or isinstance(stale_days, bool)
+        or not 1 <= stale_days <= 3660
+    ):
+        raise ValueError("Interval de actualitate invalid.")
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    base = {
+        "mod": "local",
+        "source_name": "Camera Deputaților",
+        "source_status": "unavailable",
+        "generated_at": now.isoformat(),
+        "stale_after_days": stale_days,
+        "total": 0,
+        "returned": 0,
+        "projects": [],
+        "stale": 0,
+        "unknown_stage": 0,
+        "unavailable": 0,
+        "limitari": [],
+    }
+    try:
+        needle = (
+            "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        )
+        with closing(_readonly(stare.initiative)) as con:
+            tables = {
+                r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "initiative" not in tables:
+                base["limitari"].append("Registrul inițiativelor nu este instalat.")
+                return base
+            where = "WHERE plx_id LIKE ? ESCAPE '\\' OR titlu LIKE ? ESCAPE '\\'"
+            base["total"] = con.execute(
+                "SELECT count(*) FROM initiative " + where,
+                (needle, needle),
+            ).fetchone()[0]
+            rows = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT plx_id, titlu, stadiu, citit_la, data_inreg, sursa_url, cam, idp "
+                    "FROM initiative " + where + " ORDER BY citit_la DESC, plx_id LIMIT ? OFFSET ?",
+                    (needle, needle, limit + 1, offset),
+                )
+            ]
+    except (OSError, sqlite3.Error):
+        base["limitari"].append("Registrul inițiativelor nu este disponibil.")
+        return base
+    projects = [project_lifecycle_item(row, now=now, stale_days=stale_days) for row in rows[:limit]]
+    base["projects"] = projects
+    base["returned"] = len(projects)
+    base["mai_multe"] = len(rows) > limit
+    base["stale"] = sum(1 for project in projects if project["stale"])
+    base["unknown_stage"] = sum(1 for project in projects if project["stage"]["key"] == "unknown")
+    base["unavailable"] = sum(1 for project in projects if project["unavailable"])
+    if projects:
+        if base["unavailable"]:
+            base["source_status"] = "partial"
+        elif base["unknown_stage"]:
+            base["source_status"] = "needs_review"
+        elif base["stale"]:
+            base["source_status"] = "stale"
+        else:
+            base["source_status"] = "ok"
+    else:
+        base["source_status"] = "empty"
+    return base

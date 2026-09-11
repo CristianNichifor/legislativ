@@ -329,6 +329,14 @@
   .source-inventory{font-family:var(--sans);border-block:1px solid var(--rule);padding:.7rem 0;margin-bottom:1rem}
   .source-inventory h3{font-size:1rem;margin:0}
   .source-inventory .source-heading{display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap}
+  .source-dashboard{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:.55rem;margin:.7rem 0}
+  .source-card{border-left:3px solid var(--rule);padding:.55rem .65rem;background:var(--surface);min-width:0}
+  .source-card h4{font-size:.86rem;margin:.05rem 0 .25rem}
+  .source-card p{font-size:.76rem;line-height:1.45;margin:.22rem 0;overflow-wrap:anywhere}
+  .source-card ul{font-size:.74rem;margin:.25rem 0 .25rem 1rem;padding:0}
+  .source-card-ok{border-color:var(--accent)}
+  .source-card-attention,.source-card-blocked{border-color:var(--material)}
+  .source-next{color:var(--ink-mute)}
   .source-inventory .source-total{display:inline-block}
   .source-inventory .source-actions{display:flex;gap:.4rem;flex-wrap:wrap}
   .source-inventory details{border-top:1px solid var(--rule-soft);padding:.5rem 0}
@@ -5115,6 +5123,19 @@ const SOURCE_METRICS={
   acte_engleza:'Acte în engleză',versiuni:'Versiuni stocate',extrase:'Text extras',
   ocr_necesar:'Necesită OCR / verificare',fara_text:'Fără text',status_necunoscut:'Status de extragere necunoscut'
 };
+const SOURCE_ACTIONS={
+  corpus:'Actualizează corpusul local înainte de analiză; în pagina statică folosește butonul de update al setului public.',
+  initiative:'Sincronizează proiectele parlamentare și importă documentele lipsă pentru proiectele urmărite.',
+  ue:'Importă CELEX-urile citate sau relevante; preferă textul oficial în română când există.',
+  importuri:'Deschide sursele parlamentare și reîncearcă importurile cu OCR/verificare lipsă.'
+};
+const SOURCE_ISSUES=['surse_esuate','documente_fara_sursa_reusita','ocr_necesar','fara_text','status_necunoscut'];
+const SOURCE_DATES={
+  corpus:['ultima_reusita_sursa','ultima_incercare_sursa','ultimul_document_stocat','ultima_pagina_colectata'],
+  initiative:['ultima_inregistrare_stocata'],
+  ue:['ultima_inregistrare_stocata'],
+  importuri:['ultima_inregistrare_stocata']
+};
 function sourceValue(metric){
   if(!metric||metric.stare==='indisponibil') return 'Indisponibil';
   if(metric.stare!=='masurat'||metric.valoare===null) return 'Necunoscut';
@@ -5122,23 +5143,52 @@ function sourceValue(metric){
   const value=String(metric.valoare);
   return value.replace(/^(\d{4})-(\d{2})-(\d{2}) /,'$3.$2.$1 ');
 }
+function sourceNumber(metric){return metric?.stare==='masurat'&&typeof metric.valoare==='number'?metric.valoare:null;}
+function sourceIssues(metrics){
+  return SOURCE_ISSUES.filter(k=>sourceNumber(metrics[k])>0).map(k=>`${SOURCE_METRICS[k]}: ${sourceValue(metrics[k])}`);
+}
+function sourceFreshness(key,metrics){
+  for(const name of SOURCE_DATES[key]||[]){
+    if(metrics[name]?.stare==='masurat'&&metrics[name].valoare!==null) return `${SOURCE_METRICS[name]}: ${sourceValue(metrics[name])}`;
+  }
+  return 'Actualitate locală necunoscută';
+}
+function sourceHealth(s,metrics,total){
+  const count=sourceNumber(metrics[total]);
+  if(!s||['lipsa','inaccesibil'].includes(s.stare)) return {tone:'blocked',label:'Neutilizabilă local'};
+  if(s.stare==='partial'||sourceIssues(metrics).length) return {tone:'attention',label:'Necesită atenție'};
+  if(count===0) return {tone:'attention',label:'Goală local'};
+  if(s.stare==='disponibil') return {tone:'ok',label:'Utilizabilă local'};
+  return {tone:'attention',label:'Stare neclară'};
+}
 function sourceInventoryHtml(d){
   if(d.mod==='static') return '<p>Inventarul bazei locale nu este disponibil în versiunea statică.</p>';
   const states={disponibil:'Bază accesibilă',partial:'Date parțial disponibile',lipsa:'Bază lipsă',inaccesibil:'Bază inaccesibilă'};
-  let h='<p class="hint">Actualitate necunoscută · Acoperire juridică necunoscută · Inventar global, independent de filtrele matricei.</p>';
+  const limitari=Array.isArray(d.limitari)?d.limitari:[];
+  let h='<p class="hint">Starea surselor locale pentru matrice, dosare și comparații. Nu reconsultă sursele oficiale.</p><div class="source-dashboard">';
+  for(const [key,[label,total]] of Object.entries(SOURCE_LABELS)){
+    const s=d.surse?.[key], metrics=s?.metrici||{}, health=sourceHealth(s,metrics,total), issues=sourceIssues(metrics);
+    h+=`<article class="source-card source-card-${health.tone}" data-source-card="${key}"><h4>${esc(label)}</h4>`;
+    h+=`<p><strong>${esc(health.label)}</strong> · ${esc(states[s?.stare]||'Stare necunoscută')}</p>`;
+    h+=`<p>${esc(SOURCE_METRICS[total])}: <strong>${esc(sourceValue(metrics[total]))}</strong></p>`;
+    h+=`<p>${esc(sourceFreshness(key,metrics))}</p>`;
+    h+=issues.length?`<ul>${issues.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:'<p class="source-note">Fără probleme măsurate în inventarul local.</p>';
+    h+=`<p class="source-next">Următorul pas: ${esc(SOURCE_ACTIONS[key])}</p></article>`;
+  }
+  h+='</div><p class="hint">Acoperire juridică necunoscută · Inventar global, independent de filtrele matricei.</p>';
   for(const [key,[label,total]] of Object.entries(SOURCE_LABELS)){
     const s=d.surse?.[key], metrics=s?.metrici||{}, warning=!s||s.stare!=='disponibil';
-    const issues=['surse_esuate','documente_fara_sursa_reusita','ocr_necesar','fara_text','status_necunoscut'].filter(k=>metrics[k]?.stare==='masurat'&&metrics[k].valoare>0).map(k=>`${esc(SOURCE_METRICS[k])}: ${esc(sourceValue(metrics[k]))}`).join(' · ');
+    const issues=sourceIssues(metrics).map(esc).join(' · ');
     h+=`<details data-source="${key}"><summary><strong>${label}</strong><span class="${warning?'source-warning':'source-note'}">${esc(states[s?.stare]||'Stare necunoscută')}</span> · <span class="source-total">${esc(SOURCE_METRICS[total])}: ${esc(sourceValue(metrics[total]))}</span>${issues?`<br><span class="source-warning">${issues}</span>`:''}</summary>`;
     h+='<p class="hint">Actualitate necunoscută · Sincronizare completă neconfirmată</p><dl>';
     for(const [name,value] of Object.entries(metrics)){
       if(!Object.hasOwn(SOURCE_METRICS,name)) continue;
-      const alert=['surse_esuate','documente_fara_sursa_reusita','ocr_necesar','fara_text','status_necunoscut'].includes(name)&&value?.stare==='masurat'&&value.valoare>0;
+      const alert=SOURCE_ISSUES.includes(name)&&value?.stare==='masurat'&&value.valoare>0;
       h+=`<dt>${esc(SOURCE_METRICS[name])}</dt><dd${alert?' class="source-warning"':''}>${esc(sourceValue(value))}</dd>`;
     }
     h+='</dl></details>';
   }
-  h+='<details><summary>Limitele inventarului</summary>'+d.limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')+'</details>';
+  h+='<details><summary>Limitele inventarului</summary>'+limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')+'</details>';
   return h;
 }
 let SOURCE_REPORT=null, SOURCE_LOADING=false;
