@@ -171,6 +171,22 @@ assert.equal(prefill.status,'ready_for_review');
 assert.ok(prefill.evidence_quote.includes('A text'));
 assert.ok(prefill.evidence_quote.includes('B text'));
 assert.ok(manualNoteFormHtml(prefill).includes('Notă precompletată din constatare'));
+const summary=manualNoteSummaryHtml({
+  pe_stare:{draft:1,ready_for_review:2},
+  pe_tip:{lacuna:1,contradictie:2},
+  recente:[note]});
+assert.ok(summary.includes('Total')&&summary.includes('data-note-summary-status="ready_for_review"'));
+assert.ok(summary.includes('Lacună: 1')&&summary.includes('Ultimele note modificate'));
+const matrix=manualNoteFromMatrix('ue',{
+  celex:'32014L0024',importat:false,
+  exemple:[{id:'A',locator:'art. 1',fragment:'frag'}]});
+assert.equal(matrix.type,'risc_ue');
+assert.equal(matrix.status,'needs_evidence');
+assert.ok(matrix.evidence_quote.includes('frag'));
+const lacuna=manualNoteFromMatrix('lacuna',{
+  act_id:'lege-1',locator:'art. 2',text:'missing',instrument:'hotărâre'});
+assert.equal(lacuna.type,'lacuna');
+assert.ok(lacuna.reasoning.includes('hotărâre'));
 const values={title:'Titlu',type:'lacuna',act_id:'A',locator:'art1',
   evidence_quote:'citat',source_url:'https://x.test',source_hash:'b'.repeat(64),
   reasoning:'motiv',status:'draft'};
