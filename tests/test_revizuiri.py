@@ -104,6 +104,7 @@ def test_revision_conflict_and_concurrent_retry(saved):
 def test_v1_read_without_migration_then_atomic_upgrade_and_backup(saved, tmp_path):
     path, run, req, _, _ = saved
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE revizuiri")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")

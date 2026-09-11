@@ -424,6 +424,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/coada",
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
+                "/api/dosare/note",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
                 "/api/dosare/propuneri/surse",
@@ -504,6 +505,20 @@ def face_handler(stare: Stare, *, runtime=None):
                         out = coada(
                             path, int(qs.get("offset", ["0"])[0]), qs.get("stare", ["toate"])[0]
                         )
+                    elif ruta.path == "/api/dosare/note":
+                        from scripts import note_manuale
+
+                        note_id = qs.get("note_id", [None])[0]
+                        out = (
+                            note_manuale.citeste(path, ident, note_id)
+                            if note_id
+                            else note_manuale.lista(
+                                path,
+                                ident,
+                                int(qs.get("offset", ["0"])[0]),
+                                qs.get("status", [None])[0],
+                            )
+                        )
                     elif ruta.path == "/api/dosare/dovezi":
                         from scripts.dependente_dovezi import verifica
 
@@ -566,6 +581,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
                 "/api/dosare/context",
+                "/api/dosare/note",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -637,6 +653,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
                 "/api/dosare/context",
+                "/api/dosare/note",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -677,6 +694,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.revizuiri import context_salveaza
 
                         out = context_salveaza(path, cerere)
+                    elif ruta == "/api/dosare/note":
+                        from scripts.note_manuale import salveaza
+
+                        out = salveaza(path, cerere)
                     elif ruta == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import salveaza
 

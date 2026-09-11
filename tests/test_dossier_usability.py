@@ -95,11 +95,12 @@ def test_run_recovery_ownership_and_metadata_backup(state, tmp_path):
     assert dosare.lista_ciorne(copy)["ciorne"][0]["titlu"] == "Archived"
 
 
-@pytest.mark.parametrize("version", range(1, 9))
+@pytest.mark.parametrize("version", range(1, 10))
 def test_old_schema_readonly_upgrade_and_rollback(state, version):
     path = dosare.cale(state)
     create(state)
     introduced = {
+        10: ["note_manuale"],
         9: ["legaturi_ue"],
         8: ["ciorne", "dosare_stare"],
         7: ["analize_propuneri"],

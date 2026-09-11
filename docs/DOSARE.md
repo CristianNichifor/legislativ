@@ -153,11 +153,34 @@ Tables:
   domain label, optional analysis date and creation time.
 - `rulari`: generated ID, owning dossier, creation time, detector contract version,
   filters, full generated report, evidence manifest and content hash.
+- `note_manuale`: user-authored gap, loophole, contradiction, necorelare, EU-risk
+  or constitutionality notes. These are editable local workspace records, not
+  generated findings and not legal acceptance decisions.
 
 Domain and analysis date are research metadata, not verified classifications or
 instructions to reconstruct the historical corpus. Stored reports preserve their
 existing coverage limits, candidate status and Markdown. No legal conclusion is
 introduced by saving them.
+
+## Manual gap notes
+
+`GET /api/dosare/note?id=<dossier>&offset=0&status=<state>` lists manual notes in
+the selected dossier. `GET /api/dosare/note?id=<dossier>&note_id=<note>` reads one
+note. `POST /api/dosare/note` creates or updates one note using a caller-generated
+stable ID and optimistic `revizie`.
+
+Manual notes use the shared vocabulary in `scripts.constatari_manuale`: `lacuna`,
+`loophole`, `contradictie`, `necorelare`, `risc_ue` and `constitutionalitate`.
+Statuses are `draft`, `needs_evidence`, `ready_for_review`, `reviewed` and
+`resolved`. The record stores optional act/locator, evidence quote, source URL,
+source hash, reasoning and title. Source references are user-supplied evidence
+pointers; saving a manual note does not fetch public sources, run AI, recalculate
+the dossier, or mark a generated finding as reviewed.
+
+The endpoint keeps the dossier API's local Host/Origin checks, static rejection,
+request-size limits and retry/conflict behavior. Schema 10 adds `note_manuale`;
+schemas 1-9 remain readable without migration and upgrade on the next successful
+write.
 
 ## Evidence Dependencies
 
