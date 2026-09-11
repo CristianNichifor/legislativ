@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from scripts import source_registry
 from scripts.text import cheie
 
 
@@ -52,6 +53,7 @@ STAGES: tuple[LifecycleStage, ...] = (
 _BY_KEY = {stage.key: stage for stage in STAGES}
 DEFAULT_STALE_DAYS = 30
 MAX_PROJECTS = 100
+REGISTRY_ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -298,7 +300,11 @@ def _project_url(row: dict) -> str:
 
 
 def project_lifecycle_item(
-    row: dict, *, now: datetime | None = None, stale_days: int = DEFAULT_STALE_DAYS
+    row: dict,
+    *,
+    registry: dict | None = None,
+    now: datetime | None = None,
+    stale_days: int = DEFAULT_STALE_DAYS,
 ) -> dict:
     """Public lifecycle/status shape for one project row from a source registry."""
     now = (now or datetime.now(UTC)).astimezone(UTC)
@@ -313,6 +319,8 @@ def project_lifecycle_item(
         source_state = "unknown"
     elif stale:
         source_state = "stale"
+    registry = registry or {}
+    registry_state = registry.get("state") or ""
     return {
         "source_name": row.get("source_name") or "Camera Deputaților",
         "project_id": row.get("plx_id") or "",
@@ -324,10 +332,53 @@ def project_lifecycle_item(
         "consultation_deadline": row.get("consultation_deadline"),
         "url": url,
         "source_state": source_state,
+        "registry_source": registry,
+        "registry_source_id": registry.get("id") or "",
+        "registry_source_state": registry_state,
+        "registry_needs_attention": registry_state in REGISTRY_ATTENTION_STATES,
+        "registry_can_sync": bool(registry.get("id"))
+        and registry.get("family") in source_registry.PROJECT_FAMILIES,
         "stale": stale,
         "unavailable": source_state == "unavailable",
-        "needs_attention": source_state in {"stale", "unknown", "unavailable"},
+        "needs_attention": source_state in {"stale", "unknown", "unavailable"}
+        or registry_state in REGISTRY_ATTENTION_STATES,
     }
+
+
+def _project_registry_sources(stare, identifiers: list[str]) -> dict[str, dict]:
+    path = source_registry.cale(stare)
+    if not identifiers or not path.exists():
+        return {}
+    try:
+        with closing(_readonly(path)) as con:
+            tables = {
+                r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "source_registry" not in tables:
+                return {}
+            placeholders = ",".join("?" for _ in identifiers)
+            rows = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT id,family,identifier,url,label,state,last_hash,parser_version,"
+                    "last_attempt_at,last_error FROM source_registry WHERE identifier IN ("
+                    + placeholders
+                    + ") AND family IN ('parlament','camera','senat') "
+                    "ORDER BY updated_at DESC, id",
+                    identifiers,
+                )
+            ]
+    except (OSError, sqlite3.Error):
+        return {}
+    out: dict[str, dict] = {}
+    for row in rows:
+        current = out.get(row["identifier"])
+        if current is None or (
+            row["state"] in REGISTRY_ATTENTION_STATES
+            and current.get("state") not in REGISTRY_ATTENTION_STATES
+        ):
+            out[row["identifier"]] = row
+    return out
 
 
 def project_lifecycle_summary(
@@ -394,7 +445,14 @@ def project_lifecycle_summary(
     except (OSError, sqlite3.Error):
         base["limitari"].append("Registrul inițiativelor nu este disponibil.")
         return base
-    projects = [project_lifecycle_item(row, now=now, stale_days=stale_days) for row in rows[:limit]]
+    visible_rows = rows[:limit]
+    registry = _project_registry_sources(stare, [row.get("plx_id", "") for row in visible_rows])
+    projects = [
+        project_lifecycle_item(
+            row, registry=registry.get(row.get("plx_id", "")), now=now, stale_days=stale_days
+        )
+        for row in visible_rows
+    ]
     base["projects"] = projects
     base["returned"] = len(projects)
     base["mai_multe"] = len(rows) > limit

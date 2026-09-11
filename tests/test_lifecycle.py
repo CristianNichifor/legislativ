@@ -2,7 +2,7 @@ import io
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from scripts import depozit
+from scripts import depozit, source_registry
 from scripts.lifecycle import (
     ACTIVE_STAGE_KEYS,
     STAGES,
@@ -161,6 +161,51 @@ def test_project_lifecycle_summary_reads_local_store_and_bounds_results(tmp_path
     assert second["source_status"] == "needs_review"
     assert second["unknown_stage"] == 1
     assert second["projects"][0]["source_state"] == "unknown"
+
+
+def test_project_lifecycle_summary_includes_registry_attention(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 10/2026',2,'10','Lege urmărită','Raport depus',"
+            "'2026-09-10T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect10')"
+        )
+        con.commit()
+    row = source_registry.executa(state, {"family": "parlament", "identifier": "PL-x 10/2026"})
+    source_registry.executa(state, {"action": "queue", "id": row["id"]})
+    source_registry.executa(
+        state,
+        {
+            "action": "record",
+            "id": row["id"],
+            "state": "fetched",
+            "content_hash": "d" * 64,
+            "parser_version": "test",
+        },
+    )
+    changed = source_registry.executa(
+        state,
+        {
+            "action": "record",
+            "id": row["id"],
+            "state": "changed",
+            "content_hash": "e" * 64,
+            "parser_version": "test",
+        },
+    )
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 10/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    project = out["projects"][0]
+    assert project["source_state"] == "ok"
+    assert project["needs_attention"] is True
+    assert project["registry_needs_attention"] is True
+    assert project["registry_source_id"] == changed["id"]
+    assert project["registry_source_state"] == "changed"
+    assert project["registry_can_sync"] is True
 
 
 def test_project_lifecycle_summary_reports_unavailable_source_without_leaking_paths(tmp_path):
