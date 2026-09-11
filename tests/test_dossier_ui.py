@@ -128,6 +128,46 @@ def test_law_workbench_shows_eu_availability_and_import_action():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_manual_note_renderer_and_payload_escape_user_content():
+    source = (
+        APP.read_text()
+        .split("const MANUAL_NOTE_TYPES=", 1)[1]
+        .split("async function loadProposalList", 1)[0]
+    )
+    code = (
+        r"""
+const assert=require('node:assert/strict');
+const escapes={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>escapes[c]);
+const dossierTime=s=>s;
+const crypto={randomUUID:()=>"11111111-2222-4333-8444-555555555555"};
+const MANUAL_NOTE_TYPES="""
+        + source
+        + r"""
+const note={id:'abc',title:'<script>',type:'contradictie',status:'ready_for_review',
+  revizie:2,modificat_la:'now',act_id:'Lege <img>',locator:'art. 1',
+  source_url:'https://example.test/?q=<svg>',source_hash:'a'.repeat(64),
+  evidence_quote:'quote <b>',reasoning:'reason <i>'};
+const h=manualNoteHtml(note,0);
+assert.ok(h.includes('Contradicție')&&h.includes('Pregătită pentru revizie'));
+assert.ok(h.includes('SHA-256 sursă')&&h.includes('Citat dovadă'));
+assert.ok(!/<(script|img|svg|b|i)>/.test(h));
+const formHtml=manualNoteFormHtml(note);
+assert.ok(formHtml.includes('Editezi nota')&&!formHtml.includes('<script>'));
+const values={title:'Titlu',type:'lacuna',act_id:'A',locator:'art1',
+  evidence_quote:'citat',source_url:'https://x.test',source_hash:'b'.repeat(64),
+  reasoning:'motiv',status:'draft'};
+class FormData{constructor(){return Object.entries(values)}}
+assert.deepEqual(manualNotePayload({},'dossier',null),{
+  id:'11111111222243338444555555555555',dosar_id:'dossier',revizie:0,title:'Titlu',
+  type:'lacuna',act_id:'A',locator:'art1',evidence_quote:'citat',
+  source_url:'https://x.test',source_hash:'b'.repeat(64),reasoning:'motiv',status:'draft'});
+"""
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_review_form_escapes_evidence_and_history():
     source = (
         APP.read_text()
