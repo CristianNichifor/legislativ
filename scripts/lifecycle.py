@@ -53,6 +53,7 @@ _BY_KEY = {stage.key: stage for stage in STAGES}
 DEFAULT_STALE_DAYS = 30
 MAX_PROJECTS = 100
 REGISTRY_ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
+PROJECT_REGISTRY_FAMILIES = frozenset({"parlament", "camera", "senat"})
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -336,7 +337,7 @@ def project_lifecycle_item(
         "registry_source_state": registry_state,
         "registry_needs_attention": registry_state in REGISTRY_ATTENTION_STATES,
         "registry_can_sync": bool(registry.get("id"))
-        and registry.get("family") in source_registry.PROJECT_FAMILIES,
+        and registry.get("family") in PROJECT_REGISTRY_FAMILIES,
         "stale": stale,
         "unavailable": source_state == "unavailable",
         "needs_attention": source_state in {"stale", "unknown", "unavailable"}
@@ -345,6 +346,8 @@ def project_lifecycle_item(
 
 
 def _project_registry_sources(stare, identifiers: list[str]) -> dict[str, dict]:
+    from scripts import source_registry
+
     path = source_registry.cale(stare)
     if not identifiers or not path.exists():
         return {}
