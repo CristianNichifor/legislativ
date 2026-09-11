@@ -39,7 +39,7 @@ _TRANSITIONS = {
     "queued": frozenset({"fetched", "failed", "unavailable", "rate_limited", "needs_review"}),
     "fetched": frozenset({"unchanged", "changed", "needs_review"}),
     "unchanged": frozenset({"queued", "needs_review"}),
-    "changed": frozenset({"queued", "needs_review"}),
+    "changed": frozenset({"queued", "unchanged", "needs_review"}),
     "failed": frozenset({"queued", "unavailable", "rate_limited", "needs_review"}),
     "unavailable": frozenset({"queued", "needs_review"}),
     "rate_limited": frozenset({"queued", "failed"}),

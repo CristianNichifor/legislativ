@@ -30,6 +30,7 @@ MAX_PAGE = 50
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
+ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
 
 
 def cale(stare) -> Path:
@@ -155,6 +156,7 @@ def lista(stare, qs: dict | None = None) -> dict:
     offset = max(0, int((qs.get("offset") or ["0"])[0]))
     family = (qs.get("family") or [""])[0]
     state = (qs.get("state") or [""])[0]
+    attention = (qs.get("attention") or [""])[0] in {"1", "true", "da"}
     query = _text((qs.get("q") or [""])[0], limit=200).lower()
     params: list[object] = []
     where = []
@@ -164,6 +166,9 @@ def lista(stare, qs: dict | None = None) -> dict:
     if state:
         where.append("state=?")
         params.append(normalize_state(state))
+    elif attention:
+        where.append("state IN (" + ",".join("?" for _ in ATTENTION_STATES) + ")")
+        params.extend(sorted(ATTENTION_STATES))
     if query:
         where.append("(lower(identifier) LIKE ? OR lower(url) LIKE ? OR lower(label) LIKE ?)")
         needle = f"%{query}%"
@@ -175,6 +180,7 @@ def lista(stare, qs: dict | None = None) -> dict:
             "schema_version": SCHEMA_VERSION,
             "families": families(),
             "states": list(SYNC_STATES),
+            "attention_states": sorted(ATTENTION_STATES),
             "sources": [],
             "total": 0,
             "offset": offset,
@@ -213,6 +219,7 @@ def lista(stare, qs: dict | None = None) -> dict:
         "schema_version": SCHEMA_VERSION,
         "families": families(),
         "states": list(SYNC_STATES),
+        "attention_states": sorted(ATTENTION_STATES),
         "sources": [dict(_row(row), attempts=attempts.get(row["id"], [])) for row in rows],
         "total": total,
         "offset": offset,
@@ -305,6 +312,22 @@ def inregistreaza(stare, data: dict) -> dict:
         con.commit()
         updated = con.execute("SELECT * FROM source_registry WHERE id=?", (source_id,)).fetchone()
         return _row(updated)
+
+
+def marcheaza_revizuit(stare, source_id: str, note: str = "") -> dict:
+    row = _source(stare, source_id)
+    if row["state"] not in {"changed", "needs_review"}:
+        raise ValueError("Doar sursele schimbate sau cu revizie necesară pot fi marcate revizuite.")
+    return inregistreaza(
+        stare,
+        {
+            "id": row["id"],
+            "state": "unchanged",
+            "content_hash": row.get("last_hash", ""),
+            "parser_version": row.get("parser_version", ""),
+            "note": _text(note, limit=500) or "Sursă marcată revizuită manual.",
+        },
+    )
 
 
 def _source(stare, source_id: str) -> dict:
@@ -493,6 +516,8 @@ def executa(stare, data: dict) -> dict:
         return pune_in_coada(stare, data.get("id", ""))
     if action == "record":
         return inregistreaza(stare, data)
+    if action == "review":
+        return marcheaza_revizuit(stare, data.get("id", ""), data.get("note", ""))
     if action == "sync":
         row = _source(stare, data.get("id", ""))
         if row["family"] == "ue_cellar":
