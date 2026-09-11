@@ -237,6 +237,39 @@ def test_registry_sync_records_project_review_and_failure(monkeypatch, tmp_path)
     assert failed["last_error"] == "fetch_failed"
 
 
+def test_registry_attention_filter_and_review_action(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    changed = registry.executa(stare, {"family": "camera", "identifier": "PL-x 5"})
+    ok = registry.executa(stare, {"family": "camera", "identifier": "PL-x 6"})
+    unsupported = registry.executa(stare, {"family": "ccr", "identifier": "decizie-2"})
+
+    def discover_project(state, request):
+        return {
+            "fisa_url": f"https://www.cdep.ro/proiecte/{request['plx']}",
+            "documente": [{"url": "https://www.cdep.ro/proiecte/x.pdf", "label": request["plx"]}],
+        }
+
+    monkeypatch.setattr("scripts.achizitii_proiecte.executa", discover_project)
+    changed_result = registry.executa(stare, {"action": "sync", "id": changed["id"]})
+    ok_result = registry.executa(stare, {"action": "sync", "id": ok["id"]})
+    registry.executa(stare, {"action": "review", "id": ok_result["id"]})
+
+    attention = registry.lista(stare, {"attention": ["1"]})
+    assert attention["attention_states"] == ["changed", "failed", "needs_review", "rate_limited"]
+    assert [row["id"] for row in attention["sources"]] == [changed_result["id"]]
+
+    reviewed = registry.executa(
+        stare,
+        {"action": "review", "id": changed_result["id"], "note": "Verificat în fișa proiectului."},
+    )
+    assert reviewed["state"] == "unchanged"
+    assert reviewed["last_hash"] == changed_result["last_hash"]
+    assert registry.lista(stare, {"attention": ["1"]})["total"] == 0
+
+    with pytest.raises(ValueError, match="schimbate"):
+        registry.executa(stare, {"action": "review", "id": unsupported["id"]})
+
+
 def test_registry_sync_rejects_unsupported_sources(tmp_path):
     stare = state(tmp_path)
     row = registry.executa(stare, {"family": "ccr", "identifier": "decizie-1"})

@@ -1313,7 +1313,7 @@
               <label>Etichetă<input name="label" maxlength="300"></label>
               <button type="submit" class="ghost mini">Adaugă sursa</button>
             </form>
-            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option></select></label><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
+            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
             <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled>Pagina următoare</button></div>
@@ -5339,7 +5339,7 @@ function sourceRegistryConfigure(data){
   SOURCE_REGISTRY.families=data.families;SOURCE_REGISTRY.states=data.states;
   const family=$('#source-registry-add select[name="family"]');
   family.innerHTML=Object.entries(data.families).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join('');
-  $('#source-registry-state').innerHTML='<option value="">Toate</option>'+data.states.map(s=>`<option value="${esc(s)}">${esc(SOURCE_STATE_LABELS[s]||s)}</option>`).join('');
+  $('#source-registry-state').innerHTML='<option value="">Toate</option><option value="_attention">Necesită atenție</option>'+data.states.map(s=>`<option value="${esc(s)}">${esc(SOURCE_STATE_LABELS[s]||s)}</option>`).join('');
 }
 function sourceRegistryRowHtml(row,families){
   const state=SOURCE_STATE_LABELS[row.state]||row.state, family=families[row.family]||row.family;
@@ -5348,13 +5348,15 @@ function sourceRegistryRowHtml(row,families){
   const hash=row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:'';
   const canSync=['ue_cellar','parlament','camera','senat'].includes(row.family);
   const sync=canSync?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">${row.family==='ue_cellar'?'Sincronizează CELEX':'Sincronizează sursa'}</button>`:'';
+  const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
+  const review=['changed','needs_review'].includes(row.state)?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button>${sync}</div></article>`;
+  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function loadSourceRegistry(offset=0){
   const status=$('#source-registry-status'), list=$('#source-registry-list');
   const params=new URLSearchParams({offset:String(offset)});
-  const state=$('#source-registry-state').value;if(state)params.set('state',state);
+  const state=$('#source-registry-state').value;if(state==='_attention')params.set('attention','1');else if(state)params.set('state',state);
   status.textContent='Încarc registrul surselor…';list.textContent='';
   try{
     const data=await sourceRegistryApi(null,params);sourceRegistryConfigure(data);SOURCE_REGISTRY.offset=offset;
@@ -5367,10 +5369,17 @@ async function loadSourceRegistry(offset=0){
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
     list.querySelectorAll('[data-source-sync]').forEach(button=>button.onclick=async()=>{
-      button.disabled=true;status.textContent='Sincronizez o singură sursă UE…';
+      button.disabled=true;status.textContent='Sincronizez o singură sursă…';
       try{await sourceRegistryApi({action:'sync',id:button.dataset.sourceSync});await loadSourceRegistry(SOURCE_REGISTRY.offset);}
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
+    list.querySelectorAll('[data-source-review]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;status.textContent='Marchez sursa ca revizuită…';
+      try{await sourceRegistryApi({action:'review',id:button.dataset.sourceReview});await loadSourceRegistry(SOURCE_REGISTRY.offset);}
+      catch(err){status.textContent=err.message;button.disabled=false;}
+    });
+    list.querySelectorAll('[data-source-open-project]').forEach(button=>button.onclick=()=>openAcquisitionProject(button.dataset.sourceOpenProject));
+    list.querySelectorAll('[data-source-open-eu]').forEach(button=>button.onclick=()=>openEuSource(button.dataset.sourceOpenEu));
   }catch(err){status.textContent=err.message;}
 }
 $('#source-registry').ontoggle=()=>{if($('#source-registry').open) loadSourceRegistry(0);};
