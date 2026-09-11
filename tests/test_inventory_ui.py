@@ -84,27 +84,42 @@ def test_acquisition_renderers_distinguish_states_and_escape_sources():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_filters_and_opens_project_sources():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
-    source = html.split("const LIFECYCLE=", 1)[1].split("const ACQUISITION=", 1)[0]
+    source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
         "const esc=s=>String(s).replaceAll('&','&amp;')"
         ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
         "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
-        "const dossierTime=s=>s;const LIFECYCLE="
+        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
+        "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
         + source
         + "const base={project_id:'PL-x 1',title:'<script>',source_name:'Camera',"
         "source_state:'ok',needs_attention:false,last_seen:'2026-09-10',"
         "last_updated:'2026-09-10',url:'https://www.cdep.ro/p',stage:{label:'Raport depus'}};"
+        "assert.ok(lifecycleListHtml({projects:[base]},'watched')"
+        ".includes('Niciun proiect urmărit'));"
+        "projectWatchToggle('PL-x 1');"
+        "assert.ok(projectWatched('PL-x 1'));"
+        "assert.ok(lifecycleListHtml({projects:[base]},'watched').includes('Nu mai urmări'));"
         "let h=lifecycleListHtml({projects:[base,{...base,project_id:'PL-x 2',"
         "source_state:'stale',needs_attention:true}]},'attention');"
         "assert.ok(h.includes('PL-x 2')&&!h.includes('PL-x 1'));"
         "assert.ok(h.includes('Date vechi'));"
+        "assert.ok(h.includes('Urmărește'));"
         "assert.ok(h.includes('data-lifecycle-open=\"0\"'));"
         "assert.ok(!h.includes('<script>'));"
         "h=lifecycleListHtml({projects:[{...base,source_state:'unknown',"
         "needs_attention:true,stage:{key:'unknown',label:'Etapă nouă'}}]},'unknown');"
         "assert.ok(h.includes('Etapă necunoscută'));"
+        "assert.deepEqual(lifecycleCounts({projects:[base,{...base,project_id:'PL-x 2',"
+        "source_state:'stale',needs_attention:true,stale:true}]}),"
+        "{watched:1,attention:1,stale:1,unknown:0});"
         "assert.ok(lifecycleListHtml({projects:[base]},'stale').includes('Niciun proiect'));"
+        "fetch=async url=>({ok:true,json:async()=>({projects:String(url).includes('PL-x+2')?"
+        "[{...base,project_id:'PL-x 2'}]:[]})});"
+        "projectWatchSave(['PL-x 2','PL-x 3']);"
+        "lifecycleWatchedData().then(d=>{assert.equal(d.projects.length,2);"
+        "assert.equal(d.projects[1].source_state,'unavailable');}).catch(e=>{throw e;});"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
