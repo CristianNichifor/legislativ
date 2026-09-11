@@ -1,0 +1,68 @@
+{
+  "status": "pilot_runtime_path_passed_domain_acceptance_pending",
+  "date": "2026-09-11",
+  "tested_commit": "origin/main after PR161",
+  "python": "3.12.12",
+  "sqlite": "3.50.4",
+  "source_manifest": {
+    "path": "data/v1_pilot.json",
+    "sha256": "cf26ad24af52b39254dc53fe9b8f781a2c3f22bb632686ec0800db72d76d45e1"
+  },
+  "sources": [
+    {
+      "act_id": "lege-98-2016",
+      "path": "sources/lege-98-2016.html.gz",
+      "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762"
+    },
+    {
+      "act_id": "lege-208-2022",
+      "path": "sources/lege-208-2022.html.gz",
+      "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e"
+    }
+  ],
+  "release": {
+    "id": "2026-09-11-pilot",
+    "folder": "/tmp/legislativ-v1-pilot-release",
+    "manifest_sha256": "b38b8f48034fa4f27e8dda72d0d1965294926ad63ada45fef16a257e80c78e0c",
+    "corpus_db_sha256": "e4a66d2223072b68aa3ce075eda2c642c2cf0451e38552d06b4935dd75e061ff",
+    "corpus_db_bytes": 2064384,
+    "acts": 2,
+    "provisions": 1635
+  },
+  "commands": [
+    "uv run python -c '<build pilot release from data/v1_pilot.json>'",
+    "uv run python -m scripts.acceptare_date_reale /tmp/legislativ-v1-pilot-release --min-acts 2 --pilot-act lege-98-2016"
+  ],
+  "acceptance_output": {
+    "release": "2026-09-11-pilot",
+    "acte": 2,
+    "search_results": 3,
+    "workbench": {
+      "status": "passed",
+      "act_id": "lege-98-2016",
+      "engine_version": "fisa-act-v1",
+      "signals": {
+        "viduri": 0,
+        "neconstitutionale": 0,
+        "initiative_in_lucru": 0,
+        "amendamente_primite": 0,
+        "referinte_ue": 8
+      },
+      "reviewable_findings": 0,
+      "finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
+      "proposal_candidate_id": null,
+      "limitations": [
+        "No synthetic bridge is used by this acceptance runner.",
+        "Proposal save is not automated until a real reviewer-approved finding/wording exists."
+      ]
+    },
+    "dossier_survived_rollback": true,
+    "seconds": 0.2
+  },
+  "conclusion": {
+    "runtime_release_update_search_workbench_dossier_rollback": "passed",
+    "real_finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
+    "domain_acceptance": "pending",
+    "release_acceptance": "pending"
+  }
+}

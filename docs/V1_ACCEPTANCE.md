@@ -1,7 +1,8 @@
 # V1 acceptance preparation
 
-Status: proposed public-procurement pilot, with an executable workbench acceptance
-step added to `scripts.acceptare_date_reale`. Neither M7 nor M8 is accepted here.
+Status: bounded public-procurement pilot runtime path recorded in
+[`v1_acceptance_pilot_2026-09-11.json`](v1_acceptance_pilot_2026-09-11.json).
+Neither M7 nor M8 is accepted here.
 
 ## Bounded source set
 
@@ -36,6 +37,13 @@ signal/finding counts, verifies private dossier data survives rollback, and emit
 JSON. It does not synthesize a finding or proposal. Preserve output with the tested
 commit, Python/SQLite versions and manifest hash in the acceptance record.
 
+The 2026-09-11 pilot record built a valid public release from the two committed
+authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
+search, workbench save and private rollback survival. The run measured 2 acts,
+1,635 provisions, 3 search results, 8 EU references signaled and 0 reviewable
+gap/CCR findings. Therefore the real finding-to-proposal save remains unexercised;
+this is a data/review limitation, not an application pass/fail threshold.
+
 The authentic etalon counts publisher S_LGI marks matched by normalized text
 containment anywhere in the document. **Those marks are locators, not citations of
 other acts**: over the committed fixtures, 808 of 822 are `lit. e)`-shaped and the
@@ -68,12 +76,10 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
 ## Remaining M7 gates
 
 - User confirms domain, document/version boundary and intended research questions.
-- Run the real-data workbench acceptance command against the approved release
-  folder. Use `workbench.reviewable_findings` and `workbench.finding_to_proposal`
-  from the emitted JSON for the observed state; zero findings is a measured
-  limitation, not proof of absence of legal problems. Proposal save remains
-  unexercised until an authentic gap/CCR finding and reviewer-approved wording
-  exist. The synthetic rehearsal bridge must not be used for this gate.
+- Extend the approved release data or measurements enough to produce at least one
+  authentic reviewable gap/CCR finding, then save reviewer-approved proposal
+  wording from that finding. The 2026-09-11 run has
+  `workbench.finding_to_proposal = not_exercised_no_authentic_gap_or_ccr_finding`.
 - Record missing/extraction/false-positive cases and agreed tolerances; no invented
   passing threshold or accuracy claim. Resolve release-blocking findings and rerun.
 - Integrate and assess M3 source-change, M4 applicability and M6 UX changes, plus
