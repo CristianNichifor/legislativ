@@ -46,6 +46,8 @@ Goal: make the app useful even with partial data.
 Deliverables:
 
 - Manual creation of a gap, loophole, contradiction or EU-risk note.
+- Stable shared note vocabulary in code, starting with `scripts.constatari_manuale`,
+  so storage, UI, exports and future AI/MCP flows use the same keys.
 - Required fields: title, problem type, affected act, locator, evidence quote,
   source URL or source hash, user reasoning, status and owner.
 - Optional fields: domain, legal hierarchy, affected institutions, applicability
