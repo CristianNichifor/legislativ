@@ -56,6 +56,11 @@ const warnings=sourceFreshnessWarnings({mod:'local_readonly',surse:{
 assert.equal(warnings.length,3);
 assert.ok(warnings[0].includes('Legislație română'));
 assert.ok(warnings[0].includes('Surse HTML eșuate: 1'));
+const items=sourceFreshnessWarningItems({mod:'local_readonly',
+ surse:{ue:{stare:'lipsa',metrici:{acte:{stare:'indisponibil',valoare:null}}}},
+ limitari:[]});
+assert.equal(items[0].key,'corpus');
+assert.ok(items.some(item=>item.key==='ue'&&item.action.includes('CELEX')));
 const panel=sourceFreshnessPanelHtml({mod:'local_readonly',surse:{corpus:{stare:'disponibil',
  metrici:{acte:{stare:'masurat',valoare:1}}},
  initiative:{stare:'disponibil',metrici:{initiative:{stare:'masurat',valoare:1}}},
@@ -64,6 +69,14 @@ const panel=sourceFreshnessPanelHtml({mod:'local_readonly',surse:{corpus:{stare:
 assert.ok(panel.includes('id="dossier-source-warning"'));
 assert.ok(panel.includes('source-freshness-ok'));
 assert.ok(panel.includes('Sursele locale par utilizabile'));
+const warningPanel=sourceFreshnessPanelHtml({mod:'local_readonly',surse:{corpus:{stare:'partial',
+ metrici:{acte:{stare:'masurat',valoare:1},surse_esuate:{stare:'masurat',valoare:1}}}}});
+assert.ok(warningPanel.includes('data-source-note="0"'));
+const note=manualNoteFromSourceWarning({key:'ue',label:'Drept UE',
+ message:'UE lipsă',action:'Importă CELEX'});
+assert.equal(note.type,'risc_ue');
+assert.equal(note.status,'needs_evidence');
+assert.ok(note.reasoning.includes('CELEX'));
 assert.ok(sourceFreshnessPanelHtml({mod:'static'}).includes('versiunea statică'));
 """
     )

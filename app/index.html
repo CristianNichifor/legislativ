@@ -5219,22 +5219,40 @@ function sourceInventoryHtml(d){
   h+='<details><summary>Limitele inventarului</summary>'+limitari.map(t=>`<p class="hint">${esc(t)}</p>`).join('')+'</details>';
   return h;
 }
-function sourceFreshnessWarnings(d){
-  if(!d) return ['Inventarul surselor locale nu este încărcat.'];
-  if(d.mod==='static') return ['Inventarul bazei locale nu este disponibil în versiunea statică.'];
+function sourceFreshnessWarningItems(d){
+  if(!d) return [{key:'unknown',label:'Inventar surse',message:'Inventarul surselor locale nu este încărcat.',detail:'Inventar neîncărcat',action:'Reîncarcă inventarul surselor înainte de concluzia juridică.'}];
+  if(d.mod==='static') return [{key:'static',label:'Inventar surse',message:'Inventarul bazei locale nu este disponibil în versiunea statică.',detail:'Rulează aplicația locală pentru inventar complet al surselor.',action:'Folosește aplicația locală pentru analiză cu inventar complet.'}];
   const states={disponibil:'bază accesibilă',partial:'date parțiale',lipsa:'bază lipsă',inaccesibil:'bază inaccesibilă'};
-  const warnings=[];
+  const items=[];
   for(const [key,[label,total]] of Object.entries(SOURCE_LABELS)){
     const s=d.surse?.[key], metrics=s?.metrici||{}, health=sourceHealth(s,metrics,total);
     if(health.tone==='ok') continue;
     const details=sourceIssues(metrics);
-    warnings.push(`${label}: ${health.label.toLowerCase()} (${states[s?.stare]||'stare necunoscută'}). ${details[0]||sourceFreshness(key,metrics)}`);
+    const detail=details[0]||sourceFreshness(key,metrics);
+    items.push({key,label,detail,action:SOURCE_ACTIONS[key],
+      message:`${label}: ${health.label.toLowerCase()} (${states[s?.stare]||'stare necunoscută'}). ${detail}`});
   }
-  return warnings;
+  return items;
+}
+function sourceFreshnessWarnings(d){
+  return sourceFreshnessWarningItems(d).map(item=>typeof item==='string'?item:item.message);
 }
 function sourceFreshnessPanelHtml(d){
-  const warnings=sourceFreshnessWarnings(d), ok=!warnings.length;
-  return `<div id="dossier-source-warning" class="source-freshness ${ok?'source-freshness-ok':''}"><p><strong>${ok?'Sursele locale par utilizabile pentru o analiză nouă.':'Atenție la sursele locale înainte de analiză.'}</strong></p>${ok?'<p>Inventarul nu semnalează surse lipsă, goale sau cu erori măsurate.</p>':`<ul>${warnings.map(w=>`<li>${esc(w)}</li>`).join('')}</ul>`}<p class="hint">Nu blochează salvarea; spune doar ce știe copia locală în acest moment.</p></div>`;
+  const items=sourceFreshnessWarningItems(d), ok=!items.length;
+  return `<div id="dossier-source-warning" class="source-freshness ${ok?'source-freshness-ok':''}"><p><strong>${ok?'Sursele locale par utilizabile pentru o analiză nouă.':'Atenție la sursele locale înainte de analiză.'}</strong></p>${ok?'<p>Inventarul nu semnalează surse lipsă, goale sau cu erori măsurate.</p>':`<ul>${items.map((item,i)=>`<li>${esc(item.message)} <button type="button" class="ghost mini" data-source-note="${i}">Creează notă</button></li>`).join('')}</ul>`}<p class="hint">Nu blochează salvarea; spune doar ce știe copia locală în acest moment.</p></div>`;
+}
+function manualNoteFromSourceWarning(item){
+  const type=item.key==='ue'?'risc_ue':item.key==='importuri'?'necorelare':'lacuna';
+  return {title:`Surse incomplete · ${item.label||'inventar'}`,type,act_id:item.label||'',locator:'',
+    evidence_quote:item.message||item.detail||'',source_url:'',source_hash:'',
+    reasoning:item.action||'Verifică sursa locală înainte de concluzia juridică.',status:'needs_evidence',revizie:0};
+}
+function bindSourceWarningNotes(panel,d){
+  const items=sourceFreshnessWarningItems(d);
+  panel?.querySelectorAll('[data-source-note]').forEach(button=>button.onclick=()=>{
+    const item=items[Number(button.dataset.sourceNote)];
+    if(item)startManualNote(manualNoteFromSourceWarning(item));
+  });
 }
 function sourceFreshnessStatus(){
   return loadSourceInventory().then(d=>{
@@ -5249,6 +5267,7 @@ async function renderDossierSourceFreshness(){
   try{
     const report=await loadSourceInventory();
     target.outerHTML=sourceFreshnessPanelHtml(report);
+    bindSourceWarningNotes($('#dossier-source-warning'),report);
     return report;
   }catch{
     target.innerHTML='<p><strong>Atenție la sursele locale înainte de analiză.</strong></p><p>Inventarul surselor locale nu a putut fi verificat.</p>';
