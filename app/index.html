@@ -4334,7 +4334,7 @@ function reviewFindingHtml(f){
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
     +reviewEvidenceHtml(f)
-    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+proposalPrefillHtml(f)+'</div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
+    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+proposalPrefillHtml(f)+'<div class="dossier-actions"><button type="button" class="ghost mini" data-note-from-finding>Creează notă</button></div></div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
@@ -4354,18 +4354,20 @@ const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null};
 
 function manualNoteHtml(note,index){
   const source=note.source_url?` · <a href="${esc(note.source_url)}" target="_blank" rel="noopener">sursa</a>`:'';
+  const canOpen=note.act_id&&note.locator;
   return `<article class="manual-note" data-note-index="${index}"><h5>${esc(note.title)}</h5>`
     +`<div class="manual-note-meta"><span>${esc(MANUAL_NOTE_TYPES[note.type]||note.type)}</span><span>${esc(MANUAL_NOTE_STATUS[note.status]||note.status)}</span><span>Revizia ${esc(note.revizie)}</span><span>Modificat: ${esc(dossierTime(note.modificat_la))}</span></div>`
     +`<p>${esc([note.act_id,note.locator].filter(Boolean).join(' · ')||'Fără act sau locator atașat')}${source}</p>`
     +(note.source_hash?`<p class="hint">SHA-256 sursă: ${esc(note.source_hash)}</p>`:'')
     +(note.evidence_quote?`<details open><summary>Citat dovadă</summary><pre>${esc(note.evidence_quote)}</pre></details>`:'')
     +(note.reasoning?`<details open><summary>Raționament</summary><pre>${esc(note.reasoning)}</pre></details>`:'')
-    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button></div></article>';
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button>${canOpen?'<button type="button" class="ghost mini" data-open-note-source>Deschide prevederea</button>':''}</div><div data-note-source></div></article>`;
 }
 function manualNoteFormHtml(editing=null){
   const v=(name,fallback='')=>esc(editing?.[name]??fallback);
   const options=(items,current)=>Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
-  return `<form data-manual-note-form><p class="hint" data-note-editing>${editing?`Editezi nota · revizia ${esc(editing.revizie)}`:'Notă nouă. Salvează aici lacune, loopholes, contradicții sau riscuri UE observate manual.'}</p>`
+  const label=editing?.id?`Editezi nota · revizia ${esc(editing.revizie)}`:editing?'Notă precompletată din constatare. Verifică și salvează.':'Notă nouă. Salvează aici lacune, loopholes, contradicții sau riscuri UE observate manual.';
+  return `<form data-manual-note-form><p class="hint" data-note-editing>${label}</p>`
     +`<label>Titlu<input name="title" required maxlength="200" value="${v('title')}"></label>`
     +`<label>Tip<select name="type">${options(MANUAL_NOTE_TYPES,editing?.type||'lacuna')}</select></label>`
     +`<label>Stare<select name="status">${options(MANUAL_NOTE_STATUS,editing?.status||'draft')}</select></label>`
@@ -4386,6 +4388,55 @@ function manualNotePayload(form,dossierId,note){
 }
 function manualNoteStatusOptions(current){
   return Object.entries(MANUAL_NOTE_STATUS).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+}
+
+function manualNoteText(value){
+  if(value==null)return '';
+  if(typeof value==='string')return value;
+  if(Array.isArray(value))return value.map(manualNoteText).filter(Boolean).join('\n');
+  if(typeof value==='object')return Object.values(value).map(manualNoteText).filter(Boolean).join('\n');
+  return String(value);
+}
+function manualNoteEvidence(d){
+  const direct=d.norma||d.citat||d.text||d.fragment||d.definitie||d.gasit||'';
+  if(direct)return String(direct);
+  return [d.a,d.b].map(x=>manualNoteText(x?.text||x?.definitie||x?.fragment)).filter(Boolean).join('\n\n---\n\n');
+}
+function manualNoteSource(d){
+  const source=[d.sursa_url,d.url,d.item_url,d.sursa].find(x=>typeof x==='string'&&/^https?:\/\//.test(x));
+  const hash=[d.sursa_sha256,d.sha256,d.text_sha256].find(x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x));
+  return {source_url:source||'',source_hash:hash||''};
+}
+function manualNoteFromFinding(f){
+  const d=f.dovada||{}, type=MANUAL_NOTE_TYPES[f.tip]?f.tip:String(f.tip||'').includes('ue')?'risc_ue':String(f.tip||'').includes('constit')?'constitutionalitate':String(f.tip||'').includes('contrad')?'contradictie':'lacuna';
+  const act=d.act_id||d.a?.act_id||d.b?.act_id||d.tinta?.act_id||'';
+  const locator=d.locator||d.locator_lovit||d.a?.locator||d.b?.locator||d.tinta?.locator||'';
+  const title=[MANUAL_NOTE_TYPES[type]||type,act,locator].filter(Boolean).join(' · ');
+  const evidence=manualNoteEvidence(d);
+  return {...manualNoteSource(d),title:title||'Constatare manuală',type,act_id:act,locator,
+    evidence_quote:evidence,reasoning:manualNoteText(d.motiv||d.explicatie||f.tip||''),
+    status:evidence?'ready_for_review':'needs_evidence',revizie:0};
+}
+async function startManualNote(prefill){
+  if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de a salva nota.';return;}
+  MANUAL_NOTES_UI.editing=prefill;
+  await loadManualNotes(DOSARE_UI.selected.id,0);
+  $('#dossier-notes').scrollIntoView({block:'start'});
+  $('#dossier-notes input[name="title"]')?.focus();
+}
+async function openManualNoteSource(button,note){
+  const out=button.closest('.manual-note').querySelector('[data-note-source]');
+  if(!out)return;
+  if(out.textContent||out.children.length){out.textContent='';return;}
+  out.textContent='Caut prevederea în corpusul local…';button.disabled=true;
+  try{
+    const d=await prevedereTinta(note.act_id||'',note.locator||'');
+    const loc=esc(locRo((d&&d.locator)||note.locator||''));
+    out.innerHTML=d&&d.gasit
+      ? `<div class="matrix-prev"><div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||'')}</div><div class="matrix-prev-text">${textLizibil(String(d.text||'').slice(0,1800))}</div></div>`
+      : `<p class="hint">Corpusul local nu are text adresabil pentru această prevedere.</p>`;
+  }catch(err){out.textContent='Nu am putut deschide prevederea. Reîncearcă.';}
+  finally{button.disabled=false;}
 }
 async function loadManualNotes(dossierId,offset=0){
   const host=$('#dossier-notes'),seq=++MANUAL_NOTES_UI.sequence;
@@ -4415,6 +4466,7 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelector('[data-notes-prev]').onclick=()=>loadManualNotes(dossierId,Math.max(0,offset-50));
     host.querySelector('[data-notes-next]').onclick=()=>loadManualNotes(dossierId,offset+50);
     host.querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=()=>{MANUAL_NOTES_UI.editing=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];loadManualNotes(dossierId,offset);});
+    host.querySelectorAll('[data-open-note-source]').forEach(button=>button.onclick=()=>openManualNoteSource(button,data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)]));
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
     form.onsubmit=async e=>{
       e.preventDefault();if(!form.reportValidity())return;
@@ -4746,7 +4798,11 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
       });
       panel.querySelector('[data-show-drafts]').hidden=!drafts.size;
       list.innerHTML=active?reviewFindingHtml(active):(filter.startsWith('evidence_')&&!panel.evidenceCheck?'<p>Dovezi încă neverificate.</p><button type="button" class="ghost mini" data-open-checks>Deschide verificările</button>':'<p>Nicio constatare în această selecție.</p>');
-      if(active)bindFindingProposal(list.querySelector('[data-proposal]'),panel,active,dossierId,runId,valid,render);
+      if(active){
+        bindFindingProposal(list.querySelector('[data-proposal]'),panel,active,dossierId,runId,valid,render);
+        const noteButton=list.querySelector('[data-note-from-finding]');
+        if(noteButton)noteButton.onclick=()=>startManualNote(manualNoteFromFinding(active));
+      }
       const openChecks=list.querySelector('[data-open-checks]');if(openChecks)openChecks.onclick=()=>{checksPanel.open=true;panel.querySelector('[data-evidence-check]').focus();};
       list.querySelectorAll('[data-current-source]').forEach(b=>b.onclick=async()=>{
         await mPrevedere(b);const current=b.closest('.matrix-ex').querySelector('.matrix-prev');

@@ -51,6 +51,12 @@ def test_cleared_review_draft_does_not_block_recalculation():
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 
 
+def test_saved_finding_review_exposes_manual_note_action():
+    source = APP.read_text()
+    assert "data-note-from-finding" in source
+    assert "Creează notă" in source
+
+
 def test_library_is_in_matrix_tab():
     class Placement(HTMLParser):
         def __init__(self):
@@ -154,6 +160,17 @@ assert.ok(h.includes('SHA-256 sursă')&&h.includes('Citat dovadă'));
 assert.ok(!/<(script|img|svg|b|i)>/.test(h));
 const formHtml=manualNoteFormHtml(note);
 assert.ok(formHtml.includes('Editezi nota')&&!formHtml.includes('<script>'));
+const prefill=manualNoteFromFinding({tip:'contradictie',dovada:{
+  a:{act_id:'A',locator:'art. 1',text:'A text'},
+  b:{act_id:'B',locator:'art. 2',definitie:'B text'},
+  motiv:'conflict'}});
+assert.equal(prefill.type,'contradictie');
+assert.equal(prefill.act_id,'A');
+assert.equal(prefill.locator,'art. 1');
+assert.equal(prefill.status,'ready_for_review');
+assert.ok(prefill.evidence_quote.includes('A text'));
+assert.ok(prefill.evidence_quote.includes('B text'));
+assert.ok(manualNoteFormHtml(prefill).includes('Notă precompletată din constatare'));
 const values={title:'Titlu',type:'lacuna',act_id:'A',locator:'art1',
   evidence_quote:'citat',source_url:'https://x.test',source_hash:'b'.repeat(64),
   reasoning:'motiv',status:'draft'};
