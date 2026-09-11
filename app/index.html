@@ -717,6 +717,8 @@
   .empty{font-family:var(--sans);font-size:.85rem;color:var(--ink-mute);font-style:italic}
   a{color:var(--accent);text-underline-offset:.15em}
   .frag{font-family:var(--mono);font-size:.82rem} .frag mark{background:var(--accent-wash);color:var(--accent);padding:0 .1em}
+  .card-actions{display:flex;flex-wrap:wrap;gap:.35rem;align-items:center;margin-top:.5rem}
+  .project-impact{margin-top:.45rem}
   .out-box{background:var(--surface);border:1px solid var(--rule);border-left:3px solid var(--accent);
     border-radius:var(--r1);box-shadow:var(--e1);
     padding:.8rem 1rem;margin-top:1rem;font-family:var(--mono);font-size:.9rem;white-space:pre-wrap;
@@ -1755,11 +1757,12 @@ const slug = t => t.toLowerCase().replace(/[^a-z]+/g,"-").replace(/^-|-$/g,"");
 const sec = (t,n,body)=>{ const id="sec-"+slug(t);
   return `<section id="${id}"><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`; };
 const empty = t=>`<p class="empty">${t}</p>`;
-function card(cls, lead, meta, quote, tag){
+function card(cls, lead, meta, quote, tag, actions=""){
   return `<div class="card ${cls}">`+(tag?`<span class="tag ${tag}">${tag}</span>`:"")
     +`<span class="lead">${lead}</span>`
     +((meta&&meta.length)?`<div class="meta">${meta.map(m=>`<span>${m}</span>`).join("")}</div>`:"")
-    +(quote?`<div class="quote">${esc(quote)}</div>`:"")+`</div>`;
+    +(quote?`<div class="quote">${esc(quote)}</div>`:"")
+    +(actions?`<div class="card-actions">${actions}</div>`:"")+`</div>`;
 }
 // chips carry the section id they jump to
 function chip(label,n,sev,secTitle){ const on=n>0;
@@ -3512,9 +3515,49 @@ function cardCauta(x){
   const frag=s=>esc(s).replace(/\[/g,"<mark>").replace(/\]/g,"</mark>");
   const link=x.sursa_url?`<a class="plx" href="${esc(x.sursa_url)}" target="_blank" rel="noopener">${esc(x.act_id)}</a>`:`<span class="plx">${esc(x.act_id)}</span>`;
   const titlu=x.titlu?` — <span class="hint">${esc(x.titlu).slice(0,80)}</span>`:"";
-  return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"");
+  const actions=`<button type="button" class="ghost mini impact-proiecte" data-act="${esc(x.act_id)}">proiecte care îl ating</button>`
+    +`<button type="button" class="ghost mini impact-watch" data-act="${esc(x.act_id)}">supraveghează</button>`
+    +`<span class="hint project-impact-count" data-act="${esc(x.act_id)}"></span>`
+    +`<div class="project-impact" data-act="${esc(x.act_id)}" hidden></div>`;
+  return card("note",`${link} <span class="hint">${esc(locRo(x.locator))}</span>${titlu}`,[`<span class="frag">${frag(x.fragment)}</span>`],"","",actions);
+}
+function proiectImpactHtml(d){
+  const inits=d.initiative||[];
+  if(d.eroare) return `<p class="empty">Nu pot încărca proiectele pentru ${esc(d.act_id)}.</p>`;
+  if(!d.cunoscut) return `<p class="empty">${esc(d.act_id)} nu este în corpusul local.</p>`;
+  let h=`<div class="parc"><div class="parc-h">Impact parlamentar pentru ${esc(d.act_id)}</div>`
+    +`<p class="watch-meta">${esc((d.titlu||"").slice(0,140))}</p>`
+    +`<p class="watch-meta"><b>${d.citari||0}</b> acte îl citează · amendat de <b>${d.amendat||0}</b>`
+    +(d.ultima_modificare?` · ultima modificare: <b>${esc(d.ultima_modificare)}</b>`:"")+`</p>`;
+  if(!inits.length) return h+`<p class="hint">Nicio inițiativă parlamentară în lucru nu atinge acest act în datele instalate.</p></div>`;
+  h+=`<div class="impact-h">Inițiative în lucru care îl ating (${inits.length})</div>`;
+  h+=inits.map(i=>`<div class="watch-init"><span class="plx">${esc(i.plx_id)}</span>`
+    +(i.senat_id?` · Senat ${esc(i.senat_id)}`:"")+` — ${esc((i.titlu||"").slice(0,130))} `
+    +`<span class="hint">[${esc((i.stadiu||"").slice(0,50))}]</span>`
+    +` <button type="button" class="ghost mini parc-buton" data-plx="${esc(i.plx_id)}">parcurs</button>`
+    +`<div class="parc-loc" data-loc="${esc(i.plx_id)}"></div></div>`).join("");
+  return h+`</div>`;
+}
+async function comutaImpactProiecte(button){
+  const act=button.dataset.act, card=button.closest(".card");
+  const out=card.querySelector(`.project-impact[data-act="${CSS.escape(act)}"]`);
+  if(!out) return;
+  if(!out.hidden){ out.hidden=true; button.textContent="proiecte care îl ating"; return; }
+  out.hidden=false; button.disabled=true; button.textContent="încarc…";
+  try{
+    const d=await fetch("/api/supraveghere?act="+encodeURIComponent(act)).then(r=>r.json());
+    out.innerHTML=proiectImpactHtml(d);
+    out.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+    const count=card.querySelector(`.project-impact-count[data-act="${CSS.escape(act)}"]`);
+    if(count) count.textContent=d.initiative?.length?`${d.initiative.length} inițiative în lucru`:"niciuna în lucru";
+    button.textContent="ascunde proiectele";
+  }catch(e){
+    out.innerHTML=`<p class="empty">Sursele parlamentare nu sunt disponibile în această versiune.</p>`;
+    button.textContent="reîncearcă proiectele";
+  }finally{ button.disabled=false; }
 }
 async function runSearch(append=false){
+  clearTimeout(searchTimer);
   const q=$("#q").value.trim();
   if(!q){ $("#cauta-out").innerHTML=""; searchOffset=0; return; }
   const offset=append?searchOffset:0, seq=++searchSeq;
@@ -3539,6 +3582,10 @@ async function runSearch(append=false){
         : (total>CAUTA_PAG?`<p class="hint">Toate cele ${total} rezultate sunt afișate.</p>`:"");
       const b=$("#cauta-more-btn"); if(b) b.onclick=()=>runSearch(true);
     }
+    $("#cauta-list").querySelectorAll(".impact-proiecte").forEach(b=>b.onclick=()=>comutaImpactProiecte(b));
+    $("#cauta-list").querySelectorAll(".impact-watch").forEach(b=>b.onclick=()=>{
+      watchAdd(b.dataset.act); b.textContent="supravegheat"; b.disabled=true;
+    });
   }catch(e){ if(!append) $("#cauta-out").innerHTML=empty("Eroare: "+esc(e.message||e)); }
 }
 $("#q").addEventListener("keydown",e=>{ if(e.key==="Enter") runSearch(); });
