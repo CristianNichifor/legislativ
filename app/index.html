@@ -4294,6 +4294,23 @@ function findingSourcesHtml(f){
   const sources=paired?['a','b'].filter(k=>f.dovada[k]).map(k=>[k.toUpperCase(),f.dovada[k]]):[['',f.dovada]];
   return '<p class="hint">Dovezi păstrate în rulare</p><div class="finding-sources">'+sources.map(([side,s])=>`<div class="matrix-ex"><h4>${esc(side?side+' · ':'')}${esc(s.act_id||s.act_tinta||'Referință incompletă')} ${esc(s.locator?locRo(s.locator):'')}</h4><div class="source-text">${esc(s.text||s.definitie||s.continut_nou||'Text nepăstrat în această dovadă.')}</div>${f.tip!=='proiect'&&s.act_id?`<button type="button" class="ghost mini" data-current-source data-act="${esc(s.act_id)}" data-loc="${esc(s.locator||'')}" data-et="Text curent local">Text curent local</button>`:''}</div>`).join('')+'</div>';
 }
+function proposalSeed(f){
+  const source=f.dovada?.a||f.dovada||{};
+  const act=source.act_tinta||source.act_id||'',locator=source.locator||'';
+  if(!['lacuna','ccr'].includes(f.tip)||!act||!locator)return null;
+  const label=act+' '+locRo(locator);
+  const basis=f.tip==='lacuna'?'lacuna salvată':'constatarea CCR salvată';
+  return {
+    act_id:act,locator,label,basis,
+    titlu:'Propunere pentru '+label,
+    motiv:('Pornire din '+basis+': '+(source.decizie||source.text||'')).trim()
+  };
+}
+function proposalPrefillHtml(f){
+  const seed=proposalSeed(f);if(!seed)return '';
+  return '<div class="matrix-ex note" data-proposal-prefill><b>Țintă propunere sugerată</b><br>'
+    +esc(seed.label)+' · operație: înlocuire<br><span class="hint">Ținta este preluată din '+esc(seed.basis)+'. Completează textul juridic; aplicația nu inventează soluția.</span></div>';
+}
 function workspaceFindings(findings,filter,query){
   const needle=fold(query||'');
   return findings.filter(f=>(filter==='all'||filter==='unresolved'&&['unreviewed','needs_evidence'].includes(f.stare)||f.stare===filter||filter==='evidence_changed'&&f.verificare?.stare==='schimbat'||filter==='evidence_unknown'&&(f.verificare?.stare==='indisponibil'||f.verificare?.comparatie_incompleta))&&(!needle||fold(JSON.stringify(f.dovada)).includes(needle)));
@@ -4306,7 +4323,7 @@ function reviewFindingHtml(f){
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
     +reviewEvidenceHtml(f)
-    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+'</div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
+    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+proposalPrefillHtml(f)+'</div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
@@ -4513,6 +4530,7 @@ function bindStructuredProposal(form,saved,f,drafts,key,revision,initial,identit
     form.dispatchEvent(new Event('input',{bubbles:true}));message.textContent='Intervenție aplicată · nesalvată.';
   };
   if(previous?.structura||original){section.open=true;message.textContent=original?'Intervenție salvată · '+original.operatie+' '+original.act_id+' '+original.locator:'Intervenție neaplicată.';}
+  else if(proposalSeed(f)&&defaults.act_id&&defaults.locator){section.open=true;message.textContent='Țintă precompletată din constatarea salvată. Completează textul propus.';}
   if(original&&!previous?.structura){
     section.querySelector('[data-intent-result]').innerHTML='<h5>Țintă păstrată în revizia salvată</h5><pre>'+esc(saved.interventie.inainte)+'</pre><h5>Text propus · '+esc(original.operatie)+'</h5><pre>'+esc(saved.interventie.dupa)+'</pre><p class="hint">SHA-256 țintă: '+esc(original.sha256_tinta)+'</p>';
   }
@@ -4530,8 +4548,8 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
     if(loaded)return;loaded=true;host.textContent='Încarc propunerea…';
     try{
       const data=await dossierApi(query);if(!alive())return;
-      const previous=drafts.get(key),saved=data.propunere;
-      const initial=previous?.initial||{titlu:saved?.titlu||'',text:saved?.text||'',motiv:saved?.motiv||''};
+      const previous=drafts.get(key),saved=data.propunere,seed=proposalSeed(f);
+      const initial=previous?.initial||{titlu:saved?.titlu||seed?.titlu||'',text:saved?.text||'',motiv:saved?.motiv||seed?.motiv||''};
       const revision=previous?.revision??saved?.revizie??0;
       host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
       host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;

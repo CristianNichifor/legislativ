@@ -20,6 +20,7 @@ const bindProposalHistory=()=>{};
 const bindProposalAnalysis=()=>{};
 const bindEuProposalLinks=()=>{};
 const bindStructuredProposal=()=>{};
+const proposalSeed=()=>null;
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }
 const panel={reviewDrafts:new Map(),proposalOpen:new Set(['finding']),querySelector:()=>({})};
@@ -73,6 +74,38 @@ function mount(){
   assert.equal(calls[3].revizie,7);assert.equal(saved.propunere.revizie,8);
   assert.equal(panel.reviewDrafts.has('proposal:finding'),false);
 })().catch(e=>{console.error(e);process.exit(1)});
+"""
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_law_workbench_finding_prefills_proposal_target_and_rationale():
+    source = (
+        (Path(__file__).parents[1] / "app/index.html")
+        .read_text()
+        .split("function proposalSeed", 1)[1]
+        .split("function workspaceFindings", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const locRo=id=>id==='art7'?'art. 7':id;"
+        "function proposalSeed"
+        + source
+        + r"""
+const finding={tip:'lacuna',dovada:{act_id:'lege-98-2016',locator:'art7',text:'Nu există termen.'}};
+const seed=proposalSeed(finding);
+assert.equal(seed.act_id,'lege-98-2016');
+assert.equal(seed.locator,'art7');
+assert.equal(seed.titlu,'Propunere pentru lege-98-2016 art. 7');
+assert.ok(seed.motiv.includes('lacuna salvată'));
+const html=proposalPrefillHtml(finding);
+assert.ok(html.includes('Țintă propunere sugerată'));
+assert.ok(html.includes('lege-98-2016 art. 7'));
+assert.ok(html.includes('aplicația nu inventează soluția'));
+assert.equal(proposalSeed({tip:'contradictie',dovada:{act_id:'lege',locator:'art1'}}),null);
 """
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
