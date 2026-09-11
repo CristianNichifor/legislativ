@@ -32,6 +32,9 @@ for (const width of [390, 1440]) {
     await projectButton.click();
     await expect(page.locator('#cauta-out .project-impact').first()).toContainText('plx-999999-2026');
     await expect(page.locator('#cauta-out .project-impact').first()).toContainText('raport depus');
+    await expect(page.locator('#cauta-out .project-impact').first()).toContainText('Ținte în act');
+    await page.locator('#cauta-out .impact-compare').first().click();
+    await expect(page.locator('#cauta-out .matrix-draft-form').first()).toContainText('Compară două proiecte');
     await page.locator('#cauta-out .impact-watch').first().click();
     await expect(page.locator('#cauta-out .impact-watch').first()).toContainText('supravegheat');
     await page.screenshot({ path: info.outputPath(`search-${width}.png`), fullPage: true });

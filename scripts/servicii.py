@@ -546,6 +546,8 @@ def _supraveghere(act_id: str, stare: Stare) -> dict:
         "amendat": 0,
         "ultima_modificare": None,
         "initiative": [],
+        "initiative_status": "necunoscut",
+        "limitari": [],
     }
     if stare.are_graf():
         from scripts.graf import _deschide_graf, inbound
@@ -564,8 +566,22 @@ def _supraveghere(act_id: str, stare: Stare) -> dict:
         from scripts.imbogateste import initiative_pe_act
 
         with depozit.deschide(stare.initiative, readonly=True) as ini:
+            tables = {
+                r[0] for r in ini.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "initiative" not in tables:
+                out["initiative_status"] = "surse_indisponibile"
+                out["limitari"].append("Registrul inițiativelor nu este instalat.")
+                return out
+            if "initiative_tinta" not in tables:
+                out["initiative_status"] = "index_indisponibil"
+                out["limitari"].append("Indexul actelor atinse de inițiative nu este instalat.")
+                return out
             out["initiative"] = initiative_pe_act(ini, act_id)
+            out["initiative_status"] = "ok"
     except Exception:
+        out["initiative_status"] = "surse_indisponibile"
+        out["limitari"].append("Registrul inițiativelor nu este disponibil.")
         out["initiative"] = []
     return out
 

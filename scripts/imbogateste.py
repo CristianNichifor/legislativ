@@ -47,8 +47,12 @@ def initiative_pe_act(con, act_id: str, *, doar_vii: bool = True) -> list[dict]:
     from scripts.text import cheie
 
     randuri = con.execute(
-        "SELECT DISTINCT i.plx_id, i.senat_id, i.titlu, i.stadiu FROM initiative_tinta t"
-        " JOIN initiative i ON i.plx_id = t.plx_id WHERE t.act_id = ? ORDER BY i.data_inreg DESC",
+        "SELECT i.plx_id, i.senat_id, i.titlu, i.stadiu, i.sursa_url, "
+        "group_concat(DISTINCT t.locator) locatoare, count(*) tinte "
+        "FROM initiative_tinta t JOIN initiative i ON i.plx_id = t.plx_id "
+        "WHERE t.act_id = ? "
+        "GROUP BY i.plx_id, i.senat_id, i.titlu, i.stadiu, i.sursa_url, i.data_inreg "
+        "ORDER BY i.data_inreg DESC",
         (act_id,),
     ).fetchall()
     out = []
@@ -62,6 +66,9 @@ def initiative_pe_act(con, act_id: str, *, doar_vii: bool = True) -> list[dict]:
                 "senat_id": r["senat_id"],
                 "titlu": r["titlu"],
                 "stadiu": r["stadiu"] or "",
+                "sursa_url": r["sursa_url"] or "",
+                "locatoare": [x for x in (r["locatoare"] or "").split(",") if x],
+                "tinte": r["tinte"],
                 "in_viata": viu,
             }
         )

@@ -43,9 +43,30 @@ with TemporaryDirectory(prefix="legislativ-browser-") as directory:
                 sursa_url="",
             ),
         )
+        depozit.scrie_initiativa(
+            connection,
+            Initiativa(
+                plx_id="plx-999998-2026",
+                cam=2,
+                idp="999998",
+                senat_id="L998/2026",
+                tip="propunere legislativa",
+                titlu="Lege privind completarea registrului demonstrativ",
+                obiect="completarea Legii nr. 999999/2024",
+                urgenta=False,
+                stadiu="pe ordinea de zi",
+                camera_decizionala="Camera Deputaților",
+                data_inreg="2026-01-02",
+                sursa_url="",
+            ),
+        )
         connection.execute(
             "INSERT INTO initiative_tinta (plx_id, act_id, locator) VALUES (?,?,?)",
             ("plx-999999-2026", "lege-999999-2024", "art1"),
+        )
+        connection.execute(
+            "INSERT INTO initiative_tinta (plx_id, act_id, locator) VALUES (?,?,?)",
+            ("plx-999998-2026", "lege-999999-2024", "art2"),
         )
     serveste(
         5190,

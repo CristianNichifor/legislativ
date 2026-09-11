@@ -12,7 +12,14 @@ from pathlib import Path
 from scripts import depozit
 from scripts.cdep import Initiativa
 from scripts.graf import _deschide_graf
-from scripts.servicii import Stare, _matrice, _matrice_acte, _matrice_contradictii, _matrice_dosar
+from scripts.servicii import (
+    Stare,
+    _matrice,
+    _matrice_acte,
+    _matrice_contradictii,
+    _matrice_dosar,
+    _supraveghere,
+)
 
 EDGE_SQL = (
     "INSERT INTO muchii (din_act, din_locator, catre_act, locator, fel, incredere, de_la)"
@@ -437,6 +444,33 @@ def test_matrix_groups_gap_reports_by_issuer(tmp_path):
         "locator": "art5.alin7",
     }
     assert out["limitari"]
+
+
+def test_watch_state_exposes_project_targets_and_source_status(tmp_path):
+    stare = _stare(tmp_path, graf=True, initiative=True)
+    with depozit.deschide(stare.initiative) as con:
+        depozit.scrie_initiativa(con, _ini("plx-2-2024", stadiu="raport depus"))
+        con.execute(
+            "INSERT INTO initiative_tinta (plx_id, act_id, locator) VALUES (?,?,?)",
+            ("plx-2-2024", "lege-98-2016", "art9"),
+        )
+    out = _supraveghere("lege-98-2016", stare)
+
+    assert out["initiative_status"] == "ok"
+    assert out["citari"] == 3
+    assert out["amendat"] == 2
+    assert {i["plx_id"] for i in out["initiative"]} == {"plx-1-2024", "plx-2-2024"}
+    first = next(i for i in out["initiative"] if i["plx_id"] == "plx-1-2024")
+    assert first["locatoare"] == ["art7"]
+    assert first["tinte"] == 1
+
+    absent_dir = tmp_path / "absent"
+    absent_dir.mkdir()
+    absent = _stare(absent_dir)
+    Path(absent.initiative).unlink()
+    missing = _supraveghere("lege-98-2016", absent)
+    assert missing["initiative_status"] == "surse_indisponibile"
+    assert missing["initiative"] == []
 
 
 def test_matrix_type_filter_applies_to_counts_and_report_rows(tmp_path):
