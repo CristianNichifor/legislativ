@@ -127,6 +127,7 @@ def test_legacy_read_only_atomic_upgrade_and_limits(saved, monkeypatch):
     state, run = saved
     path = dosare.cale(state)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")

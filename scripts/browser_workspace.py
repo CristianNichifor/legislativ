@@ -85,6 +85,7 @@ def route(stare, route, qs, body, method="GET"):
         dependente_dovezi,
         legaturi_ue,
         legaturi_ue_store,
+        note_manuale,
         propuneri,
         revizuiri,
         surse_propuneri,
@@ -108,6 +109,7 @@ def route(stare, route, qs, body, method="GET"):
             "/revizuiri": lambda: revizuiri.salveaza(path, body),
             "/verificari": lambda: verificari_dovezi.salveaza(stare, body),
             "/context": lambda: revizuiri.context_salveaza(path, body),
+            "/note": lambda: note_manuale.salveaza(path, body),
             "/propuneri": lambda: propuneri.salveaza(path, body, stare),
             "/propuneri/previzualizare": lambda: propuneri.previzualizeaza(stare, body),
             "/propuneri/analize": lambda: analize_propuneri.salveaza(stare, body),
@@ -139,6 +141,11 @@ def route(stare, route, qs, body, method="GET"):
             ),
             "/coada": lambda: verificari_dovezi.coada(path, offset, get("stare", "toate")),
             "/coada-ue": lambda: coada_ue.lista(path, offset, get("stare", "toate")),
+            "/note": lambda: (
+                note_manuale.citeste(path, ident, get("note_id"))
+                if "note_id" in qs
+                else note_manuale.lista(path, ident, offset, get("status"))
+            ),
             "/dovezi": lambda: dependente_dovezi.verifica(stare, ident, run),
             "/propuneri": lambda: propuneri.citeste_cerere(path, qs),
             "/propuneri/analize": lambda: analize_propuneri.citeste_cerere(path, qs),

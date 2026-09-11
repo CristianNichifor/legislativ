@@ -54,7 +54,7 @@ def test_save_retry_offline_history_export_backup_and_immutability(linked_case):
     dosare.backup(path, backup)
     assert history(backup, selected) == exported
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
         for sql in ("DELETE FROM legaturi_ue", "UPDATE legaturi_ue SET creat_la='bad'"):
             with pytest.raises(sqlite3.IntegrityError, match="append-only"):
                 con.execute(sql)
@@ -108,6 +108,7 @@ def test_schema8_read_no_migration_failed_write_rollback_and_upgrade(linked_case
     state, path, selected = linked_case
     req = request(state, selected)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE legaturi_ue")
         con.execute("PRAGMA user_version=8")
     before = path.read_bytes()

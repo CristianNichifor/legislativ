@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 ENGINE_VERSION = "matrice-dosar-v2"
 LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
@@ -81,7 +81,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, 4, 5, 6, 7, 8, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -177,6 +177,21 @@ def _open(path, *, write=False):
             from scripts.legaturi_ue_schema import migreaza
 
             migreaza(con)
+            version = 9
+        if write and version == 9:
+            con.execute(
+                "CREATE TABLE note_manuale (id TEXT PRIMARY KEY, dosar_id TEXT NOT NULL "
+                "REFERENCES dosare(id), titlu TEXT NOT NULL, tip TEXT NOT NULL, "
+                "act_id TEXT NOT NULL, "
+                "locator TEXT NOT NULL, citat_dovada TEXT NOT NULL, sursa_url TEXT NOT NULL, "
+                "sursa_sha256 TEXT NOT NULL, rationament TEXT NOT NULL, stare TEXT NOT NULL, "
+                "revizie INTEGER NOT NULL, creat_la TEXT NOT NULL, modificat_la TEXT NOT NULL)"
+            )
+            con.execute(
+                "CREATE INDEX note_manuale_dosar ON note_manuale(dosar_id,modificat_la DESC,id)"
+            )
+            version = 10
+        if write:
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con
         con.commit()
