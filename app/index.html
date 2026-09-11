@@ -431,6 +431,14 @@
   .acquisition-workspace [data-acquisition-plx]{display:block;width:100%;text-align:left;white-space:normal;overflow-wrap:anywhere;border:0;border-left:3px solid transparent;border-radius:0;background:transparent;padding:.65rem;font:inherit}
   .acquisition-workspace [data-acquisition-plx][aria-current=true]{border-color:#18745b;background:#e5f1ec}
   .acquisition-workspace nav small{display:block;color:var(--ink-mute);font-size:.75rem;margin-top:.3rem}
+  .lifecycle-toolbar{display:flex;flex-wrap:wrap;gap:.45rem;align-items:end;margin:.55rem 0}
+  .lifecycle-toolbar label{min-width:min(100%,220px)}
+  .lifecycle-list{display:grid;gap:.5rem;margin:.6rem 0}
+  .lifecycle-row{border-left:3px solid var(--rule);padding:.55rem .65rem;background:var(--surface)}
+  .lifecycle-row h4{font-size:.9rem;margin:.05rem 0 .25rem;overflow-wrap:anywhere}
+  .lifecycle-row p{font-size:.76rem;line-height:1.45;margin:.22rem 0;overflow-wrap:anywhere}
+  .lifecycle-row-attention{border-color:var(--material)}
+  .lifecycle-row-ok{border-color:var(--accent)}
   #acquisition-list{max-height:34rem;overflow:auto}
   #acquisition-detail select{width:100%;min-width:0}
   #acquisition-detail h4{font-size:1rem}
@@ -1291,6 +1299,18 @@
           <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
           <div id="source-content"></div>
         </section>
+        <details class="dossier-library" id="lifecycle-tracker">
+          <summary>Proiecte urmărite · Stadiu legislativ</summary>
+          <form id="lifecycle-search" class="lifecycle-toolbar">
+            <label>Caută proiect<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label>
+            <label>Filtru<select id="lifecycle-filter"><option value="attention">Necesită atenție</option><option value="stale">Date vechi</option><option value="unknown">Etapă necunoscută</option><option value="toate">Toate proiectele</option></select></label>
+            <button type="submit" class="ghost mini">Caută</button>
+            <button type="button" id="lifecycle-refresh" class="ghost mini" title="Reîncarcă stadiile locale" aria-label="Reîncarcă stadiile locale">↻</button>
+          </form>
+          <p id="lifecycle-status" class="hint" role="status">Stadii neîncărcate.</p>
+          <div id="lifecycle-list" class="lifecycle-list"></div>
+          <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
+        </details>
         <details class="dossier-library" id="source-project-manager">
           <summary>Surse parlamentare · Import și actualizări</summary>
           <form id="acquisition-search" class="dossier-actions"><label>Caută inițiativa<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label><button type="submit" class="ghost mini">Caută</button><button type="button" id="acquisition-refresh" class="ghost mini" title="Reîncarcă datele locale" aria-label="Reîncarcă datele locale">↻</button></form>
@@ -5217,6 +5237,68 @@ $('#source-export').onclick=()=>{
     $('#source-status').textContent='Export JSON inițiat.';
   }catch{$('#source-status').textContent='Exportul nu a reușit.';}
 };
+const LIFECYCLE={offset:0,query:'',filter:'attention',sequence:0,loaded:false,last:null};
+const LIFECYCLE_FILTERS={attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',toate:'toate proiectele'};
+function lifecycleStateLabel(project){
+  if(project.source_state==='stale') return 'Date vechi';
+  if(project.source_state==='unknown') return 'Etapă necunoscută';
+  if(project.source_state==='unavailable') return 'Sursă indisponibilă';
+  return project.stage?.label||project.status||'Stadiu necunoscut';
+}
+function lifecycleVisible(project,filter=LIFECYCLE.filter){
+  if(filter==='toate') return true;
+  if(filter==='stale') return project.source_state==='stale'||project.stale;
+  if(filter==='unknown') return project.source_state==='unknown'||project.stage?.key==='unknown';
+  return !!project.needs_attention;
+}
+function lifecycleRowHtml(project,index=0){
+  const attention=project.needs_attention?'attention':'ok', url=urlSigur(project.url);
+  const stage=project.stage?.label||project.status||'Stadiu necunoscut';
+  const source=url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Fișa oficială</a>`:'Fișă oficială necunoscută';
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4><p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p><p>${source}</p><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button></article>`;
+}
+function lifecycleFilteredProjects(data,filter=LIFECYCLE.filter){
+  return (data.projects||[]).filter(p=>lifecycleVisible(p,filter));
+}
+function lifecycleListHtml(data,filter=LIFECYCLE.filter){
+  const projects=lifecycleFilteredProjects(data,filter);
+  if(!projects.length) return `<p>Niciun proiect în filtrul „${esc(LIFECYCLE_FILTERS[filter]||filter)}”.</p>`;
+  return projects.map(lifecycleRowHtml).join('');
+}
+async function lifecycleApi(params){
+  const response=await fetch('/api/lifecycle-proiecte?'+new URLSearchParams(params));
+  const d=await response.json().catch(()=>({error:'Stadiile proiectelor nu sunt disponibile.'}));
+  if(!response.ok||d.error) throw new Error(d.error||'Stadiile proiectelor nu sunt disponibile.');
+  return d;
+}
+function renderLifecycleList(){
+  const data=LIFECYCLE.last, list=$('#lifecycle-list');
+  if(!data){list.innerHTML='';return;}
+  const projects=lifecycleFilteredProjects(data,LIFECYCLE.filter);
+  list.innerHTML=lifecycleListHtml(data,LIFECYCLE.filter);
+  list.querySelectorAll('[data-lifecycle-open]').forEach(button=>{
+    button.onclick=()=>openAcquisitionProject(projects[Number(button.dataset.lifecycleOpen)]?.project_id);
+  });
+}
+async function loadLifecycleList(offset=0){
+  const token=++LIFECYCLE.sequence;LIFECYCLE.offset=offset;
+  const status=$('#lifecycle-status'), list=$('#lifecycle-list');
+  $('#lifecycle-prev').disabled=true;$('#lifecycle-next').disabled=true;
+  status.textContent='Încarc stadiile proiectelor…';list.innerHTML='';
+  try{
+    const data=await lifecycleApi({q:LIFECYCLE.query,offset:String(offset),limit:'100'});
+    if(token!==LIFECYCLE.sequence)return;
+    LIFECYCLE.loaded=true;LIFECYCLE.last=data;renderLifecycleList();
+    const visible=lifecycleFilteredProjects(data).length;
+    $('#lifecycle-prev').disabled=!offset;$('#lifecycle-next').disabled=!data.mai_multe;
+    status.textContent=`${visible} proiecte afișate din ${data.returned||0} citite local · sursă ${data.source_status||'necunoscută'} · fără consultare online.`;
+  }catch(err){
+    if(token===LIFECYCLE.sequence){
+      status.textContent=err.message;
+      list.innerHTML='<p>Stadiile nu sunt disponibile în această rulare. Folosește sursele parlamentare pentru o inițiativă concretă.</p>';
+    }
+  }
+}
 const ACQUISITION={offset:0,query:'',selected:null,sequence:0,busy:false,loaded:false,documents:new Map(),versions:new Map()};
 const IMPORT_STATES={extras:'Text extras',ocr_necesar:'Necesită OCR / verificare',fara_text:'Fără text extras'};
 const ACQUISITION_ACTIONS={descopera:'Consultare fișă',importa:'Import document',actualizeaza:'Verificare și import actualizare'};
@@ -5321,6 +5403,19 @@ $('#acquisition-search').onsubmit=e=>{e.preventDefault();if(ACQUISITION.busy)ret
 $('#acquisition-refresh').onclick=()=>loadAcquisitionList(ACQUISITION.offset);
 $('#acquisition-prev').onclick=()=>loadAcquisitionList(Math.max(0,ACQUISITION.offset-25));
 $('#acquisition-next').onclick=()=>loadAcquisitionList(ACQUISITION.offset+25);
+async function openAcquisitionProject(plx){
+  if(!plx){$('#lifecycle-status').textContent='Proiect fără identificator.';return;}
+  const panel=$('#source-project-manager'),form=$('#acquisition-search');
+  panel.open=true;form.elements.q.value=plx;ACQUISITION.query=plx;
+  await loadAcquisitionList(0);
+  if(!ACQUISITION.busy) await loadAcquisitionDetail(plx);
+}
+$('#lifecycle-search').onsubmit=e=>{e.preventDefault();LIFECYCLE.query=e.currentTarget.elements.q.value;loadLifecycleList();};
+$('#lifecycle-filter').onchange=e=>{LIFECYCLE.filter=e.target.value;renderLifecycleList();if(LIFECYCLE.last){const visible=lifecycleFilteredProjects(LIFECYCLE.last).length;$('#lifecycle-status').textContent=`${visible} proiecte afișate în filtrul ${LIFECYCLE_FILTERS[LIFECYCLE.filter]}.`;}};
+$('#lifecycle-refresh').onclick=()=>loadLifecycleList(LIFECYCLE.offset);
+$('#lifecycle-prev').onclick=()=>loadLifecycleList(Math.max(0,LIFECYCLE.offset-100));
+$('#lifecycle-next').onclick=()=>loadLifecycleList(LIFECYCLE.offset+100);
+$('#lifecycle-tracker').ontoggle=e=>{if(e.currentTarget.open&&!LIFECYCLE.loaded)loadLifecycleList();};
 $('#source-project-manager').ontoggle=e=>{if(e.currentTarget.open&&!ACQUISITION.loaded)loadAcquisitionList();};
 async function loadMatrice(forta){
   loadSourceInventory();
