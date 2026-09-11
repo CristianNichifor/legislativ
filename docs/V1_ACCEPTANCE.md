@@ -40,9 +40,11 @@ commit, Python/SQLite versions and manifest hash in the acceptance record.
 The 2026-09-11 pilot record built a valid public release from the two committed
 authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
 search, workbench save and private rollback survival. The run measured 2 acts,
-1,635 provisions, 3 search results, 8 EU references signaled and 0 reviewable
-gap/CCR findings. Therefore the real finding-to-proposal save remains unexercised;
-this is a data/review limitation, not an application pass/fail threshold.
+1,635 provisions, 3 search results, 8 EU references signaled, 0 EU texts imported
+locally and 0 reviewable gap/CCR findings. Therefore the real finding-to-proposal
+save remains unexercised; this is a data/review limitation, not an application
+pass/fail threshold. Bounded EU assessment also remains blocked until the referenced
+CELEX texts are imported from official EU sources.
 
 The authentic etalon counts publisher S_LGI marks matched by normalized text
 containment anywhere in the document. **Those marks are locators, not citations of
@@ -80,6 +82,9 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
   authentic reviewable gap/CCR finding, then save reviewer-approved proposal
   wording from that finding. The 2026-09-11 run has
   `workbench.finding_to_proposal = not_exercised_no_authentic_gap_or_ccr_finding`.
+- Import official EU text for the 8 CELEX references signaled by `lege-98-2016`
+  or explicitly narrow the pilot so EU assessment is out of scope. The current
+  pilot records `workbench.eu_availability.neimportate = 8`.
 - Record missing/extraction/false-positive cases and agreed tolerances; no invented
   passing threshold or accuracy claim. Resolve release-blocking findings and rerun.
 - Integrate and assess M3 source-change, M4 applicability and M6 UX changes, plus

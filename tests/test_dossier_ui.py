@@ -99,6 +99,35 @@ def test_saved_run_provenance_is_escaped_and_labeled_historical():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_law_workbench_shows_eu_availability_and_import_action():
+    source = (
+        APP.read_text()
+        .split("function fisaActHtml", 1)[1]
+        .split("async function comutaFisaAct", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const nf=n=>String(n);const mActiuni=()=>'';function fisaActHtml"
+        + source
+        + "const html=fisaActHtml({gasit:true,act_id:'lege-98-2016',titlu:'Lege',"
+        "viduri:[],neconstitutionale:[],initiative:[],pasi:[],limitari:[],"
+        "referinte_ue:[{celex:'32014L0024',importat:false,mentionari:2,"
+        "comanda_import:'python -m scripts.achizitii_ue 32014L0024'},"
+        "{celex:'32018R1805',importat:true,mentionari:1}]});"
+        "assert.ok(html.includes('<b>2</b> referințe UE'));"
+        "assert.ok(html.includes('<b>1</b> cu text local'));"
+        "assert.ok(html.includes('<b>1</b> de importat'));"
+        "assert.ok(html.includes('referințe UE fără text local'));"
+        "assert.ok(html.includes('lipsește din eu.db'));"
+        "assert.ok(html.includes('text local disponibil'));"
+        "assert.ok(html.includes('python -m scripts.achizitii_ue 32014L0024'));"
+    )
+    result = subprocess.run(["node", "-e", code], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_review_form_escapes_evidence_and_history():
     source = (
         APP.read_text()

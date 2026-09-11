@@ -3527,11 +3527,12 @@ function fisaActHtml(d){
   if(d.eroare) return `<p class="empty">Nu pot încărca fișa pentru ${esc(d.act_id)}.</p>`;
   if(!d.gasit) return `<p class="empty">${esc((d.limitari||[])[0]||"Actul nu este în corpusul local.")}</p>`;
   const vid=d.viduri||[], nec=d.neconstitutionale||[], inits=d.initiative||[], ue=d.referinte_ue||[];
+  const ueImportate=ue.filter(ref=>ref.importat).length, ueLipsa=ue.length-ueImportate;
   let h=`<div class="parc"><div class="parc-h">Fișă de lucru — ${esc(d.act_id)}</div>`
     +`<p class="watch-meta">${esc((d.titlu||"").slice(0,150))}</p>`
     +`<p class="watch-meta"><b>${d.citari||0}</b> acte îl citează · amendat de <b>${d.amendat||0}</b>`
-    +` · <b>${vid.length}</b> lacune · <b>${nec.length}</b> CCR · <b>${inits.length}</b> inițiative`
-    +(ue.length?` · <b>${ue.length}</b> CELEX`:"")+`</p>`;
+    +` · <b>${vid.length}</b> lacune · <b>${nec.length}</b> CCR · <b>${inits.length}</b> inițiative</p>`
+    +(ue.length?`<p class="watch-meta"><b>${ue.length}</b> referințe UE · <b>${ueImportate}</b> cu text local · <b>${ueLipsa}</b> de importat</p>`:"");
   h+=`<div class="parc-h">Următorii pași</div>`+(d.pasi||[]).map(p=>`<div class="matrix-ex note">${esc(p)}</div>`).join("");
   if(vid.length) h+=`<div class="parc-h">Lacune pe acest act</div>`+vid.map(v=>`<div class="matrix-ex ${esc(v.severitate||"material")}">`
     +`<span class="dom-cheie">${esc(v.act_id)}</span> ${esc(locRo(v.locator||""))} `
@@ -3550,8 +3551,10 @@ function fisaActHtml(d){
   else h+=`<p class="hint">Nicio inițiativă parlamentară în lucru nu atinge acest act în indexul instalat.</p>`;
   if(inits.length>1) h+=`<div class="dossier-actions"><button type="button" class="ghost mini impact-compare" data-act="${esc(d.act_id)}">compară proiecte pe acest act</button></div>`;
   h+=`<div class="parc-h">Referințe UE</div>`;
+  if(ue.length&&ueLipsa) h+=`<div class="matrix-ex material"><b>${nf(ueLipsa)} referințe UE fără text local</b><br><span class="hint">Importă CELEX-urile lipsă înainte de a evalua obligații, lacune sau contradicții cu dreptul UE.</span></div>`;
   if(ue.length) h+=ue.map(ref=>`<div class="matrix-ex note"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
-    +`${ref.importat?"importat":"lipsește"} · ${nf(ref.mentionari||0)} menționări</div>`).join("");
+    +`${ref.importat?"text local disponibil":"lipsește din eu.db"} · ${nf(ref.mentionari||0)} menționări`
+    +(ref.comanda_import&&!ref.importat?`<br><code>${esc(ref.comanda_import)}</code>`:"")+`</div>`).join("");
   else h+=`<p class="hint">Nu există referințe CELEX explicite în acest act în datele locale.</p>`;
   h+=(d.limitari||[]).map(x=>`<p class="hint" style="margin:.25rem 0">${esc(x)}</p>`).join("");
   return h+`</div>`;

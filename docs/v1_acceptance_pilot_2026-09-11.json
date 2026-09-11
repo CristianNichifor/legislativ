@@ -1,7 +1,7 @@
 {
   "status": "pilot_runtime_path_passed_domain_acceptance_pending",
   "date": "2026-09-11",
-  "tested_commit": "origin/main after PR161",
+  "tested_commit": "origin/main after PR162",
   "python": "3.12.12",
   "sqlite": "3.50.4",
   "source_manifest": {
@@ -48,6 +48,112 @@
         "amendamente_primite": 0,
         "referinte_ue": 8
       },
+      "eu_availability": {
+        "total": 8,
+        "text_importat": 0,
+        "text_romanian": 0,
+        "text_english": 0,
+        "metadata_only": 0,
+        "neimportate": 8,
+        "referinte": [
+          {
+            "celex": "32014L0024",
+            "mentionari": 11,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 32014L0024 --db eu.db"
+          },
+          {
+            "celex": "32004L0018",
+            "mentionari": 4,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 32004L0018 --db eu.db"
+          },
+          {
+            "celex": "31987D0095",
+            "mentionari": 3,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 31987D0095 --db eu.db"
+          },
+          {
+            "celex": "31989L0106",
+            "mentionari": 3,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 31989L0106 --db eu.db"
+          },
+          {
+            "celex": "32011R0305",
+            "mentionari": 3,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 32011R0305 --db eu.db"
+          },
+          {
+            "celex": "32012R0648",
+            "mentionari": 3,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 32012R0648 --db eu.db"
+          },
+          {
+            "celex": "32013R0575",
+            "mentionari": 3,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 32013R0575 --db eu.db"
+          },
+          {
+            "celex": "31993R0339",
+            "mentionari": 2,
+            "importat": false,
+            "stare": "neimportat",
+            "text_romanian": false,
+            "text_english": false,
+            "limba_text": null,
+            "manifestari": 0,
+            "instantanee": 0,
+            "comanda_import": "uv run python -m scripts.cellar 31993R0339 --db eu.db"
+          }
+        ]
+      },
       "reviewable_findings": 0,
       "finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
       "proposal_candidate_id": null,
@@ -62,6 +168,7 @@
   "conclusion": {
     "runtime_release_update_search_workbench_dossier_rollback": "passed",
     "real_finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
+    "eu_text_availability": "not_imported_8_of_8",
     "domain_acceptance": "pending",
     "release_acceptance": "pending"
   }
