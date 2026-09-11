@@ -117,6 +117,49 @@ def test_runs_preserve_generated_evidence_and_deduplicate(state, monkeypatch):
         dosare.salveaza_rulare(state, request)
 
 
+def test_runs_can_save_and_reopen_law_workbench(state, monkeypatch):
+    create(state)
+    report = {
+        "gasit": True,
+        "tip_dosar": "fisa-act",
+        "act_id": "lege-98-2016",
+        "acte": {"acte": [{"act_id": "lege-98-2016"}]},
+        "rand": {
+            "exemple": {
+                "viduri": [
+                    {
+                        "act_id": "lege-98-2016",
+                        "locator": "art7",
+                        "text": "Lacună",
+                    }
+                ]
+            }
+        },
+        "referinte_ue": [],
+        "markdown": "# Fișă de lucru: lege-98-2016",
+    }
+    monkeypatch.setattr("scripts.servicii._fisa_act", lambda qs, s: report)
+
+    request = {"dosar_id": ID, "filtre": {"act": "lege-98-2016"}}
+    first = dosare.salveaza_rulare(state, request)
+
+    assert dosare.salveaza_rulare(state, request) == first
+    assert first["engine_version"] == dosare.LAW_WORKBENCH_ENGINE_VERSION
+    assert first["filtre"] == {"act": "lege-98-2016"}
+    assert first["raport"]["tip_dosar"] == "fisa-act"
+    assert first["dovezi"]["acte"]["acte"][0]["act_id"] == "lege-98-2016"
+    assert dosare.rulari(dosare.cale(state), ID, first["id"])["raport"]["markdown"].startswith(
+        "# Fișă de lucru"
+    )
+
+    with pytest.raises(ValueError, match="nu se amestecă"):
+        dosare.salveaza_rulare(
+            state, {"dosar_id": ID, "filtre": {"act": "lege-98-2016", "emitent": "Parlamentul"}}
+        )
+    with pytest.raises(ValueError, match="nu salvează comparații"):
+        dosare.salveaza_rulare(state, {**request, "proiecte": {}})
+
+
 def test_concurrent_create_and_backup_restore(state, tmp_path):
     with ThreadPoolExecutor(max_workers=2) as pool:
         rows = list(pool.map(lambda _: create(state), range(2)))

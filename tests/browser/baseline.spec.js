@@ -22,6 +22,15 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#f-an-min')).toHaveClass(/civic-select/);
     await expect(page.locator('#f-an-max')).toHaveClass(/civic-select/);
     expect(requests.some(url => url.endsWith('/vendor/civic-ui/styles.css'))).toBe(true);
+    await page.locator('#tab-matrice').click();
+    await page.locator('#dossier-library > summary').click();
+    await expect(page.locator('#dossier-local')).toBeVisible();
+    await page.locator('#dossier-create').evaluate(form => form.closest('details').open = true);
+    await page.locator('#dossier-create input[name="titlu"]').fill(`Fișă act ${width}`);
+    await page.locator('#dossier-create textarea[name="intrebare"]').fill('Ce afectează legea?');
+    await page.locator('#dossier-create input[name="domeniu"]').fill('test');
+    await page.locator('#dossier-create button[type="submit"]').click();
+    await expect(page.locator('#dossier-status')).toContainText('Dosar ales');
     await page.locator('#tab-cauta').click();
     await expect(page.locator('#pane-cauta')).toBeVisible();
     await page.locator('#q').fill('registrul demonstrativ');
@@ -39,6 +48,9 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#cauta-out .law-workbench').first()).toContainText('Fișă de lucru');
     await expect(page.locator('#cauta-out .law-workbench').first()).toContainText('Următorii pași');
     await expect(page.locator('#cauta-out .law-workbench').first()).toContainText('Inițiative pendinte');
+    await page.locator('#cauta-out .law-workbench .dossier-actions button').first().click();
+    await expect(page.locator('#dossier-saved')).toContainText('fisa-act-v1');
+    await expect(page.locator('#dossier-saved')).toContainText('Fișă de lucru');
     await page.locator('#cauta-out .impact-watch').first().click();
     await expect(page.locator('#cauta-out .impact-watch').first()).toContainText('supravegheat');
     await page.screenshot({ path: info.outputPath(`search-${width}.png`), fullPage: true });

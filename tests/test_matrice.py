@@ -510,6 +510,9 @@ def test_law_workbench_collects_act_scoped_next_actions(tmp_path):
 
     assert out["gasit"] is True
     assert out["act_id"] == "lege-98-2016"
+    assert out["tip_dosar"] == "fisa-act"
+    assert out["rand"]["exemple"]["viduri"][0]["act_id"] == "lege-98-2016"
+    assert "# Fișă de lucru: lege-98-2016" in out["markdown"]
     assert out["viduri"][0]["actiuni"][0]["eticheta"] == "vezi prevederea"
     assert out["neconstitutionale"][0]["decizie"] == "decizie-9-1994"
     assert out["initiative"][0]["plx_id"] == "plx-1-2024"

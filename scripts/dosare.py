@@ -14,6 +14,7 @@ from pathlib import Path
 APPLICATION_ID = 0x4C445352
 SCHEMA_VERSION = 9
 ENGINE_VERSION = "matrice-dosar-v2"
+LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
 
 
@@ -428,7 +429,7 @@ def rulari(path, ident, run_id=None):
 
 
 def salveaza_rulare(stare, request):
-    from scripts.servicii import _matrice_dosar
+    from scripts.servicii import _fisa_act, _matrice_dosar
 
     if (
         not isinstance(request, dict)
@@ -441,6 +442,7 @@ def salveaza_rulare(stare, request):
     citeste(path, ident)
     filters = request["filtre"]
     if not isinstance(filters, dict) or set(filters) - {
+        "act",
         "emitent",
         "tip",
         "rang",
@@ -449,7 +451,12 @@ def salveaza_rulare(stare, request):
     }:
         raise ValueError("Filtre invalide.")
     filters = {k: _text(v, 300) for k, v in filters.items()}
-    if not filters.get("emitent"):
+    law_workbench = bool(filters.get("act"))
+    if law_workbench and set(filters) != {"act"}:
+        raise ValueError("Filtrele fișei de act nu se amestecă cu filtre de matrice.")
+    if law_workbench and "proiecte" in request:
+        raise ValueError("Fișa de act nu salvează comparații între proiecte.")
+    if not law_workbench and not filters.get("emitent"):
         raise ValueError("Emitentul este obligatoriu.")
     parent = request.get("sursa_rulare_id")
     projects = request.get("proiecte")
@@ -486,6 +493,8 @@ def salveaza_rulare(stare, request):
         if report.get("error"):
             raise ValueError(report["error"])
         report["selectie_proiecte"] = projects
+    elif law_workbench:
+        report = _fisa_act({"act": [filters["act"]]}, stare)
     else:
         report = _matrice_dosar({k: [v] for k, v in filters.items()}, stare)
     if not report.get("gasit"):
@@ -504,7 +513,13 @@ def salveaza_rulare(stare, request):
         from scripts.instantanee_ue import captureaza as capture_eu
 
         evidence["surse_ue"] = capture_eu(stare, evidence["referinte_ue"])
-    engine_version = "matrice-proiecte-v1" if projects else ENGINE_VERSION
+    engine_version = (
+        "matrice-proiecte-v1"
+        if projects
+        else LAW_WORKBENCH_ENGINE_VERSION
+        if law_workbench
+        else ENGINE_VERSION
+    )
     payload = _json(
         {"engine_version": engine_version, "filtre": filters, "raport": report, "dovezi": evidence}
     )
