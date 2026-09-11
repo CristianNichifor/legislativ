@@ -123,7 +123,15 @@ def lista(path, dossier_id, offset=0, status=None):
         params.append(status)
     with dosare._open(path) as con:
         if con.execute("PRAGMA user_version").fetchone()[0] < dosare.SCHEMA_VERSION:
-            return {"note": [], "total": 0, "offset": offset, "limita": 50}
+            return {
+                "note": [],
+                "total": 0,
+                "offset": offset,
+                "limita": 50,
+                "pe_stare": {},
+                "pe_tip": {},
+                "recente": [],
+            }
         rows = con.execute(
             f"SELECT * FROM note_manuale WHERE {where} ORDER BY modificat_la DESC,id "
             "LIMIT 50 OFFSET ?",
@@ -132,7 +140,33 @@ def lista(path, dossier_id, offset=0, status=None):
         total = con.execute(f"SELECT count(*) FROM note_manuale WHERE {where}", params).fetchone()[
             0
         ]
-        return {"note": [_row(row) for row in rows], "total": total, "offset": offset, "limita": 50}
+        by_status = {
+            row["stare"]: row["total"]
+            for row in con.execute(
+                "SELECT stare,count(*) AS total FROM note_manuale WHERE dosar_id=? GROUP BY stare",
+                (dossier_id,),
+            )
+        }
+        by_type = {
+            row["tip"]: row["total"]
+            for row in con.execute(
+                "SELECT tip,count(*) AS total FROM note_manuale WHERE dosar_id=? GROUP BY tip",
+                (dossier_id,),
+            )
+        }
+        recente = con.execute(
+            "SELECT * FROM note_manuale WHERE dosar_id=? ORDER BY modificat_la DESC,id LIMIT 5",
+            (dossier_id,),
+        ).fetchall()
+        return {
+            "note": [_row(row) for row in rows],
+            "total": total,
+            "offset": offset,
+            "limita": 50,
+            "pe_stare": by_status,
+            "pe_tip": by_type,
+            "recente": [_row(row) for row in recente],
+        }
 
 
 def salveaza(path, request):

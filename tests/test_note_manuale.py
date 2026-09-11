@@ -40,7 +40,11 @@ def test_manual_notes_save_update_list_and_reopen(state):
     assert first["status"] == "draft"
     assert first["revizie"] == 0
     assert note_manuale.citeste(path, ID, first["id"]) == first
-    assert note_manuale.lista(path, ID)["total"] == 1
+    listed = note_manuale.lista(path, ID)
+    assert listed["total"] == 1
+    assert listed["pe_stare"] == {"draft": 1}
+    assert listed["pe_tip"] == {"lacuna": 1}
+    assert listed["recente"][0]["id"] == first["id"]
 
     retry = note_manuale.salveaza(path, note_payload())
     assert retry == first
@@ -56,7 +60,10 @@ def test_manual_notes_save_update_list_and_reopen(state):
     assert changed["revizie"] == 1
     assert changed["status"] == "ready_for_review"
     assert changed["reasoning"].startswith("Dovada")
-    assert note_manuale.lista(path, ID, status="ready_for_review")["total"] == 1
+    ready = note_manuale.lista(path, ID, status="ready_for_review")
+    assert ready["total"] == 1
+    assert ready["pe_stare"] == {"ready_for_review": 1}
+    assert ready["pe_tip"] == {"lacuna": 1}
     assert note_manuale.lista(path, ID, status="draft")["total"] == 0
 
     with pytest.raises(ValueError, match="modificată"):
