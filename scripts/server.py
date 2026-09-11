@@ -44,6 +44,7 @@ to a separate `initiative.documente.db` beside the initiative database.
   narrowed by the same filters.
 - `GET /api/matrice-dosar?emitent=&tip=&rang=&domeniu=&problema=` — a printable work dossier for
   one matrix row.
+- `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET /api/ue/acoperire` — which CELEX ids cited by local laws/initiatives are already imported.
@@ -84,6 +85,7 @@ from scripts.servicii import (
     _dictionar,
     _docx,
     _domenii,
+    _fisa_act,
     _impact,
     _import_queue_ue,
     _importa,
@@ -314,6 +316,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 self._json(_citari(parse_qs(ruta.query).get("act", [""])[0], stare))
             elif ruta.path == "/api/supraveghere":
                 self._json(_supraveghere(parse_qs(ruta.query).get("act", [""])[0], stare))
+            elif ruta.path == "/api/fisa-act":
+                self._json(_fisa_act(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/redacteaza":
                 self._json(_redacteaza(parse_qs(ruta.query)))
             elif ruta.path == "/api/sugereaza":

@@ -2752,6 +2752,57 @@ def _targets(draft: str, stare: Stare) -> list[dict]:
     return out
 
 
+def _fisa_act(qs: dict, stare: Stare) -> dict:
+    act_id = _prima(qs, "act").strip()
+    if not act_id:
+        return {
+            "gasit": False,
+            "act_id": "",
+            "limitari": ["Alege un act pentru fișa de lucru."],
+        }
+    watch = _supraveghere(act_id, stare)
+    if not watch.get("cunoscut"):
+        return {**watch, "gasit": False, "limitari": ["Actul nu este în corpusul local."]}
+    viduri = [
+        {
+            **v,
+            "actiuni": _actiuni_prevedere(act_id, v.get("locator")),
+        }
+        for v in _raport_lista(stare.vid)
+        if v.get("act_id") == act_id
+    ][:5]
+    neconstitutionale = [
+        {
+            **n,
+            "actiuni": _actiuni_prevedere(act_id, n.get("locator")),
+        }
+        for n in _raport_lista(stare.neconstitutional)
+        if n.get("act_id") == act_id
+    ][:5]
+    referinte_ue = _referinte_ue_dosar(stare, {act_id}, limita=8)
+    pasi = ["Deschide prevederile afectate înainte de a scrie sau modifica text."]
+    if viduri:
+        pasi.append("Pentru lacune: verifică obligația, termenul și instrumentul lipsă.")
+    if neconstitutionale:
+        pasi.append("Pentru CCR: compară norma curentă cu decizia și marchează reparația.")
+    if watch.get("initiative"):
+        pasi.append("Pentru inițiative: compară proiectele pendinte înainte de text nou.")
+    if referinte_ue:
+        pasi.append("Pentru UE: verifică actele CELEX importate sau importă cele lipsă.")
+    return {
+        **watch,
+        "gasit": True,
+        "viduri": viduri,
+        "neconstitutionale": neconstitutionale,
+        "referinte_ue": referinte_ue,
+        "pasi": pasi,
+        "limitari": [
+            "Fișa de lucru agregă date locale; nu este verdict juridic.",
+            *list(watch.get("limitari") or []),
+        ],
+    }
+
+
 def _redacteaza(qs: dict) -> dict:
     """Turn a structured drafting intent into the mandated legistic text and title.
 

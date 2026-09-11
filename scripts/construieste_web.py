@@ -361,7 +361,7 @@ from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
                               _norma, _termeni, _dictionar, _regula, _impact,
-                              _cronologie, _citari, _supraveghere,
+                              _cronologie, _citari, _fisa_act, _supraveghere,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
                               _domenii, _matrice, _matrice_acte, _matrice_dosar, _prevedere,
@@ -397,6 +397,7 @@ def _raspunde(path, query, body, method='GET'):
     elif path == '/api/cronologie': out = _cronologie(qs.get('act',[''])[0], _stare)
     elif path == '/api/citari': out = _citari(qs.get('act',[''])[0], _stare)
     elif path == '/api/supraveghere': out = _supraveghere(qs.get('act',[''])[0], _stare)
+    elif path == '/api/fisa-act': out = _fisa_act(qs, _stare)
     elif path == '/api/redacteaza': out = _redacteaza(qs)
     elif path == '/api/sugereaza': out = _sugereaza(qs)
     elif path == '/api/consolidat': out = _consolidat(qs)
