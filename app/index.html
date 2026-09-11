@@ -3529,13 +3529,16 @@ function proiectImpactHtml(d){
     +`<p class="watch-meta">${esc((d.titlu||"").slice(0,140))}</p>`
     +`<p class="watch-meta"><b>${d.citari||0}</b> acte îl citează · amendat de <b>${d.amendat||0}</b>`
     +(d.ultima_modificare?` · ultima modificare: <b>${esc(d.ultima_modificare)}</b>`:"")+`</p>`;
-  if(!inits.length) return h+`<p class="hint">Nicio inițiativă parlamentară în lucru nu atinge acest act în datele instalate.</p></div>`;
+  if(d.initiative_status&&d.initiative_status!=="ok") return h+`<p class="hint">${esc((d.limitari||[]).join(" ")||"Registrul inițiativelor nu este disponibil.")}</p></div>`;
+  if(!inits.length) return h+`<p class="hint">Nicio inițiativă parlamentară în lucru nu atinge acest act în indexul instalat.</p></div>`;
   h+=`<div class="impact-h">Inițiative în lucru care îl ating (${inits.length})</div>`;
   h+=inits.map(i=>`<div class="watch-init"><span class="plx">${esc(i.plx_id)}</span>`
     +(i.senat_id?` · Senat ${esc(i.senat_id)}`:"")+` — ${esc((i.titlu||"").slice(0,130))} `
     +`<span class="hint">[${esc((i.stadiu||"").slice(0,50))}]</span>`
+    +(i.locatoare?.length?`<div class="hint">Ținte în act: ${esc(i.locatoare.map(locRo).join(", "))}</div>`:"")
     +` <button type="button" class="ghost mini parc-buton" data-plx="${esc(i.plx_id)}">parcurs</button>`
     +`<div class="parc-loc" data-loc="${esc(i.plx_id)}"></div></div>`).join("");
+  if(inits.length>1) h+=`<div class="dossier-actions"><button type="button" class="ghost mini impact-compare" data-act="${esc(d.act_id)}">compară proiecte pe acest act</button></div>`;
   return h+`</div>`;
 }
 async function comutaImpactProiecte(button){
@@ -3548,6 +3551,7 @@ async function comutaImpactProiecte(button){
     const d=await fetch("/api/supraveghere?act="+encodeURIComponent(act)).then(r=>r.json());
     out.innerHTML=proiectImpactHtml(d);
     out.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+    out.querySelectorAll(".impact-compare").forEach(b=>b.onclick=()=>deschideComparatieImpact(out,d));
     const count=card.querySelector(`.project-impact-count[data-act="${CSS.escape(act)}"]`);
     if(count) count.textContent=d.initiative?.length?`${d.initiative.length} inițiative în lucru`:"niciuna în lucru";
     button.textContent="ascunde proiectele";
@@ -3555,6 +3559,12 @@ async function comutaImpactProiecte(button){
     out.innerHTML=`<p class="empty">Sursele parlamentare nu sunt disponibile în această versiune.</p>`;
     button.textContent="reîncearcă proiectele";
   }finally{ button.disabled=false; }
+}
+function deschideComparatieImpact(host,d){
+  const box=document.createElement("div");
+  host.append(box);
+  renderProjectCompare(box,{emitent:"Parlamentul"},{initiative:d.initiative||[],tinte:[d.act_id],limitari:d.limitari||[]});
+  box.scrollIntoView({block:"nearest"});
 }
 async function runSearch(append=false){
   clearTimeout(searchTimer);
@@ -5157,6 +5167,10 @@ async function mArataProiecte(buton){
     const response=await fetch("/api/matrice-proiecte?"+new URLSearchParams(filtre));
     if(!response.ok) throw new Error("HTTP "+response.status);
     const d=await response.json(); if(!out.isConnected) return;
+    renderProjectCompare(out,filtre,d);
+  }catch(e){out.textContent="Nu am putut încărca inițiativele.";}
+}
+function renderProjectCompare(out,filtre,d){
     if(!(d.initiative||[]).length){
       out.textContent="Nu sunt inițiative eligibile în selecția disponibilă. "+(d.limitari||[]).join(" "); return;
     }
@@ -5241,7 +5255,6 @@ async function mArataProiecte(buton){
       }catch(e){ result.textContent="Comparația nu a reușit. Reîncearcă."; }
       finally{submit.disabled=false;}
     };
-  }catch(e){out.textContent="Nu am putut încărca inițiativele.";}
 }
 function mContradictiiHtml(d){
   let h=`<div class="parc-h">Contradicții candidate · neconfirmate · necesită jurist</div>`;
