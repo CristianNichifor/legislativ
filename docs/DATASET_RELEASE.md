@@ -115,6 +115,20 @@ Files are hashed in 1 MiB chunks. Existing manifests and output proposals are no
 overwritten. Failed builds may leave a partial staging folder; start a fresh folder.
 Freeze staging files throughout building, verification and uploading.
 
+If the release folder is already built and verified, skip the rebuild:
+
+```bash
+RELEASE_DIR=/home/cristianvn/.local/share/legislativ/release-payload-2026-09-10 \
+PREFIX=2026-09-10 \
+CF_ACCOUNT=432316a05c0d6000c6e196fe32e47dd7 \
+CF_R2_TOKEN_OP='op://vault/item/credential' \
+infra/publica-release-existenta.sh --latest
+```
+
+This script refuses an occupied immutable prefix, uploads payloads first, checks
+remote bytes, uploads `dataset-release.json` last, then promotes `channel.json`
+only with `--latest`.
+
 `--published-eu /path/to/curated-eu.db` explicitly copies a public standalone EU
 database to `eu.db`. The source is checked for WAL/sidecars and private objects
 before copying; it is never checkpointed, mutated or discovered automatically.

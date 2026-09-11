@@ -53,7 +53,11 @@ echo "── 1/5 copiile publicate ───────────────
 uv run python -m scripts.publica --sursa "$CORPUS" --tinta "$LUCRU/publicat.db" --fel corpus
 for pereche in "graf.db:graf-publicat.db" "initiative.db:initiative-publicat.db"; do
   sursa=${pereche%%:*}; tinta=${pereche##*:}
-  [ -f "$sursa" ] && uv run python -m scripts.publica --sursa "$sursa" --tinta "$LUCRU/$tinta" --fel auxiliar
+  if [ -f "$sursa" ]; then
+    fel=auxiliar
+    [ "$sursa" != initiative.db ] || fel=initiative-public
+    uv run python -m scripts.publica --sursa "$sursa" --tinta "$LUCRU/$tinta" --fel "$fel"
+  fi
 done
 
 echo "── 2/5 indexul vechi (felii) ────────────────────────────────────"
