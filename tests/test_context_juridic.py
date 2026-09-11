@@ -158,6 +158,7 @@ def test_history_pagination_and_no_transfer(case):
 def test_v3_read_no_migration_and_failed_write_rolls_back(case):
     _, path, run, req = case
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")
         con.execute("DROP TABLE legaturi_ue")

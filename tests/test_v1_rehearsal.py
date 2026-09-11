@@ -28,9 +28,11 @@ def test_rehearsal_repeatable_and_honest(tmp_path, monkeypatch):
         "recovery_rows": 3,
         "recoverable_drafts": 2,
         "tombstones": 1,
+        "manual_notes": 1,
     }
     counts = first["workflow"]["restored_row_counts"]
     assert counts["analize_propuneri"] == 2
+    assert counts["note_manuale"] == 1
     assert counts["dosare_stare"] == 1 and counts["ciorne"] == 3
     if dosare.SCHEMA_VERSION >= 9:
         assert counts["legaturi_ue"] == 1
@@ -123,6 +125,19 @@ def test_backup_missing_recovery_table_fails(tmp_path, monkeypatch):
         backup(path, destination)
         with sqlite3.connect(destination) as con:
             con.execute("DROP TABLE ciorne")
+
+    monkeypatch.setattr(dosare, "backup", incomplete)
+    with rehearsal.offline(), pytest.raises(RuntimeError, match="Restore changed logical data"):
+        rehearsal.workflow(tmp_path, json.loads(rehearsal.MANIFEST.read_text()))
+
+
+def test_backup_missing_manual_note_table_fails(tmp_path, monkeypatch):
+    backup = dosare.backup
+
+    def incomplete(path, destination):
+        backup(path, destination)
+        with sqlite3.connect(destination) as con:
+            con.execute("DROP TABLE note_manuale")
 
     monkeypatch.setattr(dosare, "backup", incomplete)
     with rehearsal.offline(), pytest.raises(RuntimeError, match="Restore changed logical data"):

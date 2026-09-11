@@ -26,7 +26,7 @@ def test_trusted_path_does_not_change_report_source(tmp_path):
     assert state.date_dir == tmp_path / "reports"
     browser.initialize(state.dosare_db)
     with sqlite3.connect(state.dosare_db) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 def test_router_uses_shared_proposal_analysis_services(case):
@@ -87,13 +87,13 @@ def test_import_checkpoints_wal_mode(tmp_path):
 @pytest.mark.parametrize(
     "variant", ["minimal", "foreign", "missing", "view", "generated", "virtual"]
 )
-def test_import_rejects_spoofed_schema9(tmp_path, variant):
+def test_import_rejects_spoofed_schema10(tmp_path, variant):
     path = tmp_path / "spoof.db"
     if variant not in {"minimal", "foreign"}:
         browser.initialize(path)
     with sqlite3.connect(path) as con:
         con.execute(f"PRAGMA application_id={dosare.APPLICATION_ID}")
-        con.execute("PRAGMA user_version=9")
+        con.execute(f"PRAGMA user_version={dosare.SCHEMA_VERSION}")
         if variant == "foreign":
             con.execute("CREATE TABLE foreign_data(value)")
         elif variant == "missing":
@@ -113,11 +113,12 @@ def test_import_migrates_canonical_schema8(tmp_path):
     path = tmp_path / "v8.db"
     browser.initialize(path)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE legaturi_ue")
         con.execute("PRAGMA user_version=8")
     browser.validate(path)
     with sqlite3.connect(path) as con:
-        assert con.execute("PRAGMA user_version").fetchone()[0] == 9
+        assert con.execute("PRAGMA user_version").fetchone()[0] == dosare.SCHEMA_VERSION
 
 
 def test_route_rejects_unsupported_method_and_acquisition(tmp_path):

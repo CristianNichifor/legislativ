@@ -140,6 +140,7 @@ def test_old_schemas_read_without_migration(state, version):
     seed(state)
     path = dosare.cale(state)
     with sqlite3.connect(path) as con:
+        con.execute("DROP TABLE note_manuale")
         con.execute("DROP TABLE verificari_dovezi")
         con.execute("DROP TABLE contexte_juridice")
         con.execute("DROP TABLE ciorne")

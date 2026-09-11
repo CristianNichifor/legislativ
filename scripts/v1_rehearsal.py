@@ -20,6 +20,7 @@ from scripts import (
     dosare,
     etalon_real,
     interventii_propuneri,
+    note_manuale,
     parsare,
     propuneri,
     revizuiri,
@@ -344,6 +345,23 @@ def workflow(root, manifest):
     state = state_at(root)
     path = dosare.cale(state)
     dosare.creeaza(path, {"id": IDENT, "titlu": "PROPOSED procurement fixture pilot"})
+    manual_note = note_manuale.salveaza(
+        path,
+        {
+            "id": "1" * 32,
+            "dosar_id": IDENT,
+            "revizie": 0,
+            "title": "SYNTHETIC manual gap note",
+            "type": "lacuna",
+            "act_id": "lege-98-2016",
+            "locator": "art1",
+            "evidence_quote": "Synthetic manual evidence.",
+            "source_url": "",
+            "source_hash": "",
+            "reasoning": "Rehearsal only.",
+            "status": "draft",
+        },
+    )
     request = {"dosar_id": IDENT, "filtre": {"emitent": "PARLAMENTUL"}}
     actual = dosare.salveaza_rulare(state, request)
     require(actual == dosare.salveaza_rulare(state, request), "Report retry duplicated")
@@ -415,9 +433,11 @@ def workflow(root, manifest):
     retained_analyses = analysis_exports(path)
     require(len(retained_analyses) == 2, "Expected baseline and reassessment history")
     recovery_list = dosare.lista_ciorne(path)
+    manual_notes = note_manuale.lista(path, IDENT)
     before = snapshot(path)
     if eu_link:
         require(len(before["legaturi_ue"]) == 1, "EU link missing from full-row backup")
+    require(len(before["note_manuale"]) == 1, "Manual note missing from full-row backup")
     backup = root / "backup.db"
     dosare.backup(path, backup)
     restored_root = root / "restored"
@@ -442,6 +462,11 @@ def workflow(root, manifest):
     require(analysis_exports(restored) == retained_analyses, "Restore lost an analysis version")
     require(dosare.metadata(restored, IDENT) == archived, "Restore lost archived metadata")
     require(dosare.lista_ciorne(restored) == recovery_list, "Restore changed recovery library")
+    require(note_manuale.lista(restored, IDENT) == manual_notes, "Restore changed manual notes")
+    require(
+        note_manuale.citeste(restored, IDENT, manual_note["id"]) == manual_note,
+        "Restored manual note changed",
+    )
     for ident, saved in recovery.items():
         require(dosare.citeste_ciorna(restored, ident) == saved, "Restore changed recovery data")
     require(dosare.citeste(restored, IDENT) == dossier, "Restored dossier changed")
@@ -498,6 +523,7 @@ def workflow(root, manifest):
             "recovery_rows": len(recovery),
             "recoverable_drafts": 2,
             "tombstones": 1,
+            "manual_notes": manual_notes["total"],
         },
         "analysis_checks": {c["cheie"]: c["stare"] for c in result["controale"]},
         "restored_row_counts": {k: len(v) for k, v in before.items()},
