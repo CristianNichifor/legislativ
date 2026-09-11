@@ -45,6 +45,10 @@ literal LIKE matching; Romanian diacritic folding is not provided here.
 EU/Cellar and national-corpus acquisition remain on their existing separate paths;
 this batch does not add remote EU imports or bulk corpus synchronization.
 
+The next source-registry slice uses the shared states and one-source sync boundary
+from `docs/SOURCE_SYNC.md`. Inventory stays a read-only snapshot; sync attempts
+are explicit writes and must remain separate from this report.
+
 ## Coverage panel (A2)
 
 The Matrice tab loads a global inventory above its filters, independently of the

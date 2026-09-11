@@ -63,6 +63,10 @@ Acceptance:
 
 Goal: track public sources without forcing huge rebuilds.
 
+The shared state vocabulary and the first one-source sync boundary are defined in
+`docs/SOURCE_SYNC.md`. That contract is the implementation target before any
+portal-wide scheduler or release pipeline work.
+
 Deliverables:
 
 - Source registry table for every source family:
@@ -74,8 +78,8 @@ Deliverables:
   - Monitorul Oficial references where available;
   - CCR decisions;
   - EU Cellar/EUR-Lex CELEX records.
-- Per-source state: discovered, queued, fetched, parsed, unchanged, changed,
-  failed, unavailable, rate-limited, requires manual review.
+- Per-source state: discovered, queued, fetched, unchanged, changed, failed,
+  unavailable, rate-limited and needs manual review.
 - Incremental fetch queue by identifier or URL.
 - Small “sync selected sources” UI action instead of whole-dataset rebuilds.
 - Stored fetch logs with URL, timestamp, status code, content hash and parser
