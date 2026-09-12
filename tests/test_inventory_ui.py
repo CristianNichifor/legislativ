@@ -206,6 +206,7 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "assert.ok(h.includes('2 atașamente'));"
         "assert.ok(h.includes('Sincronizează sursa'));"
         "assert.ok(h.includes('Inspectează impactul și datele'));"
+        "assert.ok(h.includes('data-source-tracker=\"0\"'));"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
         "h=sourceRegistryDetailHtml(row,families);"
         "assert.ok(h.includes('Date parsate E-Consultare'));"
@@ -216,6 +217,8 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "assert.ok(!h.includes('<b>')&&!h.includes('<img>'));"
         "assert.equal(sourceRegistryConsultationStatus('closed'),'Închisă');"
         "assert.equal(sourceRegistryConsultationStatus('missing'),'missing');"
+        "assert.equal(sourceRegistryTrackerProject({identifier:'PL-x 2/2026'}),'PL-x 2/2026');"
+        "assert.equal(sourceRegistryTrackerProject({identifier:'https://example.test'}),'');"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr.decode()
