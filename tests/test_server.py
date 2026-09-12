@@ -789,6 +789,9 @@ def test_prevedere_returns_a_provisions_stored_text(tmp_path):
     assert d["identity"]["provision_id"] == "ro:lege-98-2016#text"
     assert d["identity"]["status"] == "available"
     assert len(d["identity"]["source_hash"]) == 64
+    assert d["provision_id"] == "ro:lege-98-2016#text"
+    assert len(d["source_hash"]) == 64
+    assert d["identity_status"] == "available"
 
 
 def test_prevedere_says_so_for_an_act_with_no_article_tree(tmp_path):

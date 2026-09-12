@@ -3298,18 +3298,28 @@ def _prevedere(qs: dict, stare: Stare) -> dict:
                     "source_hash": "",
                     "unavailable_reason": str(exc),
                 },
+                "provision_id": "",
+                "source_hash": "",
+                "source_url": "",
+                "captured_at": "",
+                "identity_status": "unavailable",
             }
         rand = con.execute(
             "SELECT text FROM provizii WHERE act_id = ? AND locator = ? ORDER BY ord LIMIT 1",
-            (act_id, locator),
+            (identity["act_id"], identity["locator"]),
         ).fetchone()
     return {
         "gasit": rand is not None,
-        "act_id": act_id,
-        "locator": locator,
+        "act_id": identity["act_id"],
+        "locator": identity["locator"],
         "titlu": stare.titlu(act_id),
         "text": (rand[0] if rand else "") or "",
         "identity": identity,
+        "provision_id": identity["provision_id"],
+        "source_hash": identity["source_hash"],
+        "source_url": identity["source_url"],
+        "captured_at": identity["captured_at"],
+        "identity_status": identity["status"],
     }
 
 

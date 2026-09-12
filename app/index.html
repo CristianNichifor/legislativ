@@ -4478,6 +4478,15 @@ const MANUAL_NOTE_STATUS={
 const EU_ISSUE_STATES={
   possible_conflict:'Conflict posibil',possible_gap:'Lacună posibilă',possible_coverage:'Acoperire posibilă'
 };
+const RULE_CANDIDATE_MODALITIES={
+  obligation:'Obligație',prohibition:'Interdicție',permission:'Permisiune',procedure:'Procedură',
+  deadline:'Termen',competence:'Competență',sanction:'Sancțiune',definition:'Definiție',
+  exception:'Excepție',vague_standard:'Standard vag',not_codeable:'Nepotrivit pentru codificare'
+};
+const RULE_CANDIDATE_REVIEW_STATES={
+  machine_detected:'Detectat de mașină',human_reviewed:'Revizuit uman',
+  legally_validated:'Validat juridic',disputed:'Disputat',obsolete:'Învechit'
+};
 const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null};
 
 function manualNoteHtml(note,index){
@@ -4505,6 +4514,10 @@ function manualNoteFormHtml(editing=null){
     +`<label>SHA-256 sursă<input name="source_hash" maxlength="64" value="${v('source_hash')}"></label>`
     +`<label>Citat dovadă<textarea name="evidence_quote" rows="3" maxlength="4000">${v('evidence_quote')}</textarea></label>`
     +`<label>Raționament<textarea name="reasoning" rows="4" maxlength="8000">${v('reasoning')}</textarea></label>`
+    +ruleCandidateControlsHtml({
+      act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
+      text:editing?.evidence_quote||'',provision_id:''
+    })
     +'<details data-ai-note-draft><summary>Ciornă AI din dovadă</summary><p class="hint">Folosește numai citatul, sursa și contextul din formular. Rezultatul rămâne ciornă nerevizuită.</p><div class="dossier-actions"><select name="ai_task"><option value="issue_note">notă de constatare</option><option value="amendment_rationale">motivare amendament</option><option value="review_checklist">listă de verificare</option></select><button type="button" class="ghost mini" data-ai-draft-note>Generează ciornă</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
 }
@@ -4535,6 +4548,71 @@ function manualNoteAiEvidence(form){
       language: 'RON'
     }]
   };
+}
+function ruleCandidateOptions(items,current=''){
+  return Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+}
+function ruleCandidateControlsHtml(seed={}){
+  const v=name=>esc(seed[name]||'');
+  return '<details data-rule-candidate><summary>Propune regulă</summary>'
+    +'<p class="hint">Previzualizare nesalvată. Contractul verifică sursa și câmpurile, dar nu produce verdict juridic.</p>'
+    +`<label>ID prevedere<input name="rule_provision_id" maxlength="240" value="${v('provision_id')}" placeholder="ro:lege-98-2016#art7.alin2"></label>`
+    +`<label>Act<input name="rule_act_id" maxlength="200" value="${v('act_id')}"></label>`
+    +`<label>Locator<input name="rule_locator" maxlength="120" value="${v('locator')}"></label>`
+    +`<label>SHA-256 sursă<input name="rule_source_hash" maxlength="64" value="${v('source_hash')}"></label>`
+    +`<label>Text prevedere<textarea name="rule_text" rows="4" maxlength="12000">${v('text')}</textarea></label>`
+    +`<label>Tip regulă<select name="rule_modality">${ruleCandidateOptions(RULE_CANDIDATE_MODALITIES,seed.modality||'obligation')}</select></label>`
+    +`<label>Stare revizie<select name="rule_review_state">${ruleCandidateOptions(RULE_CANDIDATE_REVIEW_STATES,seed.review_state||'machine_detected')}</select></label>`
+    +'<label>Actor<input name="rule_actor" maxlength="300"></label>'
+    +'<label>Condiție<textarea name="rule_condition" rows="2" maxlength="1200"></textarea></label>'
+    +'<label>Acțiune<textarea name="rule_action" rows="2" maxlength="1200"></textarea></label>'
+    +'<label>Termen<input name="rule_deadline" maxlength="300"></label>'
+    +'<label>Excepții<textarea name="rule_exceptions" rows="2" maxlength="2000" placeholder="o excepție pe linie"></textarea></label>'
+    +'<label>Efect<textarea name="rule_effect" rows="2" maxlength="1200"></textarea></label>'
+    +'<label>Reviewer<input name="rule_reviewer" maxlength="160"></label>'
+    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-preview>Previzualizează candidatul</button><p class="hint" role="status" data-rule-status></p></div>'
+    +'<pre data-rule-result></pre></details>';
+}
+function ruleCandidatePayload(root,source={}){
+  const field=name=>root.querySelector(`[name="${name}"]`)?.value||'';
+  return {
+    provision_id:field('rule_provision_id')||source.provision_id||'',
+    act_id:field('rule_act_id')||source.act_id||'',
+    locator:field('rule_locator')||source.locator||'',
+    source_hash:field('rule_source_hash')||source.source_hash||'',
+    text:field('rule_text')||source.text||'',
+    modality:field('rule_modality')||'obligation',
+    review_state:field('rule_review_state')||'machine_detected',
+    actor:field('rule_actor'),
+    condition:field('rule_condition'),
+    action:field('rule_action'),
+    deadline:field('rule_deadline'),
+    exceptions:field('rule_exceptions').split(/\n+/).map(s=>s.trim()).filter(Boolean),
+    effect:field('rule_effect'),
+    reviewer:field('rule_reviewer')
+  };
+}
+function bindRuleCandidateControls(root,sourceReader=()=>({})){
+  const box=root.querySelector?.('[data-rule-candidate]')||root.closest?.('[data-rule-candidate]')||root;
+  const preview=box.querySelector('[data-rule-preview]'),status=box.querySelector('[data-rule-status]'),out=box.querySelector('[data-rule-result]');
+  if(!preview)return;
+  preview.onclick=async()=>{
+    preview.disabled=true;status.textContent='Validez candidatul…';out.textContent='';
+    try{
+      const data=await dossierApi('/api/dosare/rule-candidates/preview',ruleCandidatePayload(box,sourceReader()));
+      status.textContent=`Candidat ${data.status} · ${data.candidate_id}. Nesalvat.`;
+      out.textContent=JSON.stringify(data,null,2);
+    }catch(err){status.textContent=err.message;}
+    finally{preview.disabled=false;}
+  };
+}
+function bindManualNoteRuleCandidate(form){
+  bindRuleCandidateControls(form,()=>({
+    act_id:form.elements.act_id?.value||'',
+    locator:form.elements.locator?.value||'',
+    source_hash:form.elements.source_hash?.value||'',
+    text:form.elements.evidence_quote?.value||''
+  }));
 }
 function bindManualNoteAiDraft(form){
   const section=form.querySelector('[data-ai-note-draft]');if(!section)return;
@@ -4823,6 +4901,7 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=()=>{MANUAL_NOTES_UI.editing=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];loadManualNotes(dossierId,offset);});
     host.querySelectorAll('[data-open-note-source]').forEach(button=>button.onclick=()=>openManualNoteSource(button,data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)]));
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
+    bindManualNoteRuleCandidate(form);
     bindManualNoteAiDraft(form);
     form.onsubmit=async e=>{
       e.preventDefault();if(!form.reportValidity())return;
@@ -6643,7 +6722,21 @@ async function mPrevedere(buton){
       const scurt=text.length>1400 ? text.slice(0,1400)+"…" : text;
       out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||"")}</div>`
         +provisionIdentityMeta(d)
-        +`<div class="matrix-prev-text">${textLizibil(scurt)}</div>`;
+        +`<div class="matrix-prev-text">${textLizibil(scurt)}</div>`
+        +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-from-provision>Propune regulă</button></div>'
+        +'<div data-rule-provision-form></div>';
+      const ruleButton=out.querySelector('[data-rule-from-provision]');
+      ruleButton.onclick=()=>{
+        const host=out.querySelector('[data-rule-provision-form]');
+        const identity=d.identity||{};
+        host.innerHTML=ruleCandidateControlsHtml({
+          provision_id:d.provision_id||identity.provision_id||'',act_id:d.act_id||identity.act_id||'',locator:d.locator||identity.locator||'',
+          source_hash:d.source_hash||identity.source_hash||'',text:d.text||''
+        });
+        const box=host.querySelector('[data-rule-candidate]');if(box)box.open=true;
+        bindRuleCandidateControls(host,()=>d);
+        host.scrollIntoView({block:'nearest'});
+      };
     }else{
       out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b></div>`
         +provisionIdentityMeta(d)

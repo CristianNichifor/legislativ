@@ -316,13 +316,47 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "assert.ok(text.endsWith('rezultat'));"
         "const MANUAL_NOTE_TYPES={lacuna:'Lacună'};"
         "const MANUAL_NOTE_STATUS={draft:'Ciornă'};"
+        "function ruleCandidateControlsHtml(){return '<details data-rule-candidate></details>';}"
         "const esc=s=>String(s);function manualNoteFormHtml"
         + html
         + "const form=manualNoteFormHtml();"
+        "assert.ok(form.includes('data-rule-candidate'));"
         "assert.ok(form.includes('data-mcp-ai-draft'));"
         "assert.ok(form.includes('data-mcp-preview'));"
         "assert.ok(form.includes('data-mcp-copy'));"
         "assert.ok(form.includes('data-mcp-insert'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_rule_candidate_controls_build_preview_payload():
+    source = (
+        APP.read_text()
+        .split("const RULE_CANDIDATE_MODALITIES=", 1)[1]
+        .split("function bindManualNoteAiDraft", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const RULE_CANDIDATE_MODALITIES="
+        + source
+        + 'const root={querySelector:(q)=>fields[q.match(/name="([^"]+)"/)?.[1]||q]};'
+        "const fields={rule_provision_id:{value:'ro:lege-98-2016#art7'},"
+        "rule_act_id:{value:'lege-98-2016'},rule_locator:{value:'art7'},"
+        "rule_source_hash:{value:'a'.repeat(64)},rule_text:{value:'Text <legal>'},"
+        "rule_modality:{value:'obligation'},rule_review_state:{value:'machine_detected'},"
+        "rule_actor:{value:'autoritatea'},rule_condition:{value:'dacă există cerere'},"
+        "rule_action:{value:'publică'},rule_deadline:{value:'10 zile'},"
+        "rule_exceptions:{value:'urgență\\nsecret'},rule_effect:{value:'nulitate'},"
+        "rule_reviewer:{value:'jurist'}};"
+        "const payload=ruleCandidatePayload(root,{});"
+        "assert.equal(payload.modality,'obligation');"
+        "assert.deepEqual(payload.exceptions,['urgență','secret']);"
+        "const html=ruleCandidateControlsHtml({text:'<script>',source_hash:'b'.repeat(64)});"
+        "assert.ok(html.includes('data-rule-candidate'));"
+        "assert.ok(html.includes('data-rule-preview'));"
+        "assert.ok(!html.includes('<script>'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 
