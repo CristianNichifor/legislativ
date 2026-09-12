@@ -208,6 +208,235 @@ def _plain_row(row: sqlite3.Row) -> dict:
     return dict(row)
 
 
+def _tables(con: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+
+
+def _impact_empty(row: dict, *, available: bool = True) -> dict:
+    state = normalize_state(row["state"])
+    actionable = state in ATTENTION_STATES
+    return {
+        "contract": "changed-source-impact-v1",
+        "available": available,
+        "source_id": row["id"],
+        "state": state,
+        "actionable": actionable,
+        "summary": {
+            "affected_dossiers": 0,
+            "affected_runs": 0,
+            "affected_notes": 0,
+            "affected_rule_drafts": 0,
+            "affected_proposals": 0,
+            "affected_watchlist_items": 0,
+        },
+        "samples": {
+            "dossiers": [],
+            "runs": [],
+            "notes": [],
+            "rule_drafts": [],
+            "proposals": [],
+            "watchlist": [],
+        },
+        "actions": {
+            "inspect_source": True,
+            "open_evidence": row["family"] in SYNC_FAMILIES,
+            "open_affected_runs": row["family"] in PROJECT_FAMILIES,
+            "create_review_note": actionable,
+            "mark_reviewed": state in {"changed", "needs_review"},
+            "retry_sync": row["family"] in SYNC_FAMILIES and state in {"failed", "rate_limited"},
+        },
+        "limitari": [
+            "Impactul este local și conservator; nu reconsultă sursa oficială.",
+            (
+                "Propunerile sunt numărate numai când sunt legate de rulări "
+                "sau referințe locale găsite."
+            ),
+        ],
+    }
+
+
+def _count_like(con: sqlite3.Connection, table: str, columns: list[str], needle: str) -> int:
+    if not needle:
+        return 0
+    where = " OR ".join(f"{column} LIKE ? ESCAPE '\\'" for column in columns)
+    escaped = "%" + needle.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+    return con.execute(
+        f"SELECT count(*) FROM {table} WHERE {where}",
+        [escaped] * len(columns),
+    ).fetchone()[0]
+
+
+def _sample_rows(
+    con: sqlite3.Connection,
+    sql: str,
+    params: tuple[object, ...],
+    *,
+    limit: int = 5,
+) -> list[dict]:
+    return [dict(row) for row in con.execute(sql + " LIMIT ?", (*params, limit))]
+
+
+def _project_impact(stare, row: dict, impact: dict, path: Path) -> None:
+    from scripts import dosare
+
+    affected = dosare.rulari_afectate_proiect(path, row["identifier"], 0)
+    impact["summary"]["affected_runs"] = affected["total"]
+    impact["samples"]["runs"] = affected["rulari"][:5]
+    dossier_ids = {item["dosar_id"] for item in affected["rulari"]}
+    impact["summary"]["affected_dossiers"] = len(dossier_ids)
+    impact["samples"]["dossiers"] = [
+        {"dosar_id": item["dosar_id"], "titlu": item.get("dosar_titlu", "")}
+        for item in affected["rulari"][:5]
+    ]
+    if affected["total"] > len(affected["rulari"]):
+        impact["limitari"].append(
+            "Lista de rulări afectate este paginată; numărul de dosare "
+            "este calculat pe pagina afișată."
+        )
+    with dosare._open(path) as con:
+        tables = _tables(con)
+        if "watchlist_dosare" in tables:
+            watch = _sample_rows(
+                con,
+                "SELECT w.id,w.dosar_id,d.titlu,w.tip,w.valoare,w.eticheta,w.revizuit_la "
+                "FROM watchlist_dosare w JOIN dosare d ON d.id=w.dosar_id "
+                "WHERE w.tip='project' AND w.valoare=? ORDER BY w.creat_la DESC,w.id",
+                (row["identifier"],),
+            )
+            impact["samples"]["watchlist"] = watch
+            impact["summary"]["affected_watchlist_items"] = con.execute(
+                "SELECT count(*) FROM watchlist_dosare WHERE tip='project' AND valoare=?",
+                (row["identifier"],),
+            ).fetchone()[0]
+        if "propuneri" in tables and affected["rulari"]:
+            run_ids = [item["rulare_id"] for item in affected["rulari"]]
+            placeholders = ",".join("?" for _ in run_ids)
+            impact["summary"]["affected_proposals"] = con.execute(
+                "SELECT count(*) FROM propuneri WHERE rulare_id IN (" + placeholders + ")",
+                run_ids,
+            ).fetchone()[0]
+            impact["samples"]["proposals"] = [
+                dict(item)
+                for item in con.execute(
+                    "SELECT p.id,p.rulare_id,p.constatare_id,p.titlu,p.revizie,p.creat_la "
+                    "FROM propuneri p WHERE p.rulare_id IN ("
+                    + placeholders
+                    + ") ORDER BY p.creat_la DESC,p.id LIMIT 5",
+                    run_ids,
+                )
+            ]
+
+
+def _direct_reference_impact(row: dict, impact: dict, path: Path) -> None:
+    from scripts import dosare
+
+    identifier = row.get("identifier") or ""
+    hash_value = row.get("last_hash") or ""
+    with dosare._open(path) as con:
+        tables = _tables(con)
+        if "note_manuale" in tables:
+            params: list[object] = [identifier]
+            checks = ["n.act_id=?"]
+            if hash_value:
+                checks.append("n.sursa_sha256=?")
+                params.append(hash_value)
+            if row.get("url"):
+                checks.append("n.sursa_url=?")
+                params.append(row["url"])
+            where = " OR ".join(checks)
+            impact["summary"]["affected_notes"] = con.execute(
+                f"SELECT count(*) FROM note_manuale n WHERE {where}", params
+            ).fetchone()[0]
+            impact["samples"]["notes"] = [
+                dict(item)
+                for item in con.execute(
+                    "SELECT n.id,n.dosar_id,d.titlu AS dosar_titlu,n.titlu,n.tip,n.stare,"
+                    "n.act_id,n.locator,n.modificat_la FROM note_manuale n "
+                    "JOIN dosare d ON d.id=n.dosar_id WHERE "
+                    + where
+                    + " ORDER BY n.modificat_la DESC,n.id LIMIT 5",
+                    params,
+                )
+            ]
+        if "law_rule_drafts" in tables:
+            params = [identifier, f"%{identifier}%"]
+            impact["summary"]["affected_rule_drafts"] = con.execute(
+                "SELECT count(*) FROM law_rule_drafts WHERE act_id=? OR payload_json LIKE ?",
+                params,
+            ).fetchone()[0]
+            impact["samples"]["rule_drafts"] = [
+                dict(item)
+                for item in con.execute(
+                    "SELECT r.id,r.dosar_id,d.titlu AS dosar_titlu,r.act_id,r.locator,"
+                    "r.provision_id,r.creat_la FROM law_rule_drafts r "
+                    "JOIN dosare d ON d.id=r.dosar_id "
+                    "WHERE r.act_id=? OR r.payload_json LIKE ? "
+                    "ORDER BY r.creat_la DESC,r.id LIMIT 5",
+                    params,
+                )
+            ]
+        if "propuneri" in tables:
+            impact["summary"]["affected_proposals"] += _count_like(
+                con, "propuneri", ["titlu", "text", "motiv"], identifier
+            )
+            impact["samples"]["proposals"].extend(
+                _sample_rows(
+                    con,
+                    "SELECT p.id,r.dosar_id,d.titlu AS dosar_titlu,p.rulare_id,"
+                    "p.constatare_id,p.titlu,p.revizie,p.creat_la FROM propuneri p "
+                    "JOIN rulari r ON r.id=p.rulare_id JOIN dosare d ON d.id=r.dosar_id "
+                    "WHERE p.titlu LIKE ? ESCAPE '\\' OR p.text LIKE ? ESCAPE '\\' "
+                    "OR p.motiv LIKE ? ESCAPE '\\' ORDER BY p.creat_la DESC,p.id",
+                    tuple(
+                        "%"
+                        + identifier.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                        + "%"
+                        for _ in range(3)
+                    ),
+                )
+            )
+        if "watchlist_dosare" in tables:
+            watch_kind = "celex" if row["family"] == "ue_cellar" else "act"
+            watch = _sample_rows(
+                con,
+                "SELECT w.id,w.dosar_id,d.titlu,w.tip,w.valoare,w.eticheta,w.revizuit_la "
+                "FROM watchlist_dosare w JOIN dosare d ON d.id=w.dosar_id "
+                "WHERE w.tip=? AND w.valoare=? ORDER BY w.creat_la DESC,w.id",
+                (watch_kind, identifier),
+            )
+            impact["samples"]["watchlist"] = watch
+            impact["summary"]["affected_watchlist_items"] = con.execute(
+                "SELECT count(*) FROM watchlist_dosare WHERE tip=? AND valoare=?",
+                (watch_kind, identifier),
+            ).fetchone()[0]
+
+
+def _impact(stare, row: dict) -> dict:
+    impact = _impact_empty(row)
+    path = Path(stare.dosare_db) if getattr(stare, "dosare_db", None) else None
+    if path is None:
+        try:
+            from scripts import dosare
+
+            path = dosare.cale(stare)
+        except (OSError, ValueError):
+            return _impact_empty(row, available=False)
+    if not path.exists():
+        return _impact_empty(row, available=False)
+    try:
+        if row["family"] in PROJECT_FAMILIES and row.get("identifier"):
+            _project_impact(stare, row, impact, path)
+        if row["family"] in {"ue_cellar", "legislatie_ro"} and row.get("identifier"):
+            _direct_reference_impact(row, impact, path)
+    except (OSError, ValueError, sqlite3.Error, json.JSONDecodeError):
+        return _impact_empty(row, available=False)
+    return impact
+
+
+def _with_impact(stare, row: dict) -> dict:
+    return {**row, "impact": _impact(stare, row)}
+
+
 def families() -> dict[str, str]:
     return dict(FAMILIES)
 
@@ -305,10 +534,13 @@ def lista(stare, qs: dict | None = None) -> dict:
         "states": list(SYNC_STATES),
         "attention_states": sorted(ATTENTION_STATES),
         "sources": [
-            dict(
-                _row(row),
-                attempts=attempts.get(row["id"], []),
-                snapshots=snapshots.get(row["id"], []),
+            _with_impact(
+                stare,
+                dict(
+                    _row(row),
+                    attempts=attempts.get(row["id"], []),
+                    snapshots=snapshots.get(row["id"], []),
+                ),
             )
             for row in rows
         ],
@@ -705,18 +937,20 @@ def sincronizeaza_ue(stare, source_id: str) -> dict:
 def executa(stare, data: dict) -> dict:
     action = _text(data.get("action", "discover"), limit=40) or "discover"
     if action == "discover":
-        return descopera(stare, data)
+        return _with_impact(stare, descopera(stare, data))
     if action == "queue":
-        return pune_in_coada(stare, data.get("id", ""))
+        return _with_impact(stare, pune_in_coada(stare, data.get("id", "")))
     if action == "record":
-        return inregistreaza(stare, data)
+        return _with_impact(stare, inregistreaza(stare, data))
     if action == "review":
-        return marcheaza_revizuit(stare, data.get("id", ""), data.get("note", ""))
+        return _with_impact(
+            stare, marcheaza_revizuit(stare, data.get("id", ""), data.get("note", ""))
+        )
     if action == "sync":
         row = _source(stare, data.get("id", ""))
         if row["family"] == "ue_cellar":
-            return sincronizeaza_ue(stare, row["id"])
+            return _with_impact(stare, sincronizeaza_ue(stare, row["id"]))
         if row["family"] in PROJECT_FAMILIES:
-            return sincronizeaza_proiect(stare, row["id"])
+            return _with_impact(stare, sincronizeaza_proiect(stare, row["id"]))
         raise ValueError("Familia de surse nu are sincronizare directă.")
     raise ValueError("Acțiune registru necunoscută.")

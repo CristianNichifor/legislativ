@@ -5947,10 +5947,41 @@ function sourceRegistryOutcome(row,verb='Sync'){
   const next=row.sync_status?.next_action?` Următorul pas: ${row.sync_status.next_action}`:'';
   return `${verb}: ${label}. ${hint}${next}${hash}${error}`;
 }
+function sourceRegistryImpactSummary(impact){
+  const s=impact?.summary||{};
+  const parts=[
+    ['dosare',s.affected_dossiers],['rulări',s.affected_runs],
+    ['note',s.affected_notes],['reguli',s.affected_rule_drafts],
+    ['propuneri',s.affected_proposals],['watchlist',s.affected_watchlist_items]
+  ].filter(([,v])=>Number(v)>0).map(([k,v])=>`${nf(v)} ${k}`);
+  if(!impact?.available) return 'Impact local indisponibil.';
+  return parts.length?parts.join(' · '):'Nicio dependență locală găsită.';
+}
+function sourceRegistryImpactHtml(row,compact=false){
+  const impact=row.impact;
+  if(!impact) return '';
+  const state=SOURCE_STATE_LABELS[impact.state]||impact.state||'necunoscută';
+  const summary=sourceRegistryImpactSummary(impact);
+  if(compact) return `<p class="hint">Impact local: ${esc(summary)}</p>`;
+  const samples=impact.samples||{};
+  const runs=(samples.runs||[]).map(r=>`<li>${esc(r.dosar_titlu||r.dosar_id)} · rulare ${esc(dossierTime(r.rulare_creata_la))} · ${esc((r.potriviri||[]).map(m=>m.motiv).join(', ')||'potrivire proiect')}</li>`).join('');
+  const notes=(samples.notes||[]).map(n=>`<li>${esc(n.dosar_titlu||n.dosar_id)} · ${esc(n.titlu||n.id)} · ${esc(n.stare||'')}</li>`).join('');
+  const rules=(samples.rule_drafts||[]).map(r=>`<li>${esc(r.dosar_titlu||r.dosar_id)} · ${esc(r.act_id||'')} ${esc(r.locator||'')} · ${esc(r.id)}</li>`).join('');
+  const proposals=(samples.proposals||[]).map(p=>`<li>${esc(p.dosar_titlu||p.dosar_id||p.rulare_id)} · ${esc(p.titlu||p.id)} · revizia ${esc(p.revizie||'')}</li>`).join('');
+  const watch=(samples.watchlist||[]).map(w=>`<li>${esc(w.titlu||w.dosar_id)} · ${esc(w.tip)} ${esc(w.valoare)}${w.revizuit_la?` · revizuit ${esc(dossierTime(w.revizuit_la))}`:''}</li>`).join('');
+  return `<section class="source-review"><h4>Impact local pentru revizie</h4><p><strong>${esc(state)}</strong> · ${esc(summary)}</p>`
+    +`<p class="hint">Înainte să închizi alerta, verifică elementele afectate sau notează de ce nu sunt relevante.</p>`
+    +(runs?`<details open><summary>Rulări afectate</summary><ul class="hint">${runs}</ul></details>`:'')
+    +(notes?`<details open><summary>Note afectate</summary><ul class="hint">${notes}</ul></details>`:'')
+    +(rules?`<details open><summary>Ciorne de reguli afectate</summary><ul class="hint">${rules}</ul></details>`:'')
+    +(proposals?`<details open><summary>Propuneri afectate</summary><ul class="hint">${proposals}</ul></details>`:'')
+    +(watch?`<details open><summary>Watchlist afectat</summary><ul class="hint">${watch}</ul></details>`:'')
+    +`<p class="hint">${(impact.limitari||[]).map(esc).join(' ')}</p></section>`;
+}
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistryImpactHtml(row)}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
 }
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
@@ -5980,7 +6011,7 @@ function sourceRegistryRowHtml(row,families){
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
