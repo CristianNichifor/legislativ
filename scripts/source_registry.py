@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sqlite3
 from contextlib import closing
@@ -25,6 +26,7 @@ FAMILIES = {
     "ue_cellar": "Drept UE · Cellar/EUR-Lex",
 }
 SCHEMA_VERSION = 1
+PROJECT_PARSER_VERSION = "achizitii_proiecte.v1"
 MAX_TEXT = 1000
 MAX_PAGE = 50
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
@@ -139,6 +141,16 @@ def init(con: sqlite3.Connection) -> None:
           parser_version TEXT NOT NULL DEFAULT '',
           note TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS source_snapshots (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          source_id TEXT NOT NULL REFERENCES source_registry(id),
+          captured_at TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          parser_version TEXT NOT NULL DEFAULT '',
+          snapshot_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_snapshots_source
+          ON source_snapshots(source_id,captured_at DESC,seq DESC);
         PRAGMA user_version = 1;
         """
     )
@@ -250,6 +262,7 @@ def lista(stare, qs: dict | None = None) -> dict:
             [*params, MAX_PAGE, offset],
         ).fetchall()
         attempts: dict[str, list[dict]] = {row["id"]: [] for row in rows}
+        snapshots: dict[str, list[dict]] = {row["id"]: [] for row in rows}
         if attempts:
             placeholders = ",".join("?" for _ in attempts)
             for attempt in con.execute(
@@ -262,6 +275,24 @@ def lista(stare, qs: dict | None = None) -> dict:
                 bucket = attempts[attempt["source_id"]]
                 if len(bucket) < 3:
                     bucket.append(_plain_row(attempt))
+            for snapshot in con.execute(
+                "SELECT source_id,captured_at,content_hash,parser_version,snapshot_json "
+                "FROM source_snapshots WHERE source_id IN ("
+                + placeholders
+                + ") ORDER BY captured_at DESC, seq DESC",
+                list(snapshots),
+            ):
+                bucket = snapshots[snapshot["source_id"]]
+                if len(bucket) < 3:
+                    payload = json.loads(snapshot["snapshot_json"])
+                    bucket.append(
+                        {
+                            "captured_at": snapshot["captured_at"],
+                            "content_hash": snapshot["content_hash"],
+                            "parser_version": snapshot["parser_version"],
+                            "summary": payload.get("summary", {}),
+                        }
+                    )
         counts = {
             f"{r['family']}:{r['state']}": r["c"]
             for r in con.execute(
@@ -273,7 +304,14 @@ def lista(stare, qs: dict | None = None) -> dict:
         "families": families(),
         "states": list(SYNC_STATES),
         "attention_states": sorted(ATTENTION_STATES),
-        "sources": [dict(_row(row), attempts=attempts.get(row["id"], [])) for row in rows],
+        "sources": [
+            dict(
+                _row(row),
+                attempts=attempts.get(row["id"], []),
+                snapshots=snapshots.get(row["id"], []),
+            )
+            for row in rows
+        ],
         "total": total,
         "offset": offset,
         "more": offset + len(rows) < total,
@@ -422,13 +460,119 @@ def _project_identifier(row: dict) -> str:
 
 
 def _stable_hash(data: object) -> str:
-    import json
-
     return hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
 def _sync_state(previous_hash: str, content_hash: str) -> str:
     return "unchanged" if previous_hash and previous_hash == content_hash else "changed"
+
+
+def _project_local_meta(stare, plx: str) -> dict:
+    from scripts import achizitii_proiecte
+
+    try:
+        detail = achizitii_proiecte.detaliu(stare, plx)
+    except (OSError, ValueError, sqlite3.Error):
+        return {}
+    return {
+        "plx_id": detail.get("plx_id"),
+        "titlu": detail.get("titlu"),
+        "stadiu": detail.get("stadiu"),
+        "cam": detail.get("cam"),
+        "idp": detail.get("idp"),
+        "fisa_url": detail.get("fisa_url"),
+        "lifecycle": (detail.get("lifecycle") or {}).get("key"),
+    }
+
+
+def _project_snapshot(row: dict, plx: str, operation: str, result: dict, local_meta: dict) -> dict:
+    documents = [
+        {"url": _url(doc.get("url")), "label": _text(doc.get("label", ""), limit=300)}
+        for doc in result.get("documente", [])[:100]
+        if isinstance(doc, dict)
+    ]
+    versions = [
+        {
+            "id": _token(version.get("id", "")),
+            "url": _url(version.get("url")),
+            "sha256": _hash(version.get("sha256", "")),
+            "status": _token(version.get("status", "")),
+        }
+        for version in result.get("versiuni", [])[:100]
+        if isinstance(version, dict)
+    ]
+    imported = {}
+    if result.get("id") or result.get("sha256"):
+        imported = {
+            "id": _token(result.get("id", "")),
+            "url": _url(result.get("url")),
+            "sha256": _hash(result.get("sha256", "")),
+            "status": _token(result.get("status", "")),
+            "label": _text(result.get("label", ""), limit=300),
+        }
+    return {
+        "contract": "parliament-project-source-snapshot-v1",
+        "family": row["family"],
+        "identifier": row["identifier"],
+        "registry_url": row["url"],
+        "plx": plx,
+        "operation": operation,
+        "summary": {
+            "plx": plx,
+            "operation": operation,
+            "fisa_url": result.get("fisa_url") or local_meta.get("fisa_url") or "",
+            "documents": len(documents),
+            "versions": len(versions),
+            "imported_status": imported.get("status", ""),
+            "truncated": bool(result.get("trunchiat")),
+        },
+        "initiative": local_meta,
+        "fisa_url": result.get("fisa_url") or local_meta.get("fisa_url") or "",
+        "documents": documents,
+        "versions": versions,
+        "imported": imported,
+        "truncated": bool(result.get("trunchiat")),
+    }
+
+
+def _project_content_hash(snapshot: dict) -> str:
+    imported = snapshot.get("imported") or {}
+    if imported.get("sha256"):
+        return imported["sha256"]
+    return _stable_hash(
+        {
+            "contract": snapshot["contract"],
+            "family": snapshot["family"],
+            "identifier": snapshot["identifier"],
+            "registry_url": snapshot["registry_url"],
+            "plx": snapshot["plx"],
+            "operation": snapshot["operation"],
+            "fisa_url": snapshot["fisa_url"],
+            "documents": snapshot["documents"],
+            "truncated": snapshot["truncated"],
+        }
+    )
+
+
+def _store_snapshot(stare, source_id: str, content_hash: str, snapshot: dict) -> None:
+    stamp = now()
+    with closing(_open(cale(stare))) as con:
+        init(con)
+        con.execute(
+            """
+            INSERT INTO source_snapshots
+              (source_id,captured_at,content_hash,parser_version,snapshot_json)
+            VALUES (?,?,?,?,?)
+            """,
+            (
+                source_id,
+                stamp,
+                content_hash,
+                PROJECT_PARSER_VERSION,
+                json.dumps(snapshot, ensure_ascii=False, sort_keys=True),
+            ),
+        )
+        con.commit()
 
 
 def sincronizeaza_proiect(stare, source_id: str) -> dict:
@@ -443,21 +587,15 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
 
     try:
         if row.get("url"):
+            operation = "importa"
             result = achizitii_proiecte.executa(
                 stare, {"plx": plx, "operatie": "importa", "url": row["url"]}
             )
-            content_hash = result.get("sha256") or _stable_hash(result)
             note = f"Document parlamentar importat pentru {plx}."
             needs_review = result.get("status") != "extras"
         else:
+            operation = "descopera"
             result = achizitii_proiecte.executa(stare, {"plx": plx, "operatie": "descopera"})
-            content_hash = _stable_hash(
-                {
-                    "fisa_url": result.get("fisa_url"),
-                    "documente": result.get("documente", []),
-                    "trunchiat": result.get("trunchiat", False),
-                }
-            )
             note = f"Fișa parlamentară {plx} consultată."
             needs_review = not result.get("documente")
     except ValueError as exc:
@@ -470,6 +608,9 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
                 "note": str(exc)[:500],
             },
         )
+    snapshot = _project_snapshot(row, plx, operation, result, _project_local_meta(stare, plx))
+    content_hash = _project_content_hash(snapshot)
+    _store_snapshot(stare, source_id, content_hash, snapshot)
     inregistreaza(
         stare,
         {
@@ -477,7 +618,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
             "state": "fetched",
             "http_status": 200,
             "content_hash": content_hash,
-            "parser_version": "achizitii_proiecte.v1",
+            "parser_version": PROJECT_PARSER_VERSION,
             "note": note,
         },
     )
@@ -489,7 +630,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
                 "state": "needs_review",
                 "http_status": 200,
                 "content_hash": content_hash,
-                "parser_version": "achizitii_proiecte.v1",
+                "parser_version": PROJECT_PARSER_VERSION,
                 "note": "Sursa a fost citită, dar rezultatul necesită verificare manuală.",
             },
         )
@@ -500,7 +641,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
             "state": _sync_state(row.get("last_hash", ""), content_hash),
             "http_status": 200,
             "content_hash": content_hash,
-            "parser_version": "achizitii_proiecte.v1",
+            "parser_version": PROJECT_PARSER_VERSION,
         },
     )
 

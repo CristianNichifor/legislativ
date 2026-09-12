@@ -73,6 +73,21 @@ Each attempt must record at least:
 The attempt must not record raw secrets, local filesystem paths, full private
 dossier content or unbounded upstream error bodies.
 
+For parliamentary project sources (`parlament`, `camera`, `senat`), a successful
+one-source sync also stores a compact `parliament-project-source-snapshot-v1`
+record. The snapshot includes the selected PL-x/id, the addressed ficha URL, the
+official document links discovered on that ficha, and bounded local initiative
+metadata. If a specific official project document URL is synced, the snapshot
+records the retained document hash and extraction status instead of raw bytes or
+full extracted text.
+
+The registry hash for a project ficha is computed from the official ficha URL,
+document links and truncation flag. Local retained-version history is exposed in
+snapshot summaries but is excluded from that hash, so importing a document does
+not by itself make the upstream ficha look changed. The last few snapshot
+headers are returned by `GET /api/registru-surse` beside the existing attempt
+history.
+
 ## Change handling
 
 `unchanged` means the newly fetched hash equals the previous retained hash. It
