@@ -6495,6 +6495,15 @@ function lifecycleUncertaintyText(project){
   const reasons=(uncertainty.reasons||[]).join(', ');
   return `Incertitudine ${level}${reasons?' · '+reasons:''}${uncertainty.message?' · '+uncertainty.message:''}`;
 }
+function lifecycleFreshnessBadgeHtml(project){
+  const source=project.registry_source||{};
+  const state=project.registry_source_state||project.source_state||'unknown';
+  const label=SOURCE_STATE_LABELS[state]||state;
+  const last=source.last_attempt_at||project.last_updated||project.last_seen||'';
+  const attention=['changed','failed','needs_review','rate_limited','unavailable','stale'].includes(state);
+  const next=source.sync_status?.next_action||project.uncertainty?.message||'Fără alertă de prospețime în datele locale.';
+  return `<p class="hint source-freshness-${attention?'attention':'ok'}"><strong>Prospețime sursă: ${esc(label)}</strong> · ultima verificare ${esc(dossierTime(last)||'necunoscută')}<br>${esc(next)}</p>`;
+}
 function lifecycleTimelineHtml(project){
   const key=project.stage?.key||project.latest_event?.stage_key||'', current=LIFECYCLE_STEPS.findIndex(([k])=>k===key);
   if(current<0)return `<div class="lifecycle-timeline"><span class="lifecycle-step lifecycle-step-attention">${esc(project.stage?.label||project.status||'Etapă neconfirmată')}</span></div>`;
@@ -6524,7 +6533,7 @@ function lifecycleRowHtml(project,index=0){
   const stageDate=project.stage_date?` · Stadiu la: ${esc(dossierTime(project.stage_date))}`:'';
   const source=url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Fișa oficială</a>`:'Fișă oficială necunoscută';
   const watch=projectWatched(project.project_id)?'Nu mai urmări':'Urmărește';
-  const registry=project.registry_source_state?`<p class="hint">Registru sursă: ${esc(SOURCE_STATE_LABELS[project.registry_source_state]||project.registry_source_state)}${project.registry_source?.last_attempt_at?` · ${esc(dossierTime(project.registry_source.last_attempt_at))}`:''}</p>`:'';
+  const registry=lifecycleFreshnessBadgeHtml(project);
   const affected=Number(project.affected_dossiers||0);
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
