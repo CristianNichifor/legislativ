@@ -206,8 +206,7 @@ def _open(path, *, write=False):
                 "CREATE INDEX IF NOT EXISTS watchlist_dosare_dosar "
                 "ON watchlist_dosare(dosar_id,tip,valoare)"
             )
-            version = 11
-        if write and version == 11:
+        if write and version in (10, 11):
             con.execute(
                 "CREATE TABLE IF NOT EXISTS rule_candidate_queue (id TEXT PRIMARY KEY, "
                 "dosar_id TEXT NOT NULL REFERENCES dosare(id), candidate_id TEXT NOT NULL, "
