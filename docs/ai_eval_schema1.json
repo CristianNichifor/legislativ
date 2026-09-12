@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://legislativ.local/schemas/ai-eval-v1.json",
+  "title": "Legislativ AI evaluation v1",
+  "type": "object",
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "cases": {
+      "type": "array",
+      "maxItems": 200,
+      "items": {
+        "type": "object",
+        "required": ["id", "task_type", "prompt", "sources"],
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "string", "minLength": 1, "maxLength": 120},
+          "task_type": {
+            "enum": [
+              "source_summarization",
+              "gap_note_drafting",
+              "eu_article_comparison",
+              "amendment_wording"
+            ]
+          },
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "locator", "language", "text"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {"type": "string", "minLength": 1, "maxLength": 80},
+                "locator": {"type": "string", "maxLength": 120},
+                "language": {"enum": ["ro", "en"]},
+                "text": {"type": "string", "maxLength": 80000}
+              }
+            }
+          },
+          "required_citations": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 80}
+          },
+          "forbidden_claim_terms": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 160}
+          },
+          "requires_uncertainty": {"type": "boolean"}
+        }
+      }
+    },
+    "run_id": {"type": "string", "maxLength": 120},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["case_id", "provider", "model", "output"],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {"type": "string", "minLength": 1, "maxLength": 120},
+          "provider": {"type": "string", "maxLength": 80},
+          "model": {"type": "string", "maxLength": 120},
+          "output": {"type": "string", "minLength": 1, "maxLength": 20000}
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {"required": ["cases"]},
+    {"required": ["run_id", "candidates"]}
+  ]
+}

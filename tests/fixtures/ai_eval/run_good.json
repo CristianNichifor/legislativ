@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "run_id": "fixture-good",
+  "candidates": [
+    {
+      "case_id": "source-summary-public-consultation",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [RO-L52-2003:art-7]\nConstatare: Art. 7 prevede obligatia autoritatii administratiei publice de a publica un anunt despre elaborarea proiectului de act normativ si de a acorda un termen pentru propuneri scrise.\nLimitari: Din fragment nu rezulta o sanctiune si nu certifica respectarea tuturor etapelor procedurale.\nIncertitudini: este posibil sa fie necesara verificarea formei actualizate si a normelor conexe."
+    },
+    {
+      "case_id": "eu-comparison-procurement",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [RO-PLX-101:art-I], [EU-32014L0024:art-18]\nIpoteza: proiectul national introduce o procedura rapida pentru achizitii publice, iar articolul UE mentioneaza tratamentul egal, nediscriminatoriu, transparent si proportional.\nRisc: lipsa criteriilor de transparenta pentru anunt poate crea un posibil conflict de aplicare, dar nu certifica incalcarea directivei.\nRecomandare: formularea ar trebui sa indice criteriile de transparenta aplicabile si exceptiile justificate.\nLimitari: analiza ramane o ipoteza si trebuie verificata pe textul complet."
+    },
+    {
+      "case_id": "amendment-wording-deadline",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [RO-DRAFT-TERMEN:art-2]\nAmendament: La articolul 2, dupa sintagma privind transmiterea normelor metodologice, se precizeaza ca termenul de 30 de zile curge de la data intrarii in vigoare a legii.\nTemei: sursa prevede autoritatea competenta, normele metodologice si termenul de 30 de zile.\nLimitari: propunerea este o redactare de lucru si necesita verificare tehnico-legislativa."
+    },
+    {
+      "case_id": "gap-note-local-domain",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [RO-LAW-DOMAIN:art-3]\nIpoteza: legea defineste domeniul serviciilor digitale si include platforme online, dar fragmentul citat mentioneaza doar obligatia de notificare a incidentelor.\nConstatare: poate exista un posibil vid daca sunt necesare reguli pentru prevenire, termene sau continutul notificarii, insa textul citat nu certifica aceasta concluzie.\nRecomandare: verificati actele secundare si definitiile conexe inainte de amendament.\nIncertitudini: analiza este limitata la fragmentul furnizat."
+    }
+  ]
+}

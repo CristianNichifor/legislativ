@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "source-summary-public-consultation",
+      "task_type": "source_summarization",
+      "prompt": "Rezuma obligatia si limitele consultarii publice folosind numai sursele date.",
+      "sources": [
+        {
+          "id": "RO-L52-2003",
+          "locator": "art-7",
+          "language": "ro",
+          "text": "Art. 7. Autoritatea administratiei publice are obligatia sa publice un anunt referitor la elaborarea unui proiect de act normativ si sa acorde un termen pentru primirea propunerilor in scris."
+        }
+      ],
+      "required_citations": ["RO-L52-2003"],
+      "forbidden_claim_terms": ["constitutionalitate", "sanctiune penala"],
+      "requires_uncertainty": true
+    },
+    {
+      "id": "eu-comparison-procurement",
+      "task_type": "eu_article_comparison",
+      "prompt": "Compara proiectul national cu articolul UE si marcheaza numai ipoteze de risc.",
+      "sources": [
+        {
+          "id": "RO-PLX-101",
+          "locator": "art-I",
+          "language": "ro",
+          "text": "Proiectul introduce o procedura rapida pentru achizitii publice in cazuri justificate, fara a descrie criteriile de transparenta aplicabile anuntului."
+        },
+        {
+          "id": "EU-32014L0024",
+          "locator": "art-18",
+          "language": "ro",
+          "text": "Operatorii economici sunt tratati in mod egal si nediscriminatoriu, iar autoritatile contractante actioneaza intr-un mod transparent si proportional."
+        }
+      ],
+      "required_citations": ["RO-PLX-101", "EU-32014L0024"],
+      "forbidden_claim_terms": ["directiva este incalcata sigur", "nulitate"],
+      "requires_uncertainty": true
+    },
+    {
+      "id": "amendment-wording-deadline",
+      "task_type": "amendment_wording",
+      "prompt": "Propune o formulare de amendament pentru clarificarea termenului.",
+      "sources": [
+        {
+          "id": "RO-DRAFT-TERMEN",
+          "locator": "art-2",
+          "language": "ro",
+          "text": "Autoritatea competenta transmite normele metodologice in termen de 30 de zile de la intrarea in vigoare a legii."
+        }
+      ],
+      "required_citations": ["RO-DRAFT-TERMEN"],
+      "forbidden_claim_terms": ["60 de zile", "abrogare totala"],
+      "requires_uncertainty": true
+    },
+    {
+      "id": "gap-note-local-domain",
+      "task_type": "gap_note_drafting",
+      "prompt": "Redacteaza o nota scurta despre un posibil vid legislativ in domeniul definit.",
+      "sources": [
+        {
+          "id": "RO-LAW-DOMAIN",
+          "locator": "art-3",
+          "language": "ro",
+          "text": "Domeniul serviciilor digitale include furnizarea de platforme online catre utilizatori. Legea stabileste obligatia de notificare a incidentelor catre autoritatea competenta."
+        }
+      ],
+      "required_citations": ["RO-LAW-DOMAIN"],
+      "forbidden_claim_terms": ["toate platformele sunt interzise", "amenzi penale"],
+      "requires_uncertainty": true
+    }
+  ]
+}
