@@ -1347,6 +1347,7 @@
             <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
+            <div id="source-registry-detail"></div>
             <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled>Pagina următoare</button></div>
           </details>
         </section>
@@ -5772,6 +5773,11 @@ function sourceRegistryOutcome(row,verb='Sync'){
   const next=row.sync_status?.next_action?` Următorul pas: ${row.sync_status.next_action}`:'';
   return `${verb}: ${label}. ${hint}${next}${hash}${error}`;
 }
+function sourceRegistryDetailHtml(row,families){
+  const family=families?.[row.family]||row.family||'necunoscută';
+  const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+}
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
   const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
@@ -5800,7 +5806,20 @@ function sourceRegistryRowHtml(row,families){
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+}
+async function inspectSourceRegistryRow(id){
+  const status=$('#source-registry-status'),detail=$('#source-registry-detail');
+  const params=new URLSearchParams({id});
+  status.textContent='Citesc sursa selectată…';
+  try{
+    const data=await sourceRegistryApi(null,params);
+    const row=data.sources?.[0];
+    if(!row)throw Error('Sursa selectată nu mai există.');
+    sourceRegistryConfigure(data);
+    detail.innerHTML=sourceRegistryDetailHtml(row,data.families);
+    status.textContent=sourceRegistryOutcome(row,'Sursă selectată');
+  }catch(err){status.textContent=err.message;}
 }
 async function loadSourceRegistry(offset=0,notice=''){
   const status=$('#source-registry-status'), list=$('#source-registry-list');
@@ -5812,6 +5831,7 @@ async function loadSourceRegistry(offset=0,notice=''){
     list.innerHTML=data.sources.map(row=>sourceRegistryRowHtml(row,data.families)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
     $('#source-registry-prev').disabled=offset===0;$('#source-registry-next').disabled=!data.more;
     status.textContent=notice||`${data.total} surse urmărite. Sync-ul este explicit, câte o sursă, fără rebuild.`;
+    list.querySelectorAll('[data-source-inspect]').forEach(button=>button.onclick=()=>inspectSourceRegistryRow(button.dataset.sourceInspect));
     list.querySelectorAll('[data-source-queue]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;status.textContent='Pun sursa în coadă…';
       try{await sourceRegistryApi({action:'queue',id:button.dataset.sourceQueue});await loadSourceRegistry(SOURCE_REGISTRY.offset);}
@@ -5819,12 +5839,12 @@ async function loadSourceRegistry(offset=0,notice=''){
     });
     list.querySelectorAll('[data-source-sync]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;status.textContent='Sincronizez o singură sursă…';
-      try{const row=await sourceRegistryApi({action:'sync',id:button.dataset.sourceSync});await loadSourceRegistry(SOURCE_REGISTRY.offset,sourceRegistryOutcome(row));}
+      try{const row=await sourceRegistryApi({action:'sync',id:button.dataset.sourceSync});await loadSourceRegistry(SOURCE_REGISTRY.offset,sourceRegistryOutcome(row));await inspectSourceRegistryRow(row.id);}
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
     list.querySelectorAll('[data-source-review]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;status.textContent='Marchez sursa ca revizuită…';
-      try{const row=await sourceRegistryApi({action:'review',id:button.dataset.sourceReview});await loadSourceRegistry(SOURCE_REGISTRY.offset,sourceRegistryOutcome(row,'Revizie'));}
+      try{const row=await sourceRegistryApi({action:'review',id:button.dataset.sourceReview});await loadSourceRegistry(SOURCE_REGISTRY.offset,sourceRegistryOutcome(row,'Revizie'));await inspectSourceRegistryRow(row.id);}
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
     list.querySelectorAll('[data-source-open-project]').forEach(button=>button.onclick=()=>openAcquisitionProject(button.dataset.sourceOpenProject));
