@@ -652,6 +652,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -758,6 +759,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -816,6 +818,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         out = executa(path, cerere)
                     elif ruta == "/api/dosare/ai-draft":
                         from scripts.ai_drafting import preview
+
+                        out = preview(cerere)
+                    elif ruta == "/api/dosare/ai-draft/mcp-preview":
+                        from scripts.mcp_ai_draft import preview
 
                         out = preview(cerere)
                     elif ruta == "/api/dosare/verificari":

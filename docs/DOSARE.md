@@ -224,6 +224,12 @@ browser. The generated text is inserted only by explicit user action, labelled a
 an unreviewed AI draft, and remains ordinary note text until the user saves it.
 It cannot mark a note reviewed, accepted or legally final.
 
+The same editor also exposes an MCP handoff for the prompt. `POST
+/api/dosare/ai-draft/mcp-preview` returns the AI prompt plus the MCP approval
+packet, but does not execute a tool. The user can copy the packet to a connected
+MCP AI tool, paste the result back, and insert it into the note with the MCP audit
+timestamp and payload hash preserved in the reasoning text.
+
 ## Evidence Dependencies
 
 New runs use the `matrice-dosar-v2` contract and store a version-1 dependency

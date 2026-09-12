@@ -287,6 +287,39 @@ assert.ok(prefill.evidence_quote.includes('changed'));
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
+    source = (
+        APP.read_text()
+        .split("function mcpDraftInsertText", 1)[1]
+        .split("function euIssueNoteBuilderHtml", 1)[0]
+    )
+    html = (
+        APP.read_text()
+        .split("function manualNoteFormHtml", 1)[1]
+        .split("function manualNotePayload", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');function mcpDraftInsertText"
+        + source
+        + "const plan={insert_header:'[Ciornă MCP AI · server/tool · abc]',"
+        "mcp:{audit_event:{created_at:'2026-09-12T00:00:00Z'},approval:{data_sha256:'abc'}}};"
+        "const text=mcpDraftInsertText(plan,' rezultat ');"
+        "assert.ok(text.includes('MCP audit: 2026-09-12T00:00:00Z · abc'));"
+        "assert.ok(text.endsWith('rezultat'));"
+        "const MANUAL_NOTE_TYPES={lacuna:'Lacună'};"
+        "const MANUAL_NOTE_STATUS={draft:'Ciornă'};"
+        "const esc=s=>String(s);function manualNoteFormHtml"
+        + html
+        + "const form=manualNoteFormHtml();"
+        "assert.ok(form.includes('data-mcp-ai-draft'));"
+        "assert.ok(form.includes('data-mcp-preview'));"
+        "assert.ok(form.includes('data-mcp-copy'));"
+        "assert.ok(form.includes('data-mcp-insert'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_review_form_escapes_evidence_and_history():
     source = (
         APP.read_text()
