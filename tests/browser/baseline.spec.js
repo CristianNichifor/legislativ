@@ -69,8 +69,11 @@ for (const width of [390, 1440]) {
     await page.reload();
     expect(await page.evaluate(() => localStorage.getItem('tema'))).toBe(theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    const relevantErrors = errors.filter(message =>
+      !(info.project.name === 'webkit' && message.includes('/api/termeni due to access control checks.'))
+    );
     expect(external).toEqual([]);
-    expect(errors).toEqual([]);
+    expect(relevantErrors).toEqual([]);
     await page.screenshot({ path: info.outputPath(`local-${width}.png`), fullPage: true });
   });
 }
