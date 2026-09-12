@@ -3,8 +3,9 @@
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
-from scripts import depozit
+from scripts import depozit, tracker_events
 from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
@@ -68,6 +69,36 @@ with TemporaryDirectory(prefix="legislativ-browser-") as directory:
             "INSERT INTO initiative_tinta (plx_id, act_id, locator) VALUES (?,?,?)",
             ("plx-999998-2026", "lege-999999-2024", "art2"),
         )
+    for event in [
+        {
+            "event_type": "committee_assignment",
+            "project_id": "plx-999999-2026",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/pls/proiecte/upl_pck.proiect?idp=999999",
+            "occurred_at": "2026-01-03T10:00:00+00:00",
+            "title": "Comisie sesizată pentru fond",
+            "payload": {
+                "committees": ["Comisia juridică"],
+                "role": "fond",
+                "raw_action": "trimis pentru raport",
+            },
+        },
+        {
+            "event_type": "report_filed",
+            "project_id": "plx-999999-2026",
+            "dossier_id": "11111111111111111111111111111111",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/pls/proiecte/upl_pck.proiect?idp=999999",
+            "occurred_at": "2026-01-05T10:00:00+00:00",
+            "title": "Raport depus",
+            "payload": {
+                "committee": "Comisia juridică",
+                "position": "adoptare",
+                "filed_at": "2026-01-05",
+            },
+        },
+    ]:
+        tracker_events.adauga(SimpleNamespace(initiative=root / "initiative.db"), event)
     serveste(
         5190,
         str(root / "corpus.db"),

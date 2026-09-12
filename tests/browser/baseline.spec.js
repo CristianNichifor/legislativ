@@ -23,6 +23,25 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#f-an-max')).toHaveClass(/civic-select/);
     expect(requests.some(url => url.endsWith('/vendor/civic-ui/styles.css'))).toBe(true);
     await page.locator('#tab-matrice').click();
+    await page.locator('#lifecycle-tracker > summary').click();
+    await page.locator('#lifecycle-filter').selectOption('toate');
+    await page.locator('#lifecycle-search input[name="q"]').fill('plx-999999-2026');
+    await page.locator('#lifecycle-search').evaluate(form => form.requestSubmit());
+    await expect(page.locator('#lifecycle-list')).toContainText('plx-999999-2026');
+    const trackerResponse = page.waitForResponse(response =>
+      response.url().includes('/api/tracker-evenimente') && response.url().includes('project_id=plx-999999-2026')
+    );
+    await page.locator('[data-lifecycle-timeline]').first().click();
+    expect((await trackerResponse).ok()).toBe(true);
+    await expect(page.locator('#tracker-timeline-status')).toContainText('2 din 2 evenimente');
+    await expect(page.locator('#tracker-timeline-list')).toContainText('Raport depus');
+    await expect(page.locator('#tracker-timeline-list')).toContainText('Comisie sesizată pentru fond');
+    await expect(page.locator('#tracker-timeline-list')).toContainText('Comisia juridică');
+    await page.locator('#tracker-dossier-id').fill('11111111111111111111111111111111');
+    await page.locator('#tracker-project-id').fill('');
+    await page.locator('#tracker-timeline-search').evaluate(form => form.requestSubmit());
+    await expect(page.locator('#tracker-timeline-status')).toContainText('1 din 1 evenimente');
+    await expect(page.locator('#tracker-timeline-list')).toContainText('dosar 11111111111111111111111111111111');
     await page.locator('#dossier-library > summary').click();
     await expect(page.locator('#dossier-local')).toBeVisible();
     await page.locator('#dossier-create').evaluate(form => form.closest('details').open = true);
