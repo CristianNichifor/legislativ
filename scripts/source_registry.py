@@ -814,6 +814,94 @@ def _store_snapshot(
         con.commit()
 
 
+def _tracker_date(value: str | None) -> str:
+    value = (value or "").strip()
+    if not value:
+        return now()
+    if re.fullmatch(r"\d{1,2}[./-]\d{1,2}[./-]\d{4}", value):
+        day, month, year = re.split(r"[./-]", value)
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}T00:00:00+00:00"
+    if len(value) == 10 and value[4] == "-" and value[7] == "-":
+        return value + "T00:00:00+00:00"
+    return value
+
+
+def _persist_tracker_event(stare, data: dict) -> None:
+    from scripts import tracker_events
+
+    try:
+        tracker_events.adauga(stare, data)
+    except (ValueError, OSError, sqlite3.Error):
+        return
+
+
+def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) -> None:
+    from scripts import achizitii_proiecte
+
+    try:
+        events = achizitii_proiecte.tracker_events(stare, plx)
+    except (ValueError, OSError, sqlite3.Error):
+        return
+    for event in events:
+        key = event.get("key")
+        if key == "opinion_requested":
+            continue
+        payload = {
+            item: value
+            for item, value in event.items()
+            if item not in {"key", "date", "project_id", "source_family", "source_url"}
+            and value not in (None, "")
+        }
+        _persist_tracker_event(
+            stare,
+            {
+                "event_type": key,
+                "project_id": event.get("project_id") or plx,
+                "source_family": event.get("source_family") or row["family"],
+                "source_id": source_id,
+                "source_url": event.get("source_url") or row.get("url", ""),
+                "occurred_at": _tracker_date(event.get("date")),
+                "title": event.get("raw_action") or event.get("question") or key,
+                "payload": payload,
+            },
+        )
+
+
+def _persist_econsultare_tracker_event(
+    stare, source_id: str, snapshot: dict, content_hash: str
+) -> None:
+    summary = snapshot.get("summary") or {}
+    project_id = snapshot.get("url") or source_id
+    deadline = summary.get("deadline") or ""
+    event_type = (
+        "public_consultation_closed"
+        if summary.get("status") == "closed"
+        else "public_consultation_opened"
+    )
+    payload = {
+        "authority": summary.get("authority") or snapshot.get("authority", ""),
+        "deadline": deadline,
+        "project_url": snapshot.get("url", ""),
+        "attachment_hashes": [],
+        "documents": snapshot.get("documents", []),
+        "status": summary.get("status") or snapshot.get("status", "unknown"),
+    }
+    _persist_tracker_event(
+        stare,
+        {
+            "event_type": event_type,
+            "project_id": project_id,
+            "source_family": "consultare_econsultare",
+            "source_id": source_id,
+            "source_url": snapshot.get("url", ""),
+            "occurred_at": _tracker_date(deadline),
+            "title": summary.get("title") or snapshot.get("title") or "Consultare publică",
+            "payload": payload,
+            "content_hash": content_hash,
+        },
+    )
+
+
 def sincronizeaza_proiect(stare, source_id: str) -> dict:
     """Run one bounded sync for a registered parliamentary project source."""
     row = _source(stare, source_id)
@@ -850,6 +938,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
     snapshot = _project_snapshot(row, plx, operation, result, _project_local_meta(stare, plx))
     content_hash = _project_content_hash(snapshot)
     _store_snapshot(stare, source_id, content_hash, snapshot, PROJECT_PARSER_VERSION)
+    _persist_project_tracker_events(stare, source_id, row, plx)
     inregistreaza(
         stare,
         {
@@ -978,6 +1067,7 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
         snapshot,
         achizitii_econsultare.PARSER_VERSION,
     )
+    _persist_econsultare_tracker_event(stare, source_id, snapshot, content_hash)
     title = snapshot["summary"].get("title") or snapshot["url"]
     inregistreaza(
         stare,

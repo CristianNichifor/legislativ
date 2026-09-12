@@ -4,6 +4,7 @@ import pytest
 
 from scripts import achizitii_econsultare as ec
 from scripts import source_registry as registry
+from scripts import tracker_events
 
 HTML = """
 <html>
@@ -77,6 +78,14 @@ def test_registry_syncs_one_econsultare_source(monkeypatch, tmp_path):
     assert selected["sync_status"]["can_sync"] is True
     assert selected["snapshots"][0]["parser_version"] == ec.PARSER_VERSION
     assert selected["snapshots"][0]["summary"]["documents"] == 2
+    events = tracker_events.lista(
+        stare, {"source_family": ["consultare_econsultare"], "limit": ["10"]}
+    )
+    assert events["total"] == 1
+    assert events["events"][0]["event_type"] == "public_consultation_opened"
+    assert events["events"][0]["project_id"] == "https://e-consultare.gov.ro/consultare/123"
+    assert events["events"][0]["occurred_at"] == "2026-10-15T00:00:00+00:00"
+    assert events["events"][0]["payload"]["authority"] == "Ministerul Dezvoltării"
 
     unchanged = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert unchanged["state"] == "unchanged"
