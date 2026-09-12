@@ -22,6 +22,7 @@ from scripts.servicii import (
     _acoperire_ue,
     _cauta,
     _import_queue_ue,
+    _law_code_delegated_norms,
     _lint,
     _norma,
     _prevedere,
@@ -803,3 +804,55 @@ def test_prevedere_refuses_an_incomplete_request(tmp_path):
     stare = _build(tmp_path)
     assert _prevedere({"act": ["lege-98-2016"]}, stare)["gasit"] is False
     assert _prevedere({"loc": ["art3"]}, stare)["gasit"] is False
+
+
+def test_law_code_delegated_norm_check_is_review_candidate_not_verdict(tmp_path):
+    stare = _build(tmp_path)
+    stare.vid = [
+        {
+            "act_id": "lege-98-2016",
+            "locator": "art3",
+            "text": "Guvernul aprobă normele metodologice.",
+            "instrument": "hg",
+            "scadenta": "2016-06-25",
+            "zile_intarziere": 100,
+            "severitate": "blocking",
+            "cautat": "act de tip «hg» care trimite la lege-98-2016",
+            "candidati": ["ordin-1-2017"],
+            "limitari": ["Corpusul nu se declară complet pentru actele de tip «hg»."],
+        },
+        {
+            "act_id": "lege-1-2020",
+            "locator": "art1",
+            "text": "Ministrul emite ordinul.",
+            "instrument": "ordin",
+        },
+    ]
+
+    out = _law_code_delegated_norms({"act": ["lege-98-2016"], "limita": ["1"]}, stare)
+
+    assert out["contract"] == "law-code-delegated-norms-v1"
+    assert out["status"] == "deterministic_check_preview"
+    assert out["total"] == 1
+    assert out["returned"] == 1
+    check = out["checks"][0]
+    assert check["contract"] == "law-code-check-delegated-norm-v1"
+    assert check["status"] == "candidate_gap_not_verdict"
+    assert check["provision_id"] == "ro:lege-98-2016#art3"
+    assert check["evidence"]["near_candidates"] == ["ordin-1-2017"]
+    assert check["actions"][0]["eticheta"] == "vezi prevederea"
+    assert any("not a legal verdict" in item for item in check["limitations"])
+
+
+def test_law_code_delegated_norm_check_reports_truncation(tmp_path):
+    stare = _build(tmp_path)
+    stare.vid = [
+        {"act_id": f"lege-{i}-2020", "locator": "art1", "text": "x", "instrument": "hg"}
+        for i in range(3)
+    ]
+
+    out = _law_code_delegated_norms({"limita": ["2"]}, stare)
+
+    assert out["total"] == 3
+    assert out["returned"] == 2
+    assert out["truncated"] is True
