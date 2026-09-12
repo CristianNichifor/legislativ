@@ -230,6 +230,46 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_matrix_graph_renderer_labels_scaffold_edges_and_drilldowns():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function mActiuni", 1)[1].split("async function mArataActe", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const nf=n=>String(n);"
+        "const locRo=s=>'Loc '+s;"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "function mActiuni"
+        + source
+        + "const data={acte_selectate:1,acte_total:3,graph_state:'indisponibil',"
+        "trunchiat:true,limitari:['nu verdict <script>'],nodes:[{act_id:'lege-1',"
+        "cheie_citare:'Legea 1/2024',titlu:'Titlu <bad>',emitent:'Parlamentul',"
+        "an:2024,rang:{eticheta:'primar'},domeniu:{eticheta:'achiziții'},"
+        "sursa_url:'javascript:alert(1)',source_quality:{eticheta:'Sursă indisponibilă'}}],"
+        "edges:[{status:'relatie_candidata_neconfirmata',fel:'modifica',"
+        "incredere:0.72,de_la:'2024-01-01',from:{act_id:'lege-1',locator:'art1',"
+        "actiuni:[{fel:'prevedere',act_id:'lege-1',locator:'art1',eticheta:'Text sursă'}]},"
+        "to:{act_id:'lege-2',locator:'art2',actiuni:[{fel:'prevedere',act_id:'lege-2',"
+        "locator:'art2',eticheta:'Text țintă'}]}}]};"
+        "const h=mGraphHtml(data);"
+        "assert.ok(h.includes('Graf matrice · scaffold law-as-code'));"
+        "assert.ok(h.includes('nu verdict juridic'));"
+        "assert.ok(h.includes('Baza locală de graf este indisponibilă'));"
+        "assert.ok(h.includes('Sursă indisponibilă'));"
+        "assert.ok(h.includes('relatie_candidata_neconfirmata'));"
+        "assert.ok(h.includes('încredere: 0.72'));"
+        "assert.ok(h.includes('data-act=\"lege-1\"'));"
+        "assert.ok(h.includes('data-act=\"lege-2\"'));"
+        "assert.ok(h.includes('Rezultat parțial'));"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<bad>')&&!h.includes('javascript:'));"
+        "assert.ok(mGraphHtml({acte_selectate:0,acte_total:0,nodes:[],edges:[]})"
+        ".includes('Niciun act selectat'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_source_registry_renderer_escapes_and_labels_states():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split("const PROJECT_WATCH_KEY=", 1)[0]
