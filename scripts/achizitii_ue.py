@@ -14,6 +14,11 @@ from scripts.transport_cellar import TransportCellar, url_oficial
 IMPORT_LOCK = threading.Lock()
 MAX_PARTS = 10
 PAGE_SIZE = 20
+ARTICLE_PAGE_SIZE = 80
+LANGUAGE_LABELS = {
+    "RON": "romana oficiala",
+    "ENG": "engleza oficiala, fallback explicit cand textul romanesc compatibil lipseste",
+}
 ATTEMPT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS eu_achizitii (
  celex TEXT PRIMARY KEY, incercat_la TEXT NOT NULL, reusit_la TEXT,
@@ -40,11 +45,49 @@ def _attempt(con, celex, status, error=None):
     )
 
 
-def _summary(snapshot):
+def _article_summary(snapshot):
+    if snapshot.get("stare") != "capturat":
+        return {"total": 0, "randuri": [], "trunchiat": False}
+    source = snapshot.get("sursa") or {}
+    try:
+        blocks = cellar.provizii_din_text(source["celex"], source["text"], source["limba"])
+    except (KeyError, TypeError, ValueError):
+        return {"total": 0, "randuri": [], "trunchiat": False, "stare": "indisponibil"}
+    articles = [b for b in blocks if b.fel == "articol"]
     return {
+        "total": len(articles),
+        "randuri": [
+            {
+                "locator": a.locator,
+                "titlu": a.titlu,
+                "limba": a.limba,
+                "ord": a.ord,
+                "sha256": hashlib.sha256(a.text.encode()).hexdigest(),
+            }
+            for a in articles[:ARTICLE_PAGE_SIZE]
+        ],
+        "trunchiat": len(articles) > ARTICLE_PAGE_SIZE,
+    }
+
+
+def _language_contract(language):
+    return {
+        "preferinta": list(cellar.LIMBI_IMPLICITE),
+        "aleasa": language or None,
+        "eticheta": LANGUAGE_LABELS.get(language or "", "limba necunoscuta"),
+        "fallback": language == "ENG",
+    }
+
+
+def _summary(snapshot):
+    out = {
         **snapshot,
         "sursa": {k: v for k, v in snapshot.get("sursa", {}).items() if k != "text"},
+        "articole": _article_summary(snapshot),
     }
+    source = snapshot.get("sursa") or {}
+    out["limba_import"] = _language_contract(source.get("limba"))
+    return out
 
 
 def detaliu(stare, celex, *, offset=0, snapshot_id=None):
@@ -169,7 +212,12 @@ def _importa(stare, celex):
                 _attempt(
                     con, celex, "metadate", "Metadate disponibile; fara text RON/ENG compatibil."
                 )
-            return {"celex": celex, "stare": "metadate", "schimbat": False}
+            return {
+                "celex": celex,
+                "stare": "metadate",
+                "schimbat": False,
+                "limba_import": _language_contract(None),
+            }
         parts = cellar._parti_manifestare(chosen, manifestations)
         if len(parts) > MAX_PARTS or any(p.limba != chosen.limba for p in parts):
             raise ValueError("Manifestare prea mare sau incoerenta.")
@@ -208,8 +256,18 @@ def _importa(stare, celex):
             else:
                 instantanee_ue.arhiveaza_curenta(con, celex)
                 cellar.scrie_manifestari(con, celex, manifestations)
+            current = instantanee_ue.citeste_curenta(con, celex)
             _attempt(con, celex, "ok")
-        return {"celex": celex, "stare": "ok", "limba": chosen.limba, "schimbat": changed}
+        return {
+            "celex": celex,
+            "stare": "ok",
+            "limba": chosen.limba,
+            "limba_import": _language_contract(chosen.limba),
+            "instantanee": current.get("id"),
+            "text_sha256": current.get("sursa", {}).get("text_sha256"),
+            "articole": _article_summary(current),
+            "schimbat": changed,
+        }
     except (
         OSError,
         ValueError,

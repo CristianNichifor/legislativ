@@ -80,10 +80,22 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     source["manifestations"] = [binding("ENG", item=ITEM + "ENG"), binding()]
     first = au.importa(state, {"celex": CELEX})
     assert first["limba"] == "RON" and first["schimbat"]
+    assert first["limba_import"] == {
+        "preferinta": ["RON", "ENG"],
+        "aleasa": "RON",
+        "eticheta": "romana oficiala",
+        "fallback": False,
+    }
+    assert first["instantanee"] and len(first["text_sha256"]) == 64
+    assert first["articole"]["total"] == 1
+    assert first["articole"]["randuri"][0]["locator"] == "art1"
+    assert len(first["articole"]["randuri"][0]["sha256"]) == 64
     detail = au.detaliu(state, CELEX)
     snapshot_id = detail["curenta"]["id"]
     assert detail["incercare"]["stare"] == "ok"
     assert "text" not in detail["curenta"]["sursa"]
+    assert detail["curenta"]["limba_import"]["aleasa"] == "RON"
+    assert detail["curenta"]["articole"]["total"] == 1
     assert "achizitii" in au.detaliu(state, CELEX, snapshot_id=snapshot_id)["sursa"]["text"]
     second = au.importa(state, {"celex": CELEX})
     assert not second["schimbat"]
@@ -95,7 +107,9 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
 def test_english_fallback_and_later_romanian_preserve_history(fixture):
     state, source = fixture
     source["manifestations"] = [binding("ENG")]
-    assert au.importa(state, {"celex": CELEX})["limba"] == "ENG"
+    first = au.importa(state, {"celex": CELEX})
+    assert first["limba"] == "ENG"
+    assert first["limba_import"]["fallback"] is True
     old = au.detaliu(state, CELEX)["curenta"]["id"]
     source["manifestations"] = [binding()]
     au.importa(state, {"celex": CELEX})
@@ -110,7 +124,9 @@ def test_english_fallback_and_later_romanian_preserve_history(fixture):
 def test_pdf_only_retains_metadata_and_last_good_text(fixture):
     state, source = fixture
     source["manifestations"] = [binding(fmt="pdf")]
-    assert au.importa(state, {"celex": CELEX})["stare"] == "metadate"
+    result = au.importa(state, {"celex": CELEX})
+    assert result["stare"] == "metadate"
+    assert result["limba_import"]["aleasa"] is None
     detail = au.detaliu(state, CELEX)
     assert detail["stare"] == "metadate" and detail["incercare"]["reusit_la"] is None
     assert len(source["calls"]) == 1

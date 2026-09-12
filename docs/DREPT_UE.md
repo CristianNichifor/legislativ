@@ -63,6 +63,22 @@ Importatorul păstrează actul, manifestările găsite și prevederile împărț
 `preambul`, `considerent-1`, `art1`, `anexa-i`. Acestea sunt unitățile pe care interfața le poate
 cita.
 
+### Import la cerere în aplicația locală
+
+Panoul **Surse UE · Import și istoric** expune același contract fără import masiv:
+
+1. utilizatorul introduce un singur CELEX sau îl deschide din coada CELEX-urilor citate local;
+2. aplicația interoghează Cellar numai după apăsarea butonului de import;
+3. se încearcă textul oficial românesc (`RON`), apoi engleza oficială (`ENG`) ca fallback marcat
+   explicit;
+4. răspunsul afișează instantaneea curentă, SHA-256 al textului extras și limitele de articol
+   (`art1`, `art2` etc.) cu hash pe fiecare articol delimitat;
+5. acțiunea **Folosește în dosar** duce utilizatorul către legătura UE a unei propuneri salvate,
+   unde CELEX-ul, instantaneea și articolul sunt selectate explicit.
+
+Versiunea statică GitHub Pages nu importă CELEX-uri. Ea poate arăta coada și acoperirea publicată,
+dar descărcarea oficială rămâne numai în aplicația locală.
+
 ## Instantanee locale și dosare
 
 Importurile noi păstrează în `eu_instantanee` textul extras și proveniența fiecărei observații:
