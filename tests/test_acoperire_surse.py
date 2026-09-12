@@ -47,6 +47,15 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
         "unknown_stage",
         "stale_project",
     }
+    assert out["portfolio"]["contract"] == "source-portfolio-v1"
+    assert out["portfolio"]["monitorul_oficial_policy"]["part_i"] == "ingest"
+    families = {row["key"]: row for row in out["portfolio"]["families"]}
+    assert families["consultare_econsultare"]["tier"] == "required"
+    assert families["monitorul_oficial_pi"]["tier"] == "required"
+    assert families["monitorul_oficial_local"]["tier"] == "deferred"
+    assert families["camera"]["coverage_status"] == "attention"
+    assert families["camera"]["tracked_sources"] == 1
+    assert out["portfolio"]["storage_estimates"]["serious"]["gb_max"] == 630
     assert out["status"] == "blocked"
 
 

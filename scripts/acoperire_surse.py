@@ -7,7 +7,7 @@ from collections import Counter
 from contextlib import closing
 from datetime import UTC, datetime
 
-from scripts import source_registry
+from scripts import source_portfolio, source_registry
 from scripts.lifecycle import DEFAULT_STALE_DAYS, project_lifecycle_item
 
 REQUIRED_FAMILIES = (
@@ -25,6 +25,45 @@ REQUIRED_FAMILIES = (
     "ue_cellar",
 )
 ATTENTION = source_registry.ATTENTION_STATES
+
+
+def _portfolio_summary(families: list[dict]) -> dict:
+    by_family = {row["family"]: row for row in families}
+    contract = source_portfolio.portfolio()
+    items = []
+    for row in contract["families"]:
+        coverage = by_family.get(row["key"])
+        if row["key"] in REQUIRED_FAMILIES:
+            tier = "required"
+        elif row["key"] in {"monitorul_oficial_other_parts", "monitorul_oficial_local"}:
+            tier = "deferred"
+        else:
+            tier = "planned"
+        items.append(
+            {
+                "key": row["key"],
+                "label": row["label"],
+                "priority": row["priority"],
+                "tier": tier,
+                "ingest_policy": row["ingest_policy"],
+                "purpose": row["purpose"],
+                "first_slice": row["first_slice"],
+                "rough_gb_min": row["rough_gb_min"],
+                "rough_gb_max": row["rough_gb_max"],
+                "coverage_status": coverage["status"] if coverage else "missing",
+                "tracked_sources": coverage["total"] if coverage else 0,
+                "attention_sources": coverage["attention"] if coverage else 0,
+            }
+        )
+    return {
+        "contract": "source-portfolio-v1",
+        "families": items,
+        "monitorul_oficial_policy": contract["monitorul_oficial_policy"],
+        "storage_estimates": {
+            profile: source_portfolio.estimate_storage(profile)
+            for profile in ("v1", "serious", "everything")
+        },
+    }
 
 
 def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
@@ -198,6 +237,7 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
         "missing_required": len(missing),
         "attention_sources": sum(row["attention"] for row in families),
         "blockers": blockers,
+        "portfolio": _portfolio_summary(families),
         "status": "blocked" if missing or blockers else "ok",
         "limitari": limitations + project_limitations,
     }

@@ -6167,7 +6167,57 @@ $('#source-registry-add').onsubmit=async e=>{
 function sourceCoverageFamilyHtml(row){
   const states=Object.entries(row.states||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără surse';
   const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':'Acoperită';
-  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
+  const duty=row.required?'sursă necesară':'sursă opțională';
+  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${esc(duty)} · ${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
+}
+const SOURCE_PORTFOLIO_TIERS={required:'Necesar acum',planned:'Planificat',deferred:'Amânat / opt-in'};
+const SOURCE_PORTFOLIO_POLICIES={
+  full_text_incremental:'Text integral incremental',
+  metadata_and_documents_incremental:'Metadate și documente incremental',
+  metadata_first_documents_on_demand:'Metadate întâi, documente la cerere',
+  adapter_by_adapter:'Adapter pe rând',
+  celex_on_demand:'CELEX la cerere',
+  full_text_incremental_pdf_retained_selectively:'Text incremental, PDF păstrat selectiv',
+  metadata_or_domain_trigger_only:'Metadate sau declanșare pe domeniu',
+  registry_then_opt_in_packs:'Registru întâi, pachete opt-in'
+};
+function sourcePortfolioPolicyLabel(key){return SOURCE_PORTFOLIO_POLICIES[key]||key||'politică nespecificată';}
+function sourcePortfolioMoPolicyHtml(policy){
+  if(!policy) return '';
+  const labels={part_i:'Partea I',part_ii:'Partea II',parts_iii_vii:'Părțile III-VII',local:'Monitorul Oficial Local'};
+  const values={ingest:'ingestie',metadata_or_selective:'metadate/selectiv',do_not_full_ingest_by_default:'nu full-ingest implicit',registry_first_opt_in_packs:'registru întâi, pachete opt-in'};
+  return '<details><summary>Politica Monitorul Oficial</summary><ul>'
+    +Object.entries(policy).map(([k,v])=>`<li><strong>${esc(labels[k]||k)}</strong> · ${esc(values[v]||v)}</li>`).join('')
+    +'</ul></details>';
+}
+function sourcePortfolioHtml(data){
+  const portfolio=data.portfolio;
+  if(!portfolio?.families?.length) return '';
+  const groups={required:[],planned:[],deferred:[]};
+  for(const row of portfolio.families) (groups[row.tier]||groups.planned).push(row);
+  const groupHtml=Object.entries(groups).map(([tier,rows])=>{
+    if(!rows.length) return '';
+    return `<section><h5>${esc(SOURCE_PORTFOLIO_TIERS[tier]||tier)}</h5><div class="coverage-grid">`
+      +rows.map(row=>{
+        const status=row.coverage_status==='ok'?'ok':row.coverage_status==='missing'?'missing':'attention';
+        return `<article class="coverage-card coverage-${esc(status)}"><h4>${esc(row.priority)}. ${esc(row.label)}</h4>`
+          +`<p>${esc(sourcePortfolioPolicyLabel(row.ingest_policy))} · ${row.tracked_sources||0} urmărite · ${row.attention_sources||0} cu atenție</p>`
+          +`<p class="hint">${esc(row.first_slice||row.purpose||'')}</p>`
+          +`<p class="hint">${esc(row.rough_gb_min)}-${esc(row.rough_gb_max)} GB estimat</p></article>`;
+      }).join('')+'</div></section>';
+  }).join('');
+  const estimates=portfolio.storage_estimates||{};
+  const costs=Object.entries(estimates).map(([profile,s])=>`<li><strong>${esc(profile)}</strong> · ${esc(s.gb_min)}-${esc(s.gb_max)} GB · ${esc(s.r2_standard_usd_month_min)}-${esc(s.r2_standard_usd_month_max)} USD/lună R2 storage</li>`).join('');
+  return `<details open><summary>Portofoliu surse pentru redactare legislativă</summary>${groupHtml}${sourcePortfolioMoPolicyHtml(portfolio.monitorul_oficial_policy)}${costs?`<details><summary>Dimensiune estimată R2</summary><ul>${costs}</ul><p class="hint">Costul operațional, OCR și parsarea PDF nu sunt incluse.</p></details>`:''}</details>`;
+}
+function sourceCoverageActionHtml(data){
+  const actions=[];
+  if(data.missing_required) actions.push('Adaugă sau sincronizează sursele necesare lipsă înainte să tratezi analiza ca acoperită.');
+  if(data.attention_sources) actions.push('Deschide registrul surselor și inspectează rândurile schimbate/eșuate/limitate.');
+  if(data.projects?.stale) actions.push('Reîncarcă proiectele parlamentare vechi sau notează explicit că sursa nu este disponibilă.');
+  if(data.projects?.unknown) actions.push('Mapează etapele necunoscute înainte de rapoarte despre parcurs legislativ.');
+  if(data.projects?.unavailable) actions.push('Păstrează indisponibilitatea vizibilă; nu o transforma în rezultat gol.');
+  return actions.length?`<details open><summary>Ce trebuie făcut pentru acoperire utilizabilă</summary><ul>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></details>`:'';
 }
 function acceptanceDashboardHtml(data){
   const capabilityLabels={ready:'gata',partial:'parțial',missing:'lipsește'};
@@ -6184,8 +6234,10 @@ function sourceCoverageHtml(data){
   const stages=Object.entries(data.projects?.stages||{}).map(([,v])=>`<li>${esc(v.label)}: ${v.total}</li>`).join('');
   return `<div class="coverage-grid">${(data.families||[]).map(sourceCoverageFamilyHtml).join('')}</div>`
     +`<p><strong>${esc(data.status==='ok'?'Acoperire operațională':'Acoperire incompletă')}</strong> · ${data.missing_required||0} familii lipsă · ${data.attention_sources||0} surse cu atenție · ${data.projects?.total||0} proiecte urmărite în registrul local.</p>`
+    +sourceCoverageActionHtml(data)
     +(blockers?`<details open><summary>Blocaje pentru analiză fiabilă</summary><ul>${blockers}</ul></details>`:'')
     +(stages?`<details><summary>Etape proiecte parlamentare</summary><ul>${stages}</ul><p class="hint">${data.projects.stale||0} vechi · ${data.projects.unknown||0} necunoscute · ${data.projects.unavailable||0} indisponibile</p></details>`:'')
+    +sourcePortfolioHtml(data)
     +(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
 }
 async function loadSourceCoverage(){
