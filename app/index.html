@@ -1419,7 +1419,7 @@
               <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
               <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
-            <div id="dossier-meta"></div><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
+            <div id="dossier-meta"></div><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-rules"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
         </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
@@ -4501,7 +4501,12 @@ const RULE_CANDIDATE_REVIEW_STATES={
   machine_detected:'Detectat de mașină',human_reviewed:'Revizuit uman',
   legally_validated:'Validat juridic',disputed:'Disputat',obsolete:'Învechit'
 };
+const RULE_QUEUE_BUCKETS={
+  all:'Toți candidații',needs_more_structure:'Necesită structurare',needs_legal_review:'Necesită revizie juridică',
+  not_codeable:'Nepotrivit pentru codificare',reviewable:'Revizuibil',human_reviewed:'Revizuit uman'
+};
 const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null};
+let ruleDraftsSequence=0;
 
 function manualNoteHtml(note,index){
   const source=note.source_url?` · <a href="${esc(note.source_url)}" target="_blank" rel="noopener">sursa</a>`:'';
@@ -4569,7 +4574,7 @@ function ruleCandidateOptions(items,current=''){
 function ruleCandidateControlsHtml(seed={}){
   const v=name=>esc(seed[name]||'');
   return '<details data-rule-candidate><summary>Propune regulă</summary>'
-    +'<p class="hint">Previzualizare nesalvată. Contractul verifică sursa și câmpurile, dar nu produce verdict juridic.</p>'
+    +'<p class="hint">Previzualizarea verifică sursa și câmpurile. Salvarea pune candidatul în coada locală a dosarului; nu produce verdict juridic.</p>'
     +`<label>ID prevedere<input name="rule_provision_id" maxlength="240" value="${v('provision_id')}" placeholder="ro:lege-98-2016#art7.alin2"></label>`
     +`<label>Act<input name="rule_act_id" maxlength="200" value="${v('act_id')}"></label>`
     +`<label>Locator<input name="rule_locator" maxlength="120" value="${v('locator')}"></label>`
@@ -4584,7 +4589,7 @@ function ruleCandidateControlsHtml(seed={}){
     +'<label>Excepții<textarea name="rule_exceptions" rows="2" maxlength="2000" placeholder="o excepție pe linie"></textarea></label>'
     +'<label>Efect<textarea name="rule_effect" rows="2" maxlength="1200"></textarea></label>'
     +'<label>Reviewer<input name="rule_reviewer" maxlength="160"></label>'
-    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-preview>Previzualizează candidatul</button><p class="hint" role="status" data-rule-status></p></div>'
+    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-preview>Previzualizează candidatul</button><button type="button" class="ghost mini" data-rule-save disabled>Salvează în coadă</button><p class="hint" role="status" data-rule-status></p></div>'
     +'<pre data-rule-result></pre></details>';
 }
 function ruleCandidatePayload(root,source={}){
@@ -4608,16 +4613,29 @@ function ruleCandidatePayload(root,source={}){
 }
 function bindRuleCandidateControls(root,sourceReader=()=>({})){
   const box=root.querySelector?.('[data-rule-candidate]')||root.closest?.('[data-rule-candidate]')||root;
-  const preview=box.querySelector('[data-rule-preview]'),status=box.querySelector('[data-rule-status]'),out=box.querySelector('[data-rule-result]');
+  const preview=box.querySelector('[data-rule-preview]'),save=box.querySelector('[data-rule-save]'),status=box.querySelector('[data-rule-status]'),out=box.querySelector('[data-rule-result]');
   if(!preview)return;
+  let candidate=null;
+  box.querySelectorAll('input,select,textarea').forEach(input=>input.addEventListener('input',()=>{candidate=null;if(save)save.disabled=true;}));
   preview.onclick=async()=>{
     preview.disabled=true;status.textContent='Validez candidatul…';out.textContent='';
     try{
       const data=await dossierApi('/api/dosare/rule-candidates/preview',ruleCandidatePayload(box,sourceReader()));
-      status.textContent=`Candidat ${data.status} · ${data.candidate_id}. Nesalvat.`;
+      candidate=data;if(save)save.disabled=!DOSARE_UI.selected?.id;
+      status.textContent=`Candidat ${data.status} · ${data.candidate_id}. ${save?.disabled?'Alege un dosar pentru salvare.':'Poate fi salvat în coadă.'}`;
       out.textContent=JSON.stringify(data,null,2);
     }catch(err){status.textContent=err.message;}
     finally{preview.disabled=false;}
+  };
+  if(save)save.onclick=async()=>{
+    if(!DOSARE_UI.selected?.id){status.textContent='Alege un dosar înainte de salvare.';return;}
+    if(!candidate){status.textContent='Previzualizează candidatul înainte de salvare.';return;}
+    save.disabled=true;status.textContent='Salvez candidatul în coadă…';
+    try{
+      const saved=await dossierApi('/api/dosare/reguli',{action:'save',id:crypto.randomUUID().replaceAll('-',''),dosar_id:DOSARE_UI.selected.id,candidate});
+      status.textContent=`Salvat în coadă · ${saved.bucket}.`;
+      loadRuleDrafts(DOSARE_UI.selected.id);
+    }catch(err){status.textContent=err.message;save.disabled=false;}
   };
 }
 function bindManualNoteRuleCandidate(form){
@@ -4925,6 +4943,81 @@ async function loadManualNotes(dossierId,offset=0){
       catch(err){saveStatus.textContent=err.message+' Reîncarcă nota dacă a fost modificată în altă fereastră.';controls.forEach(c=>c.disabled=false);}
     };
   }catch(err){if(valid()){host.innerHTML='<details class="manual-notes" open><summary>Note manuale</summary><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-notes-retry>Reîncearcă notele</button></details>';host.querySelector('[data-notes-retry]').onclick=()=>loadManualNotes(dossierId,offset);}}
+}
+function ruleCandidateSummary(candidate){
+  return [RULE_CANDIDATE_MODALITIES[candidate.modality]||candidate.modality,candidate.actor,candidate.action]
+    .filter(Boolean).join(' · ')||candidate.candidate_id;
+}
+function ruleCandidateQueueHtml(item,index){
+  const c=item.candidate||{};
+  return `<article class="manual-note" data-rule-queue-index="${index}"><h5>${esc(ruleCandidateSummary(c))}</h5>`
+    +`<div class="manual-note-meta"><span>${esc(RULE_QUEUE_BUCKETS[item.bucket]||item.bucket)}</span><span>${esc(RULE_CANDIDATE_REVIEW_STATES[c.review_state]||c.review_state)}</span><span>${esc(c.act_id||'')} ${esc(c.locator||'')}</span></div>`
+    +`<p>${esc(c.condition||'Fără condiție explicită')}</p><p>${esc(c.effect||'Fără efect codificat')}</p>`
+    +`<p class="hint">Prevedere: ${esc(c.provision_id||'')} · SHA-256 sursă: ${esc(c.source_hash||'')}</p>`
+    +(item.actiuni?.promote_to_rule?'<details data-rule-promote><summary>Promovează în ciornă law-as-code</summary><form><label>Acceptat de<input name="accepted_by" maxlength="160" required></label><label>Notă acceptare<textarea name="acceptance_note" rows="2" maxlength="1200" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Acceptă ca regulă-ciornă</button><p class="hint" role="status" data-rule-promote-status></p></div></form></details>':'<p class="hint">Nu poate fi promovat până nu este revizuibil sau revizuit uman.</p>')
+    +`<details><summary>Contract candidat</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details></article>`;
+}
+function lawRuleDraftHtml(draft){
+  return `<article class="manual-note"><h5>${esc(ruleCandidateSummary(draft))}</h5>`
+    +`<div class="manual-note-meta"><span>${esc(draft.status)}</span><span>${esc(draft.accepted_by)}</span><span>${esc(dossierTime(draft.creat_la))}</span></div>`
+    +`<p>${esc(draft.act_id||'')} · ${esc(draft.locator||'')}<br><span class="hint">${esc(draft.provision_id||'')}</span></p>`
+    +`<p><b>${esc(RULE_CANDIDATE_MODALITIES[draft.modality]||draft.modality)}</b>: ${esc(draft.actor)} ${esc(draft.action)}</p>`
+    +(draft.condition?`<p>Condiție: ${esc(draft.condition)}</p>`:'')
+    +(draft.deadline?`<p>Termen: ${esc(draft.deadline)}</p>`:'')
+    +(draft.exceptions?.length?`<p>Excepții: ${draft.exceptions.map(esc).join('; ')}</p>`:'')
+    +(draft.acceptance_note?`<p class="hint">Acceptare: ${esc(draft.acceptance_note)}</p>`:'')
+    +`<details><summary>Contract law-rule-draft-v1</summary><pre>${esc(JSON.stringify(draft,null,2))}</pre></details></article>`;
+}
+function ruleDraftsPanelHtml(queue,drafts,bucket,filters){
+  const counts=Object.entries(RULE_QUEUE_BUCKETS).filter(([key])=>key!=='all').map(([key,label])=>`${esc(label)}: ${esc(queue.counts?.[key]||0)}`).join(' · ');
+  const bucketOptions=Object.entries(RULE_QUEUE_BUCKETS).map(([key,label])=>`<option value="${key}" ${key===bucket?'selected':''}>${label}</option>`).join('');
+  return '<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary>'
+    +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1. Ciornele nu sunt verdict juridic și nu execută reguli încă.</p>'
+    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button></div>`
+    +`<p class="hint">${counts||'Nicio coadă de candidați.'}</p>`
+    +`<form data-rule-draft-filters class="dossier-actions"><label>Coada<select name="bucket">${bucketOptions}</select></label><label>Act<input name="act" maxlength="200" value="${esc(filters.act||'')}"></label><label>ID prevedere<input name="provision_id" maxlength="240" value="${esc(filters.provision_id||'')}"></label><button type="submit" class="ghost mini">Filtrează</button><button type="button" class="ghost mini" data-rules-refresh title="Reîncarcă regulile">↻</button></form>`
+    +`<section><h4>Ciorne promovate</h4><div data-rule-draft-list>${(drafts.items||[]).map(lawRuleDraftHtml).join('')||'<p>Nicio ciornă promovată pentru filtrul ales.</p>'}</div></section>`
+    +`<section><h4>Coada de candidați</h4><div data-rule-queue-list>${(queue.items||[]).map(ruleCandidateQueueHtml).join('')||'<p>Niciun candidat în coadă pentru filtrul ales.</p>'}</div></section>`
+    +'<p class="hint" role="status" data-rule-draft-status></p></details>';
+}
+async function loadRuleDrafts(dossierId,offset=0,options={}){
+  const host=$('#dossier-rules'),seq=++ruleDraftsSequence;
+  const valid=()=>seq===ruleDraftsSequence&&DOSARE_UI.selected?.id===dossierId;
+  const bucket=options.bucket||host.querySelector?.('[name="bucket"]')?.value||'all';
+  const filters={act:options.act??host.querySelector?.('[name="act"]')?.value??'',provision_id:options.provision_id??host.querySelector?.('[name="provision_id"]')?.value??''};
+  host.innerHTML='<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary><p role="status">Încarc regulile…</p></details>';
+  try{
+    const queueParams=new URLSearchParams({id:dossierId,offset:String(offset),stare:bucket});
+    const draftParams=new URLSearchParams({id:dossierId,offset:'0'});
+    if(filters.act)draftParams.set('act',filters.act);
+    if(filters.provision_id)draftParams.set('provision_id',filters.provision_id);
+    const [queue,drafts]=await Promise.all([
+      dossierApi('/api/dosare/reguli?'+queueParams),
+      dossierApi('/api/dosare/rule-drafts?'+draftParams)
+    ]);
+    if(!valid())return;
+    host.innerHTML=ruleDraftsPanelHtml(queue,drafts,bucket,filters);
+    const status=host.querySelector('[data-rule-draft-status]');
+    host.querySelector('[data-rules-refresh]').onclick=()=>loadRuleDrafts(dossierId,offset,{bucket, ...filters});
+    host.querySelector('[data-rule-draft-filters]').onsubmit=e=>{
+      e.preventDefault();
+      const data=Object.fromEntries(new FormData(e.currentTarget));
+      loadRuleDrafts(dossierId,0,{bucket:data.bucket,act:data.act,provision_id:data.provision_id});
+    };
+    host.querySelectorAll('[data-rule-promote] form').forEach(form=>{
+      form.onsubmit=async e=>{
+        e.preventDefault();if(!form.reportValidity())return;
+        const item=queue.items[Number(form.closest('[data-rule-queue-index]').dataset.ruleQueueIndex)];
+        const formStatus=form.querySelector('[data-rule-promote-status]');
+        formStatus.textContent='Promovez ciorna…';
+        try{
+          await dossierApi('/api/dosare/rule-drafts',{action:'promote',id:crypto.randomUUID().replaceAll('-',''),dosar_id:dossierId,queue_id:item.id,accepted_by:form.elements.accepted_by.value,acceptance_note:form.elements.acceptance_note.value});
+          status.textContent='Candidatul a fost promovat în law-rule-draft-v1.';
+          await loadRuleDrafts(dossierId,0,{bucket, ...filters});
+        }catch(err){formStatus.textContent=err.message;}
+      };
+    });
+  }catch(err){if(valid()){host.innerHTML='<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-rules-retry>Reîncearcă regulile</button></details>';host.querySelector('[data-rules-retry]').onclick=()=>loadRuleDrafts(dossierId,offset,options);}}
 }
 async function loadProposalList(dossierId,offset=0){
   const host=$('#dossier-proposals'),seq=++proposalListSequence;
@@ -5497,9 +5590,9 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
 async function selectDossier(id,runId,checkId=null,findingId=null){
   if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
-  DOSARE_UI.selected=null;DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;$('#dossier-meta').innerHTML='';$('#dossier-watchlist').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  DOSARE_UI.selected=null;DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;$('#dossier-meta').innerHTML='';$('#dossier-watchlist').innerHTML='';$('#dossier-rules').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
   $('#dossier-notes').textContent='';++MANUAL_NOTES_UI.sequence;MANUAL_NOTES_UI.editing=null;
-  $('#dossier-proposals').textContent='';++proposalListSequence;
+  $('#dossier-proposals').textContent='';++proposalListSequence;++ruleDraftsSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
   try{
     const meta=await dossierApi('/api/dosare/metadate?id='+encodeURIComponent(id));
@@ -5507,6 +5600,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     DOSARE_UI.selected=meta;
     loadDossierWatchlist(id);
     loadManualNotes(id);
+    loadRuleDrafts(id);
     loadProposalList(id);
     const picker=$('#dossier-select');
     if(![...picker.options].some(option=>option.value===id)) picker.add(new Option(meta.titlu,id));
