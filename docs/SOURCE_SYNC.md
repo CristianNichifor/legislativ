@@ -85,6 +85,14 @@ metadata. If a specific official project document URL is synced, the snapshot
 records the retained document hash and extraction status instead of raw bytes or
 full extracted text.
 
+For `consultare_econsultare`, a successful one-source sync stores a compact
+`econsultare-source-snapshot-v1` record. The snapshot keeps the official page
+URL, title, initiating authority when visible, deadline/status when visible and
+bounded official attachment links. It does not crawl the whole consultation
+portal, follow ministry pages, translate documents, run AI or decide whether the
+draft is legally compatible with existing law. Pages without a clear title or
+document links are retained as `needs_review`, not treated as empty results.
+
 The registry hash for a project ficha is computed from the official ficha URL,
 document links and truncation flag. Local retained-version history is exposed in
 snapshot summaries but is excluded from that hash, so importing a document does

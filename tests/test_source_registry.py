@@ -141,6 +141,7 @@ def test_registry_names_precise_public_source_families():
     assert families["monitorul_oficial_other_parts"] == "Monitorul Oficial · Părțile II-VII"
     assert families["monitorul_oficial_local"] == "Monitorul Oficial Local"
     assert families["avize"] == "Avize și opinii instituționale"
+    assert "consultare_econsultare" in registry.SYNC_FAMILIES
     assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
 
 
