@@ -1423,6 +1423,12 @@
             <div id="tracker-timeline-list"></div>
             <div class="dossier-actions"><button type="button" id="tracker-timeline-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="tracker-timeline-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
           </details>
+          <details id="tracker-review-queue" class="tracker-timeline">
+            <summary>Coada de revizie tracker</summary>
+            <div class="dossier-actions"><label>Sursă<select id="tracker-review-source"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label><button type="button" id="tracker-review-refresh" class="ghost mini">Reîncarcă coada</button></div>
+            <p id="tracker-review-status" class="hint" role="status">Coada de revizie neîncărcată.</p>
+            <div id="tracker-review-list"></div>
+          </details>
           <div id="lifecycle-source-review"></div>
           <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
         </details>
@@ -6759,11 +6765,11 @@ function configureTrackerEventTypes(data){
   select.innerHTML='<option value="">Toate tipurile</option>'+types.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('');
   select.dataset.loaded='1';
 }
-function bindTrackerTimelineActions(){
-  const out=$('#tracker-timeline-list'), status=$('#tracker-timeline-status');
+function bindTrackerTimelineActions(listSelector='#tracker-timeline-list',statusSelector='#tracker-timeline-status',reload=()=>loadTrackerTimeline(TRACKER_TIMELINE.offset)){
+  const out=$(listSelector), status=$(statusSelector);
   out.querySelectorAll('[data-tracker-review-event]').forEach(button=>button.onclick=async()=>{
     button.disabled=true;status.textContent='Marchez evenimentul ca revizuit…';
-    try{await trackerTimelineApi({action:'review',id:button.dataset.trackerReviewEvent,reviewer:'utilizator'});await loadTrackerTimeline(TRACKER_TIMELINE.offset);}
+    try{await trackerTimelineApi({action:'review',id:button.dataset.trackerReviewEvent,reviewer:'utilizator'});await reload();}
     catch(err){status.textContent=err.message;button.disabled=false;}
   });
   out.querySelectorAll('[data-tracker-note-event]').forEach(button=>button.onclick=async()=>{
@@ -6771,7 +6777,7 @@ function bindTrackerTimelineActions(){
     const dossierId=event?.dossier_id||TRACKER_TIMELINE.dossier_id||DOSARE_UI.selected?.id||'';
     if(!dossierId){status.textContent='Selectează sau introdu un dosar pentru nota tracker.';return;}
     button.disabled=true;status.textContent='Creez nota din evenimentul tracker…';
-    try{await trackerTimelineApi({action:'create_note',id:button.dataset.trackerNoteEvent,dosar_id:dossierId});await loadTrackerTimeline(TRACKER_TIMELINE.offset);}
+    try{await trackerTimelineApi({action:'create_note',id:button.dataset.trackerNoteEvent,dosar_id:dossierId});await reload();}
     catch(err){status.textContent=err.message;button.disabled=false;}
   });
 }
@@ -6788,6 +6794,26 @@ function trackerTimelineHtml(data){
     const first=rows[0], dossier=first.dossier_id?` · dosar ${first.dossier_id}`:'';
     return `<article class="tracker-timeline-project"><h4>${esc(first.project_id||'Fără proiect')}${esc(dossier)}</h4><ol class="tracker-timeline-events">${rows.map(trackerEventHtml).join('')}</ol></article>`;
   }).join('')+(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
+}
+function trackerReviewQueueHtml(data){
+  const events=data.events||[];
+  if(!events.length)return '<p>Nicio revizie tracker deschisă în selecția curentă.</p>';
+  return `<article class="tracker-timeline-project"><h4>Evenimente nerevizuite</h4><ol class="tracker-timeline-events">${events.map(trackerEventHtml).join('')}</ol></article>`
+    +(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
+}
+async function loadTrackerReviewQueue(){
+  const status=$('#tracker-review-status'),out=$('#tracker-review-list');
+  if(!status||!out)return;
+  status.textContent='Încarc evenimentele nerevizuite…';out.innerHTML='';
+  try{
+    const params=new URLSearchParams({reviewed:'0',limit:'100'});
+    const source=$('#tracker-review-source').value;if(source)params.set('source_family',source);
+    const response=await fetch('/api/tracker-evenimente?'+params);
+    const data=await response.json().catch(()=>({error:'Coada de revizie tracker nu este disponibilă.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Coada de revizie tracker nu este disponibilă.');
+    TRACKER_TIMELINE.last=data;configureTrackerEventTypes(data);out.innerHTML=trackerReviewQueueHtml(data);bindTrackerTimelineActions('#tracker-review-list','#tracker-review-status',loadTrackerReviewQueue);
+    status.textContent=`${data.events?.length||0} din ${data.total||0} evenimente nerevizuite.`;
+  }catch(err){status.textContent=err.message;}
 }
 async function loadTrackerTimeline(offset=0){
   const panel=$('#project-tracker-timeline'), status=$('#tracker-timeline-status'), out=$('#tracker-timeline-list');
@@ -6947,6 +6973,9 @@ $('#tracker-timeline-search').onsubmit=e=>{e.preventDefault();loadTrackerTimelin
 $('#tracker-timeline-refresh').onclick=()=>loadTrackerTimeline(TRACKER_TIMELINE.offset);
 $('#tracker-timeline-prev').onclick=()=>loadTrackerTimeline(Math.max(0,TRACKER_TIMELINE.offset-50));
 $('#tracker-timeline-next').onclick=()=>loadTrackerTimeline(TRACKER_TIMELINE.offset+50);
+$('#tracker-review-queue').ontoggle=e=>{if(e.currentTarget.open)loadTrackerReviewQueue();};
+$('#tracker-review-refresh').onclick=loadTrackerReviewQueue;
+$('#tracker-review-source').onchange=loadTrackerReviewQueue;
 $('#source-project-manager').ontoggle=e=>{if(e.currentTarget.open&&!ACQUISITION.loaded)loadAcquisitionList();};
 async function loadMatrice(forta){
   loadSourceInventory();
