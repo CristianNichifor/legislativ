@@ -321,10 +321,45 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         + html
         + "const form=manualNoteFormHtml();"
         "assert.ok(form.includes('data-rule-candidate'));"
+        "assert.ok(form.includes('data-ai-boundary-summary'));"
+        "assert.ok(form.includes('data-ai-send-note'));"
+        "assert.ok(form.includes('data-ai-copy-prompt'));"
+        "assert.ok(form.includes('explică problema'));"
+        "assert.ok(form.includes('ciornă amendament'));"
+        "assert.ok(form.includes('online BYOK'));"
+        "assert.ok(form.includes('costă în contul tău'));"
         "assert.ok(form.includes('data-mcp-ai-draft'));"
         "assert.ok(form.includes('data-mcp-preview'));"
         "assert.ok(form.includes('data-mcp-copy'));"
         "assert.ok(form.includes('data-mcp-insert'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
+    source = (
+        APP.read_text()
+        .split("function aiDraftBoundaryHtml", 1)[1]
+        .split("function ruleCandidateOptions", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiDraftBoundaryHtml"
+        + source
+        + "const html=aiDraftBoundaryHtml({evidence_count:1,input_sha256:'i'.repeat(64),"
+        "evidence_sha256:'e'.repeat(64),status:'draft_unreviewed',prompt:'PROMPT',"
+        "estimated_tokens:100,cost_estimate:{estimated_total_tokens:1000,server_cost:'none',cost_owner:'user_if_byok_or_mcp'},"
+        "approval:{required_for_external_ai:true,server_calls_model:false,output_status:'draft_unreviewed'},"
+        "evidence_manifest:[{index:1,label:'<Act>',act_id:'lege',locator:'art1',source_hash:'h'.repeat(64)}]},'online_byok');"
+        "assert.ok(html.includes('online BYOK'));"
+        "assert.ok(html.includes('cost server: none'));"
+        "assert.ok(html.includes('Aprobare externă: obligatorie'));"
+        "assert.ok(html.includes('serverul cheamă model: nu'));"
+        "assert.ok(html.includes('&lt;Act&gt;'));"
+        "assert.ok(html.includes('PROMPT'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 

@@ -4537,7 +4537,7 @@ function manualNoteFormHtml(editing=null){
       act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
       text:editing?.evidence_quote||'',provision_id:''
     })
-    +'<details data-ai-note-draft><summary>Ciornă AI din dovadă</summary><p class="hint">Folosește numai citatul, sursa și contextul din formular. Online BYOK/MCP costă în contul utilizatorului și cer aprobare explicită. Rezultatul rămâne ciornă nerevizuită.</p><div class="dossier-actions"><select name="ai_task"><option value="issue_note">notă de constatare</option><option value="amendment_rationale">motivare amendament</option><option value="review_checklist">listă de verificare</option></select><button type="button" class="ghost mini" data-ai-draft-note>Generează ciornă</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
+    +'<details data-ai-note-draft><summary>Ciornă AI din dovezi selectate</summary><p class="hint">Alege sarcina, pregătește promptul și verifică manifestul/costul înainte de orice trimitere. Serverul nu cheamă modele. Local rulează în browser; online BYOK/MCP pleacă numai după acțiunea ta explicită și costă în contul tău.</p><div class="dossier-actions"><label>Sarcină AI<select name="ai_task"><option value="explain_issue">explică problema</option><option value="issue_note">notă de constatare</option><option value="draft_amendment">ciornă amendament</option><option value="review_checklist">listă de verificare reviewer</option></select></label><label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
 }
 function manualNotePayload(form,dossierId,note){
@@ -4567,6 +4567,19 @@ function manualNoteAiEvidence(form){
       language: 'RON'
     }]
   };
+}
+function aiDraftBoundaryHtml(plan,boundary){
+  if(!plan)return '';
+  const cost=plan.cost_estimate||{};
+  const approval=plan.approval||{};
+  const mode={local_ai:'AI local în browser',online_byok:'online BYOK',mcp_handoff:'MCP cu aprobare'}[boundary]||boundary;
+  const manifest=(plan.evidence_manifest||[]).map(e=>`<li>${esc(e.index)}. ${esc(e.label)} · ${esc([e.act_id,e.locator].filter(Boolean).join(' / ')||'fără act')} · ${esc(e.source_hash||e.source_url||'sursă')}</li>`).join('');
+  return `<details open data-ai-boundary-card><summary>Limită AI pregătită · ${esc(mode)}</summary>`
+    +`<p class="hint">Dovezi: ${esc(plan.evidence_count)} · tokeni estimați: ${esc(cost.estimated_total_tokens||plan.estimated_tokens||'necunoscut')} · cost server: ${esc(cost.server_cost||'none')} · cost extern: ${esc(cost.cost_owner||'utilizator')}</p>`
+    +`<p class="hint">Aprobare externă: ${approval.required_for_external_ai?'obligatorie':'nu'} · serverul cheamă model: ${approval.server_calls_model?'da':'nu'} · output: ${esc(approval.output_status||plan.status||'draft_unreviewed')}</p>`
+    +`<p class="hint">Prompt SHA-256: ${esc(plan.input_sha256||'')} · dovezi SHA-256: ${esc(plan.evidence_sha256||'')}</p>`
+    +(manifest?`<ul>${manifest}</ul>`:'')
+    +`<details><summary>Prompt complet</summary><pre>${esc(plan.prompt||'')}</pre></details></details>`;
 }
 function ruleCandidateOptions(items,current=''){
   return Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
@@ -4648,21 +4661,39 @@ function bindManualNoteRuleCandidate(form){
 }
 function bindManualNoteAiDraft(form){
   const section=form.querySelector('[data-ai-note-draft]');if(!section)return;
-  const run=section.querySelector('[data-ai-draft-note]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]');
+  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]');
   bindManualNoteMcpDraft(form,section);
-  let draft='';
-  form.addEventListener('input',e=>{if(e.target.closest('[data-ai-note-draft]'))return;draft='';insert.disabled=true;});
+  let draft='',plan=null;
+  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';};
+  form.addEventListener('input',e=>{if(e.target.closest('[data-ai-note-draft]'))return;clearPlan();});
+  form.elements.ai_task?.addEventListener('change',clearPlan);
+  form.elements.ai_boundary?.addEventListener('change',()=>{if(plan)summary.innerHTML=aiDraftBoundaryHtml(plan,form.elements.ai_boundary.value);});
   run.onclick=async()=>{
-    draft='';insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';
+    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';summary.innerHTML='';
     try{
-      const plan=await dossierApi('/api/dosare/ai-draft',manualNoteAiEvidence(form));
+      plan=await dossierApi('/api/dosare/ai-draft',manualNoteAiEvidence(form));
+      const boundary=form.elements.ai_boundary.value;
       const total=plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens;
-      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${total} tokeni · cost server zero.`;
+      summary.innerHTML=aiDraftBoundaryHtml(plan,boundary);
+      copy.disabled=false;send.disabled=boundary==='mcp_handoff';
+      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${total} tokeni · cost server zero. ${boundary==='mcp_handoff'?'Folosește panoul MCP pentru payload aprobat.':'Poți rula explicit prin modul ales.'}`;
+    }catch(err){status.textContent=err.message;}
+    finally{run.disabled=false;}
+  };
+  copy.onclick=async()=>{if(!plan)return;try{await navigator.clipboard.writeText(plan.prompt);status.textContent='Prompt copiat. Trimite-l extern numai după aprobare explicită.';}catch{status.textContent='Copierea nu a reușit.';}};
+  send.onclick=async()=>{
+    if(!plan){status.textContent='Pregătește promptul înainte de rulare.';return;}
+    const boundary=form.elements.ai_boundary.value, mode=aiMode();
+    if(boundary==='mcp_handoff'){status.textContent='Pentru MCP folosește previzualizarea și copierea payloadului MCP.';return;}
+    if(boundary==='local_ai'&&mode!=='local'){status.textContent='Limită aleasă: AI local. Comută setările AI pe local înainte de rulare.';return;}
+    if(boundary==='online_byok'&&mode!=='online'){status.textContent='Limită aleasă: online BYOK. Comută setările AI pe online și introdu cheia în sesiune.';return;}
+    send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
+    try{
       const answer=await aiComplete(plan.prompt,plan.system,{privat:true,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
       draft=`[Ciornă AI · ${answer.nota} · ${plan.contract} · ${plan.input_sha256}]\n\n${answer.text}`;
       result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
     }catch(err){status.textContent=err.message;}
-    finally{run.disabled=false;}
+    finally{send.disabled=false;}
   };
   insert.onclick=()=>{
     if(!draft)return;
