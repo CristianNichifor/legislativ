@@ -167,6 +167,61 @@ def test_source_coverage_renderer_shows_blockers_and_escapes():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_copy():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert "URL e-consultare" in html
+    assert "https://e-consultare.gov.ro/consultare/" in html
+    assert "o singură pagină" in html
+    source = html.split("const SOURCE_REGISTRY=", 1)[1].split(
+        "async function inspectSourceRegistryRow", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const nf=n=>String(n);"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;"
+        "const SOURCE_REGISTRY=" + source + "const row={id:'src_1',family:'consultare_econsultare',"
+        "identifier:'https://e-consultare.gov.ro/consultare/123',"
+        "url:'https://e-consultare.gov.ro/consultare/123',"
+        "label:'Consultare <script>',state:'changed',last_hash:'a'.repeat(64),"
+        "parser_version:'achizitii_econsultare.v1',sync_status:{can_sync:true,"
+        "can_queue:true,can_review:true,severity:'attention',next_action:'Verifică pagina'},"
+        "impact:{available:true,state:'changed',summary:{affected_dossiers:0,"
+        "affected_runs:0,affected_notes:0,affected_rule_drafts:0,"
+        "affected_proposals:0,affected_watchlist_items:0},limitari:[]},"
+        "attempts:[{attempted_at:'2026-09-12',state:'changed',http_status:200,"
+        "content_hash:'a'.repeat(64),parser_version:'achizitii_econsultare.v1',"
+        "note:'citit <img>'}],snapshots:[{captured_at:'2026-09-12',"
+        "content_hash:'a'.repeat(64),parser_version:'achizitii_econsultare.v1',"
+        "summary:{title:'Proiect <b>',authority:'Ministerul Dezvoltării',"
+        "deadline:'15.10.2026',status:'open',documents:2,truncated:false}}]};"
+        "const families={consultare_econsultare:'Consultări publice · e-consultare'};"
+        "let h=sourceRegistryRowHtml(row,families);"
+        "assert.ok(h.includes('Consultări publice · e-consultare'));"
+        "assert.ok(h.includes('E-Consultare parsată'));"
+        "assert.ok(h.includes('Autoritate: Ministerul Dezvoltării'));"
+        "assert.ok(h.includes('Termen: 15.10.2026'));"
+        "assert.ok(h.includes('Stare: Deschisă'));"
+        "assert.ok(h.includes('2 atașamente'));"
+        "assert.ok(h.includes('Sincronizează sursa'));"
+        "assert.ok(h.includes('Inspectează impactul și datele'));"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
+        "h=sourceRegistryDetailHtml(row,families);"
+        "assert.ok(h.includes('Date parsate E-Consultare'));"
+        "assert.ok(h.includes('Atașamente detectate'));"
+        "assert.ok(h.includes('Titlu pagină'));"
+        "assert.ok(h.includes('Proiect &lt;b&gt;'));"
+        "assert.ok(h.includes('HTTP 200'));"
+        "assert.ok(!h.includes('<b>')&&!h.includes('<img>'));"
+        "assert.equal(sourceRegistryConsultationStatus('closed'),'Închisă');"
+        "assert.equal(sourceRegistryConsultationStatus('missing'),'missing');"
+    )
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_acceptance_dashboard_renderer_shows_finish_state():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("function acceptanceDashboardHtml", 1)[1].split(
