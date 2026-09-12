@@ -142,6 +142,29 @@ def test_source_coverage_renderer_shows_blockers_and_escapes():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_acceptance_dashboard_renderer_shows_finish_state():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function acceptanceDashboardHtml", 1)[1].split(
+        "function sourceCoverageHtml", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');"
+        "function acceptanceDashboardHtml"
+        + source
+        + "const h=acceptanceDashboardHtml({sections:[{key:'eu',label:'Drept UE',"
+        "status:'attention',summary:'not_imported_8_of_8 <x>',"
+        "metrics:{referenced:8,imported_text:0}}],limitari:['Nu reconstruiește']});"
+        "assert.ok(h.includes('Stadiu finalizare'));"
+        "assert.ok(h.includes('Drept UE'));"
+        "assert.ok(h.includes('imported_text: 0'));"
+        "assert.ok(!h.includes('<x>'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_filters_and_opens_project_sources():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]
