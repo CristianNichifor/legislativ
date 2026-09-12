@@ -347,11 +347,39 @@ def test_eu_source_language_status_and_provenance_renderer():
         "assert.ok(euSourceStatus({stare:'integritate_invalida'}).includes('neverificabil'));"
         "const h=euSourceMeta({titlu:'<script>',limba:'ENG',citit_la:'now',text_sha256:'<img>'});"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
-        "assert.ok(h.includes('SHA-256 text extras')&&h.includes('alternativă'));"
+        "assert.ok(h.includes('Source hash')&&h.includes('SHA-256 text extras')"
+        "&&h.includes('alternativă'));"
         "const a=euSourceArticleSummary({total:1,randuri:["
         "{locator:'art<script>',titlu:'T<img>',sha256:'abc'}]});"
         "assert.ok(a.includes('1 articole delimitate')&&!a.includes('<script>')"
         "&&!a.includes('<img>'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_source_import_ui_uses_identifier_url_and_import_endpoint():
+    source = (Path(__file__).parents[1] / "app/index.html").read_text()
+    renderer = source.split("function euSourceIdentifierCelex", 1)[1].split(
+        "async function openEuSource", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "let calls=[];fetch=async(url,opts)=>{calls.push({url,opts});"
+        "return {ok:true,json:async()=>({ok:true})};};"
+        "function euSourceIdentifierCelex" + renderer + "assert.equal(euSourceIdentifierCelex("
+        "'https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024'),"
+        "'32014L0024');"
+        "assert.equal(euSourceIdentifierCelex('celex:32018R1805'),'32018R1805');"
+        "assert.throws(()=>euSourceIdentifierCelex('not a celex'));"
+        "(async()=>{await euSourceApi({celex:'32014L0024'});"
+        "await euSourceApi(null,{identifier:'https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024',limbi:'ENG,RON'});"
+        "assert.equal(calls[0].url,'/api/ue/surse?celex=32014L0024');"
+        "assert.equal(calls[1].url,'/api/ue/import');"
+        "assert.deepEqual(JSON.parse(calls[1].opts.body),{identifier:"
+        "'https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024',"
+        "limbi:'ENG,RON'});})();"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 

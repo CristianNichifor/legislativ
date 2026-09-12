@@ -1504,7 +1504,7 @@
         </div>
         <details class="dossier-library" id="eu-source-manager">
           <summary>Surse UE · Import și istoric</summary>
-          <form id="eu-source-search" class="dossier-actions"><label>CELEX<input name="celex" type="text" maxlength="50" required placeholder="32014L0024"></label><button type="submit" class="ghost mini">Vezi / importă un CELEX</button></form>
+          <form id="eu-source-search" class="dossier-actions"><label>CELEX sau URL oficial<input name="identifier" type="text" maxlength="300" required placeholder="32014L0024 sau URL EUR-Lex/Cellar"></label><label>Preferință limbă<select name="limbi"><option value="RON,ENG">română, apoi engleză</option><option value="ENG,RON">engleză, apoi română</option></select></label><button type="submit" class="ghost mini">Vezi / importă</button></form>
           <p id="eu-source-status" class="hint" role="status"></p><div id="eu-source-detail"></div>
         </details>
         <div id="ue-import-queue"></div>
@@ -7121,6 +7121,14 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
   state.refresh=render;render();section.open=state.opened;
   section.ontoggle=()=>{state.opened=section.open;if(section.open&&!state.loaded&&!state.busy)run(()=>history());};
 }
+function euSourceIdentifierCelex(value){
+  const text=String(value||'').trim();
+  let match=text.match(/[?&]uri=CELEX:([^&#]+)/i);
+  if(!match)match=text.match(/(?:^|[:/])celex[:/]([^/?#&]+)/i);
+  const celex=(match?match[1]:text).trim().toUpperCase();
+  if(!/^[0-9A-Z()._-]{5,50}$/.test(celex))throw new Error('Introdu un CELEX valid sau un URL EUR-Lex/Cellar cu CELEX.');
+  return celex;
+}
 function euSourceLanguage(language){return language==='RON'?'Română oficială':language==='ENG'?'Engleză oficială · alternativă la textul românesc':'Limbă necunoscută';}
 function euSourceArticleSummary(articles){
   const rows=(articles&&articles.randuri)||[];
@@ -7129,21 +7137,25 @@ function euSourceArticleSummary(articles){
     +`<div class="ue-ref-list">`+rows.slice(0,12).map(a=>`<div class="ue-ref"><span class="ue-loc">${esc(a.locator)}</span>${esc(a.titlu||'fără titlu')}<br><span class="hint">${esc(a.sha256||'')}</span></div>`).join("")+`</div>`;
 }
 function euSourceMeta(source){
-  return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>SHA-256 text extras: ${esc(source.text_sha256)}</p>`;
+  return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>Source hash / SHA-256 text extras: ${esc(source.text_sha256)}</p>`;
 }
 function euSourceStatus(d){
   const labels={neimportat:'Nicio sursă importată',metadate:'Metadate disponibile · fără text local',text_disponibil:'Text local disponibil'};
   return labels[d.stare]||'Text local neverificabil · '+d.stare;
 }
 async function euSourceApi(params,body){
-  const response=await fetch('/api/ue/surse'+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
+  const path=body?'/api/ue/import':'/api/ue/surse';
+  const response=await fetch(path+(params?'?'+new URLSearchParams(params):''),body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});
   const d=await response.json();if(!response.ok||d.error)throw new Error(d.error||'Cererea UE nu a reușit.');return d;
 }
-async function openEuSource(celex,offset=0){
+async function openEuSource(identifier,offset=0){
   if(EU_SOURCE.busy)return;
-  celex=celex.trim().toUpperCase();EU_SOURCE.celex=celex;
+  let celex;
+  try{celex=euSourceIdentifierCelex(identifier);}
+  catch(err){$('#eu-source-manager').open=true;$('#eu-source-status').textContent=err.message;return;}
+  EU_SOURCE.celex=celex;
   const token=++EU_SOURCE.sequence,out=$('#eu-source-detail'),status=$('#eu-source-status');
-  $('#eu-source-manager').open=true;$('#eu-source-search input').value=celex;
+  $('#eu-source-manager').open=true;$('#eu-source-search input').value=String(identifier||celex).trim();
   out.innerHTML='';status.textContent='Încarc sursa UE locală…';
   try{
     const d=await euSourceApi({celex,offset});if(token!==EU_SOURCE.sequence)return;
@@ -7157,7 +7169,7 @@ function renderEuSource(d){
   out.innerHTML=`<h4>${esc(d.celex)} · ${esc(euSourceStatus(d))}</h4><p class="hint">Import explicit, câte un CELEX. Preferă româna oficială; engleza este marcată ca fallback când nu există text românesc compatibil. Fără traducere automată și fără verdict juridic.</p>`
     +`<button type="button" class="ghost mini" data-eu-import>${attempt&&attempt.stare!=='ok'?'Reîncearcă importul':d.stare==='text_disponibil'?'Verifică și importă actualizarea':'Importă din Cellar'}</button>`
     +(attempt?`<p class="hint">Ultima încercare: ${esc(dossierTime(attempt.incercat_la))}<br>Ultima preluare de text reușită în acest flux: ${attempt.reusit_la?esc(dossierTime(attempt.reusit_la)):'Necunoscută'}</p>${attempt.eroare?`<p>${esc(attempt.eroare)}</p>`:''}`:'<p class="hint">Nicio încercare înregistrată în acest flux.</p>')
-    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Instantanee curentă: ${esc(d.curenta.id)}${lang.fallback?' · fallback ENG explicit':''}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în dosar</button></div><details><summary>Articole delimitate pentru dosare</summary>${euSourceArticleSummary(d.curenta.articole)}</details>`:'')
+    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Preferință limbă: ${esc((lang.preferinta||[]).join(' → ')||'RON → ENG')}<br>Limbă aleasă: ${esc(lang.eticheta||euSourceLanguage(source.limba))}${lang.fallback?' · fallback explicit':''}<br>Snapshot curent: ${esc(d.curenta.id)}<br>Source hash: ${esc(source.text_sha256||'')}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în dosar</button></div><details open><summary>Articole / prevederi importate</summary>${euSourceArticleSummary(d.curenta.articole)}</details>`:'')
     +`<details><summary>Manifestări Cellar locale · ${d.manifestari.length}${d.manifestari_trunchiate?'+':''}</summary>${d.manifestari.map(m=>`<p>${esc(m.limba)} · ${esc(m.format)} · ${acquisitionLink(m.item_url,m.titlu||'Sursa oficială')}</p>`).join('')||'<p>Nicio manifestare locală.</p>'}</details>`
     +`<details data-eu-history><summary>Instantanee istorice</summary><p class="hint">Text extras păstrat local, nu versiuni juridice certificate.</p><div data-eu-history-list></div></details><div data-eu-source-text></div>`;
   out.querySelector('[data-eu-import]').onclick=()=>importEuSource(d.celex);
@@ -7179,23 +7191,26 @@ function renderEuSource(d){
 }
 async function importEuSource(celex){
   if(EU_SOURCE.busy)return;
+  const form=$('#eu-source-search'),identifier=(form?.elements.identifier?.value||celex).trim(),limbi=form?.elements.limbi?.value||'RON,ENG';
   EU_SOURCE.busy=true;++EU_SOURCE.sequence;
   const controls=[...$('#eu-source-manager').querySelectorAll('button,input,select')].map(c=>[c,c.disabled]);controls.forEach(([c])=>c.disabled=true);
   const status=$('#eu-source-status');status.textContent='Preiau sursa oficială UE…';let message;
   try{
-    const result=await euSourceApi(null,{celex});
+    const result=await euSourceApi(null,{identifier,limbi});
     message=result.stare==='metadate'?'Metadate păstrate; niciun text compatibil disponibil.':result.schimbat?'Sursa UE a fost actualizată.':'Textul și metadatele sursei sunt neschimbate.';
     if(result.limba_import?.fallback)message+=' Text românesc compatibil negăsit; s-a păstrat engleza oficială ca fallback explicit.';
     if(result.articole)message+=` Articole delimitate: ${nf(result.articole.total||0)}.`;
+    if(result.snapshot?.source_hash)message+=` Source hash: ${result.snapshot.source_hash.slice(0,12)}….`;
     message+=' Analizele salvate și textul din editor nu au fost modificate.';
     SOURCE_REPORT=null;
   }catch(err){message=err.message;}
   finally{EU_SOURCE.busy=false;controls.forEach(([c,disabled])=>c.disabled=disabled);}
-  await openEuSource(celex);status.textContent=message;
+  await openEuSource(resultCelex(identifier,celex));status.textContent=message;
   if($('#ue-import-queue').textContent)loadUEImportQueue();
   if($('#ue-acoperire').textContent)loadUEAcoperire();
 }
-$('#eu-source-search').onsubmit=e=>{e.preventDefault();openEuSource(e.currentTarget.elements.celex.value);};
+function resultCelex(identifier,fallback){try{return euSourceIdentifierCelex(identifier);}catch{return fallback;}}
+$('#eu-source-search').onsubmit=e=>{e.preventDefault();openEuSource(e.currentTarget.elements.identifier.value);};
 function renderUEAcoperire(d){
   const out=$("#ue-acoperire");
   if(!out) return;
