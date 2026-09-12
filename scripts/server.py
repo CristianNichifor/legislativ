@@ -44,6 +44,8 @@ to a separate `initiative.documente.db` beside the initiative database.
   derived from existing registers rather than a model.
 - `GET /api/matrice-acte?emitent=&tip=&rang=&domeniu=` — the concrete acts behind one matrix row,
   narrowed by the same filters.
+- `GET /api/matrice-graf?emitent=&tip=&rang=&domeniu=` — graph/matrix scaffold rows for the same
+  selection, with explicit evidence and source state but no legal verdict.
 - `GET /api/matrice-dosar?emitent=&tip=&rang=&domeniu=&problema=` — a printable work dossier for
   one matrix row.
 - `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
@@ -96,6 +98,7 @@ from scripts.servicii import (
     _matrice_acte,
     _matrice_contradictii,
     _matrice_dosar,
+    _matrice_graf,
     _matrice_proiecte,
     _norma,
     _opinie,
@@ -382,6 +385,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 self._json(_matrice_contradictii(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-dosar":
                 self._json(_matrice_dosar(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/matrice-graf":
+                self._json(_matrice_graf(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/matrice-proiecte":
                 self._json(_matrice_proiecte(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/documente-proiect":

@@ -1407,6 +1407,103 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
     }
 
 
+def _matrice_graf(qs: dict, stare: Stare) -> dict:
+    """Graph/matrix scaffold for the selected row; evidence rows, not legal conclusions."""
+    selectie = _matrice_acte({**qs, "limita": ["100"]}, stare)
+    acte = selectie["acte"]
+    limita = max(1, min(_numar_qs(qs, "limita", 40), 100))
+    nodes = [
+        {
+            "act_id": a["act_id"],
+            "cheie_citare": a["cheie_citare"],
+            "titlu": a["titlu"],
+            "emitent": selectie["emitent"],
+            "tip": a["tip"],
+            "an": a["an"],
+            "rang": a["rang"],
+            "domeniu": a["domeniu"],
+            "sursa_url": a["sursa_url"],
+            "source_quality": a["source_quality"],
+            "rol": "matrice_selectata",
+        }
+        for a in acte
+    ]
+    out = {
+        "contract": "matrice-graf-v1",
+        "status": "scaffold_neconfirmat",
+        "acte_selectate": len(acte),
+        "acte_total": selectie["total"],
+        "nodes": nodes,
+        "edges": [],
+        "trunchiat": selectie["total"] > len(acte),
+        "limitari": [
+            "Scaffold de lucru pentru law-as-code: muchiile sunt relații extrase/indexate, "
+            "nu verdict juridic.",
+            "Domeniul este orientativ și vine din aceleași filtre ca matricea.",
+            (
+                "Calitatea sursei descrie evidența locală; endpointul nu reconsultă "
+                "portaluri oficiale."
+            ),
+            *selectie["limitari"],
+        ],
+    }
+    if not acte:
+        return out
+    if not stare.are_graf():
+        out["graph_state"] = "indisponibil"
+        out["limitari"].append("Baza locală de graf nu este disponibilă.")
+        return out
+    selected = {a["act_id"] for a in acte} | {a["cheie_citare"] for a in acte}
+    try:
+        from scripts.graf import _deschide_graf
+
+        graf = _deschide_graf(stare.graf, readonly=True)
+        try:
+            rows = graf.execute(
+                "SELECT din_act, din_locator, catre_act, locator, fel, incredere, de_la"
+                " FROM muchii"
+                f" WHERE din_act IN ({','.join('?' for _ in selected)})"
+                f" OR catre_act IN ({','.join('?' for _ in selected)})"
+                " ORDER BY de_la DESC, fel, din_act, catre_act LIMIT ?",
+                (*sorted(selected), *sorted(selected), limita + 1),
+            ).fetchall()
+        finally:
+            graf.close()
+    except sqlite3.OperationalError:
+        out["graph_state"] = "indisponibil"
+        out["limitari"].append("Baza locală de graf nu poate fi citită.")
+        return out
+    out["graph_state"] = "ok"
+    out["trunchiat"] |= len(rows) > limita
+    for r in rows[:limita]:
+        out["edges"].append(
+            {
+                "status": "relatie_candidata_neconfirmata",
+                "fel": r["fel"],
+                "incredere": r["incredere"],
+                "de_la": r["de_la"],
+                "from": {
+                    "act_id": r["din_act"],
+                    "locator": r["din_locator"],
+                    "actiuni": _actiuni_prevedere(r["din_act"], r["din_locator"]),
+                },
+                "to": {
+                    "act_id": r["catre_act"],
+                    "locator": r["locator"],
+                    "actiuni": _actiuni_prevedere(r["catre_act"], r["locator"]),
+                },
+                "evidence": {
+                    "tip": "muchie_graf",
+                    "din_act": r["din_act"],
+                    "din_locator": r["din_locator"],
+                    "catre_act": r["catre_act"],
+                    "locator": r["locator"],
+                },
+            }
+        )
+    return out
+
+
 def _matrice_contradictii(qs: dict, stare: Stare) -> dict:
     """Bounded, same-domain definition/deadline/authority candidates; never a legal verdict."""
     from scripts.contradictii_termene import termen_comparabil, termene_diferite
