@@ -4995,6 +4995,22 @@ function manualNoteFromFinding(f){
     evidence_quote:evidence,reasoning:manualNoteText(d.motiv||d.explicatie||f.tip||''),
     status:evidence?'ready_for_review':'needs_evidence',revizie:0};
 }
+function manualNoteFromRuleCheck(row){
+  const first=(row.matched_checks||[])[0]||{},evidence=first.evidence||{};
+  const type=row.status==='candidate_issue_not_verdict'?'lacuna':'necorelare';
+  const quote=evidence.quote||manualNoteText(first.text||first.norma||'');
+  const title=(row.status==='candidate_issue_not_verdict'?'Regulă verificată · normă delegată negăsită':'Regulă verificată · fără semnal local')+' · '+[row.act_id,row.locator].filter(Boolean).join(' ');
+  const reasoning=[
+    `Verificare deterministă: ${row.check||'rule draft check'}.`,
+    `Stare: ${row.status}.`,
+    `Ciornă regulă: ${row.rule_draft_id}.`,
+    row.status==='candidate_issue_not_verdict'?'Semnal local candidat; trebuie revizie umană.':'Fără semnal local; nu înseamnă conformitate sau acoperire completă.',
+    ...(row.limitations||[])
+  ].filter(Boolean).join('\n');
+  return {title,type,act_id:row.act_id||'',locator:row.locator||'',evidence_quote:quote,
+    source_url:first.source_url||evidence.source_url||'',source_hash:row.source_hash||first.source_hash||evidence.source_hash||'',
+    reasoning,status:quote?'ready_for_review':'needs_evidence',revizie:0};
+}
 async function startManualNote(prefill){
   if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de a salva nota.';return;}
   MANUAL_NOTES_UI.editing=prefill;
@@ -5091,14 +5107,34 @@ function lawRuleDraftHtml(draft){
     +(draft.acceptance_note?`<p class="hint">Acceptare: ${esc(draft.acceptance_note)}</p>`:'')
     +`<details><summary>Contract law-rule-draft-v1</summary><pre>${esc(JSON.stringify(draft,null,2))}</pre></details></article>`;
 }
-function ruleDraftsPanelHtml(queue,drafts,bucket,filters){
+function ruleCheckRowHtml(row,index){
+  const signal=row.status==='candidate_issue_not_verdict',matched=row.matched_checks||[];
+  const first=matched[0]||{},evidence=first.evidence||{};
+  return `<article class="manual-note ${signal?'attention':''}" data-rule-check-index="${index}"><h5>${signal?'Candidat de problemă':'Fără semnal local'} · ${esc(row.act_id||'')} ${esc(row.locator||'')}</h5>`
+    +`<div class="manual-note-meta"><span>${esc(row.check)}</span><span>${esc(row.rule_draft_id)}</span><span>${esc(row.provision_id||'')}</span></div>`
+    +`<p>${esc(RULE_CANDIDATE_MODALITIES[row.modality]||row.modality)} · ${esc(row.status)}</p>`
+    +(matched.length?`<p class="hint">Semnale locale: ${esc(matched.length)} · severitate: ${esc(first.severity||'necunoscută')} · instrument: ${esc(evidence.expected_instrument||first.expected_instrument||'')}</p>`:'<p class="hint">Nu există semnal local pentru această ciornă. Asta nu dovedește conformitatea sau acoperirea completă.</p>')
+    +(evidence.quote?`<pre>${esc(String(evidence.quote).slice(0,1200))}</pre>`:'')
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-check-note>Creează notă manuală</button></div>`
+    +`<details><summary>Contract law-rule-execution-row-v1</summary><pre>${esc(JSON.stringify(row,null,2))}</pre></details></article>`;
+}
+function ruleChecksHtml(checks){
+  if(!checks)return '<p role="status">Verificările de reguli nu au fost încă încărcate.</p>';
+  const rows=checks.rows||[];
+  return `<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Ciorne eligibile<br><b>${esc(checks.eligible_rule_drafts||0)}</b></button><button type="button" class="ghost mini" disabled>Candidate probleme<br><b>${esc(checks.candidate_issues||0)}</b></button><button type="button" class="ghost mini" disabled>Returnate<br><b>${esc(checks.returned||0)}</b></button></div>`
+    +`<p class="hint">${esc(checks.check||'verificare')} · ${esc(checks.status||'')} · nu este verdict juridic.</p>`
+    +(checks.limitations?.length?`<ul>${checks.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
+    +`<div data-rule-check-list>${rows.map(ruleCheckRowHtml).join('')||'<p>Nicio ciornă eligibilă pentru verificarea deterministă curentă.</p>'}</div>`;
+}
+function ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters){
   const counts=Object.entries(RULE_QUEUE_BUCKETS).filter(([key])=>key!=='all').map(([key,label])=>`${esc(label)}: ${esc(queue.counts?.[key]||0)}`).join(' · ');
   const bucketOptions=Object.entries(RULE_QUEUE_BUCKETS).map(([key,label])=>`<option value="${key}" ${key===bucket?'selected':''}>${label}</option>`).join('');
   return '<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary>'
-    +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1. Ciornele nu sunt verdict juridic și nu execută reguli încă.</p>'
-    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button></div>`
+    +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1 → verificare deterministă limitată. Rezultatele sunt candidate de lucru, nu verdict juridic.</p>'
+    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button><button type="button" class="ghost mini" disabled>Semnale reguli<br><b>${esc(checks?.candidate_issues||0)}</b></button></div>`
     +`<p class="hint">${counts||'Nicio coadă de candidați.'}</p>`
     +`<form data-rule-draft-filters class="dossier-actions"><label>Coada<select name="bucket">${bucketOptions}</select></label><label>Act<input name="act" maxlength="200" value="${esc(filters.act||'')}"></label><label>ID prevedere<input name="provision_id" maxlength="240" value="${esc(filters.provision_id||'')}"></label><button type="submit" class="ghost mini">Filtrează</button><button type="button" class="ghost mini" data-rules-refresh title="Reîncarcă regulile">↻</button></form>`
+    +`<section><h4>Verificări deterministe</h4>${ruleChecksHtml(checks)}</section>`
     +`<section><h4>Ciorne promovate</h4><div data-rule-draft-list>${(drafts.items||[]).map(lawRuleDraftHtml).join('')||'<p>Nicio ciornă promovată pentru filtrul ales.</p>'}</div></section>`
     +`<section><h4>Coada de candidați</h4><div data-rule-queue-list>${(queue.items||[]).map(ruleCandidateQueueHtml).join('')||'<p>Niciun candidat în coadă pentru filtrul ales.</p>'}</div></section>`
     +'<p class="hint" role="status" data-rule-draft-status></p></details>';
@@ -5114,12 +5150,15 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
     const draftParams=new URLSearchParams({id:dossierId,offset:'0'});
     if(filters.act)draftParams.set('act',filters.act);
     if(filters.provision_id)draftParams.set('provision_id',filters.provision_id);
-    const [queue,drafts]=await Promise.all([
+    const checkParams=new URLSearchParams({id:dossierId,limita:'50'});
+    if(filters.act)checkParams.set('act',filters.act);
+    const [queue,drafts,checks]=await Promise.all([
       dossierApi('/api/dosare/reguli?'+queueParams),
-      dossierApi('/api/dosare/rule-drafts?'+draftParams)
+      dossierApi('/api/dosare/rule-drafts?'+draftParams),
+      dossierApi('/api/dosare/rule-drafts/checks?'+checkParams)
     ]);
     if(!valid())return;
-    host.innerHTML=ruleDraftsPanelHtml(queue,drafts,bucket,filters);
+    host.innerHTML=ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters);
     const status=host.querySelector('[data-rule-draft-status]');
     host.querySelector('[data-rules-refresh]').onclick=()=>loadRuleDrafts(dossierId,offset,{bucket, ...filters});
     host.querySelector('[data-rule-draft-filters]').onsubmit=e=>{
@@ -5140,6 +5179,7 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
         }catch(err){formStatus.textContent=err.message;}
       };
     });
+    host.querySelectorAll('[data-rule-check-note]').forEach(button=>button.onclick=()=>startManualNote(manualNoteFromRuleCheck(checks.rows[Number(button.closest('[data-rule-check-index]').dataset.ruleCheckIndex)])));
   }catch(err){if(valid()){host.innerHTML='<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-rules-retry>Reîncearcă regulile</button></details>';host.querySelector('[data-rules-retry]').onclick=()=>loadRuleDrafts(dossierId,offset,options);}}
 }
 async function loadProposalList(dossierId,offset=0){
@@ -6003,10 +6043,41 @@ function sourceRegistryOutcome(row,verb='Sync'){
   const next=row.sync_status?.next_action?` Următorul pas: ${row.sync_status.next_action}`:'';
   return `${verb}: ${label}. ${hint}${next}${hash}${error}`;
 }
+function sourceRegistryImpactSummary(impact){
+  const s=impact?.summary||{};
+  const parts=[
+    ['dosare',s.affected_dossiers],['rulări',s.affected_runs],
+    ['note',s.affected_notes],['reguli',s.affected_rule_drafts],
+    ['propuneri',s.affected_proposals],['watchlist',s.affected_watchlist_items]
+  ].filter(([,v])=>Number(v)>0).map(([k,v])=>`${nf(v)} ${k}`);
+  if(!impact?.available) return 'Impact local indisponibil.';
+  return parts.length?parts.join(' · '):'Nicio dependență locală găsită.';
+}
+function sourceRegistryImpactHtml(row,compact=false){
+  const impact=row.impact;
+  if(!impact) return '';
+  const state=SOURCE_STATE_LABELS[impact.state]||impact.state||'necunoscută';
+  const summary=sourceRegistryImpactSummary(impact);
+  if(compact) return `<p class="hint">Impact local: ${esc(summary)}</p>`;
+  const samples=impact.samples||{};
+  const runs=(samples.runs||[]).map(r=>`<li>${esc(r.dosar_titlu||r.dosar_id)} · rulare ${esc(dossierTime(r.rulare_creata_la))} · ${esc((r.potriviri||[]).map(m=>m.motiv).join(', ')||'potrivire proiect')}</li>`).join('');
+  const notes=(samples.notes||[]).map(n=>`<li>${esc(n.dosar_titlu||n.dosar_id)} · ${esc(n.titlu||n.id)} · ${esc(n.stare||'')}</li>`).join('');
+  const rules=(samples.rule_drafts||[]).map(r=>`<li>${esc(r.dosar_titlu||r.dosar_id)} · ${esc(r.act_id||'')} ${esc(r.locator||'')} · ${esc(r.id)}</li>`).join('');
+  const proposals=(samples.proposals||[]).map(p=>`<li>${esc(p.dosar_titlu||p.dosar_id||p.rulare_id)} · ${esc(p.titlu||p.id)} · revizia ${esc(p.revizie||'')}</li>`).join('');
+  const watch=(samples.watchlist||[]).map(w=>`<li>${esc(w.titlu||w.dosar_id)} · ${esc(w.tip)} ${esc(w.valoare)}${w.revizuit_la?` · revizuit ${esc(dossierTime(w.revizuit_la))}`:''}</li>`).join('');
+  return `<section class="source-review"><h4>Impact local pentru revizie</h4><p><strong>${esc(state)}</strong> · ${esc(summary)}</p>`
+    +`<p class="hint">Înainte să închizi alerta, verifică elementele afectate sau notează de ce nu sunt relevante.</p>`
+    +(runs?`<details open><summary>Rulări afectate</summary><ul class="hint">${runs}</ul></details>`:'')
+    +(notes?`<details open><summary>Note afectate</summary><ul class="hint">${notes}</ul></details>`:'')
+    +(rules?`<details open><summary>Ciorne de reguli afectate</summary><ul class="hint">${rules}</ul></details>`:'')
+    +(proposals?`<details open><summary>Propuneri afectate</summary><ul class="hint">${proposals}</ul></details>`:'')
+    +(watch?`<details open><summary>Watchlist afectat</summary><ul class="hint">${watch}</ul></details>`:'')
+    +`<p class="hint">${(impact.limitari||[]).map(esc).join(' ')}</p></section>`;
+}
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistryImpactHtml(row)}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
 }
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
@@ -6036,7 +6107,7 @@ function sourceRegistryRowHtml(row,families){
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
@@ -6099,11 +6170,14 @@ function sourceCoverageFamilyHtml(row){
   return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
 }
 function acceptanceDashboardHtml(data){
+  const capabilityLabels={ready:'gata',partial:'parțial',missing:'lipsește'};
   const cards=(data.sections||[]).map(s=>{
     const metrics=Object.entries(s.metrics||{}).map(([k,v])=>`${esc(k)}: ${esc(v)}`).join(' · ');
     return `<article class="coverage-card coverage-${s.status==='ok'?'ok':'attention'}"><h4>${esc(s.label)} · ${esc(s.status)}</h4><p>${esc(s.summary)}</p><p class="hint">${metrics}</p></article>`;
   }).join('');
-  return `<section class="source-inventory"><h4>Stadiu finalizare</h4><div class="coverage-grid">${cards}</div><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
+  const capabilities=(data.capabilities||[]).map(c=>`<li><strong>${esc(c.label)}</strong> · ${esc(capabilityLabels[c.state]||c.state)}<br><span class="hint">${esc(c.evidence||'')}</span></li>`).join('');
+  const summary=data.capability_summary||{};
+  return `<section class="source-inventory"><h4>Stadiu finalizare</h4><p><strong>${esc(data.status)}</strong> · ${summary.ready||0} gata · ${summary.partial||0} parțial · ${summary.missing||0} lipsă.</p><div class="coverage-grid">${cards}</div>${capabilities?`<details open><summary>Capabilități pentru ținta finală</summary><ul>${capabilities}</ul></details>`:''}<p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
 }
 function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');

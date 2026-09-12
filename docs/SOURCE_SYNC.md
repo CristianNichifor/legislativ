@@ -102,6 +102,32 @@ Saved dossier evidence remains historical and must not be overwritten.
 ambiguous document targets, parser drift, unsupported format, multiple candidate
 official files, changed legal structure, or conflicting lifecycle signals.
 
+## Changed source impact
+
+`GET /api/registru-surse` and `GET /api/registru-surse?id=src_...` attach an
+`impact` object to each row:
+
+- `contract: changed-source-impact-v1`
+- `summary`: local counts for affected dossiers, saved runs, manual notes,
+  promoted rule drafts, saved proposals and watchlist entries
+- `samples`: bounded representative rows for review screens
+- `actions`: UI-safe actions such as inspecting the source, opening evidence,
+  creating a review note, retrying sync or marking the source reviewed
+
+For Parliament project sources, affected runs reuse the existing saved-run
+dependency scanner behind `/api/dosare/afectate-proiect`. Proposals are counted
+when they are attached to those affected runs.
+
+For CELEX and Romanian-law sources, impact is conservative: the registry looks
+for direct local references in manual notes, rule draft payloads, saved proposal
+text and dossier watchlists. It does not claim a complete legal dependency
+graph and it does not reconsult official sources.
+
+Rows in `changed`, `needs_review`, `failed` and `rate_limited` remain review
+signals. Closing a `changed` or `needs_review` row should happen only after the
+user has inspected the affected local artifacts or recorded why they are not
+relevant.
+
 ## Acceptance
 
 A first backend slice is acceptable when:

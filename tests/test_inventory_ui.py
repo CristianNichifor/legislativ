@@ -109,7 +109,8 @@ def test_acquisition_renderers_distinguish_states_and_escape_sources():
         "assert.ok(!h.includes('<script>'));"
         "assert.ok(acquisitionAttemptsHtml([]).includes('Nicio încercare'));"
     )
-    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -138,7 +139,8 @@ def test_source_coverage_renderer_shows_blockers_and_escapes():
         "assert.ok(h.includes('Etapă &lt;nouă&gt;'));"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
     )
-    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -155,13 +157,18 @@ def test_acceptance_dashboard_renderer_shows_finish_state():
         + source
         + "const h=acceptanceDashboardHtml({sections:[{key:'eu',label:'Drept UE',"
         "status:'attention',summary:'not_imported_8_of_8 <x>',"
-        "metrics:{referenced:8,imported_text:0}}],limitari:['Nu reconstruiește']});"
+        "metrics:{referenced:8,imported_text:0}}],capability_summary:{ready:1,partial:7,missing:0},"
+        "capabilities:[{label:'Law as code',state:'partial',evidence:'draft rule <x>'}],"
+        "limitari:['Nu reconstruiește']});"
         "assert.ok(h.includes('Stadiu finalizare'));"
         "assert.ok(h.includes('Drept UE'));"
+        "assert.ok(h.includes('Law as code'));"
+        "assert.ok(h.includes('parțial'));"
         "assert.ok(h.includes('imported_text: 0'));"
         "assert.ok(!h.includes('<x>'));"
     )
-    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -315,7 +322,7 @@ def test_source_registry_renderer_escapes_and_labels_states():
     program = (
         "const assert=require('node:assert/strict');"
         "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
-        ".replaceAll('>','&gt;');const dossierTime=s=>s;"
+        ".replaceAll('>','&gt;');const dossierTime=s=>s;const nf=String;"
         "const select={innerHTML:''};const node={innerHTML:'',querySelector:()=>select,"
         "querySelectorAll:()=>[],reset:()=>{},value:''};"
         "const $=()=>node;const SOURCE_REGISTRY="
@@ -323,6 +330,11 @@ def test_source_registry_renderer_escapes_and_labels_states():
         + "const h=sourceRegistryRowHtml({id:'src_1',family:'ue_cellar',"
         "identifier:'32014L0024',url:'https://example.test/?q=<x>',label:'<script>',"
         "state:'changed',last_attempt_at:'now',last_hash:'a'.repeat(64),last_error:'<img>',"
+        "sync_status:{can_sync:true,can_queue:true,can_review:true,severity:'attention',"
+        "next_action:'Revizuiește impactul'},impact:{available:true,state:'changed',"
+        "summary:{affected_dossiers:1,affected_runs:0,affected_notes:2,"
+        "affected_rule_drafts:1,affected_proposals:0,affected_watchlist_items:1},"
+        "samples:{},limitari:['local only']},"
         "attempts:[{attempted_at:'later',state:'failed',error_category:'fetch_failed',"
         "note:'<bad>'}]},"
         "{ue_cellar:'Drept UE'});"
@@ -333,7 +345,10 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "assert.ok(h.includes('data-source-inspect=\"src_1\"'));"
         "assert.ok(h.includes('data-source-open-eu=\"32014L0024\"'));"
         "assert.ok(h.includes('data-source-review=\"src_1\"'));"
-        "assert.ok(h.includes('Hash-ul citit acum diferă'));"
+        "assert.ok(h.includes('Revizuiește impactul'));"
+        "assert.ok(h.includes('Impact local: 1 dosare'));"
+        "assert.ok(h.includes('2 note'));"
+        "assert.ok(h.includes('Inspectează impactul'));"
         "assert.ok(h.includes('Ultimele încercări')&&h.includes('fetch_failed'));"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>')&&!h.includes('<x>'));"
         "assert.ok(!h.includes('<bad>'));"
@@ -342,8 +357,18 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "state:'changed',last_hash:'b'.repeat(64),parser_version:'achizitii_ue.v1',"
         "sync_status:{next_action:'Revizuiește dosarele'},attempts:[{"
         "attempted_at:'later',state:'changed',http_status:200,content_hash:'b'.repeat(64),"
-        "note:'importat'}]},{ue_cellar:'Drept UE'});"
+        "note:'importat'}],impact:{available:true,state:'changed',summary:{affected_dossiers:1,"
+        "affected_runs:1,affected_notes:1,affected_rule_drafts:1,affected_proposals:1,"
+        "affected_watchlist_items:1},samples:{runs:[{dosar_titlu:'D',rulare_creata_la:'now',"
+        "potriviri:[{motiv:'proiect selectat'}]}],notes:[{dosar_titlu:'D',titlu:'N',"
+        "stare:'draft'}],"
+        "rule_drafts:[{dosar_titlu:'D',act_id:'32014L0024',locator:'art1',id:'r'}],"
+        "proposals:[{dosar_titlu:'D',titlu:'P',revizie:1}],watchlist:[{titlu:'D',tip:'celex',"
+        "valoare:'32014L0024'}]},limitari:['nu reconsultă']}}"
+        ",{ue_cellar:'Drept UE'});"
         "assert.ok(detail.includes('data-source-detail'));"
+        "assert.ok(detail.includes('Impact local pentru revizie'));"
+        "assert.ok(detail.includes('Ciorne de reguli afectate'));"
         "assert.ok(detail.includes('Istoric sync pentru această sursă'));"
         "assert.ok(detail.includes('achizitii_ue.v1'));"
         "assert.ok(sourceRegistryOutcome({state:'fetched',last_hash:'b'.repeat(64)})"
@@ -365,7 +390,8 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "assert.ok(!sourceRegistryRowHtml({id:'src_2',family:'ccr',identifier:'d1',"
         "url:'',label:'CCR',state:'queued'},{}).includes('data-source-sync'));"
     )
-    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
 
 
 def test_static_worker_explicitly_rejects_source_acquisition():
