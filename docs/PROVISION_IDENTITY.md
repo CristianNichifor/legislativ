@@ -56,6 +56,18 @@ Missing rows return `status=unavailable` with a canonical `provision_id`, so a
 review queue can keep pointing at the same intended unit after source coverage
 improves.
 
+## User-facing detail
+
+`GET /api/prevedere?act=...&loc=...` includes the same object under `identity`
+next to the current local text. Provision hover cards, manual-note source panels
+and matrix evidence panels show:
+
+- stable `provision_id`;
+- official source URL when known;
+- capture timestamp;
+- source text hash;
+- unavailable reason when the local corpus cannot address the requested unit.
+
 ## Why this matters
 
 The law-as-code layer needs durable legal objects before it can safely add:

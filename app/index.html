@@ -1663,6 +1663,18 @@ async function prevedereTinta(act, loc){
   }
   return _prevCache.get(cheie);
 }
+function provisionIdentityMeta(d){
+  const id=d&&d.identity;if(!id)return "";
+  const state=id.status==="available"?"disponibil":"indisponibil";
+  const bits=[
+    id.provision_id?`<span><b>ID</b> ${esc(id.provision_id)}</span>`:"",
+    id.source_url?`<a href="${esc(id.source_url)}" target="_blank" rel="noopener">sursa oficială</a>`:"",
+    id.captured_at?`<span><b>capturat</b> ${esc(id.captured_at)}</span>`:"",
+    id.source_hash?`<span><b>SHA-256</b> ${esc(String(id.source_hash).slice(0,16))}…</span>`:"",
+    id.unavailable_reason?`<span><b>motiv</b> ${esc(id.unavailable_reason)}</span>`:""
+  ].filter(Boolean).join(" · ");
+  return `<p class="hint provision-id-meta"><b>provision-identity-v1</b> · ${esc(state)}${bits?" · "+bits:""}</p>`;
+}
 function fisaAncora(chip, d, loc){
   const veche=chip.querySelector(".ref-fisa");
   if(veche) veche.remove();
@@ -1677,7 +1689,8 @@ function fisaAncora(chip, d, loc){
     +(d && d.gasit ? `<span>${esc(String(d.text).slice(0,600))}${String(d.text).length>600?"…":""}</span>`
       : `<span class="ref-fisa-gol">${fragment
           ? "Trimitere fără articol — se referă la articolul din fraza de mai sus."
-          : "Corpusul nu are textul acestei prevederi."}</span>`);
+          : "Corpusul nu are textul acestei prevederi."}</span>`)
+    +provisionIdentityMeta(d);
   chip.appendChild(f);
   // Keep it on screen. Measured after it is in the document, because its width depends on the text
   // it just received; shifted along its own axis rather than re-anchored, so it still reads as
@@ -4760,8 +4773,8 @@ async function openManualNoteSource(button,note){
     const d=await prevedereTinta(note.act_id||'',note.locator||'');
     const loc=esc(locRo((d&&d.locator)||note.locator||''));
     out.innerHTML=d&&d.gasit
-      ? `<div class="matrix-prev"><div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||'')}</div><div class="matrix-prev-text">${textLizibil(String(d.text||'').slice(0,1800))}</div></div>`
-      : `<p class="hint">Corpusul local nu are text adresabil pentru această prevedere.</p>`;
+      ? `<div class="matrix-prev"><div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||'')}</div>${provisionIdentityMeta(d)}<div class="matrix-prev-text">${textLizibil(String(d.text||'').slice(0,1800))}</div></div>`
+      : `<div class="matrix-prev"><p class="hint">Corpusul local nu are text adresabil pentru această prevedere.</p>${provisionIdentityMeta(d)}</div>`;
   }catch(err){out.textContent='Nu am putut deschide prevederea. Reîncearcă.';}
   finally{button.disabled=false;}
 }
@@ -6552,9 +6565,11 @@ async function mPrevedere(buton){
       const text=String(d.text||"");
       const scurt=text.length>1400 ? text.slice(0,1400)+"…" : text;
       out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b> · ${esc(d.titlu||d.act_id||"")}</div>`
+        +provisionIdentityMeta(d)
         +`<div class="matrix-prev-text">${textLizibil(scurt)}</div>`;
     }else{
       out.innerHTML=`<div class="matrix-prev-h"><b>${loc}</b></div>`
+        +provisionIdentityMeta(d)
         +`<span class="hint">Corpusul local nu are text adresabil pentru această prevedere.</span>`;
     }
   }catch(e){
