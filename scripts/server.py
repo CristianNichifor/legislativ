@@ -208,6 +208,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/lifecycle-proiecte",
                     "/api/tracker-evenimente",
                     "/api/project-evidence-pack",
+                    "/api/project-draft-seed",
                     "/api/econsultare-feed",
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
@@ -386,6 +387,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/project-evidence-pack":
                 from scripts.project_evidence_pack import build
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(build(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/project-draft-seed":
+                from scripts.project_draft_seed import build
 
                 if not self._dosare_permis():
                     return
