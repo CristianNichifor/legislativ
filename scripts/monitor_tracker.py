@@ -24,6 +24,7 @@ EVENT_TYPE = "published_in_monitor"
 SOURCE_FAMILY = "monitorul_oficial_pi"
 DEFAULT_PART = "I"
 MAX_LOCAL_ROWS = 5000
+RECONCILIATION_CONTRACT = "monitor-publication-reconciliation-v1"
 
 
 def _text(value: Any) -> str:
@@ -186,6 +187,57 @@ def events_from_rows(
             seen.add(key)
             events.append(event)
     return events
+
+
+def _act_id(row: dict) -> str:
+    return _text(row.get("act_id") or row.get("cheie_act") or row.get("id") or row.get("plx_id"))
+
+
+def reconcile_act_row(row: dict) -> dict:
+    """Compare one local act row's metadata with the publication line in its retained text."""
+    row = dict(row)
+    act_id = _act_id(row)
+    parsed = publicare(row.get("text") or "") if row.get("text") else None
+    metadata_number = _number(row.get("monitor") or row.get("number"))
+    metadata_date = _date(row.get("publicat") or row.get("date"))
+    parsed_number = _number(parsed.monitor if parsed else None)
+    parsed_date = _date(parsed.data if parsed else None)
+    event = event_from_act_row(row)
+    issues = []
+    if parsed and not metadata_number:
+        issues.append("missing_monitor_number")
+    if parsed and not metadata_date:
+        issues.append("missing_publication_date")
+    if metadata_number and parsed_number and metadata_number != parsed_number:
+        issues.append("monitor_number_mismatch")
+    if metadata_date and parsed_date and metadata_date != parsed_date:
+        issues.append("publication_date_mismatch")
+    if (metadata_number or parsed_number) and (metadata_date or parsed_date) and not event:
+        issues.append("missing_tracker_event")
+    return {
+        "act_id": act_id,
+        "status": "ok" if not issues else "needs_review",
+        "issues": issues,
+        "metadata": {"number": metadata_number, "date": metadata_date},
+        "parsed": {"number": parsed_number, "date": parsed_date},
+        "event_available": bool(event),
+    }
+
+
+def reconcile_rows(act_rows: Iterable[dict]) -> dict:
+    rows = [reconcile_act_row(row) for row in act_rows]
+    issues = [row for row in rows if row["issues"]]
+    counts: dict[str, int] = {}
+    for row in issues:
+        for issue in row["issues"]:
+            counts[issue] = counts.get(issue, 0) + 1
+    return {
+        "contract": RECONCILIATION_CONTRACT,
+        "total": len(rows),
+        "needs_review": len(issues),
+        "counts": counts,
+        "items": issues[:100],
+    }
 
 
 def _readonly(path: Path) -> sqlite3.Connection:

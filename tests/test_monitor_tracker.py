@@ -146,3 +146,55 @@ def test_replay_to_tracker_uses_existing_store_deduplication(tmp_path):
     assert second["stored"] == 1
     assert listed["total"] == 1
     assert listed["events"][0]["payload"]["act_id"] == "lege-98-2016"
+
+
+def test_reconcile_flags_missing_metadata_when_text_has_monitor_line():
+    result = monitor_tracker.reconcile_act_row(
+        {
+            "cheie_act": "lege-98-2016",
+            "text": "Publicat in MONITORUL OFICIAL AL ROMANIEI, PARTEA I, nr. 390 din 23 mai 2016",
+        }
+    )
+
+    assert result["status"] == "needs_review"
+    assert result["issues"] == ["missing_monitor_number", "missing_publication_date"]
+    assert result["parsed"] == {"number": 390, "date": "2016-05-23"}
+    assert result["event_available"] is True
+
+
+def test_reconcile_flags_monitor_number_and_date_mismatches():
+    result = monitor_tracker.reconcile_act_row(
+        {
+            "cheie_act": "lege-98-2016",
+            "publicat": "2016-05-24",
+            "monitor": 391,
+            "text": "Publicat in MONITORUL OFICIAL AL ROMANIEI, PARTEA I, nr. 390 din 23 mai 2016",
+        }
+    )
+
+    assert result["status"] == "needs_review"
+    assert result["issues"] == ["monitor_number_mismatch", "publication_date_mismatch"]
+    assert result["metadata"] == {"number": 391, "date": "2016-05-24"}
+    assert result["parsed"] == {"number": 390, "date": "2016-05-23"}
+
+
+def test_reconcile_rows_summarizes_issue_counts():
+    report = monitor_tracker.reconcile_rows(
+        [
+            {
+                "cheie_act": "lege-98-2016",
+                "publicat": "2016-05-23",
+                "monitor": 390,
+                "text": "Publicat in MONITORUL OFICIAL nr. 390 din 23 mai 2016",
+            },
+            {
+                "cheie_act": "lege-1-2026",
+                "text": "Publicat in MONITORUL OFICIAL nr. 10 din 2 februarie 2026",
+            },
+        ]
+    )
+
+    assert report["contract"] == "monitor-publication-reconciliation-v1"
+    assert report["total"] == 2
+    assert report["needs_review"] == 1
+    assert report["counts"] == {"missing_monitor_number": 1, "missing_publication_date": 1}
