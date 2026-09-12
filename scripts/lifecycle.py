@@ -299,10 +299,52 @@ def _project_url(row: dict) -> str:
     return ""
 
 
+def _latest_event(row: dict, event: dict | None, stage_data: dict, source_state: str) -> dict:
+    date = (event or {}).get("data") or row.get("data_inreg") or row.get("citit_la") or ""
+    action = (event or {}).get("actiune") or row.get("stadiu") or ""
+    camera = (event or {}).get("camera") or ""
+    url = _project_url(row)
+    return {
+        "date": date,
+        "source_name": row.get("source_name") or "Camera Deputaților",
+        "source_url": url,
+        "source_state": source_state,
+        "stage_key": stage_data["key"],
+        "stage_label": stage_data["label"],
+        "raw_status": row.get("stadiu") or "",
+        "action": action,
+        "camera": camera,
+        "from_timeline": bool(event),
+    }
+
+
+def _uncertainty(stage_data: dict, *, stale: bool, source_state: str, registry_state: str) -> dict:
+    reasons = []
+    if source_state == "unavailable":
+        reasons.append("missing_official_source_or_stage")
+    if stage_data["key"] == "unknown":
+        reasons.append("unrecognized_stage_label")
+    if stale:
+        reasons.append("stale_source_read")
+    if registry_state in REGISTRY_ATTENTION_STATES:
+        reasons.append("tracked_source_needs_review")
+    if not stage_data.get("known", True):
+        reasons.append("stage_not_confirmed_by_parser")
+    if not reasons:
+        return {"level": "low", "reasons": [], "message": "Stadiu citit din sursa locală."}
+    level = "high" if source_state == "unavailable" or stage_data["key"] == "unknown" else "medium"
+    return {
+        "level": level,
+        "reasons": sorted(set(reasons)),
+        "message": "Stadiul trebuie verificat în sursa oficială.",
+    }
+
+
 def project_lifecycle_item(
     row: dict,
     *,
     registry: dict | None = None,
+    latest_event: dict | None = None,
     affected_dossiers: int = 0,
     now: datetime | None = None,
     stale_days: int = DEFAULT_STALE_DAYS,
@@ -322,12 +364,19 @@ def project_lifecycle_item(
         source_state = "stale"
     registry = registry or {}
     registry_state = registry.get("state") or ""
+    latest = _latest_event(row, latest_event, lifecycle, source_state)
+    uncertainty = _uncertainty(
+        lifecycle, stale=stale, source_state=source_state, registry_state=registry_state
+    )
     return {
         "source_name": row.get("source_name") or "Camera Deputaților",
         "project_id": row.get("plx_id") or "",
         "title": row.get("titlu") or "",
         "status": row.get("stadiu") or "",
         "stage": lifecycle,
+        "stage_date": latest["date"],
+        "latest_event": latest,
+        "uncertainty": uncertainty,
         "last_seen": last_seen,
         "last_updated": row.get("data_inreg") or last_seen,
         "consultation_deadline": row.get("consultation_deadline"),
@@ -382,6 +431,34 @@ def _project_registry_sources(stare, identifiers: list[str]) -> dict[str, dict]:
             and current.get("state") not in REGISTRY_ATTENTION_STATES
         ):
             out[row["identifier"]] = row
+    return out
+
+
+def _latest_project_events(path, identifiers: list[str]) -> dict[str, dict]:
+    if not identifiers:
+        return {}
+    try:
+        with closing(_readonly(path)) as con:
+            tables = {
+                r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "initiativa_etapa" not in tables:
+                return {}
+            placeholders = ",".join("?" for _ in identifiers)
+            rows = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT plx_id, data, camera, actiune FROM initiativa_etapa "
+                    "WHERE plx_id IN (" + placeholders + ") "
+                    "ORDER BY plx_id, COALESCE(data, ''), ord",
+                    identifiers,
+                )
+            ]
+    except (OSError, sqlite3.Error):
+        return {}
+    out = {}
+    for row in rows:
+        out[row["plx_id"]] = row
     return out
 
 
@@ -463,11 +540,13 @@ def project_lifecycle_summary(
     visible_rows = rows[:limit]
     identifiers = [row.get("plx_id", "") for row in visible_rows]
     registry = _project_registry_sources(stare, identifiers)
+    latest_events = _latest_project_events(stare.initiative, identifiers)
     affected = _affected_dossier_counts(stare, identifiers)
     projects = [
         project_lifecycle_item(
             row,
             registry=registry.get(row.get("plx_id", "")),
+            latest_event=latest_events.get(row.get("plx_id", "")),
             affected_dossiers=affected.get(row.get("plx_id", ""), 0),
             now=now,
             stale_days=stale_days,
