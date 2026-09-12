@@ -19,6 +19,7 @@ LANGUAGE_LABELS = {
     "RON": "romana oficiala",
     "ENG": "engleza oficiala, fallback explicit cand textul romanesc compatibil lipseste",
 }
+IMPORT_CONTRACT = "celex-on-demand-source-v1"
 ATTEMPT_SCHEMA = """
 CREATE TABLE IF NOT EXISTS eu_achizitii (
  celex TEXT PRIMARY KEY, incercat_la TEXT NOT NULL, reusit_la TEXT,
@@ -70,12 +71,12 @@ def _article_summary(snapshot):
     }
 
 
-def _language_contract(language):
+def _language_contract(language, preference=cellar.LIMBI_IMPLICITE):
     return {
-        "preferinta": list(cellar.LIMBI_IMPLICITE),
+        "preferinta": list(preference),
         "aleasa": language or None,
         "eticheta": LANGUAGE_LABELS.get(language or "", "limba necunoscuta"),
-        "fallback": language == "ENG",
+        "fallback": bool(language and preference and language != preference[0]),
     }
 
 
@@ -183,22 +184,60 @@ def detaliu(stare, celex, *, offset=0, snapshot_id=None):
     return out
 
 
-def importa(stare, request):
-    if not isinstance(request, dict) or set(request) != {"celex"}:
+def _cerere_import(request):
+    if not isinstance(request, dict):
         raise ValueError("Cerere de import invalida.")
-    celex = celex_valid(request["celex"])
+    allowed = {"celex", "identifier", "limbi"}
+    if not set(request) <= allowed:
+        raise ValueError("Cerere de import invalida.")
+    identifier = request.get("identifier", request.get("celex"))
+    if not isinstance(identifier, str) or not identifier.strip():
+        raise ValueError("Identificator CELEX invalid.")
+    celex = celex_valid(cellar.normalizeaza_celex(identifier))
+    raw_languages = request.get("limbi", "RON,ENG")
+    values = raw_languages.split(",") if isinstance(raw_languages, str) else raw_languages
+    if not isinstance(values, (list, tuple)) or any(not isinstance(x, str) for x in values):
+        raise ValueError("Cerere de import invalida.")
+    limbi = cellar._limbi(tuple(x.strip() for x in values))
+    return identifier.strip(), celex, limbi
+
+
+def _contract_payload(result, *, identifier, limbi):
+    source_hash = result.get("text_sha256") or ""
+    snapshot_id = result.get("instantanee")
+    return {
+        **result,
+        "contract": IMPORT_CONTRACT,
+        "source_identifier": identifier,
+        "language_preference": list(limbi),
+        "selected_language": result.get("limba"),
+        "selected_language_label": result.get("limba_import", {}).get("eticheta", ""),
+        "language_fallback": result.get("limba_import", {}).get("fallback", False),
+        "source_hash": source_hash,
+        "snapshot": {
+            "id": snapshot_id,
+            "text_sha256": source_hash,
+            "source_hash": source_hash,
+        }
+        if snapshot_id
+        else None,
+    }
+
+
+def importa(stare, request):
+    identifier, celex, limbi = _cerere_import(request)
     if not IMPORT_LOCK.acquire(blocking=False):
         raise ValueError("Un import UE este deja in curs. Reincearca dupa terminarea lui.")
     try:
-        return _importa(stare, celex)
+        return _contract_payload(_importa(stare, celex, limbi), identifier=identifier, limbi=limbi)
     finally:
         IMPORT_LOCK.release()
 
 
-def _importa(stare, celex):
+def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
     try:
         transport = TransportCellar()
-        manifestations = cellar.manifestari_celex(celex, opener=transport, timeout=15)
+        manifestations = cellar.manifestari_celex(celex, limbi=limbi, opener=transport, timeout=15)
         if len(manifestations) > 500:
             raise ValueError("Prea multe manifestari.")
         for m in manifestations:
@@ -206,7 +245,7 @@ def _importa(stare, celex):
         with cellar.deschide(stare.eu) as con:
             cellar.scrie_manifestari(con, celex, manifestations)
         try:
-            chosen = cellar.alege_manifestare_text(manifestations)
+            chosen = cellar.alege_manifestare_text(manifestations, limbi=limbi)
         except cellar.TextIndisponibil:
             with cellar.deschide(stare.eu) as con:
                 _attempt(
@@ -216,7 +255,7 @@ def _importa(stare, celex):
                 "celex": celex,
                 "stare": "metadate",
                 "schimbat": False,
-                "limba_import": _language_contract(None),
+                "limba_import": _language_contract(None, limbi),
             }
         parts = cellar._parti_manifestare(chosen, manifestations)
         if len(parts) > MAX_PARTS or any(p.limba != chosen.limba for p in parts):
@@ -262,7 +301,7 @@ def _importa(stare, celex):
             "celex": celex,
             "stare": "ok",
             "limba": chosen.limba,
-            "limba_import": _language_contract(chosen.limba),
+            "limba_import": _language_contract(chosen.limba, limbi),
             "instantanee": current.get("id"),
             "text_sha256": current.get("sursa", {}).get("text_sha256"),
             "articole": _article_summary(current),

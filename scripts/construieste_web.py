@@ -416,7 +416,7 @@ def _raspunde(path, query, body, method='GET'):
     elif path == '/api/matrice-proiecte': out = _matrice_proiecte(qs, _stare)
     elif path == '/api/surse-proiecte':
         out = {'mod': 'static', 'error': 'Achizitia surselor este disponibila numai in aplicatia locala.'}
-    elif path == '/api/ue/surse':
+    elif path in ('/api/ue/import', '/api/ue/surse'):
         out = {'mod': 'static', 'error': 'Importul si istoricul surselor UE sunt disponibile numai in aplicatia locala.'}
     elif path == '/api/mcp/capabilities':
         from scripts.mcp_boundary import capabilities

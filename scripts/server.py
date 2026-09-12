@@ -59,6 +59,7 @@ to a separate `initiative.documente.db` beside the initiative database.
 - `GET /api/ue/acoperire` — which CELEX ids cited by local laws/initiatives are already imported.
 - `GET /api/ue/import-queue` — missing cited CELEX ids, with local references and Cellar import
   guidance.
+- `POST /api/ue/import` — local-only on-demand import for one CELEX/source identifier.
 - `GET /api/prevedere?act=&loc=` — one provision's stored text, for the citation chips to show a
   target the consolidation view does not list. `gasit=false` where the corpus does not hold it.
 - `GET /api/vecini?act=` / `GET /api/rezumat` — the connections canvas and the corpus headline.
@@ -653,6 +654,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/regula",
                 "/api/impact",
                 "/api/ue",
+                "/api/ue/import",
                 "/api/importa",
                 "/api/docx",
                 "/api/conflicte-proiecte",
@@ -708,6 +710,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     (
                         "/api/dosare",
                         "/api/surse-proiecte",
+                        "/api/ue/import",
                         "/api/ue/surse",
                         "/api/registru-surse",
                         "/api/mcp",
@@ -725,7 +728,7 @@ def face_handler(stare: Stare, *, runtime=None):
             if not isinstance(cerere, dict):
                 self._json({"error": "cererea trebuie sa fie un obiect JSON"}, 400)
                 return
-            if ruta == "/api/ue/surse":
+            if ruta in ("/api/ue/import", "/api/ue/surse"):
                 from scripts.achizitii_ue import importa
 
                 if not self._dosare_permis():
