@@ -4939,6 +4939,22 @@ function manualNoteFromFinding(f){
     evidence_quote:evidence,reasoning:manualNoteText(d.motiv||d.explicatie||f.tip||''),
     status:evidence?'ready_for_review':'needs_evidence',revizie:0};
 }
+function manualNoteFromRuleCheck(row){
+  const first=(row.matched_checks||[])[0]||{},evidence=first.evidence||{};
+  const type=row.status==='candidate_issue_not_verdict'?'lacuna':'necorelare';
+  const quote=evidence.quote||manualNoteText(first.text||first.norma||'');
+  const title=(row.status==='candidate_issue_not_verdict'?'Regulă verificată · normă delegată negăsită':'Regulă verificată · fără semnal local')+' · '+[row.act_id,row.locator].filter(Boolean).join(' ');
+  const reasoning=[
+    `Verificare deterministă: ${row.check||'rule draft check'}.`,
+    `Stare: ${row.status}.`,
+    `Ciornă regulă: ${row.rule_draft_id}.`,
+    row.status==='candidate_issue_not_verdict'?'Semnal local candidat; trebuie revizie umană.':'Fără semnal local; nu înseamnă conformitate sau acoperire completă.',
+    ...(row.limitations||[])
+  ].filter(Boolean).join('\n');
+  return {title,type,act_id:row.act_id||'',locator:row.locator||'',evidence_quote:quote,
+    source_url:first.source_url||evidence.source_url||'',source_hash:row.source_hash||first.source_hash||evidence.source_hash||'',
+    reasoning,status:quote?'ready_for_review':'needs_evidence',revizie:0};
+}
 async function startManualNote(prefill){
   if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de a salva nota.';return;}
   MANUAL_NOTES_UI.editing=prefill;
@@ -5035,14 +5051,34 @@ function lawRuleDraftHtml(draft){
     +(draft.acceptance_note?`<p class="hint">Acceptare: ${esc(draft.acceptance_note)}</p>`:'')
     +`<details><summary>Contract law-rule-draft-v1</summary><pre>${esc(JSON.stringify(draft,null,2))}</pre></details></article>`;
 }
-function ruleDraftsPanelHtml(queue,drafts,bucket,filters){
+function ruleCheckRowHtml(row,index){
+  const signal=row.status==='candidate_issue_not_verdict',matched=row.matched_checks||[];
+  const first=matched[0]||{},evidence=first.evidence||{};
+  return `<article class="manual-note ${signal?'attention':''}" data-rule-check-index="${index}"><h5>${signal?'Candidat de problemă':'Fără semnal local'} · ${esc(row.act_id||'')} ${esc(row.locator||'')}</h5>`
+    +`<div class="manual-note-meta"><span>${esc(row.check)}</span><span>${esc(row.rule_draft_id)}</span><span>${esc(row.provision_id||'')}</span></div>`
+    +`<p>${esc(RULE_CANDIDATE_MODALITIES[row.modality]||row.modality)} · ${esc(row.status)}</p>`
+    +(matched.length?`<p class="hint">Semnale locale: ${esc(matched.length)} · severitate: ${esc(first.severity||'necunoscută')} · instrument: ${esc(evidence.expected_instrument||first.expected_instrument||'')}</p>`:'<p class="hint">Nu există semnal local pentru această ciornă. Asta nu dovedește conformitatea sau acoperirea completă.</p>')
+    +(evidence.quote?`<pre>${esc(String(evidence.quote).slice(0,1200))}</pre>`:'')
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-check-note>Creează notă manuală</button></div>`
+    +`<details><summary>Contract law-rule-execution-row-v1</summary><pre>${esc(JSON.stringify(row,null,2))}</pre></details></article>`;
+}
+function ruleChecksHtml(checks){
+  if(!checks)return '<p role="status">Verificările de reguli nu au fost încă încărcate.</p>';
+  const rows=checks.rows||[];
+  return `<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Ciorne eligibile<br><b>${esc(checks.eligible_rule_drafts||0)}</b></button><button type="button" class="ghost mini" disabled>Candidate probleme<br><b>${esc(checks.candidate_issues||0)}</b></button><button type="button" class="ghost mini" disabled>Returnate<br><b>${esc(checks.returned||0)}</b></button></div>`
+    +`<p class="hint">${esc(checks.check||'verificare')} · ${esc(checks.status||'')} · nu este verdict juridic.</p>`
+    +(checks.limitations?.length?`<ul>${checks.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
+    +`<div data-rule-check-list>${rows.map(ruleCheckRowHtml).join('')||'<p>Nicio ciornă eligibilă pentru verificarea deterministă curentă.</p>'}</div>`;
+}
+function ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters){
   const counts=Object.entries(RULE_QUEUE_BUCKETS).filter(([key])=>key!=='all').map(([key,label])=>`${esc(label)}: ${esc(queue.counts?.[key]||0)}`).join(' · ');
   const bucketOptions=Object.entries(RULE_QUEUE_BUCKETS).map(([key,label])=>`<option value="${key}" ${key===bucket?'selected':''}>${label}</option>`).join('');
   return '<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary>'
-    +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1. Ciornele nu sunt verdict juridic și nu execută reguli încă.</p>'
-    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button></div>`
+    +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1 → verificare deterministă limitată. Rezultatele sunt candidate de lucru, nu verdict juridic.</p>'
+    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button><button type="button" class="ghost mini" disabled>Semnale reguli<br><b>${esc(checks?.candidate_issues||0)}</b></button></div>`
     +`<p class="hint">${counts||'Nicio coadă de candidați.'}</p>`
     +`<form data-rule-draft-filters class="dossier-actions"><label>Coada<select name="bucket">${bucketOptions}</select></label><label>Act<input name="act" maxlength="200" value="${esc(filters.act||'')}"></label><label>ID prevedere<input name="provision_id" maxlength="240" value="${esc(filters.provision_id||'')}"></label><button type="submit" class="ghost mini">Filtrează</button><button type="button" class="ghost mini" data-rules-refresh title="Reîncarcă regulile">↻</button></form>`
+    +`<section><h4>Verificări deterministe</h4>${ruleChecksHtml(checks)}</section>`
     +`<section><h4>Ciorne promovate</h4><div data-rule-draft-list>${(drafts.items||[]).map(lawRuleDraftHtml).join('')||'<p>Nicio ciornă promovată pentru filtrul ales.</p>'}</div></section>`
     +`<section><h4>Coada de candidați</h4><div data-rule-queue-list>${(queue.items||[]).map(ruleCandidateQueueHtml).join('')||'<p>Niciun candidat în coadă pentru filtrul ales.</p>'}</div></section>`
     +'<p class="hint" role="status" data-rule-draft-status></p></details>';
@@ -5058,12 +5094,15 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
     const draftParams=new URLSearchParams({id:dossierId,offset:'0'});
     if(filters.act)draftParams.set('act',filters.act);
     if(filters.provision_id)draftParams.set('provision_id',filters.provision_id);
-    const [queue,drafts]=await Promise.all([
+    const checkParams=new URLSearchParams({id:dossierId,limita:'50'});
+    if(filters.act)checkParams.set('act',filters.act);
+    const [queue,drafts,checks]=await Promise.all([
       dossierApi('/api/dosare/reguli?'+queueParams),
-      dossierApi('/api/dosare/rule-drafts?'+draftParams)
+      dossierApi('/api/dosare/rule-drafts?'+draftParams),
+      dossierApi('/api/dosare/rule-drafts/checks?'+checkParams)
     ]);
     if(!valid())return;
-    host.innerHTML=ruleDraftsPanelHtml(queue,drafts,bucket,filters);
+    host.innerHTML=ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters);
     const status=host.querySelector('[data-rule-draft-status]');
     host.querySelector('[data-rules-refresh]').onclick=()=>loadRuleDrafts(dossierId,offset,{bucket, ...filters});
     host.querySelector('[data-rule-draft-filters]').onsubmit=e=>{
@@ -5084,6 +5123,7 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
         }catch(err){formStatus.textContent=err.message;}
       };
     });
+    host.querySelectorAll('[data-rule-check-note]').forEach(button=>button.onclick=()=>startManualNote(manualNoteFromRuleCheck(checks.rows[Number(button.closest('[data-rule-check-index]').dataset.ruleCheckIndex)])));
   }catch(err){if(valid()){host.innerHTML='<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-rules-retry>Reîncearcă regulile</button></details>';host.querySelector('[data-rules-retry]').onclick=()=>loadRuleDrafts(dossierId,offset,options);}}
 }
 async function loadProposalList(dossierId,offset=0){

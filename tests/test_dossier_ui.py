@@ -423,13 +423,58 @@ def test_rule_drafts_panel_renders_queue_and_promoted_rules():
         "const drafts={total:1,items:[{...candidate,"
         "status:'draft_rule_not_legal_verdict',accepted_by:'jurist',"
         "acceptance_note:'ok',creat_la:'2026-09-12T00:00:00Z'}]};"
-        "const html=ruleDraftsPanelHtml(queue,drafts,'all',"
+        "const checks={contract:'law-rule-execution-v1',"
+        "status:'deterministic_rule_draft_check_preview',"
+        "check:'delegated_norm_not_found',eligible_rule_drafts:1,candidate_issues:1,returned:1,"
+        "limitations:['nu este verdict juridic'],rows:[{contract:'law-rule-execution-row-v1',"
+        "rule_draft_id:'d1',candidate_id:'c1',status:'candidate_issue_not_verdict',"
+        "check:'delegated_norm_not_found',provision_id:'ro:lege#art1',act_id:'lege',"
+        "locator:'art1',modality:'obligation',source_hash:'b'.repeat(64),"
+        "matched_checks:[{severity:'medium',evidence:{expected_instrument:'hotărâre',"
+        "quote:'Text <legal>'}}],limitations:['revizie umană']}]} ;"
+        "const html=ruleDraftsPanelHtml(queue,drafts,checks,'all',"
         "{act:'lege',provision_id:'ro:lege#art1'});"
         "assert.ok(html.includes('law-rule-draft-v1'));"
+        "assert.ok(html.includes('law-rule-execution-row-v1'));"
+        "assert.ok(html.includes('Verificări deterministe'));"
+        "assert.ok(html.includes('Creează notă manuală'));"
         "assert.ok(html.includes('data-rule-promote'));"
         "assert.ok(html.includes('Ciorne promovate'));"
         "assert.ok(html.includes('Coada de candidați'));"
         "assert.ok(!html.includes('<script>'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_rule_check_candidate_prefills_manual_note():
+    source = (
+        APP.read_text()
+        .split("function manualNoteText", 1)[1]
+        .split("async function openManualNoteSource", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const MANUAL_NOTE_TYPES={lacuna:'Lacună',necorelare:'Necorelare'};"
+        "function manualNoteText"
+        + source
+        + "const note=manualNoteFromRuleCheck({status:'candidate_issue_not_verdict',"
+        "check:'delegated_norm_not_found',rule_draft_id:'d1',act_id:'lege-98-2016',"
+        "locator:'art3',source_hash:'a'.repeat(64),matched_checks:[{evidence:{"
+        "quote:'Ministerul emite norme',source_url:'https://example.test/sursa'}}],"
+        "limitations:['nu este verdict juridic']});"
+        "assert.equal(note.type,'lacuna');"
+        "assert.equal(note.status,'ready_for_review');"
+        "assert.equal(note.act_id,'lege-98-2016');"
+        "assert.ok(note.title.includes('normă delegată negăsită'));"
+        "assert.ok(note.evidence_quote.includes('Ministerul emite norme'));"
+        "assert.ok(note.reasoning.includes('d1'));"
+        "assert.ok(note.reasoning.includes('nu este verdict juridic'));"
+        "const noSignal=manualNoteFromRuleCheck({status:'no_local_candidate_signal',"
+        "check:'delegated_norm_not_found',rule_draft_id:'d2',matched_checks:[]});"
+        "assert.equal(noSignal.type,'necorelare');"
+        "assert.equal(noSignal.status,'needs_evidence');"
+        "assert.ok(noSignal.reasoning.includes('nu înseamnă conformitate'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 
