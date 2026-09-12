@@ -2430,6 +2430,56 @@ def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) ->
     return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
 
 
+def _law_code_delegated_norms(qs: dict, stare: Stare) -> dict:
+    """First deterministic law-as-code check: delegated implementing norm not found."""
+    limita = max(1, min(_numar_qs(qs, "limita", 50), 200))
+    act_filter = (qs.get("act", [""])[0] or "").strip()
+    rows = _raport_lista(stare.vid)
+    if act_filter:
+        rows = [r for r in rows if r.get("act_id") == act_filter]
+    checks = []
+    for row in rows[:limita]:
+        locator = row.get("locator") or ""
+        act_id = row.get("act_id") or ""
+        checks.append(
+            {
+                "contract": "law-code-check-delegated-norm-v1",
+                "status": "candidate_gap_not_verdict",
+                "check": "delegated_norm_not_found",
+                "act_id": act_id,
+                "locator": locator,
+                "provision_id": f"ro:{act_id}#{locator}" if act_id and locator else "",
+                "instrument": row.get("instrument") or "",
+                "deadline": row.get("scadenta"),
+                "days_overdue": row.get("zile_intarziere"),
+                "severity": row.get("severitate") or "blocking",
+                "evidence": {
+                    "text": row.get("text") or "",
+                    "searched": row.get("cautat") or "",
+                    "near_candidates": row.get("candidati") or [],
+                },
+                "actions": _actiuni_prevedere(act_id, locator),
+                "limitations": [
+                    "Deterministic check over the local graph/report; not a legal verdict.",
+                    "A missing implementing act can still mean missing collection coverage.",
+                    *list(row.get("limitari") or []),
+                ],
+            }
+        )
+    return {
+        "contract": "law-code-delegated-norms-v1",
+        "status": "deterministic_check_preview",
+        "total": len(rows),
+        "returned": len(checks),
+        "truncated": len(rows) > limita,
+        "checks": checks,
+        "limitations": [
+            "Reads the local unmet-obligations report; it does not fetch official sources.",
+            "Results are candidates for review, not findings accepted as legal truth.",
+        ],
+    }
+
+
 def _nereparat_dict(n, norma=None, temeiuri: list[dict] | None = None) -> dict:
     """One `neconstitutional.Nereparat` row as a plain dict for the shipped register.
 

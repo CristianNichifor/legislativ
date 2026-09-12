@@ -46,6 +46,8 @@ to a separate `initiative.documente.db` beside the initiative database.
   narrowed by the same filters.
 - `GET /api/matrice-graf?emitent=&tip=&rang=&domeniu=` — graph/matrix scaffold rows for the same
   selection, with explicit evidence and source state but no legal verdict.
+- `GET /api/law-code/delegated-norms?act=&limita=` — deterministic delegated-norm check over the
+  local unmet-obligations report; review candidates, not legal verdicts.
 - `GET /api/matrice-dosar?emitent=&tip=&rang=&domeniu=&problema=` — a printable work dossier for
   one matrix row.
 - `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
@@ -93,6 +95,7 @@ from scripts.servicii import (
     _impact,
     _import_queue_ue,
     _importa,
+    _law_code_delegated_norms,
     _lint,
     _matrice,
     _matrice_acte,
@@ -339,6 +342,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 self._json(_consolidat(parse_qs(ruta.query)))
             elif ruta.path == "/api/prevedere":
                 self._json(_prevedere(parse_qs(ruta.query), stare))
+            elif ruta.path == "/api/law-code/delegated-norms":
+                self._json(_law_code_delegated_norms(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/cine-citeaza":
                 self._json(_cine_citeaza(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/deputati":

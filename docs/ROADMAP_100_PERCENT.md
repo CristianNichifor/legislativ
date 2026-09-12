@@ -331,6 +331,9 @@ The app is “100%” for the intended product when all of these are true:
 - MCP is available as an optional integration surface.
 - Large datasets are split into optional packs.
 - Every finding has source provenance, uncertainty state and review state.
+- Deterministic law-as-code checks start with
+  [delegated implementing norms](LAW_CODE_CHECKS.md), returning review candidates
+  rather than automatic legal conclusions.
 - Acceptance metrics exist for extraction, precision/recall, source freshness,
   AI faithfulness and UX-critical workflows.
 

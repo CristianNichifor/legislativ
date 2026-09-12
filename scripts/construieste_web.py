@@ -361,6 +361,7 @@ from urllib.parse import parse_qs
 from scripts.servicii import (Stare, rezumat, _lint, _cauta, _vecini,
                               _redacteaza, _sugereaza, _consolidat, _compune, _act, _parseaza,
                               _norma, _termeni, _dictionar, _regula, _impact,
+                              _law_code_delegated_norms,
                               _cronologie, _citari, _fisa_act, _supraveghere,
                               _opinie, _opinie_cerere,
                               _deputati, _parcurs, _rol, _stenograma, _dezbateri,
@@ -427,6 +428,7 @@ def _raspunde(path, query, body, method='GET'):
         out = {'error': 'Importul oficial este disponibil în aplicația locală.'}
     elif path == '/api/conflicte-proiecte': out = _conflicte_proiecte(json.loads(body or '{}'), _stare)
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
+    elif path == '/api/law-code/delegated-norms': out = _law_code_delegated_norms(qs, _stare)
     elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
     elif path == '/api/ue/acoperire': out = _acoperire_ue(qs, _stare)
     elif path == '/api/acoperire-surse':
