@@ -11,7 +11,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from scripts import cellar
-from scripts.source_sync import SYNC_STATES, can_transition, normalize_state
+from scripts.source_sync import STATE_LABELS, SYNC_STATES, can_transition, normalize_state
 
 FAMILIES = {
     "legislatie_ro": "Legislație română",
@@ -31,6 +31,7 @@ HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
+SYNC_FAMILIES = PROJECT_FAMILIES | frozenset({"ue_cellar"})
 
 
 def cale(stare) -> Path:
@@ -143,7 +144,55 @@ def init(con: sqlite3.Connection) -> None:
     )
 
 
+def _sync_status(row: dict) -> dict:
+    state = normalize_state(row["state"])
+    can_sync = row["family"] in SYNC_FAMILIES
+    can_queue = state != "queued" and can_sync and can_transition(state, "queued")
+    can_review = state in {"changed", "needs_review"}
+    severity = {
+        "unchanged": "ok",
+        "changed": "attention",
+        "failed": "attention",
+        "needs_review": "attention",
+        "rate_limited": "attention",
+        "unavailable": "blocked",
+        "queued": "ready",
+        "discovered": "ready",
+        "fetched": "ready",
+    }[state]
+    next_actions = {
+        "discovered": "Pune sursa în coadă sau sincronizeaz-o explicit.",
+        "queued": "Rulează sincronizarea pentru această singură sursă.",
+        "fetched": "Verifică rezultatul ultimei preluări și clasificarea hash-ului.",
+        "unchanged": "Nu este necesară nicio acțiune imediată.",
+        "changed": "Revizuiește dosarele și propunerile dependente înainte de a închide alerta.",
+        "failed": "Reîncearcă sincronizarea după ce verifici identificatorul sau URL-ul.",
+        "unavailable": (
+            "Păstrează sursa vizibilă și corectează identificatorul sau înlocuiește sursa."
+        ),
+        "rate_limited": "Reîncearcă mai târziu; nu porni sync-uri repetate automat.",
+        "needs_review": (
+            "Revizie manuală: sursa a fost citită, dar nu poate actualiza automat date juridice."
+        ),
+    }
+    return {
+        "state": state,
+        "label": STATE_LABELS[state],
+        "severity": severity,
+        "can_queue": can_queue,
+        "can_sync": can_sync,
+        "can_review": can_review,
+        "next_action": next_actions[state],
+    }
+
+
 def _row(row: sqlite3.Row) -> dict:
+    data = dict(row)
+    data["sync_status"] = _sync_status(data)
+    return data
+
+
+def _plain_row(row: sqlite3.Row) -> dict:
     return dict(row)
 
 
@@ -156,10 +205,14 @@ def lista(stare, qs: dict | None = None) -> dict:
     offset = max(0, int((qs.get("offset") or ["0"])[0]))
     family = (qs.get("family") or [""])[0]
     state = (qs.get("state") or [""])[0]
+    source_id = (qs.get("id") or [""])[0]
     attention = (qs.get("attention") or [""])[0] in {"1", "true", "da"}
     query = _text((qs.get("q") or [""])[0], limit=200).lower()
     params: list[object] = []
     where = []
+    if source_id:
+        where.append("id=?")
+        params.append(_token(source_id, required=True))
     if family:
         where.append("family=?")
         params.append(_family(family))
@@ -208,7 +261,7 @@ def lista(stare, qs: dict | None = None) -> dict:
             ):
                 bucket = attempts[attempt["source_id"]]
                 if len(bucket) < 3:
-                    bucket.append(_row(attempt))
+                    bucket.append(_plain_row(attempt))
         counts = {
             f"{r['family']}:{r['state']}": r["c"]
             for r in con.execute(

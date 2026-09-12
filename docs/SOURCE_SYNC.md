@@ -41,6 +41,21 @@ failed, unavailable, rate-limited or needs-review. A changed source is a review
 signal, not an automatic legal conclusion. A failed, unavailable or rate-limited
 source remains visible in the registry instead of becoming an empty result.
 
+`GET /api/registru-surse` returns a `sync_status` object for every source row.
+`GET /api/registru-surse?id=src_...` limits the response to one selected row
+without starting a sync. The status object is read-only UI/API guidance:
+
+- `state`: one of the shared sync states;
+- `label`: human-readable state description;
+- `severity`: `ready`, `ok`, `attention` or `blocked`;
+- `can_queue`: whether the row can be moved to `queued`;
+- `can_sync`: whether this source family has a direct one-source sync adapter;
+- `can_review`: whether the row can be manually marked reviewed;
+- `next_action`: the safest next user action for that selected source.
+
+This selected-source status endpoint must not fetch upstream sources, rebuild
+datasets, recalculate dossiers or mutate the registry.
+
 Static GitHub Pages/browser workspaces do not fetch official sources. They may
 show local/public snapshots, but one-source acquisition requires the local Python
 server because it writes the source registry and retained source databases.

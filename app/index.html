@@ -5768,7 +5768,8 @@ function sourceRegistryOutcome(row,verb='Sync'){
   const hint=SOURCE_STATE_HINTS[row.state]||'Stare sursă necunoscută.';
   const hash=row.last_hash?' · SHA-256 '+row.last_hash.slice(0,12):'';
   const error=row.last_error?' · '+row.last_error:'';
-  return `${verb}: ${label}. ${hint}${hash}${error}`;
+  const next=row.sync_status?.next_action?` Următorul pas: ${row.sync_status.next_action}`:'';
+  return `${verb}: ${label}. ${hint}${next}${hash}${error}`;
 }
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
@@ -5786,15 +5787,19 @@ function sourceRegistryConfigure(data){
 }
 function sourceRegistryRowHtml(row,families){
   const state=SOURCE_STATE_LABELS[row.state]||row.state, family=families[row.family]||row.family;
+  const syncStatus=row.sync_status||{};
   const source=row.url?`<br><a href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:'';
   const attempt=row.last_attempt_at?`Ultima încercare: ${esc(dossierTime(row.last_attempt_at))}`:'Fără încercare de sync.';
   const hash=row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:'';
-  const canSync=['ue_cellar','parlament','camera','senat'].includes(row.family);
+  const canSync=syncStatus.can_sync??['ue_cellar','parlament','camera','senat'].includes(row.family);
+  const canQueue=syncStatus.can_queue??row.state!=='queued';
+  const canReview=syncStatus.can_review??['changed','needs_review'].includes(row.state);
+  const next=syncStatus.next_action||SOURCE_STATE_HINTS[row.state]||'Stare sursă necunoscută.';
   const sync=canSync?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">${row.family==='ue_cellar'?'Sincronizează CELEX':'Sincronizează sursa'}</button>`:'';
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
-  const review=['changed','needs_review'].includes(row.state)?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
+  const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(SOURCE_STATE_HINTS[row.state]||'Stare sursă necunoscută.')}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${row.state==='queued'?'disabled':''}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function loadSourceRegistry(offset=0,notice=''){
   const status=$('#source-registry-status'), list=$('#source-registry-list');
