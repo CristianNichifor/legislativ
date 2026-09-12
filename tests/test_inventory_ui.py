@@ -425,6 +425,9 @@ def test_eu_issue_note_builder_renderer_escapes_sources_and_blockers():
         "ready_for_review:'Pregătită pentru revizie',reviewed:'Revizuită'};"
         "const EU_ISSUE_STATES" + renderer + "const form=euIssueNoteBuilderHtml();"
         "assert.ok(form.includes('data-eu-issue-form'));"
+        "assert.ok(form.includes('data-eu-issue-import'));"
+        "assert.ok(form.includes('CELEX sau URL oficial'));"
+        "assert.ok(form.includes('name=\"limbi\"'));"
         "const html=euIssuePreviewHtml({issue_state:'possible_gap',base_sha256:'<hash>',"
         "blockers:[{side:'eu<script>',code:'missing<img>'}],limitari:['lim<script>'],base:{"
         "legal_effect:'unknown',national_evidence:{kind:'prevedere',title:'<RO>',"
@@ -435,5 +438,12 @@ def test_eu_issue_note_builder_renderer_escapes_sources_and_blockers():
         "assert.ok(html.includes('Lacună posibilă'));"
         "assert.ok(html.includes('eu&lt;script&gt; · missing&lt;img&gt;'));"
         "assert.ok(!html.includes('<script>')&&!html.includes('<img>')&&!html.includes('<RO>'));"
+        "const saved=euIssueSavedHtml({id:'n1',title:'Risc <b>',proposal_context:{"
+        "contract:'ro-eu-proposal-context-v1',legal_effect:'unknown',issue_state:'possible_conflict',"
+        "note_id:'n1',note_title:'Risc <b>'}});"
+        "assert.ok(saved.includes('context pentru propunere'));"
+        "assert.ok(saved.includes('ro-eu-proposal-context-v1'));"
+        "assert.ok(saved.includes('data-eu-issue-copy-context'));"
+        "assert.ok(!saved.includes('Risc <b>'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)

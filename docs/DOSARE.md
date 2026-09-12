@@ -184,6 +184,16 @@ quotes, language labels and hashes, then saves a `risc_ue` note with one candida
 state: possible conflict, possible gap or possible coverage. Human review status
 and uncertainty remain explicit; the note is not a compliance verdict.
 
+The end-to-end EU workflow can also start from the note builder itself: import or
+refresh one CELEX/source URL through the local-only `/api/ue/import` route, choose
+the retained snapshot/article, link it to the Romanian provision/project version,
+preview the source-backed base, then save the note. A saved EU note returns and
+stores a `ro-eu-proposal-context-v1` object. That context is a bounded handoff for
+drafting a proposal: it contains only the note id/title, possible issue state,
+human review status, Romanian and EU quotes, URLs, hashes, language labels,
+rationale and uncertainty. It keeps `legal_effect: unknown` and must not be used
+as a legal compliance verdict.
+
 The selected dossier UI now starts the note area with a guided legislative-gap
 workspace. It summarizes the current note state, evidence coverage, EU-risk notes
 and human-review progress, then links directly to the manual note form, EU note

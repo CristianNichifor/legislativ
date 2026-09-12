@@ -25,6 +25,11 @@ LIMITATIONS = [
     "Limba, hash-ul și incertitudinea sunt păstrate explicit.",
     "Aplicabilitatea, transpunerea și actualitatea juridică rămân pentru revizie umană.",
 ]
+PROPOSAL_CONTEXT_LIMITATIONS = [
+    "Context pentru propunere, nu verdict de conformitate.",
+    "Autorul trebuie să verifice aplicabilitatea, transpunerea, actualitatea și textul oficial.",
+    "Folosește numai citatele și hash-urile salvate în această notă.",
+]
 PREVIEW_FIELDS = {"dosar_id", "national", "eu", "issue_state"}
 SAVE_FIELDS = PREVIEW_FIELDS | {"id", "base_sha256", "title", "uncertainty", "rationale", "status"}
 
@@ -255,6 +260,45 @@ def save(stare, request: dict) -> dict:
         "eu": eu,
         "limitations": LIMITATIONS,
     }
+    proposal_context = {
+        "contract": "ro-eu-proposal-context-v1",
+        "kind": "possible_eu_issue",
+        "note_id": note_id,
+        "note_title": title,
+        "issue_state": selected["issue_state"],
+        "issue_label": ISSUE_STATES[selected["issue_state"]],
+        "human_review_status": status,
+        "legal_effect": "unknown",
+        "national": {
+            "kind": national["kind"],
+            "title": national["title"],
+            "act_id": national.get("act_id", ""),
+            "locator": national.get("locator", ""),
+            "plx": national.get("plx", ""),
+            "version_id": national.get("version_id", ""),
+            "language": national["language"],
+            "quote": national["quote"],
+            "text_sha256": national["text_sha256"],
+            "source_url": national["source_url"],
+            "captured_at": national["captured_at"],
+        },
+        "eu": {
+            "celex": eu["celex"],
+            "snapshot_id": eu["instantanee"],
+            "locator": eu["locator"],
+            "language": eu["language"],
+            "quote": eu["quote"],
+            "article_sha256": eu["article_sha256"],
+            "text_sha256": eu["text_sha256"],
+            "source_url": eu["source_url"],
+            "captured_at": eu["captured_at"],
+            "title": eu["title"],
+        },
+        "rationale": rationale,
+        "uncertainty": uncertainty,
+        "limitations": PROPOSAL_CONTEXT_LIMITATIONS,
+    }
+    payload["proposal_context"] = proposal_context
     evidence_quote = (
         f"[RO {national['language']}] {national['quote']}\n\n[UE {eu['language']}] {eu['quote']}"
     )
@@ -276,4 +320,9 @@ def save(stare, request: dict) -> dict:
             "status": status,
         },
     )
-    return {**note, "eu_issue_note": payload, "limitari": LIMITATIONS}
+    return {
+        **note,
+        "eu_issue_note": payload,
+        "proposal_context": proposal_context,
+        "limitari": LIMITATIONS,
+    }

@@ -87,6 +87,17 @@ def test_save_revalidates_base_and_stores_manual_risk_note(source_backed_case):
     assert reasoning["national"]["text_sha256"]
     assert reasoning["eu"]["article_sha256"]
     assert reasoning["limitations"]
+    context = saved["proposal_context"]
+    assert context["contract"] == "ro-eu-proposal-context-v1"
+    assert context["kind"] == "possible_eu_issue"
+    assert context["legal_effect"] == "unknown"
+    assert context["issue_state"] == "possible_conflict"
+    assert context["national"]["act_id"] == "lege-98-2016"
+    assert context["national"]["locator"] == "art1"
+    assert context["eu"]["celex"] == CELEX
+    assert context["eu"]["snapshot_id"] == selection["eu"]["instantanee"]
+    assert "verdict de conformitate" in context["limitations"][0]
+    assert reasoning["proposal_context"] == context
 
 
 def test_missing_sources_block_and_hash_tampering_is_rejected(source_backed_case):

@@ -67,3 +67,14 @@ Metadata-only response:
   compatibility verdict.
 - Failed imports keep the last good local text and record the attempt without exposing local paths or
   private transport errors to the client.
+
+## EU issue workflow
+
+The dossier EU note builder may call `/api/ue/import` before article selection. The user can paste a
+CELEX id or an official URL, choose `RON,ENG` or `ENG,RON`, then select the retained snapshot and one
+parsed article. The selected article is passed to `ro-eu-issue-note-v1` together with a Romanian
+corpus provision or imported parliamentary project version.
+
+This is an evidence workflow only: the saved dossier note records `possible_conflict`,
+`possible_gap` or `possible_coverage`, source URLs, hashes, language/fallback metadata and explicit
+uncertainty. It never records a compliance verdict.
