@@ -189,6 +189,12 @@ TRACKER_EVENTS: tuple[TrackerEvent, ...] = (
         ("chamber", "vote_date", "result", "for", "against", "abstain", "nominal_url"),
     ),
     TrackerEvent(
+        "promulgated",
+        "promulgated",
+        "presedinte",
+        ("decree_number", "date", "source_url"),
+    ),
+    TrackerEvent(
         "published_in_monitor",
         "published in Monitorul Oficial",
         "monitorul_oficial_pi",

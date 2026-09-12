@@ -21,6 +21,31 @@ MAX_TEXT = 1000
 MAX_PAYLOAD = 20000
 EVENT_TYPES = {event.key: event for event in TRACKER_EVENTS}
 TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
+LIFECYCLE_STAGES = (
+    ("consultation_open", "Consultare"),
+    ("drafting", "Avizare"),
+    ("sent_to_parliament", "Trimis"),
+    ("registered", "Înregistrat"),
+    ("committee", "Comisii"),
+    ("report", "Raport"),
+    ("plenary_scheduled", "Plen"),
+    ("adopted", "Adoptat"),
+    ("promulgated", "Promulgat"),
+    ("published", "Publicat"),
+)
+STAGE_LABELS = dict(LIFECYCLE_STAGES)
+STAGE_INDEX = {key: index for index, (key, _) in enumerate(LIFECYCLE_STAGES)}
+EVENT_NORMALIZATION = {
+    "public_consultation_opened": ("Consultare publică deschisă", "consultation_open"),
+    "public_consultation_closed": ("Consultare publică închisă", "drafting"),
+    "committee_assignment": ("Trimis la comisii", "committee"),
+    "opinion_received": ("Aviz primit", "drafting"),
+    "report_filed": ("Raport depus", "report"),
+    "plenary_agenda": ("Înscris pe ordinea de zi", "plenary_scheduled"),
+    "vote_recorded": ("Vot înregistrat", "adopted"),
+    "promulgated": ("Promulgat", "promulgated"),
+    "published_in_monitor": ("Publicat în Monitorul Oficial", "published"),
+}
 
 
 def cale(stare) -> Path:
@@ -150,6 +175,13 @@ def _row(row: sqlite3.Row) -> dict:
     out = dict(row)
     out["payload"] = json.loads(out.pop("payload_json") or "{}")
     out["event_label"] = EVENT_TYPES[out["event_type"]].label
+    display_label, stage = EVENT_NORMALIZATION.get(
+        out["event_type"], (out["event_label"], "registered")
+    )
+    out["display_label"] = display_label
+    out["stage_key"] = stage
+    out["stage_label"] = STAGE_LABELS[stage]
+    out["stage_order"] = STAGE_INDEX[stage]
     return out
 
 
@@ -191,6 +223,10 @@ def _empty(limit: int = 50, offset: int = 0) -> dict:
         "limit": limit,
         "offset": offset,
         "event_types": sorted(EVENT_TYPES),
+        "lifecycle_stages": [
+            {"key": key, "label": label, "order": index}
+            for index, (key, label) in enumerate(LIFECYCLE_STAGES)
+        ],
         "source_status": "missing",
         "limitari": ["Tracker-ul legislativ nu este inițializat."],
     }
@@ -317,6 +353,10 @@ def lista(stare, query: dict | None = None) -> dict:
         "limit": limit,
         "offset": offset,
         "event_types": sorted(EVENT_TYPES),
+        "lifecycle_stages": [
+            {"key": key, "label": label, "order": index}
+            for index, (key, label) in enumerate(LIFECYCLE_STAGES)
+        ],
         "source_status": "ok",
         "limitari": [
             "Tracker-ul citește evenimente locale normalizate; nu sincronizează surse publice."

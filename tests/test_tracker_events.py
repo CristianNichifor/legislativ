@@ -66,6 +66,56 @@ def test_tracker_store_filters_by_type_dossier_and_source_family(tmp_path):
     )
 
 
+def test_tracker_events_carry_unified_lifecycle_metadata(tmp_path):
+    stare = state(tmp_path)
+    rows = [
+        event(
+            event_type="public_consultation_opened",
+            source_family="consultare_econsultare",
+            source_url="https://e-consultare.gov.ro/consultare/1",
+            occurred_at="2026-09-01T10:00:00+00:00",
+            payload={"authority": "MDLPA"},
+        ),
+        event(
+            event_type="vote_recorded",
+            source_family="camera",
+            source_url="https://www.cdep.ro/vot",
+            occurred_at="2026-09-10T10:00:00+00:00",
+            payload={"result": "adoptat"},
+        ),
+        event(
+            event_type="promulgated",
+            source_family="presedinte",
+            source_url="https://www.presidency.ro/decret",
+            occurred_at="2026-09-11T10:00:00+00:00",
+            payload={"decree_number": "100"},
+        ),
+        event(
+            event_type="published_in_monitor",
+            source_family="monitorul_oficial_pi",
+            source_url="https://monitoruloficial.ro/",
+            occurred_at="2026-09-12T10:00:00+00:00",
+            payload={"part": "I", "number": 10, "date": "2026-09-12"},
+        ),
+    ]
+    for row in rows:
+        tracker_events.adauga(stare, row)
+
+    out = tracker_events.lista(stare, {"project_id": ["PL-x 10/2026"]})
+    by_type = {row["event_type"]: row for row in out["events"]}
+
+    assert out["lifecycle_stages"][0] == {
+        "key": "consultation_open",
+        "label": "Consultare",
+        "order": 0,
+    }
+    assert by_type["public_consultation_opened"]["display_label"] == ("Consultare publică deschisă")
+    assert by_type["public_consultation_opened"]["stage_key"] == "consultation_open"
+    assert by_type["vote_recorded"]["stage_key"] == "adopted"
+    assert by_type["promulgated"]["stage_label"] == "Promulgat"
+    assert by_type["published_in_monitor"]["stage_order"] > by_type["vote_recorded"]["stage_order"]
+
+
 def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
     stare = state(tmp_path)
     saved = tracker_events.adauga(stare, event())["event"]
