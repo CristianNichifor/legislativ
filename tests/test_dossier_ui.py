@@ -170,7 +170,7 @@ const note={id:'abc',title:'<script>',type:'contradictie',status:'ready_for_revi
   source_url:'https://example.test/?q=<svg>',source_hash:'a'.repeat(64),
   evidence_quote:'quote <b>',reasoning:'reason <i>'};
 const h=manualNoteHtml(note,0);
-assert.ok(h.includes('Contradicție')&&h.includes('Pregătită pentru revizie'));
+assert.ok(h.includes('Contradicție')&&h.includes('Gata pentru auto-revizie'));
 assert.ok(h.includes('SHA-256 sursă')&&h.includes('Citat dovadă'));
 assert.ok(!/<(script|img|svg|b|i)>/.test(h));
 const formHtml=manualNoteFormHtml(note);
@@ -186,6 +186,7 @@ assert.equal(prefill.status,'ready_for_review');
 assert.ok(prefill.evidence_quote.includes('A text'));
 assert.ok(prefill.evidence_quote.includes('B text'));
 assert.ok(manualNoteFormHtml(prefill).includes('Notă precompletată din constatare'));
+assert.ok(manualNoteFormHtml(prefill).includes('Checklist auto-revizie'));
 const summary=manualNoteSummaryHtml({
   pe_stare:{draft:1,ready_for_review:2},
   pe_tip:{lacuna:1,contradictie:2},
@@ -210,6 +211,13 @@ assert.deepEqual(manualNotePayload({},'dossier',null),{
   id:'11111111222243338444555555555555',dosar_id:'dossier',revizie:0,title:'Titlu',
   type:'lacuna',act_id:'A',locator:'art1',evidence_quote:'citat',
   source_url:'https://x.test',source_hash:'b'.repeat(64),reasoning:'motiv',status:'draft'});
+values.status='reviewed';
+assert.deepEqual(manualNoteSelfReviewMissing({}),[]);
+values.evidence_quote='';
+values.source_url='';
+values.source_hash='';
+values.reasoning='';
+assert.deepEqual(manualNoteSelfReviewMissing({}),['citat dovadă','sursă sau SHA-256','raționament']);
 """
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
