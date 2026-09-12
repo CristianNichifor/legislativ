@@ -1429,6 +1429,11 @@
             <p id="tracker-review-status" class="hint" role="status">Coada de revizie neîncărcată.</p>
             <div id="tracker-review-list"></div>
           </details>
+          <details id="project-workbench" class="tracker-timeline">
+            <summary>Workbench proiect</summary>
+            <p id="project-workbench-status" class="hint" role="status">Alege un proiect urmărit.</p>
+            <div id="project-workbench-body"></div>
+          </details>
           <div id="lifecycle-source-review"></div>
           <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
         </details>
@@ -6553,7 +6558,7 @@ function lifecycleRowHtml(project,index=0){
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -6689,6 +6694,9 @@ function renderLifecycleList(){
   });
   list.querySelectorAll('[data-lifecycle-timeline]').forEach(button=>{
     button.onclick=()=>openTrackerTimeline({project_id:projects[Number(button.dataset.lifecycleTimeline)]?.project_id||''});
+  });
+  list.querySelectorAll('[data-lifecycle-workbench]').forEach(button=>{
+    button.onclick=()=>openProjectWorkbench(projects[Number(button.dataset.lifecycleWorkbench)]||{});
   });
   list.querySelectorAll('[data-lifecycle-dossier]').forEach(button=>{
     button.onclick=()=>lifecyclePrefillDossier(projects[Number(button.dataset.lifecycleDossier)]||{});
@@ -6863,6 +6871,68 @@ function openTrackerTimeline({project_id='',dossier_id=''}={}){
   if(project_id)form.elements.project_id.value=project_id;
   if(dossier_id)form.elements.dossier_id.value=dossier_id;
   loadTrackerTimeline(0);
+  panel.scrollIntoView({block:'nearest'});
+}
+const PROJECT_WORKBENCH={project:null,pack:null,sequence:0};
+async function projectEvidencePackApi(projectId,dossierId=''){
+  const params={project_id:projectId,event_limit:'100',note_limit:'25'};
+  if(dossierId)params.dossier_id=dossierId;
+  const response=await fetch('/api/project-evidence-pack?'+new URLSearchParams(params));
+  const data=await response.json().catch(()=>({error:'Pachetul de dovezi nu este disponibil.'}));
+  if(!response.ok||data.error)throw new Error(data.error||'Pachetul de dovezi nu este disponibil.');
+  return data;
+}
+function projectWorkbenchEventsHtml(events=[]){
+  if(!events.length)return '<p>Niciun eveniment tracker pentru acest proiect.</p>';
+  return `<ol class="tracker-timeline-events">${events.slice(0,10).map(trackerEventHtml).join('')}</ol>`;
+}
+function projectWorkbenchEvidenceHtml(rows=[]){
+  if(!rows.length)return '<p>Nicio dovadă normalizată pentru proiect.</p>';
+  return '<dl class="hint">'+rows.slice(0,12).map(row=>{
+    const source=urlSigur(row.source_url);
+    return `<dt>${esc(row.source_family||'sursă')} · ${esc(dossierTime(row.occurred_at))}</dt><dd>${esc(row.title||row.event_type)}${row.content_hash?`<br>SHA-256: ${esc(row.content_hash)}`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}</dd>`;
+  }).join('')+'</dl>';
+}
+function projectWorkbenchNotesHtml(notes=[]){
+  if(!notes.length)return '<p>Nicio notă de dosar legată de proiect.</p>';
+  return notes.map(note=>`<article class="source-affected-run"><h5>${esc(note.title)}</h5><p class="hint">${esc(note.type)} · ${esc(note.status)} · ${esc(note.locator||'fără locator')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('');
+}
+function projectWorkbenchHtml(project,pack){
+  const summary=pack.summary||{};
+  const actions=pack.next_actions||[];
+  const lifecycleMatches=pack.lifecycle?.projects||[];
+  const title=project.title||lifecycleMatches[0]?.title||'Fără titlu';
+  return `<section class="source-review"><h4>Workbench · ${esc(pack.project_id||project.project_id||'proiect')}</h4>`
+    +`<p><strong>${esc(title)}</strong></p>`
+    +`<div class="lifecycle-overview"><section class="lifecycle-overview-card"><span class="hint">Evenimente</span><strong>${esc(summary.events||0)}</strong><span class="hint">${esc(summary.open_events||0)} nerevizuite</span></section><section class="lifecycle-overview-card"><span class="hint">Note dosar</span><strong>${esc(summary.notes||0)}</strong><span class="hint">${pack.dossier_id?esc(pack.dossier_id):'fără dosar ales'}</span></section><section class="lifecycle-overview-card"><span class="hint">Potriviri lifecycle</span><strong>${esc(summary.lifecycle_matches||0)}</strong><span class="hint">${esc(pack.source_status||'necunoscut')}</span></section></div>`
+    +(actions.length?`<h5>Următorul pas</h5><ul>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:'')
+    +`<h5>Evenimente</h5>${projectWorkbenchEventsHtml(pack.events||[])}`
+    +`<h5>Dovezi</h5>${projectWorkbenchEvidenceHtml(pack.evidence||[])}`
+    +`<h5>Note</h5>${projectWorkbenchNotesHtml(pack.dossier_notes||[])}`
+    +(pack.limitari?.length?`<p class="hint">${pack.limitari.map(esc).join(' ')}</p>`:'')
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-workbench-timeline>Timeline</button><button type="button" class="ghost mini" data-workbench-note>Notă în dosar</button><button type="button" class="ghost mini" data-workbench-refresh>Reîncarcă</button></div></section>`;
+}
+async function openProjectWorkbench(project){
+  const panel=$('#project-workbench'), status=$('#project-workbench-status'), body=$('#project-workbench-body');
+  if(!panel||!status||!body)return;
+  const projectId=project.project_id||'';
+  panel.open=true;PROJECT_WORKBENCH.project=project;PROJECT_WORKBENCH.pack=null;
+  if(!projectId){status.textContent='Proiect fără identificator.';body.innerHTML='';return;}
+  const token=++PROJECT_WORKBENCH.sequence;
+  status.textContent='Încarc pachetul de dovezi al proiectului…';body.innerHTML='';
+  try{
+    const pack=await projectEvidencePackApi(projectId,DOSARE_UI.selected?.id||'');
+    if(token!==PROJECT_WORKBENCH.sequence)return;
+    PROJECT_WORKBENCH.pack=pack;body.innerHTML=projectWorkbenchHtml(project,pack);
+    bindTrackerTimelineActions('#project-workbench-body','#project-workbench-status',()=>openProjectWorkbench(project));
+    const timeline=body.querySelector('[data-workbench-timeline]');
+    if(timeline)timeline.onclick=()=>openTrackerTimeline({project_id:projectId,dossier_id:pack.dossier_id||''});
+    const note=body.querySelector('[data-workbench-note]');
+    if(note)note.onclick=()=>{if(DOSARE_UI.selected?.id)startManualNote(lifecycleSourceNote(project));else lifecyclePrefillDossier(project);};
+    const refresh=body.querySelector('[data-workbench-refresh]');
+    if(refresh)refresh.onclick=()=>openProjectWorkbench(project);
+    status.textContent=`Pachet încărcat: ${pack.summary?.events||0} evenimente, ${pack.summary?.notes||0} note.`;
+  }catch(err){if(token===PROJECT_WORKBENCH.sequence){status.textContent=err.message;body.innerHTML='';}}
   panel.scrollIntoView({block:'nearest'});
 }
 const ACQUISITION={offset:0,query:'',selected:null,sequence:0,busy:false,loaded:false,documents:new Map(),versions:new Map()};
