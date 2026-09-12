@@ -481,7 +481,7 @@
   .matrix-stat span{font-size:.68rem;color:var(--ink-mute)}
   .matrix-table{overflow-x:auto;border:1px solid var(--rule);border-radius:var(--r1);
     background:var(--surface)}
-  .matrix-head,.matrix-row{display:grid;grid-template-columns:minmax(17rem,1.8fr) 5.5rem 5.5rem 5.5rem 5.5rem 6rem;
+  .matrix-head,.matrix-row{display:grid;grid-template-columns:minmax(17rem,1.8fr) 5.5rem 5.5rem 5.5rem 5.5rem 5.5rem 6rem;
     gap:.55rem;align-items:center;min-width:54rem}
   .matrix-head{font-family:var(--sans);font-size:.64rem;font-weight:700;text-transform:uppercase;
     letter-spacing:.04em;color:var(--ink-mute);background:var(--sunk);padding:.45rem .65rem}
@@ -1442,6 +1442,14 @@
             <option value="neconstitutionale">CCR nereparat</option>
             <option value="initiative">inițiative pendinte</option>
             <option value="amendamente">amendări primite</option>
+          </select>
+          <select id="m-source-quality" title="Filtrează după calitatea surselor locale">
+            <option value="">toate sursele</option>
+            <option value="missing">surse lipsă</option>
+            <option value="attention">surse cu atenție</option>
+            <option value="queued">surse în coadă</option>
+            <option value="current">surse încărcate</option>
+            <option value="unknown">registru indisponibil</option>
           </select>
           <select id="m-sort" title="Ordonează matricea">
             <option value="semnale">semnale</option>
@@ -4033,10 +4041,11 @@ function mTextCautare(r){
   const vid=(ex.viduri||[]).map(x=>`${x.act_id} ${x.instrument||""} ${x.text||""}`).join(" ");
   const nec=(ex.neconstitutionale||[]).map(x=>`${x.act_id} ${x.decizie||""} ${x.text||""}`).join(" ");
   const ranguri=(r.ranguri||[]).map(x=>`${x.categorie} ${x.eticheta} ${(x.note||[]).join(" ")}`).join(" ");
+  const surse=Object.entries(r.source_quality||{}).map(([k,v])=>`${k} ${v}`).join(" ");
   const dom=(r.domeniu_exemple||[]).map(x=>`${x.act_id} ${x.titlu||""} ${(x.dovezi||[]).join(" ")}`).join(" ");
   const det=r.domeniu ? `${r.domeniu.cheie} ${r.domeniu.eticheta}` : "";
   const problema=mProblemaEt(MATRICE&&MATRICE.problema);
-  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${det} ${dom} ${vid} ${nec}`);
+  return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${surse} ${det} ${dom} ${vid} ${nec}`);
 }
 const DOSARE_UI={offset:0,selected:null,sequence:0,listSequence:0,request:null,supported:false};
 const DOSSIER_VIEWS=new Map();
@@ -5797,6 +5806,7 @@ async function loadMatrice(forta){
   if(MATRICE && !forta){ renderMatrice(); return; }
   const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"",
         domeniu=$("#m-domeniu")?.value||"", problema=$("#m-problema")?.value||"",
+        sourceQuality=$("#m-source-quality")?.value||"",
         sort=$("#m-sort")?.value||"semnale";
   $("#m-lista").innerHTML=`<span class="spin"></span> încarc…`;
   $("#m-detalii").innerHTML="";
@@ -5805,6 +5815,7 @@ async function loadMatrice(forta){
   if(rang) qs.set("rang",rang);
   if(domeniu) qs.set("domeniu",domeniu);
   if(problema) qs.set("problema",problema);
+  if(sourceQuality) qs.set("source_quality",sourceQuality);
   MATRICE=await fetch("/api/matrice?"+qs.toString()).then(r=>r.json()).catch(()=>null);
   renderMatrice();
 }
@@ -5818,6 +5829,20 @@ function mRanguri(ranguri){
   if(!rr.length) return "";
   return rr.map(r=>`${esc(r.eticheta||r.categorie)} ${nf(r.acte||0)}`
     +((r.note||[]).length?` (${r.note.map(esc).join(", ")})`:"")).join(" · ");
+}
+function mSourceQualityLabel(q){
+  q=q||{};
+  if(q.unknown) return `${nf(q.unknown)} necun.`;
+  const parts=[];
+  if(q.missing) parts.push(`${nf(q.missing)} lipsă`);
+  if(q.attention) parts.push(`${nf(q.attention)} atenție`);
+  if(q.queued) parts.push(`${nf(q.queued)} coadă`);
+  if(q.current) parts.push(`${nf(q.current)} ok`);
+  return parts.join(" · ")||"0";
+}
+function mSourceQualityHint(q){
+  q=q||{};
+  return `Surse: ${nf(q.current||0)} încărcate · ${nf(q.missing||0)} lipsă · ${nf(q.attention||0)} cu atenție · ${nf(q.queued||0)} în coadă · ${nf(q.unknown||0)} necunoscute`;
 }
 function mActiuni(lista){
   const acts=(lista||[]).filter(a=>a.fel==="prevedere"&&a.act_id&&a.locator);
@@ -5841,6 +5866,7 @@ function mFiltreCurente(){
     rang: $("#m-rang")?.value||"",
     domeniu: $("#m-domeniu")?.value||"",
     problema: $("#m-problema")?.value||"",
+    source_quality: $("#m-source-quality")?.value||"",
   };
 }
 function mActeHtml(d){
@@ -5853,11 +5879,12 @@ function mActeHtml(d){
       : `<span class="dom-cheie">${esc(a.cheie_citare||a.act_id)}</span>`;
     const rang=a.rang&&a.rang.eticheta ? a.rang.eticheta : "";
     const dom=a.domeniu&&a.domeniu.eticheta ? a.domeniu.eticheta : "";
+    const sq=a.source_quality ? ` · sursă: ${a.source_quality.eticheta}` : "";
     const dovezi=a.domeniu&&a.domeniu.dovezi&&a.domeniu.dovezi.length
       ? ` · ${a.domeniu.dovezi.map(esc).join(" · ")}` : "";
     return `<div class="dom-act">${key} <span class="parc-data">${esc(String(a.an||""))}</span> `
       +`${esc((a.titlu||"").slice(0,180))}<br><span class="matrix-act-meta">${esc(rang)}`
-      +(dom?` · ${esc(dom)}`:"")+dovezi+`</span></div>`;
+      +(dom?` · ${esc(dom)}`:"")+esc(sq)+dovezi+`</span></div>`;
   }).join("")+(d.total>acte.length?`<p class="hint">Se afișează ${nf(acte.length)} din ${nf(d.total)} acte.</p>`:"")+`</div>`;
 }
 async function mArataActe(buton){
@@ -5876,6 +5903,7 @@ async function mArataActe(buton){
   if(f.tip) qs.set("tip",f.tip);
   if(f.rang) qs.set("rang",f.rang);
   if(f.domeniu) qs.set("domeniu",f.domeniu);
+  if(f.source_quality) qs.set("source_quality",f.source_quality);
   try{
     const d=await fetch("/api/matrice-acte?"+qs.toString()).then(r=>r.json());
     out.innerHTML=mActeHtml(d);
@@ -6164,6 +6192,7 @@ async function mArataDosar(buton){
   if(f.rang) qs.set("rang",f.rang);
   if(f.domeniu) qs.set("domeniu",f.domeniu);
   if(f.problema) qs.set("problema",f.problema);
+  if(f.source_quality) qs.set("source_quality",f.source_quality);
   try{
     const d=await fetch("/api/matrice-dosar?"+qs.toString()).then(r=>r.json());
     if(!out.isConnected||buton.dataset.deschis!=="1") return;
@@ -6220,6 +6249,8 @@ function renderMatrice(){
     +`<div class="matrix-stat"><b>${nf(rr.viduri)}</b><span>lacune legislative</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.neconstitutionale)}</b><span>nereparate după Curte</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.initiative_in_lucru)}</b><span>inițiative pendinte</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_lipsa)}</b><span>surse lipsă</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_atentie)}</b><span>surse cu atenție</span></div>`
     +`</div>`;
   const q=fold($("#m-q")?.value||"").trim();
   MATRIX_ROWS=(d.randuri||[]).filter(r=>!q||mTextCautare(r).includes(q));
@@ -6229,7 +6260,7 @@ function renderMatrice(){
     return;
   }
   gazda.innerHTML=`<div class="matrix-table">`
-    +`<div class="matrix-head"><span>emitent / arie</span><span>acte</span><span>lacune</span>`
+    +`<div class="matrix-head"><span>emitent / arie</span><span>acte</span><span>surse</span><span>lacune</span>`
     +`<span>Curte</span><span>inițiative</span><span>amendări</span></div>`
     +MATRIX_ROWS.map((r,i)=>{
       const s=r.semnale||{}, ani=r.de_la?`<span class="matrix-years">${esc(r.de_la)}–${esc(r.pana_la||r.de_la)}</span>`:"";
@@ -6238,7 +6269,7 @@ function renderMatrice(){
       return `<div class="matrix-row ${esc(r.nivel||"")}" role="button" tabindex="0" aria-expanded="false" data-i="${i}">`
         +`<span><span class="matrix-name">${esc(r.emitent)}</span>${ani}<br><span class="dom-tipuri">${tipuri}</span>`
         +(ranguri?`<br><span class="matrix-ranks">${ranguri}</span>`:"")+`</span>`
-        +mNum(r.acte)+mNum(s.viduri,"dep-nu")+mNum(s.neconstitutionale,"dep-nu")
+        +mNum(r.acte)+`<span class="matrix-cell" title="${esc(mSourceQualityHint(r.source_quality))}">${esc(mSourceQualityLabel(r.source_quality))}</span>`+mNum(s.viduri,"dep-nu")+mNum(s.neconstitutionale,"dep-nu")
         +mNum(s.initiative_in_lucru,"dep-pend")+mNum(s.amendamente_primite)+"</div>";
     }).join("")+`</div>`
     +(d.total>MATRIX_ROWS.length?`<p class="hint" style="margin:.45rem 0">Se afișează ${nf(MATRIX_ROWS.length)} din ${nf(d.total)} rânduri pentru sortarea curentă.</p>`:"")
@@ -6260,6 +6291,7 @@ function mArataRand(el){
     +(ranguri?` · ${ranguri}`:"")
     +(r.domeniu?` · ${esc(r.domeniu.eticheta)}`:"")
     +(problema?` · coadă: ${esc(problema)}`:"")
+    +` · ${esc(mSourceQualityHint(r.source_quality))}`
     +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`
@@ -6302,6 +6334,7 @@ $("#m-tip").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-rang").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-domeniu").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-problema").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-source-quality").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 // ---- Drept UE: candidate CELEX provisions for the draft text ----
