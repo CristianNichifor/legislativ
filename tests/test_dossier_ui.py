@@ -217,7 +217,9 @@ values.evidence_quote='';
 values.source_url='';
 values.source_hash='';
 values.reasoning='';
-assert.deepEqual(manualNoteSelfReviewMissing({}),['citat dovadă','sursă sau SHA-256','raționament']);
+assert.deepEqual(
+  manualNoteSelfReviewMissing({}),
+  ['citat dovadă','sursă sau SHA-256','raționament']);
 """
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
