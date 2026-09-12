@@ -86,7 +86,19 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
         "eticheta": "romana oficiala",
         "fallback": False,
     }
+    assert first["contract"] == "celex-on-demand-source-v1"
+    assert first["source_identifier"] == CELEX
+    assert first["language_preference"] == ["RON", "ENG"]
+    assert first["selected_language"] == "RON"
+    assert first["selected_language_label"] == "romana oficiala"
+    assert first["language_fallback"] is False
     assert first["instantanee"] and len(first["text_sha256"]) == 64
+    assert first["source_hash"] == first["text_sha256"]
+    assert first["snapshot"] == {
+        "id": first["instantanee"],
+        "text_sha256": first["text_sha256"],
+        "source_hash": first["text_sha256"],
+    }
     assert first["articole"]["total"] == 1
     assert first["articole"]["randuri"][0]["locator"] == "art1"
     assert len(first["articole"]["randuri"][0]["sha256"]) == 64
@@ -110,6 +122,9 @@ def test_english_fallback_and_later_romanian_preserve_history(fixture):
     first = au.importa(state, {"celex": CELEX})
     assert first["limba"] == "ENG"
     assert first["limba_import"]["fallback"] is True
+    assert first["selected_language"] == "ENG"
+    assert first["language_fallback"] is True
+    assert "fallback explicit" in first["selected_language_label"]
     old = au.detaliu(state, CELEX)["curenta"]["id"]
     source["manifestations"] = [binding()]
     au.importa(state, {"celex": CELEX})
@@ -119,6 +134,37 @@ def test_english_fallback_and_later_romanian_preserve_history(fixture):
     assert au.detaliu(state, CELEX, snapshot_id=old)["sursa"]["limba"] == "ENG"
     with pytest.raises(ValueError):
         au.detaliu(state, "32018R1805", snapshot_id=old)
+
+
+def test_identifier_import_contract_normalizes_celex_url(fixture):
+    state, _ = fixture
+
+    result = au.importa(
+        state,
+        {
+            "identifier": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024",
+            "limbi": ["RON", "ENG"],
+        },
+    )
+
+    assert result["contract"] == "celex-on-demand-source-v1"
+    assert result["source_identifier"].startswith("https://eur-lex.europa.eu/")
+    assert result["celex"] == CELEX
+    assert result["language_preference"] == ["RON", "ENG"]
+    assert result["snapshot"]["id"]
+    assert len(result["snapshot"]["source_hash"]) == 64
+
+
+def test_metadata_only_import_has_contract_without_snapshot(fixture):
+    state, source = fixture
+    source["manifestations"] = [binding(fmt="pdf")]
+
+    result = au.importa(state, {"identifier": CELEX})
+
+    assert result["contract"] == "celex-on-demand-source-v1"
+    assert result["stare"] == "metadate"
+    assert result["source_hash"] == ""
+    assert result["snapshot"] is None
 
 
 def test_pdf_only_retains_metadata_and_last_good_text(fixture):
@@ -275,9 +321,18 @@ def test_readonly_history_integrity_and_pagination(fixture, monkeypatch):
         au.detaliu(state, CELEX, snapshot_id=old["id"])
 
 
-def request(state, method, query="", body=None, host="localhost:8123", origin=None, length=None):
+def request(
+    state,
+    method,
+    query="",
+    body=None,
+    host="localhost:8123",
+    origin=None,
+    length=None,
+    path="/api/ue/surse",
+):
     handler = object.__new__(face_handler(state))
-    handler.path = "/api/ue/surse" + query
+    handler.path = path + query
     raw = json.dumps(body).encode() if body is not None else b""
     handler.rfile = io.BytesIO(raw)
     handler.headers = {
@@ -299,10 +354,19 @@ def test_http_boundaries_and_no_cache(fixture):
         assert request(state, method, origin="https://evil.test")[0] == 403
         assert request(state, method, host="evil.test:8123")[0] == 403
     assert request(state, "POST", length=16001)[0] == 413
-    for body in ([], {"celex": []}, {"celex": CELEX, "url": ITEM}, {"celex": "X> }"}):
+    for body in (
+        [],
+        {"celex": []},
+        {"celex": CELEX, "url": ITEM},
+        {"celex": "X> }"},
+        {"identifier": CELEX, "limbi": [1]},
+    ):
         assert request(state, "POST", body=body)[0] == 400
     assert not source["calls"] and not state.eu.exists()
     assert request(state, "POST", body={"celex": CELEX})[0] == 200
+    alias = request(state, "POST", body={"identifier": CELEX}, path="/api/ue/import")
+    assert alias[0] == 200
+    assert alias[1]["contract"] == "celex-on-demand-source-v1"
     assert request(state, "GET", "?celex=" + CELEX)[1]["stare"] == "text_disponibil"
     assert request(state, "GET", "?celex=" + CELEX + "&offset=-1")[0] == 400
     handler = object.__new__(face_handler(state))

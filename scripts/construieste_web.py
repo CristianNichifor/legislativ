@@ -418,6 +418,8 @@ def _raspunde(path, query, body, method='GET'):
         out = {'mod': 'static', 'error': 'Achizitia surselor este disponibila numai in aplicatia locala.'}
     elif path == '/api/ue/surse':
         out = {'mod': 'static', 'error': 'Importul si istoricul surselor UE sunt disponibile numai in aplicatia locala.'}
+    elif path == '/api/ue/import':
+        out = {'mod': 'static', 'error': 'Importul si istoricul surselor UE sunt disponibile numai in aplicatia locala.'}
     elif path == '/api/mcp/capabilities':
         from scripts.mcp_boundary import capabilities
         out = capabilities()
