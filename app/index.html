@@ -1365,9 +1365,10 @@
         </section>
         <details class="dossier-library" id="source-coverage">
           <summary>Acoperire surse · Calitatea urmăririi</summary>
-          <div class="dossier-actions"><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
+          <div class="dossier-actions"><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Stadiu finalizare</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
           <p id="source-coverage-status" class="hint" role="status">Acoperire neîncărcată.</p>
           <div id="source-coverage-result"></div>
+          <div id="acceptance-dashboard-result"></div>
         </details>
         <details class="dossier-library" id="lifecycle-tracker">
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
@@ -6041,6 +6042,13 @@ function sourceCoverageFamilyHtml(row){
   const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':'Acoperită';
   return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
 }
+function acceptanceDashboardHtml(data){
+  const cards=(data.sections||[]).map(s=>{
+    const metrics=Object.entries(s.metrics||{}).map(([k,v])=>`${esc(k)}: ${esc(v)}`).join(' · ');
+    return `<article class="coverage-card coverage-${s.status==='ok'?'ok':'attention'}"><h4>${esc(s.label)} · ${esc(s.status)}</h4><p>${esc(s.summary)}</p><p class="hint">${metrics}</p></article>`;
+  }).join('');
+  return `<section class="source-inventory"><h4>Stadiu finalizare</h4><div class="coverage-grid">${cards}</div><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
+}
 function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
   const stages=Object.entries(data.projects?.stages||{}).map(([,v])=>`<li>${esc(v.label)}: ${v.total}</li>`).join('');
@@ -6061,8 +6069,20 @@ async function loadSourceCoverage(){
     status.textContent=`${data.status==='ok'?'Acoperire completă':'Acoperire incompletă'} · ${data.blockers?.length||0} blocaje.`;
   }catch(err){status.textContent=err.message;out.innerHTML='';}
 }
+async function loadAcceptanceDashboard(){
+  const status=$('#source-coverage-status'),out=$('#acceptance-dashboard-result');
+  status.textContent='Calculez stadiul de finalizare…';out.innerHTML='';
+  try{
+    const response=await fetch('/api/acceptance-dashboard');
+    const data=await response.json().catch(()=>({error:'Dashboard indisponibil.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Dashboard indisponibil.');
+    out.innerHTML=acceptanceDashboardHtml(data);
+    status.textContent=data.status==='ok'?'Stadiu finalizare: fără blocaje cunoscute.':'Stadiu finalizare: există zone de atenție.';
+  }catch(err){status.textContent=err.message;}
+}
 $('#source-coverage').ontoggle=e=>{if(e.currentTarget.open)loadSourceCoverage();};
 $('#source-coverage-refresh').onclick=loadSourceCoverage;
+$('#acceptance-dashboard-refresh').onclick=loadAcceptanceDashboard;
 $('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 $('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
 const PROJECT_WATCH_KEY='legislativ-project-watch';

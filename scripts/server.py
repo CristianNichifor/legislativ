@@ -207,6 +207,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/mcp",
                     "/api/lifecycle-proiecte",
                     "/api/acoperire-surse",
+                    "/api/acceptance-dashboard",
                     "/api/surse-proiecte",
                     "/api/ue/surse",
                     "/api/date",
@@ -379,6 +380,10 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json(raport(stare, stale_days=int(qs.get("stale_days", ["30"])[0] or 30)))
                 except ValueError as exc:
                     self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/acceptance-dashboard":
+                from scripts.acceptance_dashboard import raport
+
+                self._json(raport(stare))
             elif ruta.path == "/api/stenograma":
                 self._json(_stenograma(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/rol":
