@@ -4518,7 +4518,7 @@ function manualNoteFormHtml(editing=null){
       act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
       text:editing?.evidence_quote||'',provision_id:''
     })
-    +'<details data-ai-note-draft><summary>Ciornă AI din dovadă</summary><p class="hint">Folosește numai citatul, sursa și contextul din formular. Rezultatul rămâne ciornă nerevizuită.</p><div class="dossier-actions"><select name="ai_task"><option value="issue_note">notă de constatare</option><option value="amendment_rationale">motivare amendament</option><option value="review_checklist">listă de verificare</option></select><button type="button" class="ghost mini" data-ai-draft-note>Generează ciornă</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
+    +'<details data-ai-note-draft><summary>Ciornă AI din dovadă</summary><p class="hint">Folosește numai citatul, sursa și contextul din formular. Online BYOK/MCP costă în contul utilizatorului și cer aprobare explicită. Rezultatul rămâne ciornă nerevizuită.</p><div class="dossier-actions"><select name="ai_task"><option value="issue_note">notă de constatare</option><option value="amendment_rationale">motivare amendament</option><option value="review_checklist">listă de verificare</option></select><button type="button" class="ghost mini" data-ai-draft-note>Generează ciornă</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
 }
 function manualNotePayload(form,dossierId,note){
@@ -4624,7 +4624,8 @@ function bindManualNoteAiDraft(form){
     draft='';insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';
     try{
       const plan=await dossierApi('/api/dosare/ai-draft',manualNoteAiEvidence(form));
-      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${plan.estimated_tokens} tokeni.`;
+      const total=plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens;
+      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${total} tokeni · cost server zero.`;
       const answer=await aiComplete(plan.prompt,plan.system,{privat:true,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
       draft=`[Ciornă AI · ${answer.nota} · ${plan.contract} · ${plan.input_sha256}]\n\n${answer.text}`;
       result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
@@ -4651,7 +4652,7 @@ function bindManualNoteMcpDraft(form,section){
     plan=null;copy.disabled=true;insert.disabled=true;preview.disabled=true;status.textContent='Construiesc pachetul MCP din dovezi…';out.textContent='';
     try{
       plan=await dossierApi('/api/dosare/ai-draft/mcp-preview',{server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value,draft:manualNoteAiEvidence(form)});
-      out.textContent=JSON.stringify({approval:plan.mcp.approval,system:plan.system,prompt:plan.prompt},null,2);
+      out.textContent=JSON.stringify({approval:plan.mcp.approval,audit:plan.audit,cost_estimate:plan.cost_estimate,system:plan.system,prompt:plan.prompt},null,2);
       copy.disabled=false;insert.disabled=false;status.textContent=`Aprobarea MCP este pregătită: ${plan.evidence_count} dovezi · ~${plan.estimated_tokens} tokeni.`;
     }catch(err){status.textContent=err.message;}
     finally{preview.disabled=false;}
