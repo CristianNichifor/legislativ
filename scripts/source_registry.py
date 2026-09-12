@@ -38,7 +38,7 @@ HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
-SYNC_FAMILIES = PROJECT_FAMILIES | frozenset({"ue_cellar"})
+SYNC_FAMILIES = PROJECT_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
 
 
 def cale(stare) -> Path:
@@ -791,7 +791,9 @@ def _project_content_hash(snapshot: dict) -> str:
     )
 
 
-def _store_snapshot(stare, source_id: str, content_hash: str, snapshot: dict) -> None:
+def _store_snapshot(
+    stare, source_id: str, content_hash: str, snapshot: dict, parser_version: str
+) -> None:
     stamp = now()
     with closing(_open(cale(stare))) as con:
         init(con)
@@ -805,7 +807,7 @@ def _store_snapshot(stare, source_id: str, content_hash: str, snapshot: dict) ->
                 source_id,
                 stamp,
                 content_hash,
-                PROJECT_PARSER_VERSION,
+                parser_version,
                 json.dumps(snapshot, ensure_ascii=False, sort_keys=True),
             ),
         )
@@ -847,7 +849,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
         )
     snapshot = _project_snapshot(row, plx, operation, result, _project_local_meta(stare, plx))
     content_hash = _project_content_hash(snapshot)
-    _store_snapshot(stare, source_id, content_hash, snapshot)
+    _store_snapshot(stare, source_id, content_hash, snapshot, PROJECT_PARSER_VERSION)
     inregistreaza(
         stare,
         {
@@ -939,6 +941,81 @@ def sincronizeaza_ue(stare, source_id: str) -> dict:
     )
 
 
+def _econsultare_url(row: dict) -> str:
+    from scripts import achizitii_econsultare
+
+    value = row.get("url") or row.get("identifier") or ""
+    return achizitii_econsultare.url_oficial(value)
+
+
+def sincronizeaza_econsultare(stare, source_id: str) -> dict:
+    """Run one bounded sync for one official e-consultare source."""
+    row = _source(stare, source_id)
+    if row["family"] != "consultare_econsultare":
+        raise ValueError("Doar sursele e-consultare pot fi sincronizate aici.")
+    if row["state"] != "queued":
+        row = pune_in_coada(stare, source_id)
+    from scripts import achizitii_econsultare
+
+    try:
+        result = achizitii_econsultare.sincronizeaza(_econsultare_url(row))
+    except ValueError as exc:
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "failed",
+                "error_category": "fetch_failed",
+                "note": str(exc)[:500],
+            },
+        )
+    snapshot = result["snapshot"]
+    content_hash = result["content_hash"]
+    _store_snapshot(
+        stare,
+        source_id,
+        content_hash,
+        snapshot,
+        achizitii_econsultare.PARSER_VERSION,
+    )
+    title = snapshot["summary"].get("title") or snapshot["url"]
+    inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "fetched",
+            "http_status": result.get("http_status", 200),
+            "content_hash": content_hash,
+            "parser_version": achizitii_econsultare.PARSER_VERSION,
+            "note": f"Pagina e-consultare citită: {title}.",
+        },
+    )
+    if result.get("needs_review"):
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "needs_review",
+                "http_status": result.get("http_status", 200),
+                "content_hash": content_hash,
+                "parser_version": achizitii_econsultare.PARSER_VERSION,
+                "note": (
+                    "Pagina a fost citită, dar titlul sau documentele necesită verificare manuală."
+                ),
+            },
+        )
+    return inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": _sync_state(row.get("last_hash", ""), content_hash),
+            "http_status": result.get("http_status", 200),
+            "content_hash": content_hash,
+            "parser_version": achizitii_econsultare.PARSER_VERSION,
+        },
+    )
+
+
 def executa(stare, data: dict) -> dict:
     action = _text(data.get("action", "discover"), limit=40) or "discover"
     if action == "discover":
@@ -953,6 +1030,8 @@ def executa(stare, data: dict) -> dict:
         )
     if action == "sync":
         row = _source(stare, data.get("id", ""))
+        if row["family"] == "consultare_econsultare":
+            return _with_impact(stare, sincronizeaza_econsultare(stare, row["id"]))
         if row["family"] == "ue_cellar":
             return _with_impact(stare, sincronizeaza_ue(stare, row["id"]))
         if row["family"] in PROJECT_FAMILIES:
