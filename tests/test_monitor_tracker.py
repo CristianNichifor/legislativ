@@ -198,3 +198,30 @@ def test_reconcile_rows_summarizes_issue_counts():
     assert report["total"] == 2
     assert report["needs_review"] == 1
     assert report["counts"] == {"missing_monitor_number": 1, "missing_publication_date": 1}
+
+
+def test_local_reconciliation_reads_corpus_rows(tmp_path):
+    corpus = tmp_path / "corpus.db"
+    with sqlite3.connect(corpus) as con:
+        con.execute(
+            "CREATE TABLE documente (cheie_act TEXT, publicat TEXT, monitor INTEGER, "
+            "republicare INTEGER, sursa_url TEXT, text TEXT)"
+        )
+        con.execute(
+            "INSERT INTO documente VALUES (?,?,?,?,?,?)",
+            (
+                "lege-1-2026",
+                None,
+                None,
+                0,
+                "https://legislatie.just.ro/",
+                "Publicat in MONITORUL OFICIAL nr. 10 din 2 februarie 2026",
+            ),
+        )
+
+    report = monitor_tracker.local_reconciliation(corpus)
+
+    assert report["contract"] == "monitor-publication-reconciliation-v1"
+    assert report["source_status"] == "ok"
+    assert report["needs_review"] == 1
+    assert report["items"][0]["act_id"] == "lege-1-2026"

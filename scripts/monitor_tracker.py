@@ -240,6 +240,43 @@ def reconcile_rows(act_rows: Iterable[dict]) -> dict:
     }
 
 
+def local_reconciliation(corpus_db: str | Path, *, limit: int = MAX_LOCAL_ROWS) -> dict:
+    """Return publication metadata mismatches visible in the local corpus rows."""
+    if not 1 <= limit <= MAX_LOCAL_ROWS:
+        raise ValueError("Limită reconciliere Monitor invalidă.")
+    rows: list[dict] = []
+    with closing(_readonly(Path(corpus_db))) as con:
+        if _has_table(con, "documente"):
+            rows.extend(
+                dict(row)
+                for row in con.execute(
+                    "SELECT cheie_act,publicat,monitor,republicare,sursa_url,text "
+                    "FROM documente WHERE text IS NOT NULL "
+                    "AND (text LIKE '%Monitorul Oficial%' OR publicat IS NOT NULL "
+                    "OR monitor IS NOT NULL) ORDER BY COALESCE(publicat, '') DESC, "
+                    "cheie_act LIMIT ?",
+                    (limit,),
+                )
+            )
+        if len(rows) < limit and _has_table(con, "acte"):
+            rows.extend(
+                dict(row)
+                for row in con.execute(
+                    "SELECT id AS act_id,publicat,sursa_url,text FROM acte "
+                    "WHERE text IS NOT NULL AND (text LIKE '%Monitorul Oficial%' "
+                    "OR publicat IS NOT NULL) ORDER BY COALESCE(publicat, '') DESC, "
+                    "id LIMIT ?",
+                    (limit - len(rows),),
+                )
+            )
+    report = reconcile_rows(rows)
+    report["source_status"] = "ok"
+    report["limitari"] = [
+        "Reconcilierea citește corpusul local; nu descarcă Monitorul Oficial și nu repară metadate."
+    ]
+    return report
+
+
 def _readonly(path: Path) -> sqlite3.Connection:
     con = sqlite3.connect(Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=1)
     con.row_factory = sqlite3.Row
