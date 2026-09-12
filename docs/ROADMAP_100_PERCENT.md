@@ -145,6 +145,9 @@ Deliverables:
 - Matrix rows for detected and manual issues.
 - Filters for “only missing source”, “only real text loaded”, “only reviewable”.
 - Drilldown from issue to exact supporting provisions and source snapshots.
+- Provision references use the `provision-identity-v1` contract from
+  [PROVISION_IDENTITY.md](PROVISION_IDENTITY.md), so matrix cells, graph edges
+  and later executable rules share the same act/locator/source identity.
 
 Acceptance:
 
