@@ -21,6 +21,26 @@ same-act comparisons and equal normalized definitions are excluded.
 The row action displays evidence pairs. The work dossier includes the candidates
 and their limitations in the view and copied Markdown.
 
+## Graph/matrix scaffold
+
+`GET /api/matrice-graf?emitent=Parlamentul` exposes the same selected matrix row
+as law-as-code candidate material. It reuses the matrix `tip`, `rang`, `domeniu`
+and `source_quality` filters, then returns:
+
+- `nodes`: selected acts with `act_id`, citation key, title, rank, heuristic
+  domain, source URL and local source-quality state;
+- `edges`: graph rows touching those acts, including source act/provision,
+  target act/provision, relation kind, extraction confidence and drilldown actions;
+- `graph_state`: `ok` or `indisponibil`, so a missing graph is visible instead
+  of being mistaken for no relationships.
+
+Every edge is marked `relatie_candidata_neconfirmata`. This endpoint is a
+developer/user inspection scaffold for future provision graphs, domain matrices
+and rule candidates. It does not decide contradiction, compatibility,
+applicability, hierarchy or whether a provision is suitable for executable legal
+rules. Source state comes from the local registry and no official portal is
+refetched.
+
 Coverage is bounded to the newest 100 matching acts, 1000 provisions per act and
 5000 extracted definitions and 5000 comparable deadlines. `trunchiat` identifies partial results, including
 result-limit overflow or unavailable corpus data. Counters describe the selected

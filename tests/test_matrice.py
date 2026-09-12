@@ -19,6 +19,7 @@ from scripts.servicii import (
     _matrice_acte,
     _matrice_contradictii,
     _matrice_dosar,
+    _matrice_graf,
     _supraveghere,
 )
 
@@ -589,6 +590,54 @@ def test_matrix_source_acts_use_the_same_filters(tmp_path):
 
     assert _matrice_acte({"emitent": ["Parlamentul"], "domeniu": ["educatie"]}, stare)["total"] == 0
     assert _matrice_acte({"emitent": ["Guvernul"], "rang": ["primar"]}, stare)["total"] == 0
+
+
+def test_matrix_graph_scaffold_exposes_candidate_edges_and_source_state(tmp_path):
+    stare = _stare(tmp_path, graf=True)
+    from scripts import source_registry
+
+    lege = source_registry.executa(
+        stare,
+        {
+            "family": "legislatie_ro",
+            "identifier": "lege-98-2016",
+            "url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+        },
+    )
+    source_registry.executa(stare, {"action": "queue", "id": lege["id"]})
+    source_registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": lege["id"],
+            "state": "unavailable",
+            "error_category": "source_unavailable",
+        },
+    )
+
+    out = _matrice_graf({"emitent": ["Parlamentul"], "domeniu": ["achizitii-publice"]}, stare)
+
+    assert out["contract"] == "matrice-graf-v1"
+    assert out["status"] == "scaffold_neconfirmat"
+    assert out["graph_state"] == "ok"
+    assert out["acte_selectate"] == 1
+    assert out["nodes"][0]["act_id"] == "lege-98-2016"
+    assert out["nodes"][0]["source_quality"]["cheie"] == "attention"
+    assert out["nodes"][0]["source_quality"]["source_state"] == "unavailable"
+    assert {e["fel"] for e in out["edges"]} == {"modifica", "abroga", "refera"}
+    assert all(e["status"] == "relatie_candidata_neconfirmata" for e in out["edges"])
+    assert out["edges"][0]["evidence"]["tip"] == "muchie_graf"
+    assert out["edges"][0]["to"]["actiuni"]
+    assert any("nu verdict juridic" in x for x in out["limitari"])
+
+    fara_graf_dir = tmp_path / "fara_graf"
+    fara_graf_dir.mkdir()
+    fara_graf = _matrice_graf(
+        {"emitent": ["Parlamentul"], "domeniu": ["achizitii-publice"]},
+        _stare(fara_graf_dir),
+    )
+    assert fara_graf["graph_state"] == "indisponibil"
+    assert fara_graf["edges"] == []
 
 
 def test_matrix_exposes_source_quality_filter(tmp_path):
