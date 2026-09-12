@@ -4,8 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import tracker_events
+from scripts import dosare, note_manuale, tracker_events
 from scripts.server import face_handler
+from tests.test_dosare import ID, create
 
 
 def state(tmp_path):
@@ -65,6 +66,48 @@ def test_tracker_store_filters_by_type_dossier_and_source_family(tmp_path):
     )
 
 
+def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
+    stare = state(tmp_path)
+    saved = tracker_events.adauga(stare, event())["event"]
+
+    assert tracker_events.lista(stare, {"reviewed": ["0"]})["total"] == 1
+    reviewed = tracker_events.marcheaza_revizuit(
+        stare, {"id": saved["id"], "reviewer": "ana", "note": "Verificat în fișa proiectului."}
+    )["event"]
+
+    assert reviewed["review"]["reviewed"] is True
+    assert reviewed["review"]["reviewer"] == "ana"
+    assert tracker_events.lista(stare, {"reviewed": ["0"]})["total"] == 0
+    assert tracker_events.lista(stare, {"reviewed": ["1"]})["events"][0]["id"] == saved["id"]
+
+
+def test_tracker_event_can_create_manual_dossier_note(tmp_path):
+    stare = state(tmp_path)
+    create(stare)
+    saved = tracker_events.adauga(
+        stare,
+        event(id="e" * 32, content_hash="a" * 64),
+    )["event"]
+
+    out = tracker_events.creeaza_nota_dosar(
+        stare,
+        {
+            "id": saved["id"],
+            "dosar_id": ID,
+            "note_id": "b" * 32,
+            "reasoning": "Evenimentul schimbă termenul de analiză al dosarului.",
+        },
+    )
+
+    assert out["note"]["id"] == "b" * 32
+    assert out["note"]["act_id"] == "PL-x 10/2026"
+    assert out["note"]["locator"] == "committee_assignment"
+    assert out["note"]["type"] == "necorelare"
+    assert out["note"]["status"] == "ready_for_review"
+    assert out["note"]["source_hash"] == "a" * 64
+    assert note_manuale.lista(dosare.cale(stare), ID)["total"] == 1
+
+
 def test_tracker_store_reports_missing_database_without_creating_file(tmp_path):
     stare = state(tmp_path)
 
@@ -86,6 +129,8 @@ def test_tracker_store_validates_event_shape(tmp_path):
         tracker_events.adauga(stare, event(payload=[]))
     with pytest.raises(ValueError, match="Paginare"):
         tracker_events.lista(stare, {"limit": ["999"]})
+    with pytest.raises(ValueError, match="Filtru"):
+        tracker_events.lista(stare, {"reviewed": ["maybe"]})
 
 
 def _get_request(stare, query=""):
@@ -127,4 +172,10 @@ def test_http_tracker_endpoint_reads_and_writes_events(tmp_path):
     code, data = _get_request(stare, "?project_id=PL-x%2010/2026")
     assert code == 200
     assert data["total"] == 1
+    event_id = data["events"][0]["id"]
+    code, data = _post_request(
+        stare, {"action": "review", "id": event_id, "reviewer": "ana", "note": "ok"}
+    )
+    assert code == 200
+    assert data["event"]["review"]["reviewed"] is True
     assert _get_request(stare, "?limit=bad")[0] == 400
