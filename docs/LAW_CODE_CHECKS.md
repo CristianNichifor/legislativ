@@ -58,3 +58,9 @@ Row states are deliberately bounded:
 
 Both states are review inputs. They do not prove legal compliance,
 non-compliance, or source completeness.
+
+The dossier rule panel shows this response beside promoted draft rules. A user
+can start a manual note from any row; the note is prefilled with the rule draft,
+matched local evidence and limitations, then saved through the normal manual-note
+workflow. Creating that note does not rerun checks, fetch sources or mark the row
+as legally resolved.
