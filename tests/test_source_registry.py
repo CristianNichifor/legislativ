@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import cellar, depozit, documente_proiecte, dosare
+from scripts import cellar, depozit, documente_proiecte, dosare, tracker_events
 from scripts import source_registry as registry
 from scripts.server import face_handler
 
@@ -279,6 +279,14 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
     write_project(stare)
     row = registry.executa(stare, {"family": "camera", "identifier": "plx-10-2026"})
     html = '<a href="https://www.cdep.ro/proiecte/a.pdf">Raport</a>'
+    with depozit.deschide(stare.initiative) as con:
+        con.execute(
+            "INSERT INTO initiativa_etapa"
+            "(plx_id,ord,data,camera,actiune,comisii,steno_ids,steno_idm) "
+            "VALUES ('plx-10-2026',0,'2026-01-10','Camera Deputaților',"
+            "'raport favorabil depus','Comisia juridică',NULL,NULL)"
+        )
+        con.commit()
 
     monkeypatch.setattr(
         documente_proiecte,
@@ -289,6 +297,12 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
     changed = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert changed["state"] == "changed"
     assert changed["last_hash"]
+    events = tracker_events.lista(stare, {"project_id": ["plx-10-2026"]})
+    assert {event["event_type"] for event in events["events"]} == {
+        "committee_assignment",
+        "report_filed",
+    }
+    assert events["events"][0]["source_id"] == row["id"]
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
     assert selected["snapshots"][0]["content_hash"] == changed["last_hash"]
     assert selected["snapshots"][0]["parser_version"] == "achizitii_proiecte.v1"
