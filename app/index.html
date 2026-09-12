@@ -4535,8 +4535,8 @@ const MANUAL_NOTE_TYPES={
   risc_ue:'Risc UE',constitutionalitate:'Constituționalitate'
 };
 const MANUAL_NOTE_STATUS={
-  draft:'Ciornă',needs_evidence:'Necesită dovezi',ready_for_review:'Pregătită pentru revizie',
-  reviewed:'Revizuită',resolved:'Rezolvată'
+  draft:'Ciornă',needs_evidence:'Necesită dovezi',ready_for_review:'Gata pentru auto-revizie',
+  reviewed:'Auto-revizuită',resolved:'Rezolvată'
 };
 const EU_ISSUE_STATES={
   possible_conflict:'Conflict posibil',possible_gap:'Lacună posibilă',possible_coverage:'Acoperire posibilă'
@@ -4582,12 +4582,22 @@ function manualNoteFormHtml(editing=null){
     +`<label>SHA-256 sursă<input name="source_hash" maxlength="64" value="${v('source_hash')}"></label>`
     +`<label>Citat dovadă<textarea name="evidence_quote" rows="3" maxlength="4000">${v('evidence_quote')}</textarea></label>`
     +`<label>Raționament<textarea name="reasoning" rows="4" maxlength="8000">${v('reasoning')}</textarea></label>`
+    +'<details><summary>Checklist auto-revizie</summary><ul><li>Dovada are citat sau rezumat verificabil.</li><li>Sursa oficială ori hash-ul local sunt atașate.</li><li>Raționamentul spune de ce este lacună, loophole, contradicție sau risc.</li><li>Concluzia rămâne ipoteză de lucru, nu verdict juridic.</li></ul></details>'
     +ruleCandidateControlsHtml({
       act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
       text:editing?.evidence_quote||'',provision_id:''
     })
     +'<details data-ai-note-draft><summary>Ciornă AI din dovezi selectate</summary><p class="hint">Alege sarcina, pregătește promptul și verifică manifestul/costul înainte de orice trimitere. Serverul nu cheamă modele. Local rulează în browser; online BYOK/MCP pleacă numai după acțiunea ta explicită și costă în contul tău.</p><div class="dossier-actions"><label>Sarcină AI<select name="ai_task"><option value="explain_issue">explică problema</option><option value="issue_note">notă de constatare</option><option value="draft_amendment">ciornă amendament</option><option value="review_checklist">listă de verificare reviewer</option></select></label><label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
+}
+function manualNoteSelfReviewMissing(form){
+  const values=Object.fromEntries(new FormData(form));
+  if(values.status!=='reviewed'&&values.status!=='resolved')return [];
+  const missing=[];
+  if(!String(values.evidence_quote||'').trim())missing.push('citat dovadă');
+  if(!String(values.source_url||values.source_hash||'').trim())missing.push('sursă sau SHA-256');
+  if(!String(values.reasoning||'').trim())missing.push('raționament');
+  return missing;
 }
 function manualNotePayload(form,dossierId,note){
   const values=Object.fromEntries(new FormData(form));
@@ -5116,6 +5126,8 @@ async function loadManualNotes(dossierId,offset=0){
     bindManualNoteAiDraft(form);
     form.onsubmit=async e=>{
       e.preventDefault();if(!form.reportValidity())return;
+      const missing=manualNoteSelfReviewMissing(form);
+      if(missing.length){saveStatus.textContent='Nu marca nota auto-revizuită fără: '+missing.join(', ')+'.';return;}
       const controls=[...form.elements];controls.forEach(c=>c.disabled=true);saveStatus.textContent='Salvez nota…';
       try{const saved=await dossierApi('/api/dosare/note',manualNotePayload(form,dossierId,MANUAL_NOTES_UI.editing));MANUAL_NOTES_UI.editing=saved;await loadManualNotes(dossierId,0);}
       catch(err){saveStatus.textContent=err.message+' Reîncarcă nota dacă a fost modificată în altă fereastră.';controls.forEach(c=>c.disabled=false);}
