@@ -91,3 +91,18 @@ sources or mutates saved legal conclusions.
 5. Add avize as metadata-first, document-on-demand sources.
 6. Add local Monitorul Oficial as opt-in packs after the registry/freshness UI is
    useful.
+
+## UI coverage rule
+
+The app should show source coverage before it offers conclusions. The coverage
+panel groups sources as:
+
+- necessary now: sources needed for useful V1 legislative drafting and tracking;
+- planned: useful source families that should be integrated adapter by adapter;
+- deferred or opt-in: broad Monitorul Oficial/local mirrors that should not be
+  full-ingested by default.
+
+Missing, stale, changed, failed, rate-limited and unavailable sources remain
+visible. They are user actions, not empty results. A changed source means “review
+affected dossiers and proposals”; it does not automatically update saved legal
+findings.
