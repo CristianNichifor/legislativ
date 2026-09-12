@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from scripts import cellar, dosare
 from scripts.server import face_handler
 
-
 DOSSIER_ID = "a" * 32
 NOTE_ID = "b" * 32
 
