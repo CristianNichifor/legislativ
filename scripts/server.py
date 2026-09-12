@@ -207,6 +207,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/mcp",
                     "/api/lifecycle-proiecte",
                     "/api/tracker-evenimente",
+                    "/api/econsultare-feed",
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
                     "/api/surse-proiecte",
@@ -375,6 +376,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/tracker-evenimente":
                 from scripts.tracker_events import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/econsultare-feed":
+                from scripts.econsultare_feed import lista
 
                 if not self._dosare_permis():
                     return
