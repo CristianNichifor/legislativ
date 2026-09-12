@@ -184,6 +184,13 @@ quotes, language labels and hashes, then saves a `risc_ue` note with one candida
 state: possible conflict, possible gap or possible coverage. Human review status
 and uncertainty remain explicit; the note is not a compliance verdict.
 
+The selected dossier UI now starts the note area with a guided legislative-gap
+workspace. It summarizes the current note state, evidence coverage, EU-risk notes
+and human-review progress, then links directly to the manual note form, EU note
+builder, AI-from-evidence draft panel, saved proposals and saved analyses. This is
+only workflow navigation over existing local records; it does not create new
+findings, run AI, fetch sources or change review state by itself.
+
 The endpoint keeps the dossier API's local Host/Origin checks, static rejection,
 request-size limits and retry/conflict behavior. Schema 10 adds `note_manuale`;
 schemas 1-9 remain readable without migration and upgrade on the next successful

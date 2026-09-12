@@ -417,6 +417,15 @@
   .manual-note-meta{font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);display:flex;flex-wrap:wrap;gap:.25rem .7rem;margin:.25rem 0}
   .manual-note-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.4rem;margin:.55rem 0}
   .manual-note-summary button{text-align:left;white-space:normal;overflow-wrap:anywhere}
+  .gap-workflow{border:1px solid var(--rule);border-left:3px solid #18745b;padding:.65rem;margin:.65rem 0;background:#f8fbfa;overflow-wrap:anywhere}
+  .gap-workflow h4{font-size:.92rem;margin:0 0 .3rem}
+  .gap-workflow p{margin:.25rem 0}
+  .gap-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.4rem;margin:.65rem 0;padding:0;list-style:none}
+  .gap-flow-steps li{border-top:1px solid var(--rule-soft);padding:.45rem 0;min-width:0}
+  .gap-flow-steps b{display:block;font-size:.82rem}
+  .gap-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
+  .gap-flow-steps .done b::before{content:"✓ ";color:#18745b}
+  .gap-flow-steps .todo b::before{content:"• ";color:#9a5b00}
   @media(max-width:650px){.manual-notes form{grid-template-columns:minmax(0,1fr)}}
   [data-proposal-history-list]{max-height:16rem;overflow:auto}
   [data-proposal-history] pre{max-height:18rem;overflow:auto}
@@ -4622,6 +4631,40 @@ function manualNoteSummaryHtml(data){
     +(recent?`<details><summary>Ultimele note modificate</summary><div class="dossier-actions">${recent}</div></details>`:'');
 }
 
+function gapWorkflowSummary(data){
+  const byStatus=data.pe_stare||{},byType=data.pe_tip||{};
+  const total=data.total||Object.values(byStatus).reduce((a,b)=>a+b,0);
+  const evidence=total-(byStatus.needs_evidence||0);
+  const reviewed=(byStatus.reviewed||0)+(byStatus.resolved||0);
+  const eu=byType.risc_ue||0;
+  const draft=byStatus.draft||0;
+  const ready=byStatus.ready_for_review||0;
+  let next='Scrie prima notă cu citat și sursă.';
+  if(total&&(byStatus.needs_evidence||0))next='Completează dovezile lipsă înainte de AI sau export.';
+  else if(ready)next='Revizuiește notele pregătite și continuă spre propunere/export.';
+  else if(draft)next='Mută ciornele mature în pregătită pentru revizie.';
+  else if(total&&!reviewed)next='Înregistrează o revizie umană pentru constatările salvate.';
+  else if(reviewed)next='Poți exporta dosarul sau continua cu propuneri și urmărire surse.';
+  return {total,evidence,reviewed,eu,draft,ready,next};
+}
+function gapWorkflowHtml(data){
+  const s=gapWorkflowSummary(data);
+  const step=(done,title,detail)=>`<li class="${done?'done':'todo'}"><b>${esc(title)}</b><span>${esc(detail)}</span></li>`;
+  return `<section class="gap-workflow" aria-labelledby="gap-workflow-title"><h4 id="gap-workflow-title">Spațiu ghidat pentru constatare legislativă</h4>`
+    +`<p class="hint">${esc(s.next)}</p><ol class="gap-flow-steps">`
+    +step(!!s.total,'1. Constatare',s.total?`${s.total} note salvate`:'Nicio notă salvată')
+    +step(s.evidence>0,'2. Dovezi',s.evidence?`${s.evidence} note au citate/surse`:'Adaugă citat și sursă')
+    +step(!!s.eu,'3. Drept UE',s.eu?`${s.eu} note de risc UE`:'Opțional: leagă CELEX/articol')
+    +step(s.ready>0||s.reviewed>0,'4. Revizie',s.reviewed?`${s.reviewed} revizuite/rezolvate`:(s.ready?`${s.ready} pregătite`:'Marchează starea umană'))
+    +'</ol><div class="dossier-actions">'
+    +'<button type="button" class="ghost mini" data-gap-flow-new-note>Notă nouă</button>'
+    +'<button type="button" class="ghost mini" data-gap-flow-eu-note>Notă UE</button>'
+    +'<button type="button" class="ghost mini" data-gap-flow-ai-note>AI din dovadă</button>'
+    +'<button type="button" class="ghost mini" data-gap-flow-proposals>Propuneri</button>'
+    +'<button type="button" class="ghost mini" data-gap-flow-runs>Analize salvate</button>'
+    +'</div></section>';
+}
+
 function manualNoteText(value){
   if(value==null)return '';
   if(typeof value==='string')return value;
@@ -4700,6 +4743,7 @@ async function loadManualNotes(dossierId,offset=0){
     const editing=MANUAL_NOTES_UI.editing;
     host.innerHTML='<details class="manual-notes" open><summary>Note manuale</summary>'
       +'<p class="hint">Spațiu de lucru verificabil: observații manuale, citate și raționament, păstrate local în dosar.</p>'
+      +gapWorkflowHtml(data)
       +manualNoteSummaryHtml(data)
       +euIssueNoteBuilderHtml()
       +manualNoteFormHtml(editing)
@@ -4713,6 +4757,11 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelector('[data-note-status-filter]').onchange=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,0);};
     host.querySelectorAll('[data-note-summary-status]').forEach(button=>button.onclick=()=>{host.querySelector('[data-note-status-filter]').value=button.dataset.noteSummaryStatus;MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,0);});
     host.querySelectorAll('[data-note-recent]').forEach(button=>button.onclick=()=>{const note=(data.recente||[]).find(n=>n.id===button.dataset.noteRecent);if(note){MANUAL_NOTES_UI.editing=note;loadManualNotes(dossierId,offset);}});
+    host.querySelector('[data-gap-flow-new-note]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,0);};
+    host.querySelector('[data-gap-flow-eu-note]').onclick=()=>{const box=host.querySelector('[data-eu-issue-builder]');if(box){box.open=true;box.scrollIntoView({block:'start'});box.querySelector('input,select,textarea')?.focus();}};
+    host.querySelector('[data-gap-flow-ai-note]').onclick=()=>{const box=host.querySelector('[data-ai-note-draft]');if(box){box.open=true;box.scrollIntoView({block:'center'});}};
+    host.querySelector('[data-gap-flow-proposals]').onclick=()=>{$('#dossier-proposals')?.scrollIntoView({block:'start'});};
+    host.querySelector('[data-gap-flow-runs]').onclick=()=>{$('#dossier-runs')?.scrollIntoView({block:'start'});};
     host.querySelector('[data-notes-refresh]').onclick=()=>loadManualNotes(dossierId,offset);
     host.querySelector('[data-notes-prev]').disabled=offset===0;
     host.querySelector('[data-notes-next]').disabled=offset+data.note.length>=data.total;
