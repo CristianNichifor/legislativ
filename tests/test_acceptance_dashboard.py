@@ -26,6 +26,8 @@ def test_acceptance_dashboard_reports_known_finish_gaps(tmp_path):
 
     assert out["contract"] == "acceptance-dashboard-v1"
     assert out["status"] == "attention"
+    assert out["capability_summary"] == {"ready": 1, "partial": 7, "missing": 0, "total": 8}
+    assert {item["key"] for item in out["capabilities"]} >= {"law_as_code", "mcp", "eu_checks"}
     assert {section["key"] for section in out["sections"]} == {
         "local_v1",
         "sources",
