@@ -109,15 +109,11 @@ def test_tracker_events_carry_unified_lifecycle_metadata(tmp_path):
         "label": "Consultare",
         "order": 0,
     }
-    assert by_type["public_consultation_opened"]["display_label"] == (
-        "Consultare publică deschisă"
-    )
+    assert by_type["public_consultation_opened"]["display_label"] == ("Consultare publică deschisă")
     assert by_type["public_consultation_opened"]["stage_key"] == "consultation_open"
     assert by_type["vote_recorded"]["stage_key"] == "adopted"
     assert by_type["promulgated"]["stage_label"] == "Promulgat"
-    assert by_type["published_in_monitor"]["stage_order"] > by_type["vote_recorded"][
-        "stage_order"
-    ]
+    assert by_type["published_in_monitor"]["stage_order"] > by_type["vote_recorded"]["stage_order"]
 
 
 def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
