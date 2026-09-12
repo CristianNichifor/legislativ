@@ -294,3 +294,28 @@ def test_registry_post_route_is_allowlisted(tmp_path):
 
     assert result[0][0] == 200
     assert result[0][1]["family"] == "parlament"
+
+
+def test_registry_post_route_syncs_one_source(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(stare, {"family": "ue_cellar", "identifier": "32014L0024"})
+
+    def import_celex(state, request):
+        write_eu_text(state, request["celex"], "Text oficial nou")
+        return {"celex": request["celex"], "stare": "ok", "limba": "RON", "schimbat": True}
+
+    monkeypatch.setattr("scripts.achizitii_ue.importa", import_celex)
+    handler = object.__new__(face_handler(stare))
+    body = json.dumps({"action": "sync", "id": row["id"]}).encode()
+    handler.path = "/api/registru-surse"
+    handler.rfile = io.BytesIO(body)
+    handler.headers = {"Host": "localhost:8123", "Content-Length": str(len(body))}
+    handler.server = SimpleNamespace(server_port=8123)
+    result = []
+    handler._json = lambda data, code=200: result.append((code, data))
+
+    handler.do_POST()
+
+    assert result[0][0] == 200
+    assert result[0][1]["state"] == "changed"
+    assert result[0][1]["last_hash"]

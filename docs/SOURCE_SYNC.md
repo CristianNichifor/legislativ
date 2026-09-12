@@ -34,6 +34,17 @@ direct official document target when the existing adapter already supports it.
 It must not rebuild the whole corpus, walk a whole portal, publish a release, or
 recalculate saved legal conclusions.
 
+The app UI exposes this boundary from **Matrice → Registru surse urmărite**.
+Each row can be placed in the queue or synchronized directly. The result stays
+visible after reload as one of the shared states: fetched, unchanged, changed,
+failed, unavailable, rate-limited or needs-review. A changed source is a review
+signal, not an automatic legal conclusion. A failed, unavailable or rate-limited
+source remains visible in the registry instead of becoming an empty result.
+
+Static GitHub Pages/browser workspaces do not fetch official sources. They may
+show local/public snapshots, but one-source acquisition requires the local Python
+server because it writes the source registry and retained source databases.
+
 Each attempt must record at least:
 
 - source family;
