@@ -140,6 +140,28 @@ signals. Closing a `changed` or `needs_review` row should happen only after the
 user has inspected the affected local artifacts or recorded why they are not
 relevant.
 
+## Source-to-tracker workflow acceptance
+
+The local acceptance contract for one registered source is intentionally narrow:
+
+- register or rediscover one public source through `/api/registru-surse`;
+- queue or sync that same source without starting a bulk download or release
+  rebuild;
+- keep the resulting source id, URL, parser version and content hash visible in
+  registry responses;
+- record normalized legislative tracker events through `/api/tracker-evenimente`
+  with the source id/hash copied into the event, so project and dossier timeline
+  filters can show the same event;
+- allow a dossier manual note saved through `/api/dosare/note` to reference the
+  source by URL/hash and let the registry `impact` sample show that note as a
+  local dependency.
+
+The current app does not infer tracker events from sync automatically and does
+not create dossier notes from a source change. Tests therefore assert the
+concrete API contracts above: registration/sync writes the source state,
+tracker writes make events visible by project and dossier, and manual notes are
+counted conservatively as direct source references.
+
 ## Acceptance
 
 A first backend slice is acceptable when:
