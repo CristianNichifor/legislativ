@@ -392,6 +392,18 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json(lista(stare, parse_qs(ruta.query)))
                 except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/monitor-reconciliere":
+                from scripts.monitor_tracker import local_reconciliation
+
+                try:
+                    qs = parse_qs(ruta.query)
+                    self._json(
+                        local_reconciliation(
+                            stare.corpus, limit=int(qs.get("limit", ["200"])[0] or 200)
+                        )
+                    )
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/acoperire-surse":
                 from scripts.acoperire_surse import raport
 

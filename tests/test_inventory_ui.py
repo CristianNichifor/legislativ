@@ -250,6 +250,79 @@ def test_acceptance_dashboard_renderer_shows_finish_state():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert "tracker-event-type" in html
+    assert "tracker-source-family" in html
+    assert "econsultare-feed" in html
+    assert "monitor-reconciliation-refresh" in html
+    source = html.split("function monitorReconciliationHtml", 1)[1].split(
+        "$('#source-coverage').ontoggle", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "function sourceRegistryConsultationStatus(value){const labels={open:'Deschisă',"
+        "closed:'Închisă',unknown:'Necunoscută'};return labels[value]||value||'Necunoscută';}"
+        "async function sourceRegistryApi(){return {};}"
+        "function inspectSourceRegistryRow(){}function openTrackerTimeline(){}"
+        "function monitorReconciliationHtml"
+        + source
+        + "let h=monitorReconciliationHtml({needs_review:1,total:2,"
+        "counts:{missing_monitor_number:1},"
+        "items:[{act_id:'lege <x>',issues:['missing <b>'],metadata:{number:null,date:''},"
+        "parsed:{number:10,date:'2026-02-02'},event_available:false}],limitari:['local <img>']});"
+        "assert.ok(h.includes('Reconciliere Monitorul Oficial'));"
+        "assert.ok(h.includes('lege &lt;x&gt;'));"
+        "assert.ok(h.includes('missing &lt;b&gt;'));"
+        "assert.ok(!h.includes('<x>')&&!h.includes('<img>'));"
+        "h=econsultareFeedHtml({items:[{source_id:'src1',identifier:'PL-x 1/2026',"
+        "title:'Consultare <b>',label:'Fallback',status:'open',authority:'MDLPA',"
+        "deadline:'2026-10-01',documents:2,state:'changed',snapshot_at:'2026',"
+        "url:'javascript:alert(1)',needs_attention:true}]});"
+        "assert.ok(h.includes('Consultare &lt;b&gt;'));"
+        "assert.ok(h.includes('Deschisă'));"
+        "assert.ok(h.includes('Sincronizează sursa'));"
+        "assert.ok(h.includes('Timeline'));"
+        "assert.ok(!h.includes('href=')&&!h.includes('<b>'));"
+    )
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_tracker_timeline_renderer_exposes_review_and_note_actions():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("const TRACKER_TIMELINE=", 1)[1].split("const ACQUISITION=", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');"
+        "const dossierTime=s=>s;"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "const TRACKER_TIMELINE="
+        + source
+        + "const h=trackerTimelineHtml({events:[{id:'ev1',event_type:'committee_assignment',"
+        "event_label:'Aviz comisie',project_id:'PL-x 1/2026',dossier_id:'dosar1',"
+        "source_family:'camera',source_url:'https://www.cdep.ro/',occurred_at:'2026-09-12',"
+        "title:'Titlu <b>',payload:{committee:'Comisie <x>'},review:{reviewed:false}}],"
+        "total:1,limitari:['local <img>']});"
+        "assert.ok(h.includes('data-tracker-note-event=\"ev1\"'));"
+        "assert.ok(h.includes('data-tracker-review-event=\"ev1\"'));"
+        "assert.ok(h.includes('Nerevizuit'));"
+        "assert.ok(h.includes('Comisie &lt;x&gt;'));"
+        "assert.ok(!h.includes('<b>')&&!h.includes('<img>'));"
+        "const params=trackerTimelineParams(10);"
+        "assert.equal(params.limit,'50');"
+    )
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_filters_and_opens_project_sources():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]

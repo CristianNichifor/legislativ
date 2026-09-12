@@ -1385,10 +1385,17 @@
         </section>
         <details class="dossier-library" id="source-coverage">
           <summary>Acoperire surse · Calitatea urmăririi</summary>
-          <div class="dossier-actions"><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Stadiu finalizare</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
+          <div class="dossier-actions"><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Stadiu finalizare</button><button type="button" id="monitor-reconciliation-refresh" class="ghost mini">Reconciliere MO</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
           <p id="source-coverage-status" class="hint" role="status">Acoperire neîncărcată.</p>
           <div id="source-coverage-result"></div>
+          <div id="monitor-reconciliation-result"></div>
           <div id="acceptance-dashboard-result"></div>
+        </details>
+        <details class="dossier-library" id="econsultare-feed">
+          <summary>Consultări publice · e-consultare</summary>
+          <div class="dossier-actions"><label>Stare<select id="econsultare-feed-status"><option value="open">Deschise</option><option value="">Toate</option><option value="unknown">Necunoscute</option><option value="closed">Închise</option></select></label><button type="button" id="econsultare-feed-refresh" class="ghost mini">Reîncarcă feed</button><button type="button" id="econsultare-feed-open-registry" class="ghost mini">Registru surse</button></div>
+          <p id="econsultare-feed-summary" class="hint" role="status">Feed neîncărcat.</p>
+          <div id="econsultare-feed-list"></div>
         </details>
         <details class="dossier-library" id="lifecycle-tracker">
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
@@ -1406,6 +1413,9 @@
             <form id="tracker-timeline-search" class="lifecycle-toolbar">
               <label>Proiect<input name="project_id" id="tracker-project-id" type="search" maxlength="200" placeholder="PL-x, plx sau id sursă"></label>
               <label>Dosar<input name="dossier_id" id="tracker-dossier-id" type="search" maxlength="200" placeholder="id dosar salvat"></label>
+              <label>Tip<select name="event_type" id="tracker-event-type"><option value="">Toate tipurile</option></select></label>
+              <label>Sursă<select name="source_family" id="tracker-source-family"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label>
+              <label>Revizie<select name="reviewed" id="tracker-reviewed"><option value="">Toate</option><option value="0">Nerevizuite</option><option value="1">Revizuite</option></select></label>
               <button type="submit" class="ghost mini">Arată timeline</button>
               <button type="button" id="tracker-timeline-refresh" class="ghost mini" title="Reîncarcă evenimentele" aria-label="Reîncarcă evenimentele">↻</button>
             </form>
@@ -6318,11 +6328,82 @@ async function loadAcceptanceDashboard(){
     status.textContent=data.status==='ok'?'Stadiu finalizare: fără blocaje cunoscute.':'Stadiu finalizare: există zone de atenție.';
   }catch(err){status.textContent=err.message;}
 }
+function monitorReconciliationHtml(data){
+  const counts=Object.entries(data.counts||{}).map(([k,v])=>`<li>${esc(k)}: ${esc(v)}</li>`).join('');
+  const items=(data.items||[]).map(row=>{
+    const metadata=row.metadata||{}, parsed=row.parsed||{};
+    return `<article class="coverage-card coverage-attention"><h4>${esc(row.act_id||'Act necunoscut')}</h4>`
+      +`<p>${esc((row.issues||[]).join(' · ')||'fără probleme')}</p>`
+      +`<p class="hint">Metadate: nr. ${esc(metadata.number||'lipsă')} / ${esc(metadata.date||'lipsă')} · Text: nr. ${esc(parsed.number||'lipsă')} / ${esc(parsed.date||'lipsă')} · eveniment tracker ${row.event_available?'posibil':'indisponibil'}</p></article>`;
+  }).join('');
+  return `<section class="source-inventory"><h4>Reconciliere Monitorul Oficial · Partea I</h4>`
+    +`<p><strong>${esc(data.needs_review?'Necesită revizie':'Fără diferențe în eșantion')}</strong> · ${esc(data.needs_review||0)} din ${esc(data.total||0)} rânduri verificate.</p>`
+    +(counts?`<details open><summary>Tipuri de probleme</summary><ul>${counts}</ul></details>`:'')
+    +(items?`<div class="coverage-grid">${items}</div>`:'<p class="hint">Nu sunt rânduri cu metadate MO inconsistente în eșantionul local.</p>')
+    +(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'')+'</section>';
+}
+async function loadMonitorReconciliation(){
+  const status=$('#source-coverage-status'),out=$('#monitor-reconciliation-result');
+  status.textContent='Verific metadatele Monitorul Oficial din corpusul local…';out.innerHTML='';
+  try{
+    const response=await fetch('/api/monitor-reconciliere?limit=200');
+    const data=await response.json().catch(()=>({error:'Reconcilierea MO nu este disponibilă.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Reconcilierea MO nu este disponibilă.');
+    out.innerHTML=monitorReconciliationHtml(data);
+    status.textContent=`Reconciliere MO: ${data.needs_review||0} rânduri de revizuit.`;
+  }catch(err){status.textContent=err.message;}
+}
+function econsultareFeedStatus(value){
+  return sourceRegistryConsultationStatus(value);
+}
+function econsultareFeedHtml(data){
+  const items=data.items||[];
+  if(!items.length)return '<p>Nicio consultare publică în selecția curentă.</p>';
+  return items.map(item=>{
+    const url=urlSigur(item.url);
+    const deadline=item.deadline||item.deadline_raw||'termen necunoscut';
+    const attention=item.needs_attention?' · necesită atenție':'';
+    return `<article class="source-registry-row" data-source-severity="${item.needs_attention?'attention':'ready'}"><h4>${esc(item.title||item.label)} · ${esc(econsultareFeedStatus(item.status))}</h4>`
+      +`<p>${esc(item.authority||'Autoritate neextrasă')} · termen ${esc(deadline)} · ${esc(item.documents||0)} atașamente${esc(attention)}</p>`
+      +`<p class="hint">Registru: ${esc(item.state)} · captură ${esc(dossierTime(item.snapshot_at||item.updated_at))}${item.last_error?` · ${esc(item.last_error)}`:''}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:''}</p>`
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-econsultare-source="${esc(item.source_id)}">Deschide sursa</button><button type="button" class="ghost mini" data-econsultare-sync="${esc(item.source_id)}">Sincronizează sursa</button><button type="button" class="ghost mini" data-econsultare-timeline>Timeline consultări</button></div></article>`;
+  }).join('');
+}
+async function loadEconsultareFeed(){
+  const status=$('#econsultare-feed-summary'),list=$('#econsultare-feed-list');
+  const wanted=$('#econsultare-feed-status').value;
+  status.textContent='Încarc feed-ul local e-consultare…';list.innerHTML='';
+  try{
+    const params=new URLSearchParams({limit:'100'});if(wanted)params.set('status',wanted);
+    const response=await fetch('/api/econsultare-feed?'+params);
+    const data=await response.json().catch(()=>({error:'Feed-ul e-consultare nu este disponibil.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Feed-ul e-consultare nu este disponibil.');
+    list.innerHTML=econsultareFeedHtml(data);
+    status.textContent=`${data.total||0} consultări în feed-ul local.`;
+    list.querySelectorAll('[data-econsultare-source]').forEach(button=>button.onclick=()=>{
+      $('#source-registry').open=true;inspectSourceRegistryRow(button.dataset.econsultareSource);
+    });
+    list.querySelectorAll('[data-econsultare-sync]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;status.textContent='Sincronizez consultarea selectată…';
+      try{await sourceRegistryApi({action:'sync',id:button.dataset.econsultareSync});await loadEconsultareFeed();}
+      catch(err){status.textContent=err.message;button.disabled=false;}
+    });
+    list.querySelectorAll('[data-econsultare-timeline]').forEach(button=>button.onclick=()=>{
+      openTrackerTimeline();const form=$('#tracker-timeline-search');
+      form.elements.source_family.value='consultare_econsultare';form.elements.reviewed.value='0';loadTrackerTimeline(0);
+    });
+  }catch(err){status.textContent=err.message;}
+}
 $('#source-coverage').ontoggle=e=>{if(e.currentTarget.open)loadSourceCoverage();};
 $('#source-coverage-refresh').onclick=loadSourceCoverage;
 $('#acceptance-dashboard-refresh').onclick=loadAcceptanceDashboard;
+$('#monitor-reconciliation-refresh').onclick=loadMonitorReconciliation;
 $('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 $('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
+$('#econsultare-feed').ontoggle=e=>{if(e.currentTarget.open)loadEconsultareFeed();};
+$('#econsultare-feed-refresh').onclick=loadEconsultareFeed;
+$('#econsultare-feed-status').onchange=loadEconsultareFeed;
+$('#econsultare-feed-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null};
 const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',unavailable:'sursă indisponibilă',toate:'toate proiectele'};
@@ -6613,11 +6694,14 @@ async function loadLifecycleList(offset=0){
     }
   }
 }
-const TRACKER_TIMELINE={offset:0,project_id:'',dossier_id:'',sequence:0,last:null};
+const TRACKER_TIMELINE={offset:0,project_id:'',dossier_id:'',event_type:'',source_family:'',reviewed:'',sequence:0,last:null};
 function trackerTimelineParams(offset=TRACKER_TIMELINE.offset){
   const params={limit:'50',offset:String(offset)};
   if(TRACKER_TIMELINE.project_id)params.project_id=TRACKER_TIMELINE.project_id;
   if(TRACKER_TIMELINE.dossier_id)params.dossier_id=TRACKER_TIMELINE.dossier_id;
+  if(TRACKER_TIMELINE.event_type)params.event_type=TRACKER_TIMELINE.event_type;
+  if(TRACKER_TIMELINE.source_family)params.source_family=TRACKER_TIMELINE.source_family;
+  if(TRACKER_TIMELINE.reviewed)params.reviewed=TRACKER_TIMELINE.reviewed;
   return params;
 }
 function trackerEventSummary(event){
@@ -6635,7 +6719,41 @@ function trackerEventSummary(event){
 function trackerEventHtml(event){
   const source=urlSigur(event.source_url);
   const summary=trackerEventSummary(event);
-  return `<li class="tracker-timeline-event"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(event.title||event.event_label||event.event_type)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p></div></li>`;
+  const review=event.review||{};
+  const reviewText=review.reviewed?`Revizuit ${dossierTime(review.reviewed_at)}${review.reviewer?` de ${review.reviewer}`:''}${review.note?` · ${review.note}`:''}`:'Nerevizuit';
+  return `<li class="tracker-timeline-event" data-tracker-event="${esc(event.id)}"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(event.title||event.event_label||event.event_type)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p><p class="hint">${esc(reviewText)}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-tracker-note-event="${esc(event.id)}">Creează notă în dosar</button><button type="button" class="ghost mini" data-tracker-review-event="${esc(event.id)}" ${review.reviewed?'disabled':''}>Marchează revizuit</button></div></div></li>`;
+}
+async function trackerTimelineApi(body){
+  const response=await fetch('/api/tracker-evenimente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const data=await response.json().catch(()=>({error:'Tracker-ul legislativ nu este disponibil.'}));
+  if(!response.ok||data.error)throw new Error(data.error||'Tracker-ul legislativ nu este disponibil.');
+  return data;
+}
+function trackerTimelineEvent(id){
+  return (TRACKER_TIMELINE.last?.events||[]).find(event=>event.id===id);
+}
+function configureTrackerEventTypes(data){
+  const select=$('#tracker-event-type');
+  if(!select||select.dataset.loaded)return;
+  const types=data.event_types||[];
+  select.innerHTML='<option value="">Toate tipurile</option>'+types.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('');
+  select.dataset.loaded='1';
+}
+function bindTrackerTimelineActions(){
+  const out=$('#tracker-timeline-list'), status=$('#tracker-timeline-status');
+  out.querySelectorAll('[data-tracker-review-event]').forEach(button=>button.onclick=async()=>{
+    button.disabled=true;status.textContent='Marchez evenimentul ca revizuit…';
+    try{await trackerTimelineApi({action:'review',id:button.dataset.trackerReviewEvent,reviewer:'utilizator'});await loadTrackerTimeline(TRACKER_TIMELINE.offset);}
+    catch(err){status.textContent=err.message;button.disabled=false;}
+  });
+  out.querySelectorAll('[data-tracker-note-event]').forEach(button=>button.onclick=async()=>{
+    const event=trackerTimelineEvent(button.dataset.trackerNoteEvent);
+    const dossierId=event?.dossier_id||TRACKER_TIMELINE.dossier_id||DOSARE_UI.selected?.id||'';
+    if(!dossierId){status.textContent='Selectează sau introdu un dosar pentru nota tracker.';return;}
+    button.disabled=true;status.textContent='Creez nota din evenimentul tracker…';
+    try{await trackerTimelineApi({action:'create_note',id:button.dataset.trackerNoteEvent,dosar_id:dossierId});await loadTrackerTimeline(TRACKER_TIMELINE.offset);}
+    catch(err){status.textContent=err.message;button.disabled=false;}
+  });
 }
 function trackerTimelineHtml(data){
   const events=data.events||[];
@@ -6657,9 +6775,12 @@ async function loadTrackerTimeline(offset=0){
   const form=$('#tracker-timeline-search');
   TRACKER_TIMELINE.project_id=(form.elements.project_id.value||'').trim();
   TRACKER_TIMELINE.dossier_id=(form.elements.dossier_id.value||'').trim();
+  TRACKER_TIMELINE.event_type=(form.elements.event_type.value||'').trim();
+  TRACKER_TIMELINE.source_family=(form.elements.source_family.value||'').trim();
+  TRACKER_TIMELINE.reviewed=(form.elements.reviewed.value||'').trim();
   TRACKER_TIMELINE.offset=offset;
-  if(!TRACKER_TIMELINE.project_id&&!TRACKER_TIMELINE.dossier_id){
-    status.textContent='Alege un proiect sau un dosar.';out.innerHTML='';$('#tracker-timeline-prev').disabled=true;$('#tracker-timeline-next').disabled=true;return;
+  if(!TRACKER_TIMELINE.project_id&&!TRACKER_TIMELINE.dossier_id&&!TRACKER_TIMELINE.event_type&&!TRACKER_TIMELINE.source_family&&!TRACKER_TIMELINE.reviewed){
+    status.textContent='Alege un proiect, un dosar sau un filtru.';out.innerHTML='';$('#tracker-timeline-prev').disabled=true;$('#tracker-timeline-next').disabled=true;return;
   }
   const token=++TRACKER_TIMELINE.sequence;
   status.textContent='Încarc evenimentele normalizate…';out.innerHTML='';
@@ -6669,10 +6790,11 @@ async function loadTrackerTimeline(offset=0){
     const data=await response.json().catch(()=>({error:'Timeline-ul de evenimente nu este disponibil.'}));
     if(!response.ok||data.error)throw new Error(data.error||'Timeline-ul de evenimente nu este disponibil.');
     if(token!==TRACKER_TIMELINE.sequence)return;
-    TRACKER_TIMELINE.last=data;out.innerHTML=trackerTimelineHtml(data);
+    TRACKER_TIMELINE.last=data;configureTrackerEventTypes(data);out.innerHTML=trackerTimelineHtml(data);bindTrackerTimelineActions();
     $('#tracker-timeline-prev').disabled=!offset;$('#tracker-timeline-next').disabled=offset+(data.events||[]).length>=data.total;
-    const scope=[TRACKER_TIMELINE.project_id&&`proiect ${TRACKER_TIMELINE.project_id}`,TRACKER_TIMELINE.dossier_id&&`dosar ${TRACKER_TIMELINE.dossier_id}`].filter(Boolean).join(' · ');
-    status.textContent=`${data.events?.length||0} din ${data.total||0} evenimente pentru ${scope}.`;
+    const scope=[TRACKER_TIMELINE.project_id&&`proiect ${TRACKER_TIMELINE.project_id}`,TRACKER_TIMELINE.dossier_id&&`dosar ${TRACKER_TIMELINE.dossier_id}`].filter(Boolean).join(' · ')||'filtrele curente';
+    const filters=[TRACKER_TIMELINE.event_type&&`tip ${TRACKER_TIMELINE.event_type}`,TRACKER_TIMELINE.source_family&&`sursa ${TRACKER_TIMELINE.source_family}`,TRACKER_TIMELINE.reviewed&&`revizie ${TRACKER_TIMELINE.reviewed==='1'?'da':'nu'}`].filter(Boolean).join(' · ');
+    status.textContent=`${data.events?.length||0} din ${data.total||0} evenimente pentru ${scope}${filters?` · ${filters}`:''}.`;
   }catch(err){if(token===TRACKER_TIMELINE.sequence){status.textContent=err.message;out.innerHTML='';}}
 }
 function openTrackerTimeline({project_id='',dossier_id=''}={}){
