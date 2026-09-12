@@ -2,8 +2,10 @@ import io
 import json
 from types import SimpleNamespace
 
+from scripts import achizitii_econsultare as ec
 from scripts import cellar, dosare
 from scripts.server import face_handler
+from tests.test_achizitii_econsultare import HTML
 
 DOSSIER_ID = "a" * 32
 NOTE_ID = "b" * 32
@@ -168,3 +170,87 @@ def test_register_sync_tracker_timeline_and_dossier_note_reference_acceptance(
     assert row["impact"]["summary"]["affected_notes"] == 1
     assert row["impact"]["samples"]["notes"][0]["id"] == NOTE_ID
     assert row["impact"]["samples"]["notes"][0]["dosar_id"] == DOSSIER_ID
+
+
+def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
+    monkeypatch, tmp_path
+):
+    stare = state(tmp_path)
+    monkeypatch.setattr(ec, "descarca", lambda url: (HTML, 200))
+
+    dosare.creeaza(
+        dosare.cale(stare),
+        {
+            "id": DOSSIER_ID,
+            "titlu": "Dosar consultare publică",
+            "intrebare": "Ce trebuie verificat după o consultare publică?",
+            "domeniu": "consultări",
+        },
+    )
+
+    code, source = request(
+        stare,
+        "POST",
+        "/api/registru-surse",
+        {
+            "action": "discover",
+            "family": "consultare_econsultare",
+            "identifier": "https://e-consultare.gov.ro/consultare/123",
+            "url": "https://e-consultare.gov.ro/consultare/123",
+            "label": "Consultare publică MDLPA",
+        },
+    )
+    assert code == 200
+
+    code, synced = request(
+        stare, "POST", "/api/registru-surse", {"action": "sync", "id": source["id"]}
+    )
+    assert code == 200
+    assert synced["state"] == "changed"
+
+    code, feed = request(stare, "GET", "/api/econsultare-feed?status=open")
+    assert code == 200
+    assert feed["total"] == 1
+    assert feed["items"][0]["source_id"] == synced["id"]
+
+    code, review_queue = request(
+        stare,
+        "GET",
+        "/api/tracker-evenimente?source_family=consultare_econsultare&reviewed=0",
+    )
+    assert code == 200
+    assert review_queue["total"] == 1
+    event_id = review_queue["events"][0]["id"]
+    assert review_queue["events"][0]["event_type"] == "public_consultation_opened"
+
+    code, note = request(
+        stare,
+        "POST",
+        "/api/tracker-evenimente",
+        {"action": "create_note", "id": event_id, "dosar_id": DOSSIER_ID},
+    )
+    assert code == 200
+    assert note["note"]["dosar_id"] == DOSSIER_ID
+    assert note["note"]["act_id"] == review_queue["events"][0]["project_id"]
+
+    code, reviewed = request(
+        stare,
+        "POST",
+        "/api/tracker-evenimente",
+        {
+            "action": "review",
+            "id": event_id,
+            "reviewer": "acceptance",
+            "note": "Consultarea a fost transformată în notă de dosar.",
+        },
+    )
+    assert code == 200
+    assert reviewed["event"]["review"]["reviewed"] is True
+
+    code, empty_queue = request(
+        stare,
+        "GET",
+        "/api/tracker-evenimente?source_family=consultare_econsultare&reviewed=0",
+    )
+    assert code == 200
+    assert empty_queue["total"] == 0
