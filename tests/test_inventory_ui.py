@@ -296,6 +296,7 @@ def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_tracker_timeline_renderer_exposes_review_and_note_actions():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert "tracker-review-queue" in html
     source = html.split("const TRACKER_TIMELINE=", 1)[1].split("const ACQUISITION=", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
@@ -317,6 +318,13 @@ def test_tracker_timeline_renderer_exposes_review_and_note_actions():
         "assert.ok(!h.includes('<b>')&&!h.includes('<img>'));"
         "const params=trackerTimelineParams(10);"
         "assert.equal(params.limit,'50');"
+        "const q=trackerReviewQueueHtml({events:[{id:'ev2',event_type:'published_in_monitor',"
+        "event_label:'Publicare MO',project_id:'lege-1',source_family:'monitorul_oficial_pi',"
+        "occurred_at:'2026-09-12',title:'MO <x>',payload:{},review:{reviewed:false}}],"
+        "total:1,limitari:[]});"
+        "assert.ok(q.includes('Evenimente nerevizuite'));"
+        "assert.ok(q.includes('data-tracker-review-event=\"ev2\"'));"
+        "assert.ok(!q.includes('<x>'));"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr.decode()
