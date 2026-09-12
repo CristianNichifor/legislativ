@@ -189,6 +189,19 @@ request-size limits and retry/conflict behavior. Schema 10 adds `note_manuale`;
 schemas 1-9 remain readable without migration and upgrade on the next successful
 write.
 
+### AI drafts from selected evidence
+
+`POST /api/dosare/ai-draft` validates one bounded set of selected evidence and
+returns a prompt contract for the browser. It does not call a model and does not
+store output. Each evidence item must include a quote plus either a source URL or
+source hash, so the prompt cannot be built from unsupported memory.
+
+The manual-note editor can send that prompt through the user's configured AI mode:
+local WebGPU, or online BYOK with the existing confirmation before text leaves the
+browser. The generated text is inserted only by explicit user action, labelled as
+an unreviewed AI draft, and remains ordinary note text until the user saves it.
+It cannot mark a note reviewed, accepted or legally final.
+
 ## Evidence Dependencies
 
 New runs use the `matrice-dosar-v2` contract and store a version-1 dependency
