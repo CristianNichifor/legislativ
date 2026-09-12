@@ -248,6 +248,45 @@ assert.ok(!html.includes('<script>'));
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_watchlist_feed_renderer_escapes_alerts_and_actions():
+    source = (
+        APP.read_text()
+        .split("const WATCHLIST_KINDS=", 1)[1]
+        .split("function proposalVersionHtml", 1)[0]
+    )
+    code = (
+        r"""
+const assert=require('node:assert/strict');
+const escapes={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>escapes[c]);
+const dossierTime=s=>s;
+const acquisitionLink=(url,label)=>'<a href="'+esc(url)+'">'+esc(label)+'</a>';
+const DOSARE_UI={runId:'run-1'};
+const WATCHLIST_KINDS="""
+        + source
+        + r"""
+const item={id:'a',tip:'celex',valoare:'<CELEX>',eticheta:'<script>',
+  source_state:'changed',creat_la:'now',nota_revizie:'<b>',
+  needs_attention:true,
+  actiuni:{mark_reviewed:true},
+  source:{url:'https://example.test/?q=<x>',last_hash:'c'.repeat(64),last_error:'<img>',updated_at:'later'}};
+const html=watchlistItemHtml(item,0);
+assert.ok(html.includes('attention'));
+assert.ok(html.includes('data-watch-note'));
+assert.ok(html.includes('data-watch-rerun'));
+assert.ok(html.includes('data-watch-review'));
+assert.ok(html.includes('data-watch-delete'));
+assert.ok(!/<(script|img|x|b)>/.test(html));
+const prefill=watchlistPrefill(item);
+assert.equal(prefill.type,'risc_ue');
+assert.equal(prefill.source_hash,'c'.repeat(64));
+assert.ok(prefill.evidence_quote.includes('changed'));
+"""
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_review_form_escapes_evidence_and_history():
     source = (
         APP.read_text()

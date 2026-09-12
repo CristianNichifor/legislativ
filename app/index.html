@@ -426,6 +426,11 @@
   .gap-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
   .gap-flow-steps .done b::before{content:"✓ ";color:#18745b}
   .gap-flow-steps .todo b::before{content:"• ";color:#9a5b00}
+  .watchlist-feed{border-top:1px solid var(--rule);padding:.7rem 0;margin:.6rem 0;overflow-wrap:anywhere}
+  .watchlist-feed form{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.45rem;align-items:end}
+  .watchlist-feed article{border-top:1px solid var(--rule-soft);padding:.55rem 0}
+  .watchlist-feed article h5{font-size:.88rem;margin:0 0 .2rem}
+  .watchlist-feed .attention{border-left:3px solid #9a5b00;padding-left:.55rem}
   @media(max-width:650px){.manual-notes form{grid-template-columns:minmax(0,1fr)}}
   [data-proposal-history-list]{max-height:16rem;overflow:auto}
   [data-proposal-history] pre{max-height:18rem;overflow:auto}
@@ -1396,7 +1401,7 @@
               <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
               <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
-            <div id="dossier-meta"></div><section id="dossier-notes"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
+            <div id="dossier-meta"></div><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
         </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
@@ -4287,6 +4292,8 @@ async function openDossierRun(id,runId,token,checkId=null,findingId=null){
   try{
     const run=await dossierApi('/api/dosare/rulari?'+new URLSearchParams({id,rulare_id:runId}));
     if(token!==DOSARE_UI.sequence) return;
+    DOSARE_UI.runFilters=run.filtre||{};
+    loadDossierWatchlist(id);
     out.innerHTML='<details data-saved-report><summary>Raport complet și surse salvate</summary>'+dossierSnapshotHtml(run)+'</details>';
     const reviews=document.createElement('section');reviews.className='finding-reviews';out.prepend(reviews);
     reviews.onProposalSaved=()=>loadProposalList(id);
@@ -4798,6 +4805,77 @@ async function loadProposalList(dossierId,offset=0){
     });
   }catch(err){if(valid()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă propunerile';retry.onclick=()=>loadProposalList(dossierId,offset);host.append(retry);}}
 }
+const WATCHLIST_KINDS={act:'Act normativ',project:'Proiect legislativ',celex:'CELEX',domain:'Domeniu',keyword:'Cuvânt cheie'};
+const WATCHLIST_STATES={not_registered:'neurmărit în registrul de surse',changed:'sursă schimbată',failed:'sincronizare eșuată',needs_review:'necesită revizie',rate_limited:'limitată de sursă',queued:'în coadă',fetched:'citită',unchanged:'neschimbată',discovered:'descoperită',unavailable:'indisponibilă'};
+function watchlistItemHtml(item,i){
+  const source=item.source||{},state=WATCHLIST_STATES[item.source_state]||item.source_state;
+  const cls=item.needs_attention?'attention':'';
+  const when=source.updated_at||item.creat_la||'';
+  return `<article class="${cls}" data-watch-index="${i}"><h5>${esc(item.eticheta||item.valoare)}</h5>`
+    +`<p class="hint">${esc(WATCHLIST_KINDS[item.tip]||item.tip)} · ${esc(item.valoare)} · ${esc(state)}${when?' · '+esc(dossierTime(when)):''}</p>`
+    +(source.url?`<p>${acquisitionLink(source.url,'Sursa oficială')}</p>`:'')
+    +(source.last_error?`<p role="status">${esc(source.last_error)}</p>`:'')
+    +(item.nota_revizie?`<p class="hint">Ultima revizie: ${esc(item.nota_revizie)}</p>`:'')
+    +'<div class="dossier-actions">'
+    +'<button type="button" class="ghost mini" data-watch-note>Notează alerta</button>'
+    +`<button type="button" class="ghost mini" data-watch-rerun ${DOSARE_UI.runId?'':'disabled'}>Recalculează analiza curentă</button>`
+    +`<button type="button" class="ghost mini" data-watch-review ${item.actiuni?.mark_reviewed?'':'disabled'}>Marchează revizuit</button>`
+    +'<button type="button" class="ghost mini" data-watch-delete>Șterge</button></div></article>';
+}
+function watchlistPrefill(item){
+  const source=item.source||{},isEu=item.tip==='celex';
+  return {
+    title:'Alertă sursă · '+(item.eticheta||item.valoare),
+    type:isEu?'risc_ue':'necorelare',
+    act_id:item.valoare,
+    locator:'',
+    evidence_quote:['Watchlist: '+item.valoare,'Stare sursă: '+item.source_state,source.last_error||''].filter(Boolean).join('\n'),
+    source_url:source.url||'',
+    source_hash:source.last_hash||'',
+    reasoning:'Verifică dacă schimbarea sursei afectează constatările sau propunerile din dosar.',
+    status:'needs_evidence',
+    revizie:0
+  };
+}
+async function loadDossierWatchlist(dossierId,offset=0){
+  const host=$('#dossier-watchlist');if(!host)return;
+  host.innerHTML='<section class="watchlist-feed"><h4>Watchlist și surse schimbate</h4><p role="status">Încarc feed-ul…</p></section>';
+  try{
+    const data=await dossierApi('/api/dosare/watchlist?'+new URLSearchParams({id:dossierId,offset:String(offset)}));
+    if(DOSARE_UI.selected?.id!==dossierId)return;
+    const rows=data.items||[];
+    host.innerHTML='<section class="watchlist-feed"><h4>Watchlist și surse schimbate</h4>'
+      +`<p class="hint">${rows.length?`${data.attention||0} elemente necesită atenție din ${data.total}.`:'Urmărește acte, proiecte, CELEX, domenii sau cuvinte cheie pentru acest dosar.'}</p>`
+      +'<form data-watch-form><label>Tip<select name="tip">'+Object.entries(WATCHLIST_KINDS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')+'</select></label><label>Valoare<input name="valoare" required maxlength="300" placeholder="lege-98-2016, PL-x, CELEX, domeniu"></label><label>Etichetă<input name="eticheta" maxlength="300"></label><button type="submit" class="ghost mini">Adaugă</button></form>'
+      +'<div data-watch-items>'+(rows.map(watchlistItemHtml).join('')||'<p class="hint">Nimic urmărit în acest dosar.</p>')+'</div>'
+      +`<p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p>`
+      +'<div class="dossier-actions"><button type="button" class="ghost mini" data-watch-prev>Pagina anterioară</button><button type="button" class="ghost mini" data-watch-next>Pagina următoare</button><button type="button" class="ghost mini" data-watch-refresh>Reîncarcă</button><span class="hint" data-watch-status></span></div></section>';
+    const status=host.querySelector('[data-watch-status]');
+    host.querySelector('[data-watch-prev]').disabled=offset===0;
+    host.querySelector('[data-watch-next]').disabled=offset+rows.length>=data.total;
+    host.querySelector('[data-watch-prev]').onclick=()=>loadDossierWatchlist(dossierId,Math.max(0,offset-50));
+    host.querySelector('[data-watch-next]').onclick=()=>loadDossierWatchlist(dossierId,offset+50);
+    host.querySelector('[data-watch-refresh]').onclick=()=>loadDossierWatchlist(dossierId,offset);
+    host.querySelector('[data-watch-form]').onsubmit=async e=>{
+      e.preventDefault();const form=e.currentTarget;if(!form.reportValidity())return;
+      const values=Object.fromEntries(new FormData(form));status.textContent='Adaug urmăritorul…';
+      try{await dossierApi('/api/dosare/watchlist',{action:'add',id:crypto.randomUUID().replaceAll('-',''),dosar_id:dossierId,...values});form.reset();await loadDossierWatchlist(dossierId,0);}
+      catch(err){status.textContent=err.message;}
+    };
+    host.querySelectorAll('[data-watch-index]').forEach(card=>{
+      const item=rows[Number(card.dataset.watchIndex)];
+      card.querySelector('[data-watch-note]').onclick=()=>startManualNote(watchlistPrefill(item));
+      card.querySelector('[data-watch-review]').onclick=async()=>{status.textContent='Marchez alerta revizuită…';try{await dossierApi('/api/dosare/watchlist',{action:'review',id:item.id,dosar_id:dossierId,nota:'Revizuit din feed-ul dosarului.'});await loadDossierWatchlist(dossierId,offset);}catch(err){status.textContent=err.message;}};
+      card.querySelector('[data-watch-delete]').onclick=async()=>{status.textContent='Șterg urmăritorul…';try{await dossierApi('/api/dosare/watchlist',{action:'delete',id:item.id,dosar_id:dossierId});await loadDossierWatchlist(dossierId,offset);}catch(err){status.textContent=err.message;}};
+      card.querySelector('[data-watch-rerun]').onclick=async()=>{
+        if(!DOSARE_UI.runId){status.textContent='Alege întâi o analiză salvată.';return;}
+        status.textContent='Recalculez analiza curentă…';
+        try{const run=await dossierApi('/api/dosare/rulari',{dosar_id:dossierId,filtre:DOSARE_UI.runFilters||{},sursa_rulare_id:DOSARE_UI.runId});await selectDossier(dossierId,run.id);}
+        catch(err){status.textContent=err.message;}
+      };
+    });
+  }catch(err){host.innerHTML='<section class="watchlist-feed"><h4>Watchlist și surse schimbate</h4><p role="status">'+esc(err.message)+'</p><button type="button" class="ghost mini" data-watch-retry>Reîncearcă</button></section>';host.querySelector('[data-watch-retry]').onclick=()=>loadDossierWatchlist(dossierId,offset);}
+}
 function proposalVersionHtml(p){
   return `<section><h4>Revizia ${p.revizie}</h4><p class="hint">${esc(dossierTime(p.creat_la))}</p>`+[['titlu','Titlu'],['text','Text propus'],['motiv','Motivare']].map(([k,label])=>`<h5>${label}</h5><pre>${esc(p[k])}</pre>`).join('')+(p.interventie?'<h5>Intervenție și țintă capturată</h5><pre>'+esc(JSON.stringify(p.interventie,null,2))+'</pre>':'')+'</section>';
 }
@@ -5279,7 +5357,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
 async function selectDossier(id,runId,checkId=null,findingId=null){
   if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
-  DOSARE_UI.selected=null;DOSARE_UI.runId=null;$('#dossier-meta').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  DOSARE_UI.selected=null;DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;$('#dossier-meta').innerHTML='';$('#dossier-watchlist').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
   $('#dossier-notes').textContent='';++MANUAL_NOTES_UI.sequence;MANUAL_NOTES_UI.editing=null;
   $('#dossier-proposals').textContent='';++proposalListSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
@@ -5287,6 +5365,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     const meta=await dossierApi('/api/dosare/metadate?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
+    loadDossierWatchlist(id);
     loadManualNotes(id);
     loadProposalList(id);
     const picker=$('#dossier-select');
@@ -5300,7 +5379,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     const runs=$('#dossier-runs');
     if(!history.rulari.length){runs.textContent='Nicio analiză salvată.';return;}
     runs.innerHTML=`<label>Analize salvate<select id="dossier-run-select"><option value="">Alege o analiză</option>${history.rulari.map((r,i)=>`<option value="${esc(r.id)}">${esc((i+1)+' · '+dossierTime(r.creat_la))}</option>`).join('')}</select></label>`+(history.trunchiat?'<p class="hint">Sunt afișate ultimele 100 de analize.</p>':'');
-    $('#dossier-run-select').onchange=e=>{if(!dossierMayNavigate())return;const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);else DOSARE_UI.runId=null;};
+    $('#dossier-run-select').onchange=e=>{if(!dossierMayNavigate())return;const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);else{DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;loadDossierWatchlist(id);}};
     if(runId){
       const picker=$('#dossier-run-select');
       if(![...picker.options].some(o=>o.value===runId)) picker.add(new Option('Rulare din coadă · '+runId,runId));

@@ -191,10 +191,25 @@ builder, AI-from-evidence draft panel, saved proposals and saved analyses. This 
 only workflow navigation over existing local records; it does not create new
 findings, run AI, fetch sources or change review state by itself.
 
+## Dossier watchlist and changed-source feed
+
+`GET /api/dosare/watchlist?id=<dossier>&offset=0` returns private watchlist items
+for the selected dossier joined to the local source registry when an exact source
+identifier is available. `POST /api/dosare/watchlist` accepts `action=add`,
+`action=review` or `action=delete`.
+
+Watchlist item types are `act`, `project`, `celex`, `domain` and `keyword`. Acts,
+projects and CELEX values can be matched to `legislatie_ro`, parliamentary and
+`ue_cellar` registry rows. Domains and keywords are kept as user intent because
+there is no single official public source for them. The feed does not fetch
+sources; it shows local registry states such as changed, failed, queued,
+rate-limited or needs review and lets the user open the dossier, create a note,
+rerun the currently selected analysis or mark the alert reviewed.
+
 The endpoint keeps the dossier API's local Host/Origin checks, static rejection,
 request-size limits and retry/conflict behavior. Schema 10 adds `note_manuale`;
-schemas 1-9 remain readable without migration and upgrade on the next successful
-write.
+schema 11 adds `watchlist_dosare`; schemas 1-10 remain readable without migration
+and upgrade on the next successful write.
 
 ### AI drafts from selected evidence
 
