@@ -424,6 +424,16 @@ def _raspunde(path, query, body, method='GET'):
     elif path == '/api/prevedere': out = _prevedere(qs, _stare)
     elif path == '/api/cine-citeaza': out = _cine_citeaza(qs, _stare)
     elif path == '/api/ue/acoperire': out = _acoperire_ue(qs, _stare)
+    elif path == '/api/acoperire-surse':
+        out = {
+            'status': 'blocked',
+            'families': [],
+            'projects': {'total': 0, 'stale': 0, 'unknown': 0, 'unavailable': 0, 'stages': {}},
+            'missing_required': 0,
+            'attention_sources': 0,
+            'blockers': [{'kind': 'local_only', 'message': 'Acoperirea surselor urmărite este disponibilă în aplicația locală.'}],
+            'limitari': ['GitHub Pages nu are registrul privat de surse urmărite.'],
+        }
     elif path == '/api/ue/import-queue': out = _import_queue_ue(qs, _stare)
     elif path == '/api/compune':
         out = _compune(json.loads(body or '{}').get('interventii', []))

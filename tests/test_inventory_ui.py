@@ -113,6 +113,35 @@ def test_acquisition_renderers_distinguish_states_and_escape_sources():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_source_coverage_renderer_shows_blockers_and_escapes():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function sourceCoverageFamilyHtml", 1)[1].split(
+        "async function loadSourceCoverage", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
+        ".replaceAll('>','&gt;');"
+        "const SOURCE_STATE_LABELS={failed:'Eșuat',changed:'Schimbată'};"
+        "function sourceCoverageFamilyHtml"
+        + source
+        + "const h=sourceCoverageHtml({status:'blocked',missing_required:1,"
+        "attention_sources:2,projects:{total:3,stale:1,unknown:1,unavailable:0,"
+        "stages:{unknown:{label:'Etapă <nouă>',total:1}}},families:[{family:'camera',"
+        "label:'Camera <x>',required:true,total:2,attention:1,status:'attention',"
+        "states:{failed:1,changed:1}}],blockers:[{kind:'x',message:'Lipsă <script>'}],"
+        "limitari:['Doar local <img>']});"
+        "assert.ok(h.includes('Acoperire incompletă'));"
+        "assert.ok(h.includes('Camera &lt;x&gt;'));"
+        "assert.ok(h.includes('Eșuat: 1'));"
+        "assert.ok(h.includes('Lipsă &lt;script&gt;'));"
+        "assert.ok(h.includes('Etapă &lt;nouă&gt;'));"
+        "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_filters_and_opens_project_sources():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]

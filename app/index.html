@@ -453,6 +453,12 @@
   .source-review dd{margin:0;overflow-wrap:anywhere}
   .source-affected-run{border-top:1px solid var(--rule);padding:.55rem 0}
   .source-affected-run h5{margin:.1rem 0 .25rem;font-size:.88rem}
+  .coverage-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.45rem;margin:.6rem 0}
+  .coverage-card{border-left:3px solid var(--rule);background:var(--surface);padding:.55rem .65rem}
+  .coverage-card h4{font-size:.9rem;margin:.05rem 0 .25rem}
+  .coverage-card p{font-size:.76rem;line-height:1.45;margin:.22rem 0}
+  .coverage-missing,.coverage-attention{border-color:var(--material)}
+  .coverage-ok{border-color:var(--accent)}
   #acquisition-list{max-height:34rem;overflow:auto}
   #acquisition-detail select{width:100%;min-width:0}
   #acquisition-detail h4{font-size:1rem}
@@ -1326,6 +1332,12 @@
             <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled>Pagina următoare</button></div>
           </details>
         </section>
+        <details class="dossier-library" id="source-coverage">
+          <summary>Acoperire surse · Calitatea urmăririi</summary>
+          <div class="dossier-actions"><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
+          <p id="source-coverage-status" class="hint" role="status">Acoperire neîncărcată.</p>
+          <div id="source-coverage-result"></div>
+        </details>
         <details class="dossier-library" id="lifecycle-tracker">
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
           <form id="lifecycle-search" class="lifecycle-toolbar">
@@ -5402,6 +5414,35 @@ $('#source-registry-add').onsubmit=async e=>{
   catch(err){status.textContent=err.message;}
   finally{button.disabled=false;}
 };
+function sourceCoverageFamilyHtml(row){
+  const states=Object.entries(row.states||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără surse';
+  const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':'Acoperită';
+  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
+}
+function sourceCoverageHtml(data){
+  const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
+  const stages=Object.entries(data.projects?.stages||{}).map(([,v])=>`<li>${esc(v.label)}: ${v.total}</li>`).join('');
+  return `<div class="coverage-grid">${(data.families||[]).map(sourceCoverageFamilyHtml).join('')}</div>`
+    +`<p><strong>${esc(data.status==='ok'?'Acoperire operațională':'Acoperire incompletă')}</strong> · ${data.missing_required||0} familii lipsă · ${data.attention_sources||0} surse cu atenție · ${data.projects?.total||0} proiecte urmărite în registrul local.</p>`
+    +(blockers?`<details open><summary>Blocaje pentru analiză fiabilă</summary><ul>${blockers}</ul></details>`:'')
+    +(stages?`<details><summary>Etape proiecte parlamentare</summary><ul>${stages}</ul><p class="hint">${data.projects.stale||0} vechi · ${data.projects.unknown||0} necunoscute · ${data.projects.unavailable||0} indisponibile</p></details>`:'')
+    +(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
+}
+async function loadSourceCoverage(){
+  const status=$('#source-coverage-status'),out=$('#source-coverage-result');
+  status.textContent='Calculez acoperirea surselor locale…';
+  try{
+    const response=await fetch('/api/acoperire-surse');
+    const data=await response.json().catch(()=>({error:'Acoperirea surselor nu este disponibilă.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Acoperirea surselor nu este disponibilă.');
+    out.innerHTML=sourceCoverageHtml(data);
+    status.textContent=`${data.status==='ok'?'Acoperire completă':'Acoperire incompletă'} · ${data.blockers?.length||0} blocaje.`;
+  }catch(err){status.textContent=err.message;out.innerHTML='';}
+}
+$('#source-coverage').ontoggle=e=>{if(e.currentTarget.open)loadSourceCoverage();};
+$('#source-coverage-refresh').onclick=loadSourceCoverage;
+$('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
+$('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null};
 const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',toate:'toate proiectele'};
