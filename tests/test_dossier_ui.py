@@ -356,6 +356,44 @@ def test_rule_candidate_controls_build_preview_payload():
         "const html=ruleCandidateControlsHtml({text:'<script>',source_hash:'b'.repeat(64)});"
         "assert.ok(html.includes('data-rule-candidate'));"
         "assert.ok(html.includes('data-rule-preview'));"
+        "assert.ok(html.includes('data-rule-save'));"
+        "assert.ok(!html.includes('<script>'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_rule_drafts_panel_renders_queue_and_promoted_rules():
+    source = (
+        APP.read_text()
+        .split("const RULE_CANDIDATE_MODALITIES=", 1)[1]
+        .split("async function loadProposalList", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;')"
+        ".replaceAll('\"','&quot;');"
+        "const dossierTime=s=>s||'';"
+        "const RULE_CANDIDATE_MODALITIES="
+        + source
+        + "const candidate={candidate_id:'c1',provision_id:'ro:lege#art1',"
+        "act_id:'lege',locator:'art1',modality:'obligation',"
+        "review_state:'human_reviewed',actor:'Autoritatea',condition:'cerere',"
+        "action:'publică',deadline:'10 zile',exceptions:['secret'],"
+        "effect:'nulitate',source_hash:'a'.repeat(64)};"
+        "const queue={total:1,counts:{human_reviewed:1},items:[{id:'q1',"
+        "bucket:'human_reviewed',candidate,"
+        "actiuni:{promote_to_rule:true}}]};"
+        "const drafts={total:1,items:[{...candidate,"
+        "status:'draft_rule_not_legal_verdict',accepted_by:'jurist',"
+        "acceptance_note:'ok',creat_la:'2026-09-12T00:00:00Z'}]};"
+        "const html=ruleDraftsPanelHtml(queue,drafts,'all',"
+        "{act:'lege',provision_id:'ro:lege#art1'});"
+        "assert.ok(html.includes('law-rule-draft-v1'));"
+        "assert.ok(html.includes('data-rule-promote'));"
+        "assert.ok(html.includes('Ciorne promovate'));"
+        "assert.ok(html.includes('Coada de candidați'));"
         "assert.ok(!html.includes('<script>'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
