@@ -29,6 +29,59 @@ def raport(stare) -> dict:
     workbench = output.get("workbench") or {}
     eu = workbench.get("eu_availability") or {}
     known_gaps = pilot.get("known_gaps") or pilot.get("conclusion") or {}
+    capabilities = [
+        {
+            "key": "manual_gap_workspace",
+            "label": "Note/dosare manuale",
+            "state": "ready",
+            "evidence": "note_manuale + dosare locale + export",
+        },
+        {
+            "key": "single_source_sync",
+            "label": "Sync sursă individuală",
+            "state": "partial",
+            "evidence": "registru surse + sync parlamentar/CELEX punctual",
+        },
+        {
+            "key": "lifecycle_tracking",
+            "label": "Lifecycle proiecte",
+            "state": "partial",
+            "evidence": "timeline/stage feed local; consultările guvern/ministere rămân incomplete",
+        },
+        {
+            "key": "eu_checks",
+            "label": "Verificare UE",
+            "state": "partial",
+            "evidence": "CELEX la cerere + note risc UE; pilotul încă are 0 texte UE importate",
+        },
+        {
+            "key": "law_as_code",
+            "label": "Law as code",
+            "state": "partial",
+            "evidence": "candidate -> draft rule -> delegated-norm check preview",
+        },
+        {
+            "key": "ai_byok",
+            "label": "AI BYOK/local",
+            "state": "partial",
+            "evidence": "prompt/evidence/cost/approval UI; calitatea modelelor nu este măsurată",
+        },
+        {
+            "key": "mcp",
+            "label": "MCP",
+            "state": "partial",
+            "evidence": "handoff/audit boundary; fără executor MCP real",
+        },
+        {
+            "key": "acceptance_metrics",
+            "label": "Metrici acceptanță",
+            "state": "partial",
+            "evidence": "pilot runtime + dashboard; lipsesc precizie/recall și test UX complet",
+        },
+    ]
+    ready = sum(1 for item in capabilities if item["state"] == "ready")
+    partial = sum(1 for item in capabilities if item["state"] == "partial")
+    missing_capabilities = sum(1 for item in capabilities if item["state"] == "missing")
     sections = [
         {
             "key": "local_v1",
@@ -80,6 +133,13 @@ def raport(stare) -> dict:
     return {
         "contract": "acceptance-dashboard-v1",
         "status": "attention" if any(s["status"] != "ok" for s in sections) else "ok",
+        "capability_summary": {
+            "ready": ready,
+            "partial": partial,
+            "missing": missing_capabilities,
+            "total": len(capabilities),
+        },
+        "capabilities": capabilities,
         "sections": sections,
         "source_coverage": sources,
         "pilot": {

@@ -155,9 +155,13 @@ def test_acceptance_dashboard_renderer_shows_finish_state():
         + source
         + "const h=acceptanceDashboardHtml({sections:[{key:'eu',label:'Drept UE',"
         "status:'attention',summary:'not_imported_8_of_8 <x>',"
-        "metrics:{referenced:8,imported_text:0}}],limitari:['Nu reconstruiește']});"
+        "metrics:{referenced:8,imported_text:0}}],capability_summary:{ready:1,partial:7,missing:0},"
+        "capabilities:[{label:'Law as code',state:'partial',evidence:'draft rule <x>'}],"
+        "limitari:['Nu reconstruiește']});"
         "assert.ok(h.includes('Stadiu finalizare'));"
         "assert.ok(h.includes('Drept UE'));"
+        "assert.ok(h.includes('Law as code'));"
+        "assert.ok(h.includes('parțial'));"
         "assert.ok(h.includes('imported_text: 0'));"
         "assert.ok(!h.includes('<x>'));"
     )

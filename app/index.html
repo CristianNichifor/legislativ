@@ -6043,11 +6043,14 @@ function sourceCoverageFamilyHtml(row){
   return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
 }
 function acceptanceDashboardHtml(data){
+  const capabilityLabels={ready:'gata',partial:'parțial',missing:'lipsește'};
   const cards=(data.sections||[]).map(s=>{
     const metrics=Object.entries(s.metrics||{}).map(([k,v])=>`${esc(k)}: ${esc(v)}`).join(' · ');
     return `<article class="coverage-card coverage-${s.status==='ok'?'ok':'attention'}"><h4>${esc(s.label)} · ${esc(s.status)}</h4><p>${esc(s.summary)}</p><p class="hint">${metrics}</p></article>`;
   }).join('');
-  return `<section class="source-inventory"><h4>Stadiu finalizare</h4><div class="coverage-grid">${cards}</div><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
+  const capabilities=(data.capabilities||[]).map(c=>`<li><strong>${esc(c.label)}</strong> · ${esc(capabilityLabels[c.state]||c.state)}<br><span class="hint">${esc(c.evidence||'')}</span></li>`).join('');
+  const summary=data.capability_summary||{};
+  return `<section class="source-inventory"><h4>Stadiu finalizare</h4><p><strong>${esc(data.status)}</strong> · ${summary.ready||0} gata · ${summary.partial||0} parțial · ${summary.missing||0} lipsă.</p><div class="coverage-grid">${cards}</div>${capabilities?`<details open><summary>Capabilități pentru ținta finală</summary><ul>${capabilities}</ul></details>`:''}<p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
 }
 function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
