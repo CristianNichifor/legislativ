@@ -2,7 +2,7 @@ import io
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from scripts import depozit, source_registry
+from scripts import depozit, dosare, source_registry
 from scripts.lifecycle import (
     ACTIVE_STAGE_KEYS,
     STAGES,
@@ -206,6 +206,42 @@ def test_project_lifecycle_summary_includes_registry_attention(tmp_path):
     assert project["registry_source_id"] == changed["id"]
     assert project["registry_source_state"] == "changed"
     assert project["registry_can_sync"] is True
+    assert project["affected_dossiers"] == 0
+
+
+def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db", date_dir=None)
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 10/2026',2,'10','Lege urmărită','Raport depus',"
+            "'2026-09-10T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect10')"
+        )
+        con.commit()
+    path = dosare.cale(state)
+    dosare.creeaza(path, {"id": "a" * 32, "titlu": "Dosar proiect"})
+    with dosare._open(path, write=True) as con:
+        con.execute(
+            "INSERT INTO rulari VALUES (?,?,?,?,?,?,?,?)",
+            (
+                "b" * 32,
+                "a" * 32,
+                "2026-09-11T10:00:00+00:00",
+                "matrice-proiecte-v1",
+                "c" * 64,
+                "{}",
+                '{"gasit":true,"selectie_proiecte":{"a":{"plx_id":"PL-x 10/2026","versiune_id":"'
+                + "d" * 64
+                + '"}}}',
+                '{"manifest":{"dependente":[]}}',
+            ),
+        )
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 10/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    assert out["projects"][0]["affected_dossiers"] == 1
 
 
 def test_project_lifecycle_summary_reports_unavailable_source_without_leaking_paths(tmp_path):

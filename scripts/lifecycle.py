@@ -303,6 +303,7 @@ def project_lifecycle_item(
     row: dict,
     *,
     registry: dict | None = None,
+    affected_dossiers: int = 0,
     now: datetime | None = None,
     stale_days: int = DEFAULT_STALE_DAYS,
 ) -> dict:
@@ -336,6 +337,7 @@ def project_lifecycle_item(
         "registry_source_id": registry.get("id") or "",
         "registry_source_state": registry_state,
         "registry_needs_attention": registry_state in REGISTRY_ATTENTION_STATES,
+        "affected_dossiers": max(0, int(affected_dossiers)),
         "registry_can_sync": bool(registry.get("id"))
         and registry.get("family") in PROJECT_REGISTRY_FAMILIES,
         "stale": stale,
@@ -381,6 +383,17 @@ def _project_registry_sources(stare, identifiers: list[str]) -> dict[str, dict]:
         ):
             out[row["identifier"]] = row
     return out
+
+
+def _affected_dossier_counts(stare, identifiers: list[str]) -> dict[str, int]:
+    if not identifiers:
+        return {}
+    try:
+        from scripts import dosare
+
+        return dosare.numara_rulari_afectate_proiecte(dosare.cale(stare), identifiers)
+    except (OSError, ValueError, sqlite3.Error):
+        return {}
 
 
 def project_lifecycle_summary(
@@ -448,10 +461,16 @@ def project_lifecycle_summary(
         base["limitari"].append("Registrul inițiativelor nu este disponibil.")
         return base
     visible_rows = rows[:limit]
-    registry = _project_registry_sources(stare, [row.get("plx_id", "") for row in visible_rows])
+    identifiers = [row.get("plx_id", "") for row in visible_rows]
+    registry = _project_registry_sources(stare, identifiers)
+    affected = _affected_dossier_counts(stare, identifiers)
     projects = [
         project_lifecycle_item(
-            row, registry=registry.get(row.get("plx_id", "")), now=now, stale_days=stale_days
+            row,
+            registry=registry.get(row.get("plx_id", "")),
+            affected_dossiers=affected.get(row.get("plx_id", ""), 0),
+            now=now,
+            stale_days=stale_days,
         )
         for row in visible_rows
     ]
