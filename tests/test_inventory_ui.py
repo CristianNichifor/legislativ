@@ -278,7 +278,8 @@ def test_eu_source_language_status_and_provenance_renderer():
     program = (
         "const assert=require('node:assert/strict');"
         "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
-        "const acquisitionLink=(u,t)=>esc(t),dossierTime=s=>s;function euSourceLanguage"
+        "const acquisitionLink=(u,t)=>esc(t),dossierTime=s=>s,nf=n=>String(n);"
+        "function euSourceLanguage"
         + renderer
         + "assert.equal(euSourceLanguage('RON'),'Română oficială');"
         "assert.ok(euSourceLanguage('ENG').includes('alternativă'));"
@@ -287,5 +288,9 @@ def test_eu_source_language_status_and_provenance_renderer():
         "const h=euSourceMeta({titlu:'<script>',limba:'ENG',citit_la:'now',text_sha256:'<img>'});"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
         "assert.ok(h.includes('SHA-256 text extras')&&h.includes('alternativă'));"
+        "const a=euSourceArticleSummary({total:1,randuri:["
+        "{locator:'art<script>',titlu:'T<img>',sha256:'abc'}]});"
+        "assert.ok(a.includes('1 articole delimitate')&&!a.includes('<script>')"
+        "&&!a.includes('<img>'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
