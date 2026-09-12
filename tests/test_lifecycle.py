@@ -112,14 +112,27 @@ def test_project_lifecycle_item_exposes_stale_unknown_and_unavailable_states():
     assert ok["project_id"] == "plx-1-2026"
     assert ok["source_name"] == "Camera Deputaților"
     assert ok["stage"]["key"] == "report"
+    assert ok["stage_date"] == "2026-09-01"
+    assert ok["latest_event"]["source_url"] == "https://www.cdep.ro/proiect"
+    assert ok["latest_event"]["from_timeline"] is False
+    assert ok["uncertainty"] == {
+        "level": "low",
+        "reasons": [],
+        "message": "Stadiu citit din sursa locală.",
+    }
     assert ok["source_state"] == "ok"
     assert ok["needs_attention"] is False
     stale = project_lifecycle_item({**row, "citit_la": "2026-07-01T00:00:00+00:00"}, now=now)
     assert stale["source_state"] == "stale" and stale["needs_attention"]
+    assert stale["uncertainty"]["level"] == "medium"
+    assert stale["uncertainty"]["reasons"] == ["stale_source_read"]
     unknown = project_lifecycle_item({**row, "stadiu": "Etapă nouă"}, now=now)
     assert unknown["source_state"] == "unknown"
+    assert unknown["uncertainty"]["level"] == "high"
+    assert "unrecognized_stage_label" in unknown["uncertainty"]["reasons"]
     unavailable = project_lifecycle_item({**row, "stadiu": "", "sursa_url": ""}, now=now)
     assert unavailable["source_state"] == "unavailable"
+    assert unavailable["uncertainty"]["level"] == "high"
 
 
 def test_project_lifecycle_summary_reads_local_store_and_bounds_results(tmp_path):
@@ -207,6 +220,47 @@ def test_project_lifecycle_summary_includes_registry_attention(tmp_path):
     assert project["registry_source_state"] == "changed"
     assert project["registry_can_sync"] is True
     assert project["affected_dossiers"] == 0
+    assert project["uncertainty"]["level"] == "medium"
+    assert "tracked_source_needs_review" in project["uncertainty"]["reasons"]
+
+
+def test_project_lifecycle_summary_exposes_latest_timeline_event(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 20/2026',2,'20','Lege parcurs','Pe ordinea de zi',"
+            "'2026-09-10T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect20')"
+        )
+        con.executemany(
+            "INSERT INTO initiativa_etapa(plx_id,ord,data,camera,actiune) VALUES (?,?,?,?,?)",
+            [
+                ("PL-x 20/2026", 0, "2026-09-01", "Camera Deputaților", "Înregistrat"),
+                ("PL-x 20/2026", 1, "2026-09-08", "Camera Deputaților", "Pe ordinea de zi"),
+            ],
+        )
+        con.commit()
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 20/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    project = out["projects"][0]
+    assert project["stage"]["key"] == "plenary_scheduled"
+    assert project["stage_date"] == "2026-09-08"
+    assert project["latest_event"] == {
+        "date": "2026-09-08",
+        "source_name": "Camera Deputaților",
+        "source_url": "https://www.cdep.ro/proiect20",
+        "source_state": "ok",
+        "stage_key": "plenary_scheduled",
+        "stage_label": "plenary scheduled",
+        "raw_status": "Pe ordinea de zi",
+        "action": "Pe ordinea de zi",
+        "camera": "Camera Deputaților",
+        "from_timeline": True,
+    }
+    assert project["uncertainty"]["level"] == "low"
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):

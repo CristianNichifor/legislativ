@@ -70,6 +70,12 @@ Each project in the response includes:
 - `title`
 - `status`
 - `stage`
+- `stage_date`: best available date for the current/latest stage
+- `latest_event`: source-backed event summary with `date`, `action`, `camera`,
+  `source_name`, `source_url`, `source_state`, normalized stage key/label, raw
+  status and `from_timeline`
+- `uncertainty`: bounded `level` (`low`, `medium`, `high`), machine-readable
+  `reasons` and a short message
 - `last_seen`
 - `last_updated`
 - `consultation_deadline`, currently `null` for parliamentary rows
@@ -79,6 +85,18 @@ Each project in the response includes:
 
 The feed returns unavailable/empty/stale/review states explicitly, so a UI can
 show missing source coverage without pretending the project has no lifecycle.
+When `initiativa_etapa` has collected procedural steps, `latest_event` uses the
+latest stored step. Otherwise it falls back to the initiative row's status and
+registration/read dates. This keeps the feed useful for watchlists before a full
+parliamentary passage import has run.
+
+`uncertainty.reasons` currently uses:
+
+- `missing_official_source_or_stage`
+- `unrecognized_stage_label`
+- `stale_source_read`
+- `tracked_source_needs_review`
+- `stage_not_confirmed_by_parser`
 
 The visible tracker supports:
 
