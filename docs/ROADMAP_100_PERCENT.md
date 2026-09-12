@@ -203,6 +203,9 @@ Deliverables:
   possible and never committed into app data.
 - Provider controls: OpenAI, Anthropic and compatible endpoints where feasible.
 - Cost preview, token estimate and per-request confirmation for online AI.
+- `rule-candidate-v1` from [RULE_CANDIDATES.md](RULE_CANDIDATES.md), so AI/MCP
+  can propose structured obligations, prohibitions, deadlines and exceptions
+  without turning them into unreviewed executable legal rules.
 
 Acceptance:
 
