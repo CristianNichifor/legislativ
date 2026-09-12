@@ -177,6 +177,13 @@ source hash, reasoning and title. Source references are user-supplied evidence
 pointers; saving a manual note does not fetch public sources, run AI, recalculate
 the dossier, or mark a generated finding as reviewed.
 
+EU issue notes are a guarded prefill path into the same table. The user selects a
+Romanian corpus provision or imported parliamentary project version and a retained
+EU CELEX article. The app resolves both sides from local stored sources, records
+quotes, language labels and hashes, then saves a `risc_ue` note with one candidate
+state: possible conflict, possible gap or possible coverage. Human review status
+and uncertainty remain explicit; the note is not a compliance verdict.
+
 The endpoint keeps the dossier API's local Host/Origin checks, static rejection,
 request-size limits and retry/conflict behavior. Schema 10 adds `note_manuale`;
 schemas 1-9 remain readable without migration and upgrade on the next successful

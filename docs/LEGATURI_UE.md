@@ -149,3 +149,21 @@ arbitrary clause offsets, unstructured national targets, automated normative
 coverage/conflict reasoning and real-data acceptance remain outside this unit.
 The earlier M5 contract is a design handoff; this document describes the actual
 implemented subset. Central milestone acceptance remains with the integrator.
+
+## Source-backed EU issue notes
+
+Manual dossiers also support a smaller note workflow for one Romanian source and
+one retained EU article. `POST /api/dosare/note-ue/previzualizare` resolves an
+existing local Romanian provision (`kind=prevedere`, `act_id`, `locator`) or one
+imported parliamentary project document (`kind=proiect`, `plx`, `version_id`)
+plus an existing EU CELEX snapshot/article. The endpoint returns the source
+quotes, language labels, text hashes, blocker codes, limitations and a
+`base_sha256`. It does not fetch, translate, call AI or classify legal effect.
+
+`POST /api/dosare/note-ue` re-resolves the same base, requires the unchanged
+`base_sha256`, and saves a normal manual note of type `risc_ue`. The author must
+choose only one candidate state: `possible_conflict`, `possible_gap` or
+`possible_coverage`. The saved note carries explicit uncertainty, human review
+status and structured source metadata in its reasoning JSON. These states are
+review queues, not findings that Romanian law conflicts with, lacks or satisfies
+EU law.
