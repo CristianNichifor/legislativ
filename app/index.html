@@ -6558,7 +6558,7 @@ function lifecycleRowHtml(project,index=0){
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-draft="${index}">Draft</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -6566,6 +6566,18 @@ function lifecycleSourceNote(project){
     act_id:project.project_id||source.identifier||'',locator:'',source_url:source.url||project.url||'',
     source_hash:source.last_hash||'',evidence_quote:[project.title,project.status].filter(Boolean).join('\n'),
     reasoning:lifecycleSourceReason(project),status:'needs_evidence',revizie:0};
+}
+async function draftFromProject(project){
+  const status=$('#lifecycle-status'), projectId=project.project_id||'';
+  if(!projectId){status.textContent='Proiect fără identificator pentru draft.';return;}
+  status.textContent='Pregătesc draftul factual din evenimentele tracker…';
+  try{
+    const response=await fetch('/api/project-draft-seed?'+new URLSearchParams({project_id:projectId}));
+    const data=await response.json().catch(()=>({error:'Draftul proiectului nu este disponibil.'}));
+    if(!response.ok||data.error)throw new Error(data.error||'Draftul proiectului nu este disponibil.');
+    $('#draft').value=data.text||'';$('#draft').dispatchEvent(new Event('input',{bubbles:true}));
+    selectTab('lint');status.textContent=`Draft pregătit pentru ${projectId}: ${data.summary?.events||0} evenimente locale.`;
+  }catch(err){status.textContent=err.message;}
 }
 function lifecyclePrefillDossier(project){
   $('#dossier-library').open=true;
@@ -6697,6 +6709,9 @@ function renderLifecycleList(){
   });
   list.querySelectorAll('[data-lifecycle-workbench]').forEach(button=>{
     button.onclick=()=>openProjectWorkbench(projects[Number(button.dataset.lifecycleWorkbench)]||{});
+  });
+  list.querySelectorAll('[data-lifecycle-draft]').forEach(button=>{
+    button.onclick=()=>draftFromProject(projects[Number(button.dataset.lifecycleDraft)]||{});
   });
   list.querySelectorAll('[data-lifecycle-dossier]').forEach(button=>{
     button.onclick=()=>lifecyclePrefillDossier(projects[Number(button.dataset.lifecycleDossier)]||{});
