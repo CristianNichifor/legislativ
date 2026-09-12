@@ -493,6 +493,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
                 "/api/dosare/rule-drafts",
+                "/api/dosare/rule-drafts/checks",
                 "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
@@ -618,6 +619,16 @@ def face_handler(stare: Stare, *, runtime=None):
                             int(qs.get("offset", ["0"])[0]),
                             act_id=qs.get("act", [""])[0],
                             provision_id=qs.get("provision_id", [""])[0],
+                        )
+                    elif ruta.path == "/api/dosare/rule-drafts/checks":
+                        from scripts import law_rule_execution
+
+                        out = law_rule_execution.delegated_norms(
+                            stare,
+                            path,
+                            ident,
+                            act_id=qs.get("act", [""])[0],
+                            limit=int(qs.get("limita", ["50"])[0]),
                         )
                     elif ruta.path == "/api/dosare/dovezi":
                         from scripts.dependente_dovezi import verifica
