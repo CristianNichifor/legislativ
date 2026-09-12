@@ -57,6 +57,107 @@ def test_local_browsing_paginates_and_does_not_fetch_or_write(state, monkeypatch
     assert not dp.cale_store(state).exists()
 
 
+def test_detail_exposes_camera_senat_tracker_events_from_local_parcurs(state):
+    with depozit.deschide(state.initiative) as con:
+        con.executemany(
+            "INSERT INTO initiativa_etapa"
+            "(plx_id,ord,data,camera,actiune,comisii,steno_ids,steno_idm) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            [
+                (
+                    "plx-000",
+                    0,
+                    "2026-01-10",
+                    "Camera Deputaților",
+                    "trimis pentru raport la comisie",
+                    "Comisia juridică\nComisia pentru administrație",
+                    None,
+                    None,
+                ),
+                (
+                    "plx-000",
+                    1,
+                    "2026-01-20",
+                    "Camera Deputaților",
+                    "raport favorabil depus",
+                    "Comisia juridică",
+                    None,
+                    None,
+                ),
+                (
+                    "plx-000",
+                    2,
+                    "2026-01-25",
+                    "Camera Deputaților",
+                    "înscris pe ordinea de zi a plenului",
+                    None,
+                    "1234",
+                    "5",
+                ),
+            ],
+        )
+        con.execute(
+            "INSERT INTO initiativa_aviz(plx_id,de_la,data,sens,numar,primit) "
+            "VALUES ('plx-000','Consiliul Legislativ','2026-01-12','favorabil','10',1)"
+        )
+        con.execute(
+            "INSERT INTO initiativa_vot"
+            "(plx_id,data,camera,intrebare,pentru,contra,abtineri,rezultat,absenti,idv) "
+            "VALUES ('plx-000','2026-01-30','Camera Deputaților','adoptare',220,40,5,"
+            "'adoptat',2,'999')"
+        )
+        con.commit()
+
+    events = ap.detaliu(state, "plx-000")["tracker_events"]
+
+    assert [event["key"] for event in events] == [
+        "committee_assignment",
+        "opinion_received",
+        "committee_assignment",
+        "report_filed",
+        "plenary_agenda",
+        "vote_recorded",
+    ]
+    assignment = events[0]
+    assert assignment["source_family"] == "camera"
+    assert assignment["committees"] == ["Comisia juridică", "Comisia pentru administrație"]
+    assert assignment["role"] == "report"
+    report = next(event for event in events if event["key"] == "report_filed")
+    assert report["committee"] == "Comisia juridică"
+    assert report["position"] == "adoptare"
+    plenary = next(event for event in events if event["key"] == "plenary_agenda")
+    assert plenary["source_url"].endswith("stenograma?ids=1234&idm=5")
+    vote = events[-1]
+    assert vote["for"] == 220
+    assert vote["against"] == 40
+    assert vote["abstain"] == 5
+    assert vote["nominal_url"].endswith("Nominal?idv=999")
+
+
+def test_tracker_events_normalize_senat_and_requested_opinions(state):
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiativa_etapa"
+            "(plx_id,ord,data,camera,actiune,comisii,steno_ids,steno_idm) "
+            "VALUES ('plx-000',0,'2026-02-01','Senat','trimis pentru aviz',"
+            "'Comisia pentru buget',NULL,NULL)"
+        )
+        con.execute(
+            "INSERT INTO initiativa_aviz(plx_id,de_la,data,sens,numar,primit) "
+            "VALUES ('plx-000','Guvern','2026-02-02',NULL,NULL,0)"
+        )
+        con.commit()
+
+    events = ap.tracker_events(state, "plx-000")
+
+    assert events[0]["key"] == "committee_assignment"
+    assert events[0]["source_family"] == "senat"
+    assert events[0]["role"] == "opinion"
+    assert events[1]["key"] == "opinion_requested"
+    assert events[1]["issuer"] == "Guvern"
+    assert events[1]["received"] is False
+
+
 def test_discovery_only_store_remains_compatible_with_existing_importer(state):
     action(state, "descopera")
     assert dp.versiuni(state, "plx-000") == []
