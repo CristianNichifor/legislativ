@@ -526,6 +526,30 @@ def rulari_afectate_proiect(path, project_id, offset=0):
         }
 
 
+def numara_rulari_afectate_proiecte(path, project_ids):
+    if not isinstance(project_ids, list) or len(project_ids) > 200:
+        raise ValueError("Listă de proiecte invalidă.")
+    targets = {}
+    for project_id in project_ids:
+        text = _text(project_id, 200, True)
+        targets.setdefault(_project_key(text), text)
+    counts = {project_id: 0 for project_id in targets.values()}
+    if not targets:
+        return counts
+    with _open(path) as con:
+        rows = con.execute("SELECT raport_json,dovezi_json FROM rulari").fetchall()
+    for row in rows:
+        try:
+            report = json.loads(row["raport_json"])
+            evidence = json.loads(row["dovezi_json"])
+        except (TypeError, json.JSONDecodeError):
+            continue
+        for project_id in targets.values():
+            if _project_matches(report, evidence, project_id):
+                counts[project_id] += 1
+    return counts
+
+
 def salveaza_rulare(stare, request):
     from scripts.servicii import _fisa_act, _matrice_dosar
 
