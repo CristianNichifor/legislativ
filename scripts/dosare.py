@@ -443,6 +443,89 @@ def rulari(path, ident, run_id=None):
         return {"rulari": [dict(r) for r in rows], "total": count, "trunchiat": count > len(rows)}
 
 
+def _project_key(value):
+    return re.sub(r"\s+", " ", value.strip()).casefold() if isinstance(value, str) else ""
+
+
+def _project_matches(report, evidence, project_id):
+    target = _project_key(project_id)
+    matches = []
+    seen = set()
+
+    def add(label, ref):
+        version = ref.get("versiune_id") if isinstance(ref, dict) else None
+        key = (label, version or "")
+        if key not in seen:
+            seen.add(key)
+            matches.append({"motiv": label, "versiune_id": version})
+
+    selection = report.get("selectie_proiecte") if isinstance(report, dict) else None
+    if isinstance(selection, dict):
+        for side, ref in selection.items():
+            if isinstance(ref, dict) and _project_key(ref.get("plx_id")) == target:
+                add(f"proiect selectat ({side})", ref)
+
+    manifest = evidence.get("manifest") if isinstance(evidence, dict) else None
+    dependencies = manifest.get("dependente", []) if isinstance(manifest, dict) else []
+    for dep in dependencies:
+        if (
+            isinstance(dep, dict)
+            and dep.get("sursa") == "proiect_importat"
+            and _project_key(dep.get("plx_id")) == target
+        ):
+            add("dependență capturată în dovezi", dep)
+    return matches
+
+
+def rulari_afectate_proiect(path, project_id, offset=0):
+    project_id = _text(project_id, 200, True)
+    if not isinstance(offset, int) or offset < 0:
+        raise ValueError("Offset invalid.")
+    with _open(path) as con:
+        rows = con.execute(
+            "SELECT r.*,d.titlu dosar_titlu FROM rulari r JOIN dosare d ON d.id=r.dosar_id "
+            "ORDER BY r.creat_la DESC,r.id"
+        ).fetchall()
+        affected = []
+        for row in rows:
+            try:
+                report = json.loads(row["raport_json"])
+                evidence = json.loads(row["dovezi_json"])
+                filters = json.loads(row["filtre_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            matches = _project_matches(report, evidence, project_id)
+            if not matches:
+                continue
+            latest = con.execute(
+                "SELECT r.id,r.creat_la,rr.creat_la recalculat_la FROM recalculari rr "
+                "JOIN rulari r ON r.id=rr.rulare_id WHERE rr.sursa_id=? "
+                "ORDER BY rr.creat_la DESC,r.creat_la DESC,r.id LIMIT 1",
+                (row["id"],),
+            ).fetchone()
+            affected.append(
+                {
+                    "dosar_id": row["dosar_id"],
+                    "dosar_titlu": row["dosar_titlu"],
+                    "rulare_id": row["id"],
+                    "rulare_creata_la": row["creat_la"],
+                    "engine_version": row["engine_version"],
+                    "sha256": row["sha256"],
+                    "filtre": filters,
+                    "pot_recalcula": row["engine_version"] == "matrice-proiecte-v1",
+                    "potriviri": matches,
+                    "ultima_recalculare": dict(latest) if latest else None,
+                }
+            )
+        page = affected[offset : offset + 20]
+        return {
+            "proiect": project_id,
+            "rulari": page,
+            "total": len(affected),
+            "trunchiat": offset + len(page) < len(affected),
+        }
+
+
 def salveaza_rulare(stare, request):
     from scripts.servicii import _fisa_act, _matrice_dosar
 

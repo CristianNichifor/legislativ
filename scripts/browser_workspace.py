@@ -139,6 +139,9 @@ def route(stare, route, qs, body, method="GET"):
             "/verificari": lambda: verificari_dovezi.istoric(
                 path, ident, run, offset, get("verificare_id")
             ),
+            "/afectate-proiect": lambda: dosare.rulari_afectate_proiect(
+                path, get("proiect", ""), offset
+            ),
             "/coada": lambda: verificari_dovezi.coada(path, offset, get("stare", "toate")),
             "/coada-ue": lambda: coada_ue.lista(path, offset, get("stare", "toate")),
             "/note": lambda: (
