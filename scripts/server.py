@@ -206,6 +206,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/dosare",
                     "/api/mcp",
                     "/api/lifecycle-proiecte",
+                    "/api/tracker-evenimente",
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
                     "/api/surse-proiecte",
@@ -371,6 +372,15 @@ def face_handler(stare: Stare, *, runtime=None):
                         )
                     )
                 except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/tracker-evenimente":
+                from scripts.tracker_events import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/acoperire-surse":
                 from scripts.acoperire_surse import raport
@@ -692,6 +702,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/surse-proiecte",
                 "/api/ue/surse",
                 "/api/registru-surse",
+                "/api/tracker-evenimente",
                 "/api/mcp/preview",
                 "/api/dosare",
                 "/api/dosare/metadate",
@@ -742,6 +753,7 @@ def face_handler(stare: Stare, *, runtime=None):
                         "/api/ue/import",
                         "/api/ue/surse",
                         "/api/registru-surse",
+                        "/api/tracker-evenimente",
                         "/api/mcp",
                     )
                 )
@@ -792,6 +804,18 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Registrul surselor nu este disponibil."}, 503)
+                return
+            if ruta == "/api/tracker-evenimente":
+                from scripts.tracker_events import executa
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(executa(stare, cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Tracker-ul legislativ nu este disponibil."}, 503)
                 return
             if ruta == "/api/mcp/preview":
                 from scripts.mcp_boundary import preview
