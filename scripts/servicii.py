@@ -659,6 +659,7 @@ def _rand_matrice(emitent: str) -> dict:
         "amendamente_primite": 0,
         "acte_amendate": 0,
         "initiative_in_lucru": 0,
+        "source_quality": _empty_source_quality(),
         "_vid_exemple": [],
         "_neconst_exemple": [],
         "_domeniu_exemple": [],
@@ -807,6 +808,98 @@ def _initiative_matrice(stare: Stare) -> dict[str, int]:
         return {}
 
 
+SOURCE_QUALITY_STATES = {
+    "current": {"cheie": "current", "eticheta": "surse încărcate"},
+    "attention": {"cheie": "attention", "eticheta": "surse cu atenție"},
+    "queued": {"cheie": "queued", "eticheta": "surse în coadă"},
+    "missing": {"cheie": "missing", "eticheta": "surse lipsă"},
+    "unknown": {"cheie": "unknown", "eticheta": "registru indisponibil"},
+}
+
+
+def _quality_state_from_source(row: dict | None, registry_available: bool) -> str:
+    if not registry_available:
+        return "unknown"
+    if row is None:
+        return "missing"
+    state = row.get("state") or ""
+    if state in {"fetched", "unchanged"}:
+        return "current"
+    if state in {"changed", "failed", "needs_review", "rate_limited", "unavailable"}:
+        return "attention"
+    return "queued"
+
+
+def _source_registry_index(stare: Stare) -> tuple[bool, dict[str, dict], dict[str, dict]]:
+    try:
+        from scripts import source_registry
+
+        path = source_registry.cale(stare)
+        if not path.exists():
+            return False, {}, {}
+        by_identifier: dict[str, dict] = {}
+        by_url: dict[str, dict] = {}
+        with source_registry._open(path) as con:
+            source_registry.init(con)
+            for row in con.execute(
+                "SELECT identifier,url,state,last_attempt_at,updated_at FROM source_registry "
+                "WHERE family='legislatie_ro'"
+            ):
+                item = dict(row)
+                if item["identifier"]:
+                    by_identifier[item["identifier"]] = item
+                if item["url"]:
+                    by_url[item["url"]] = item
+        return True, by_identifier, by_url
+    except (OSError, sqlite3.Error, ValueError):
+        return False, {}, {}
+
+
+def _empty_source_quality() -> dict:
+    return {
+        "current": 0,
+        "attention": 0,
+        "queued": 0,
+        "missing": 0,
+        "unknown": 0,
+        "total": 0,
+    }
+
+
+def _source_quality_for_act(
+    row: dict,
+    *,
+    registry_available: bool,
+    by_identifier: dict[str, dict],
+    by_url: dict[str, dict],
+) -> dict:
+    source = (
+        by_identifier.get(row.get("id") or "")
+        or by_identifier.get(row.get("cheie_citare") or "")
+        or by_url.get(row.get("sursa_url") or "")
+    )
+    state = _quality_state_from_source(source, registry_available)
+    return {
+        **SOURCE_QUALITY_STATES[state],
+        "source_state": (source or {}).get("state", ""),
+        "last_attempt_at": (source or {}).get("last_attempt_at"),
+        "updated_at": (source or {}).get("updated_at"),
+    }
+
+
+def _adauga_source_quality(rand: dict, quality: dict) -> None:
+    sq = rand.setdefault("source_quality", _empty_source_quality())
+    key = quality["cheie"]
+    sq[key] += 1
+    sq["total"] += 1
+
+
+def _source_quality_acceptat(rand: dict, filtru: str | None) -> bool:
+    if not filtru:
+        return True
+    return (rand.get("source_quality") or {}).get(filtru, 0) > 0
+
+
 PROBLEME_MATRICE = (
     {"cheie": "semnale", "eticheta": "orice semnal"},
     {"cheie": "viduri", "eticheta": "lacune legislative"},
@@ -859,6 +952,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     rang = (qs.get("rang", [""])[0] or "").strip() or None
     domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
     problema = (qs.get("problema", [""])[0] or "").strip() or None
+    source_quality = (qs.get("source_quality", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
     viduri = _raport_lista(stare.vid)
     neconst = _raport_lista(stare.neconstitutional)
@@ -878,6 +972,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
     probleme_valide = {p["cheie"] for p in PROBLEME_MATRICE}
     problema_filtru = problema if problema in probleme_valide else None
+    quality_filtru = source_quality if source_quality in SOURCE_QUALITY_STATES else None
+    registry_available, by_identifier, by_url = _source_registry_index(stare)
 
     def tip_acceptat(tip_act: str | None) -> bool:
         if tip and tip_act != tip:
@@ -902,7 +998,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 for r in con.execute(
                     "SELECT id, cheie_citare, tip, titlu,"
                     " COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent,"
-                    " an, publicat FROM acte"
+                    " an, publicat, sursa_url FROM acte"
                 ):
                     tip_act = r["tip"] or ""
                     if not tip_acceptat(tip_act):
@@ -941,6 +1037,15 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                             or ["fără indicator cunoscut în titlu/emitent"],
                         },
                     )
+                    _adauga_source_quality(
+                        rand,
+                        _source_quality_for_act(
+                            dict(r),
+                            registry_available=registry_available,
+                            by_identifier=by_identifier,
+                            by_url=by_url,
+                        ),
+                    )
             else:
                 conditie = " AND tip = ?" if tip else ""
                 params = (tip,) if tip else ()
@@ -967,6 +1072,26 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                             if rand["pana_la"] is not None
                             else max(ani)
                         )
+                for r in con.execute(
+                    "SELECT id, cheie_citare, tip, sursa_url,"
+                    " COALESCE(NULLIF(trim(emitent), ''), '(emitent necunoscut)') emitent"
+                    " FROM acte"
+                    f" WHERE 1 = 1{conditie}",
+                    params,
+                ):
+                    tip_act = r["tip"] or ""
+                    if not tip_acceptat(tip_act):
+                        continue
+                    rand = randuri.setdefault(r["emitent"], _rand_matrice(r["emitent"]))
+                    _adauga_source_quality(
+                        rand,
+                        _source_quality_for_act(
+                            dict(r),
+                            registry_available=registry_available,
+                            by_identifier=by_identifier,
+                            by_url=by_url,
+                        ),
+                    )
             meta = _meta_acte(con, act_ids)
     except sqlite3.OperationalError:
         return {
@@ -975,6 +1100,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             "domeniu": domeniu_filtru,
             "domenii": domenii_juridice.optiuni(),
             "problema": problema_filtru,
+            "source_quality": quality_filtru,
+            "source_quality_states": list(SOURCE_QUALITY_STATES.values()),
             "probleme": _probleme_matrice(),
             "sort": sortare,
             "limita": limita,
@@ -1098,6 +1225,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 "acte_amendate": rand["acte_amendate"],
                 "initiative_in_lucru": rand["initiative_in_lucru"],
             },
+            "source_quality": rand["source_quality"],
             "scor": scor,
             "nivel": nivel,
             "exemple": {
@@ -1110,7 +1238,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             ),
             "domeniu_exemple": rand["_domeniu_exemple"],
         }
-        if _filtru_problema_matrice(rand_public, problema_filtru):
+        if _filtru_problema_matrice(rand_public, problema_filtru) and _source_quality_acceptat(
+            rand_public, quality_filtru
+        ):
             iesire.append(rand_public)
 
     chei = {
@@ -1133,6 +1263,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "neconstitutionale": sum(r["semnale"]["neconstitutionale"] for r in iesire),
         "amendamente_primite": sum(r["semnale"]["amendamente_primite"] for r in iesire),
         "initiative_in_lucru": sum(r["semnale"]["initiative_in_lucru"] for r in iesire),
+        "surse_lipsa": sum(r["source_quality"]["missing"] for r in iesire),
+        "surse_atentie": sum(r["source_quality"]["attention"] for r in iesire),
+        "surse_curente": sum(r["source_quality"]["current"] for r in iesire),
     }
     return {
         "tip": tip,
@@ -1140,6 +1273,8 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "domeniu": domeniu_filtru,
         "domenii": domenii_juridice.optiuni(),
         "problema": problema_filtru,
+        "source_quality": quality_filtru,
+        "source_quality_states": list(SOURCE_QUALITY_STATES.values()),
         "probleme": _probleme_matrice(),
         "sort": sortare,
         "limita": limita,
@@ -1151,6 +1286,15 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             (
                 "Filtrul de domeniu este orientativ: se aplică doar când titlul sau emitentul "
                 "conține un indicator cunoscut; restul rămâne «domeniu necunoscut»."
+            ),
+            (
+                "Calitatea sursei citește registrul local pentru familia legislație română; "
+                "nu reconsultă portalul oficial."
+            ),
+            *(
+                []
+                if registry_available
+                else ["Registrul local de surse nu este disponibil; calitatea apare necunoscută."]
             ),
         ],
     }
@@ -1164,16 +1308,20 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
     tip = (qs.get("tip", [""])[0] or "").strip() or None
     rang = (qs.get("rang", [""])[0] or "").strip() or None
     domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
+    source_quality = (qs.get("source_quality", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 40), 100))
     ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
     rang_filtru = rang if rang in ranguri_valide else None
     domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
+    quality_filtru = source_quality if source_quality in SOURCE_QUALITY_STATES else None
+    registry_available, by_identifier, by_url = _source_registry_index(stare)
     if not emitent:
         return {
             "emitent": "",
             "tip": tip,
             "rang": rang_filtru,
             "domeniu": domeniu_filtru,
+            "source_quality": quality_filtru,
             "total": 0,
             "acte": [],
             "limitari": ["Alege un rând din matrice."],
@@ -1203,6 +1351,7 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
             "tip": tip,
             "rang": rang_filtru,
             "domeniu": domeniu_filtru,
+            "source_quality": quality_filtru,
             "total": 0,
             "acte": [],
             "limitari": ["Corpusul nu este disponibil; actele rândului nu pot fi listate."],
@@ -1216,6 +1365,14 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
         if domeniu_filtru and domeniu_act["cheie"] != domeniu_filtru:
             continue
         rang_act = rang_normativ.info(r["tip"])
+        quality = _source_quality_for_act(
+            dict(r),
+            registry_available=registry_available,
+            by_identifier=by_identifier,
+            by_url=by_url,
+        )
+        if quality_filtru and quality["cheie"] != quality_filtru:
+            continue
         acte.append(
             {
                 "act_id": r["id"],
@@ -1228,6 +1385,7 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
                 "sursa_url": depozit.url_document(r["sursa_url"], r["id_act_portal"]),
                 "rang": rang_act,
                 "domeniu": domeniu_act,
+                "source_quality": quality,
             }
         )
     return {
@@ -1235,6 +1393,7 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
         "tip": tip,
         "rang": rang_filtru,
         "domeniu": domeniu_filtru,
+        "source_quality": quality_filtru,
         "total": len(acte),
         "acte": acte[:limita],
         "limitari": [
@@ -1243,6 +1402,7 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
                 "Domeniul este orientativ: apare numai când titlul sau emitentul conține un "
                 "indicator cunoscut."
             ),
+            ("Calitatea sursei vine din registrul local pentru legislație română, fără fetch nou."),
         ],
     }
 
@@ -1685,6 +1845,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
     rang = _prima(qs, "rang").strip()
     domeniu = _prima(qs, "domeniu").strip()
     problema = _prima(qs, "problema").strip()
+    source_quality = _prima(qs, "source_quality").strip()
     limita_acte = max(1, min(_numar_qs(qs, "limita", 80), 100))
     if not emitent:
         return {
@@ -1704,6 +1865,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
         ("rang", rang),
         ("domeniu", domeniu),
         ("problema", problema),
+        ("source_quality", source_quality),
     ):
         if valoare:
             matrix_qs[cheie] = [valoare]
@@ -1751,6 +1913,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
         "rang": matrice.get("rang"),
         "domeniu": matrice.get("domeniu"),
         "problema": matrice.get("problema"),
+        "source_quality": matrice.get("source_quality"),
         "problema_eticheta": problema_eticheta,
         "rand": rand,
         "acte": acte,

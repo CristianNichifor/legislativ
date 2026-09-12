@@ -4,6 +4,14 @@
 from the selected matrix row. It accepts the matrix `tip`, `rang`, and `domeniu`
 filters and a result `limita` (default 40, maximum 100).
 
+`GET /api/matrice` also accepts `source_quality=current|attention|queued|missing|unknown`.
+The source-quality axis reads the local source registry for Romanian legislative
+portal sources. It does not fetch official portals. A row can therefore be used
+as a work queue for missing source records, failed/changed sources, queued sources
+or acts whose local source record is current. `GET /api/matrice-acte` and
+`GET /api/matrice-dosar` preserve the same filter, so a missing-source matrix row
+lists the exact acts still missing local source provenance.
+
 The first detector groups the same normalized term in different acts with the
 same known, heuristic domain. Different normalized definition wording produces an
 unconfirmed candidate with both act IDs, provision locators, extracted text,

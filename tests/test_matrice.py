@@ -591,6 +591,56 @@ def test_matrix_source_acts_use_the_same_filters(tmp_path):
     assert _matrice_acte({"emitent": ["Guvernul"], "rang": ["primar"]}, stare)["total"] == 0
 
 
+def test_matrix_exposes_source_quality_filter(tmp_path):
+    stare = _stare(tmp_path)
+    from scripts import source_registry
+
+    lege = source_registry.executa(
+        stare,
+        {
+            "family": "legislatie_ro",
+            "identifier": "lege-98-2016",
+            "url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+        },
+    )
+    source_registry.executa(stare, {"action": "queue", "id": lege["id"]})
+    source_registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": lege["id"],
+            "state": "failed",
+            "error_category": "fetch_failed",
+        },
+    )
+
+    out = _matrice({}, stare)
+    parlament = next(r for r in out["randuri"] if r["emitent"] == "Parlamentul")
+    guvern = next(r for r in out["randuri"] if r["emitent"] == "Guvernul")
+
+    assert parlament["source_quality"]["attention"] == 1
+    assert guvern["source_quality"]["missing"] == 1
+    assert out["rezumat"]["surse_atentie"] == 1
+    assert out["rezumat"]["surse_lipsa"] == 1
+
+    assert [
+        r["emitent"] for r in _matrice({"source_quality": ["attention"]}, stare)["randuri"]
+    ] == ["Parlamentul"]
+    acte = _matrice_acte(
+        {"emitent": ["Parlamentul"], "source_quality": ["attention"]},
+        stare,
+    )
+    assert acte["total"] == 1
+    assert acte["acte"][0]["source_quality"]["cheie"] == "attention"
+    assert (
+        _matrice_acte(
+            {"emitent": ["Parlamentul"], "source_quality": ["missing"]},
+            stare,
+        )["acte"]
+        == []
+    )
+
+
 def test_matrix_problem_filter_turns_rows_into_a_work_queue(tmp_path):
     stare = _stare(tmp_path, graf=True, initiative=True)
     stare.vid = [
