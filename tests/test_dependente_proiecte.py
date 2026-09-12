@@ -92,6 +92,27 @@ def test_save_server_generated_draft_findings_and_retry(saved):
     assert dependente_dovezi.verifica(state, ID, run["id"])["totaluri"]["neschimbat"] == 1
 
 
+def test_project_alert_lists_affected_saved_runs(saved):
+    state, run, _ = saved
+    out = dosare.rulari_afectate_proiect(dosare.cale(state), "PLX-absent")
+    assert out["total"] == 0
+
+    out = dosare.rulari_afectate_proiect(dosare.cale(state), "PLX-1")
+
+    assert out["proiect"] == "PLX-1"
+    assert out["total"] == 1 and not out["trunchiat"]
+    affected = out["rulari"][0]
+    assert affected["dosar_id"] == ID
+    assert affected["rulare_id"] == run["id"]
+    assert affected["dosar_titlu"] == "Draft research"
+    assert affected["filtre"] == run["filtre"]
+    assert affected["pot_recalcula"] is True
+    assert {m["motiv"] for m in affected["potriviri"]} == {
+        "proiect selectat (a)",
+        "dependență capturată în dovezi",
+    }
+
+
 @pytest.mark.parametrize("text", [A, A + "\nArticolul II. Text nou."])
 def test_bytes_and_text_are_distinguished_and_url_is_bound(saved, text):
     state, run, _ = saved

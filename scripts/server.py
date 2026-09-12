@@ -454,6 +454,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/revizuiri",
                 "/api/dosare/dovezi",
                 "/api/dosare/verificari",
+                "/api/dosare/afectate-proiect",
                 "/api/dosare/coada",
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
@@ -525,6 +526,12 @@ def face_handler(stare: Stare, *, runtime=None):
                             qs.get("rulare_id", [None])[0],
                             int(qs.get("offset", ["0"])[0]),
                             qs.get("verificare_id", [None])[0],
+                        )
+                    elif ruta.path == "/api/dosare/afectate-proiect":
+                        out = dosare.rulari_afectate_proiect(
+                            path,
+                            qs.get("proiect", [""])[0],
+                            int(qs.get("offset", ["0"])[0]),
                         )
                     elif ruta.path == "/api/dosare/coada-ue":
                         from scripts.coada_ue import lista

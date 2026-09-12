@@ -451,6 +451,8 @@
   .source-review dl{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:.25rem .55rem;font-size:.78rem}
   .source-review dt{font-weight:600;color:var(--ink-mute)}
   .source-review dd{margin:0;overflow-wrap:anywhere}
+  .source-affected-run{border-top:1px solid var(--rule);padding:.55rem 0}
+  .source-affected-run h5{margin:.1rem 0 .25rem;font-size:.88rem}
   #acquisition-list{max-height:34rem;overflow:auto}
   #acquisition-detail select{width:100%;min-width:0}
   #acquisition-detail h4{font-size:1rem}
@@ -5491,13 +5493,42 @@ function lifecycleSourceReviewHtml(project){
     +`<dt>Parser</dt><dd>${esc(source.parser_version||'necunoscut')}</dd>`
     +`<dt>SHA-256</dt><dd>${esc(source.last_hash||'necunoscut')}</dd>`
     +(source.last_error?`<dt>Eroare</dt><dd>${esc(source.last_error)}</dd>`:'')
-    +`</dl><div class="dossier-actions">${url?`<a class="ghost mini" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}<button type="button" class="ghost mini" data-review-open-project>Deschide importurile proiectului</button>${project.registry_can_sync?'<button type="button" class="ghost mini" data-review-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-review-note-source>Notează în dosar</button>${['changed','needs_review'].includes(project.registry_source_state)?'<button type="button" class="ghost mini" data-review-mark-source>Marchează revizuită</button>':''}<button type="button" class="ghost mini" data-review-close-source>Închide</button></div><p class="hint" role="status" data-review-source-status></p></section>`;
+    +`</dl><div data-source-affected-runs><p class="hint">Caut dosare salvate care folosesc acest proiect…</p></div><div class="dossier-actions">${url?`<a class="ghost mini" href="${esc(url)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}<button type="button" class="ghost mini" data-review-open-project>Deschide importurile proiectului</button>${project.registry_can_sync?'<button type="button" class="ghost mini" data-review-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-review-note-source>Notează în dosar</button>${['changed','needs_review'].includes(project.registry_source_state)?'<button type="button" class="ghost mini" data-review-mark-source>Marchează revizuită</button>':''}<button type="button" class="ghost mini" data-review-close-source>Închide</button></div><p class="hint" role="status" data-review-source-status></p></section>`;
+}
+function lifecycleAffectedRunsHtml(data){
+  const rows=data?.rulari||[];
+  if(!rows.length)return '<p class="hint">Niciun dosar salvat nu declară această sursă.</p>';
+  return `<h4>Dosare afectate · ${data.total}</h4>`+rows.map((row,i)=>{
+    const matches=(row.potriviri||[]).map(m=>`${m.motiv}${m.versiune_id?' · '+m.versiune_id.slice(0,12):''}`).join('; ')||'Potrivire proiect';
+    const recalc=row.ultima_recalculare?`<br>Recalculat deja: ${esc(dossierTime(row.ultima_recalculare.recalculat_la||row.ultima_recalculare.creat_la))}`:'';
+    return `<article class="source-affected-run"><h5>${esc(row.dosar_titlu||row.dosar_id)}</h5><p class="hint">Rulare: ${esc(dossierTime(row.rulare_creata_la))} · ${esc(row.engine_version)}<br>${esc(matches)}${recalc}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-affected-open="${i}">Deschide rularea</button><button type="button" class="ghost mini" data-affected-rerun="${i}" ${row.pot_recalcula?'':'disabled'}>Recalculează cu ultimele importuri locale</button></div></article>`;
+  }).join('')+(data.trunchiat?'<p class="hint">Sunt afișate primele 20 de rulări afectate.</p>':'');
 }
 function renderLifecycleSourceReview(project=LIFECYCLE.review){
   const host=$('#lifecycle-source-review');if(!host)return;
   LIFECYCLE.review=project||null;host.innerHTML=lifecycleSourceReviewHtml(project);
   if(!project)return;
   const status=host.querySelector('[data-review-source-status]');
+  const affected=host.querySelector('[data-source-affected-runs]');
+  if(affected&&project.project_id){
+    const token=project.project_id+'|'+Date.now();
+    affected.dataset.token=token;
+    dossierApi('/api/dosare/afectate-proiect?'+new URLSearchParams({proiect:project.project_id})).then(data=>{
+      if(!affected.isConnected||affected.dataset.token!==token)return;
+      affected.sourceAffected=data;affected.innerHTML=lifecycleAffectedRunsHtml(data);
+      affected.querySelectorAll('[data-affected-open]').forEach(button=>button.onclick=()=>{
+        const row=affected.sourceAffected.rulari[Number(button.dataset.affectedOpen)];
+        if(row)selectDossier(row.dosar_id,row.rulare_id);
+      });
+      affected.querySelectorAll('[data-affected-rerun]').forEach(button=>button.onclick=async()=>{
+        const row=affected.sourceAffected.rulari[Number(button.dataset.affectedRerun)];
+        if(!row)return;
+        button.disabled=true;status.textContent='Recalculez dosarul afectat…';
+        try{const run=await dossierApi('/api/dosare/rulari',{dosar_id:row.dosar_id,filtre:row.filtre,sursa_rulare_id:row.rulare_id});await selectDossier(row.dosar_id,run.id);status.textContent='Recalcularea a fost salvată în istoricul dosarului.';}
+        catch(err){status.textContent=err.message;button.disabled=false;}
+      });
+    }).catch(err=>{if(affected.isConnected&&affected.dataset.token===token)affected.innerHTML=`<p class="hint">${esc(err.message)}</p>`;});
+  }
   host.querySelector('[data-review-open-project]').onclick=()=>openAcquisitionProject(project.project_id);
   host.querySelector('[data-review-note-source]').onclick=()=>{if(DOSARE_UI.selected?.id)startManualNote(lifecycleSourceNote(project));else lifecyclePrefillDossier(project);};
   host.querySelector('[data-review-close-source]').onclick=()=>renderLifecycleSourceReview(null);
