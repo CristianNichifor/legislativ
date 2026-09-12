@@ -8,19 +8,15 @@ import pytest
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_eu_workflow_renderers_label_blockers_and_non_verdict_scope():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
-    helper_source = (
-        html.split("const EU_BLOCKER_LABELS", 1)[1].split("function euIssueNoteBuilderHtml", 1)[0]
-    )
-    issue_source = (
-        html.split("function euIssueEvidenceHtml", 1)[1].split(
-            "function bindEuIssueNoteBuilder", 1
-        )[0]
-    )
-    link_source = (
-        html.split("function euProposalLinkResult", 1)[1].split(
-            "function bindEuProposalLinks", 1
-        )[0]
-    )
+    helper_source = html.split("const EU_BLOCKER_LABELS", 1)[1].split(
+        "function euIssueNoteBuilderHtml", 1
+    )[0]
+    issue_source = html.split("function euIssueEvidenceHtml", 1)[1].split(
+        "function bindEuIssueNoteBuilder", 1
+    )[0]
+    link_source = html.split("function euProposalLinkResult", 1)[1].split(
+        "function bindEuProposalLinks", 1
+    )[0]
     code = (
         "const assert=require('node:assert/strict');"
         "const esc=s=>String(s).replaceAll('&','&amp;')"
@@ -29,7 +25,9 @@ def test_eu_workflow_renderers_label_blockers_and_non_verdict_scope():
         "const EU_LINK_HYPOTHESES={potential_conflict:'Conflict potențial'};"
         "const acquisitionLink=(url,label)=>label;"
         "const ueLimitariHtml=items=>items.map(esc).join('|');"
-        "function euSourceLanguage(language){return language==='RON'?'Română oficială':'Engleză oficială · alternativă la textul românesc';}"
+        "function euSourceLanguage(language){"
+        "return language==='RON'?'Română oficială':"
+        "'Engleză oficială · alternativă la textul românesc';}"
         "const EU_BLOCKER_LABELS"
         + helper_source
         + "function euIssueEvidenceHtml"
@@ -37,18 +35,25 @@ def test_eu_workflow_renderers_label_blockers_and_non_verdict_scope():
         + "function euProposalLinkResult"
         + link_source
         + r"""
-const blocked={contract:'ro-eu-link-v1',scope:'contextual',blockers:[{side:'eu',code:'missing_text'}],
-  baza_sha256:'hash',baza:{proposal:{revizie:1,text:'Text propus',interventie:{tinta:{text:'Text RO'}}},
+const blocked={
+  contract:'ro-eu-link-v1',
+  scope:'contextual',
+  blockers:[{side:'eu',code:'missing_text'}],
+  baza_sha256:'hash',
+  baza:{proposal:{revizie:1,text:'Text propus',interventie:{tinta:{text:'Text RO'}}},
   proposal_sha256:'proposalhash',eu_snapshot:null,eu_article:null,context:{}}};
 const linkHtml=euProposalLinkResult(blocked);
 assert.ok(linkHtml.includes('Textul necesar nu este disponibil local.'));
 assert.ok(linkHtml.includes('comparație de sprijin, nu concluzie'));
 assert.ok(euProposalLinkResult(null).includes('Nicio bază selectată'));
-const issueHtml=euIssuePreviewHtml({issue_state:'possible_conflict',blockers:[{side:'national',code:'locator_missing'}],
+const issueHtml=euIssuePreviewHtml({
+  issue_state:'possible_conflict',
+  blockers:[{side:'national',code:'locator_missing'}],
   base_sha256:'abc',base:{legal_effect:'unknown'},limitari:['Nu verdict']});
 assert.ok(issueHtml.includes('RO · Locatorul național nu are prevedere păstrată.'));
 assert.ok(issueHtml.includes('comparație de sprijin, nu concluzie'));
-assert.ok(euWorkflowStepsHtml([{label:'1. Import CELEX',text:'ok',state:'done'}]).includes('eu-workflow-steps'));
+const steps=euWorkflowStepsHtml([{label:'1. Import CELEX',text:'ok',state:'done'}]);
+assert.ok(steps.includes('eu-workflow-steps'));
 """
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
