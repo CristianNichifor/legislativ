@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import cellar, depozit, documente_proiecte
+from scripts import cellar, depozit, documente_proiecte, dosare
 from scripts import source_registry as registry
 from scripts.server import face_handler
 
@@ -39,6 +39,18 @@ def write_project(stare, plx="plx-10-2026"):
             (plx,),
         )
         con.commit()
+
+
+def write_dossier(stare, ident="a" * 32):
+    return dosare.creeaza(
+        dosare.cale(stare),
+        {
+            "id": ident,
+            "titlu": "Dosar impact",
+            "intrebare": "Ce se schimbă?",
+            "domeniu": "test",
+        },
+    )
 
 
 def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
@@ -347,6 +359,190 @@ def test_registry_attention_filter_and_review_action(monkeypatch, tmp_path):
 
     with pytest.raises(ValueError, match="schimbate"):
         registry.executa(stare, {"action": "review", "id": unsupported["id"]})
+
+
+def test_registry_changed_project_exposes_local_impact(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    write_dossier(stare)
+    row = registry.executa(stare, {"family": "camera", "identifier": "PL-x 9"})
+
+    with dosare._open(dosare.cale(stare), write=True) as con:
+        con.execute(
+            "INSERT INTO rulari "
+            "(id,dosar_id,creat_la,engine_version,sha256,filtre_json,raport_json,dovezi_json) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            (
+                "9" * 32,
+                "a" * 32,
+                "2026-01-01T00:00:00+00:00",
+                "matrice-proiecte-v1",
+                "0" * 64,
+                dosare._json({"emitent": "Parlamentul"}),
+                dosare._json(
+                    {
+                        "selectie_proiecte": {
+                            "a": {"plx_id": "PL-x 9", "versiune_id": "1" * 64},
+                            "b": {"plx_id": "PL-x 10", "versiune_id": "2" * 64},
+                        }
+                    }
+                ),
+                dosare._json(
+                    {
+                        "manifest": {
+                            "dependente": [
+                                {
+                                    "sursa": "proiect_importat",
+                                    "plx_id": "PL-x 9",
+                                    "versiune_id": "1" * 64,
+                                }
+                            ]
+                        }
+                    }
+                ),
+            ),
+        )
+        con.execute(
+            "INSERT INTO watchlist_dosare "
+            "(id,dosar_id,tip,valoare,eticheta,creat_la) VALUES (?,?,?,?,?,?)",
+            (
+                "8" * 32,
+                "a" * 32,
+                "project",
+                "PL-x 9",
+                "Proiect urmărit",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+
+    def discover_project(state, request):
+        return {
+            "fisa_url": f"https://www.cdep.ro/proiecte/{request['plx']}",
+            "documente": [{"url": "https://www.cdep.ro/proiecte/x.pdf", "label": request["plx"]}],
+        }
+
+    monkeypatch.setattr("scripts.achizitii_proiecte.executa", discover_project)
+    changed = registry.executa(stare, {"action": "sync", "id": row["id"]})
+    listed = registry.lista(stare, {"id": [changed["id"]]})["sources"][0]
+
+    assert changed["impact"]["contract"] == "changed-source-impact-v1"
+    assert listed["impact"]["summary"]["affected_runs"] == 1
+    assert listed["impact"]["summary"]["affected_dossiers"] == 1
+    assert listed["impact"]["actions"]["open_affected_runs"] is True
+    assert listed["impact"]["actions"]["mark_reviewed"] is True
+    assert listed["impact"]["samples"]["runs"][0]["dosar_titlu"] == "Dosar impact"
+
+
+def test_registry_celex_impact_counts_notes_rules_and_watchlist(tmp_path):
+    stare = state(tmp_path)
+    dossier = write_dossier(stare)
+    path = dosare.cale(stare)
+    row = registry.executa(stare, {"family": "ue_cellar", "identifier": "32014L0024"})
+    registry.executa(stare, {"action": "queue", "id": row["id"]})
+    changed = registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": row["id"],
+            "state": "fetched",
+            "content_hash": "d" * 64,
+            "parser_version": "achizitii_ue.v1",
+        },
+    )
+    changed = registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": row["id"],
+            "state": "changed",
+            "content_hash": changed["last_hash"],
+            "parser_version": "achizitii_ue.v1",
+        },
+    )
+    with dosare._open(path, write=True) as con:
+        con.execute(
+            "INSERT INTO note_manuale VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "b" * 32,
+                dossier["id"],
+                "Notă UE",
+                "risc_ue",
+                "32014L0024",
+                "art1",
+                "Text",
+                "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024",
+                "d" * 64,
+                "Revizuiește sursa UE.",
+                "needs_evidence",
+                0,
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        con.execute(
+            "INSERT INTO watchlist_dosare "
+            "(id,dosar_id,tip,valoare,eticheta,creat_la) VALUES (?,?,?,?,?,?)",
+            (
+                "c" * 32,
+                dossier["id"],
+                "celex",
+                "32014L0024",
+                "Directiva",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        con.execute(
+            "INSERT INTO rule_candidate_queue "
+            "(id,dosar_id,candidate_id,provision_id,act_id,locator,status,review_state,"
+            "modality,source_hash,text_sha256,payload_json,creat_la) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "f" * 32,
+                dossier["id"],
+                "cand-1",
+                "eu:32014L0024#art1",
+                "32014L0024",
+                "art1",
+                "reviewable",
+                "pending",
+                "obligation",
+                "d" * 64,
+                "1" * 64,
+                dosare._json({"contract": "rule-candidate-v1"}),
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        con.execute(
+            "INSERT INTO law_rule_drafts "
+            "(id,dosar_id,candidate_id,queue_id,provision_id,act_id,locator,modality,"
+            "source_hash,text_sha256,accepted_by,acceptance_note,payload_json,creat_la) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "e" * 32,
+                dossier["id"],
+                "cand-1",
+                "f" * 32,
+                "eu:32014L0024#art1",
+                "32014L0024",
+                "art1",
+                "obligation",
+                "d" * 64,
+                "1" * 64,
+                "tester",
+                "acceptat",
+                dosare._json({"contract": "law-rule-draft-v1", "celex": "32014L0024"}),
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+
+    listed = registry.lista(stare, {"id": [changed["id"]]})["sources"][0]
+    impact = listed["impact"]
+
+    assert impact["summary"]["affected_notes"] == 1
+    assert impact["summary"]["affected_rule_drafts"] == 1
+    assert impact["summary"]["affected_watchlist_items"] == 1
+    assert impact["samples"]["notes"][0]["titlu"] == "Notă UE"
+    assert impact["samples"]["rule_drafts"][0]["act_id"] == "32014L0024"
+    assert impact["actions"]["create_review_note"] is True
 
 
 def test_registry_sync_rejects_unsupported_sources(tmp_path):
