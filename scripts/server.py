@@ -468,6 +468,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
                 "/api/dosare/propuneri/surse",
@@ -634,6 +635,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
+                "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -722,6 +724,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
+                "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -774,6 +777,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.note_manuale import salveaza
 
                         out = salveaza(path, cerere)
+                    elif ruta == "/api/dosare/ai-draft":
+                        from scripts.ai_drafting import preview
+
+                        out = preview(cerere)
                     elif ruta == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import salveaza
 

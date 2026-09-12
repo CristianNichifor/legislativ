@@ -2896,6 +2896,18 @@ async function aiRescrie(text, opt){
   }
   throw new Error("Activează AI local sau online BYOK din setări.");
 }
+async function aiComplete(text, sistem, opt){
+  opt=opt||{}; const mode=aiMode(), prog=opt.prog;
+  if(mode==="local"){
+    if(!LLM.disponibil()) throw new Error("Acest dispozitiv nu are WebGPU. Comută pe modul «online» din setările AI.");
+    return {text:await LLM.rescrieCu(text,sistem,prog),nota:"local"};
+  }
+  if(mode==="online"){
+    if(opt.privat && !okOnlinePrivat()) throw new Error("Anulat — textul nu a fost trimis.");
+    return aiRescrieOnline(text,sistem,"nou",opt);
+  }
+  throw new Error("Activează AI local sau online BYOK din setări.");
+}
 // Suggest a model from what the device can plausibly run: RAM, cores, and the GPU's buffer limit.
 async function sugereazaModel(){
   let scor=0; const mem=navigator.deviceMemory||0;
@@ -4460,6 +4472,7 @@ function manualNoteFormHtml(editing=null){
     +`<label>SHA-256 sursă<input name="source_hash" maxlength="64" value="${v('source_hash')}"></label>`
     +`<label>Citat dovadă<textarea name="evidence_quote" rows="3" maxlength="4000">${v('evidence_quote')}</textarea></label>`
     +`<label>Raționament<textarea name="reasoning" rows="4" maxlength="8000">${v('reasoning')}</textarea></label>`
+    +'<details data-ai-note-draft><summary>Ciornă AI din dovadă</summary><p class="hint">Folosește numai citatul, sursa și contextul din formular. Rezultatul rămâne ciornă nerevizuită.</p><div class="dossier-actions"><select name="ai_task"><option value="issue_note">notă de constatare</option><option value="amendment_rationale">motivare amendament</option><option value="review_checklist">listă de verificare</option></select><button type="button" class="ghost mini" data-ai-draft-note>Generează ciornă</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
 }
 function manualNotePayload(form,dossierId,note){
@@ -4471,6 +4484,48 @@ function manualNotePayload(form,dossierId,note){
 }
 function manualNoteStatusOptions(current){
   return Object.entries(MANUAL_NOTE_STATUS).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+}
+function manualNoteAiEvidence(form){
+  const values=Object.fromEntries(new FormData(form));
+  return {
+    task: values.ai_task||'issue_note',
+    title: values.title||'',
+    type: values.type||'lacuna',
+    context: values.reasoning||'',
+    evidence: [{
+      label: values.title||'Dovadă din notă',
+      act_id: values.act_id||'',
+      locator: values.locator||'',
+      source_url: values.source_url||'',
+      source_hash: values.source_hash||'',
+      quote: values.evidence_quote||'',
+      language: 'RON'
+    }]
+  };
+}
+function bindManualNoteAiDraft(form){
+  const section=form.querySelector('[data-ai-note-draft]');if(!section)return;
+  const run=section.querySelector('[data-ai-draft-note]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]');
+  let draft='';
+  form.addEventListener('input',e=>{if(e.target.closest('[data-ai-note-draft]'))return;draft='';insert.disabled=true;});
+  run.onclick=async()=>{
+    draft='';insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';
+    try{
+      const plan=await dossierApi('/api/dosare/ai-draft',manualNoteAiEvidence(form));
+      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${plan.estimated_tokens} tokeni.`;
+      const answer=await aiComplete(plan.prompt,plan.system,{privat:true,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
+      draft=`[Ciornă AI · ${answer.nota} · ${plan.contract} · ${plan.input_sha256}]\n\n${answer.text}`;
+      result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
+    }catch(err){status.textContent=err.message;}
+    finally{run.disabled=false;}
+  };
+  insert.onclick=()=>{
+    if(!draft)return;
+    const field=form.elements.reasoning;
+    field.value=(field.value?field.value.trim()+'\n\n':'')+draft;
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+    insert.disabled=true;status.textContent='Ciorna a fost inserată în raționament; salvează nota când ești gata.';
+  };
 }
 
 function euIssueNoteBuilderHtml(){
@@ -4666,6 +4721,7 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=()=>{MANUAL_NOTES_UI.editing=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];loadManualNotes(dossierId,offset);});
     host.querySelectorAll('[data-open-note-source]').forEach(button=>button.onclick=()=>openManualNoteSource(button,data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)]));
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
+    bindManualNoteAiDraft(form);
     form.onsubmit=async e=>{
       e.preventDefault();if(!form.reportValidity())return;
       const controls=[...form.elements];controls.forEach(c=>c.disabled=true);saveStatus.textContent='Salvez nota…';
