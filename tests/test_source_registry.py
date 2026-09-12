@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import cellar
+from scripts import cellar, depozit, documente_proiecte
 from scripts import source_registry as registry
 from scripts.server import face_handler
 
@@ -29,6 +29,16 @@ def write_eu_text(stare, celex="32014L0024", text="Text oficial UE"):
     )
     with cellar.deschide(stare.eu) as con:
         cellar.scrie_celex(con, celex, [manifestation], manifestation, text)
+
+
+def write_project(stare, plx="plx-10-2026"):
+    with depozit.deschide(stare.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la) "
+            "VALUES (?,2,'10','Proiect test','la comisii','2026-01-01')",
+            (plx,),
+        )
+        con.commit()
 
 
 def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
@@ -238,6 +248,46 @@ def test_registry_syncs_project_sheet_and_detects_unchanged(monkeypatch, tmp_pat
     assert changed["state"] == "changed"
     unchanged = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert unchanged["state"] == "unchanged"
+
+
+def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    write_project(stare)
+    row = registry.executa(stare, {"family": "camera", "identifier": "plx-10-2026"})
+    html = '<a href="https://www.cdep.ro/proiecte/a.pdf">Raport</a>'
+
+    monkeypatch.setattr(
+        documente_proiecte,
+        "descarca",
+        lambda url, *args: html.encode(),
+    )
+
+    changed = registry.executa(stare, {"action": "sync", "id": row["id"]})
+    assert changed["state"] == "changed"
+    assert changed["last_hash"]
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["content_hash"] == changed["last_hash"]
+    assert selected["snapshots"][0]["parser_version"] == "achizitii_proiecte.v1"
+    assert selected["snapshots"][0]["summary"] == {
+        "plx": "plx-10-2026",
+        "operation": "descopera",
+        "fisa_url": "https://www.cdep.ro/ords/pls/proiecte/upl_pck2015.proiect?cam=2&idp=10",
+        "documents": 1,
+        "versions": 0,
+        "imported_status": "",
+        "truncated": False,
+    }
+
+    unchanged = registry.executa(stare, {"action": "sync", "id": row["id"]})
+    assert unchanged["state"] == "unchanged"
+
+    html = '<a href="https://www.cdep.ro/proiecte/b.pdf">Raport nou</a>'
+    changed_again = registry.executa(stare, {"action": "sync", "id": row["id"]})
+    assert changed_again["state"] == "changed"
+    assert changed_again["last_hash"] != changed["last_hash"]
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert [s["summary"]["documents"] for s in selected["snapshots"]] == [1, 1, 1]
+    assert [a["state"] for a in selected["attempts"][:2]] == ["changed", "fetched"]
 
 
 def test_registry_sync_records_project_review_and_failure(monkeypatch, tmp_path):
