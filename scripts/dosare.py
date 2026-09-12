@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 ENGINE_VERSION = "matrice-dosar-v2"
 LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
@@ -81,7 +81,7 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SCHEMA_VERSION) or app != APPLICATION_ID:
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -191,6 +191,19 @@ def _open(path, *, write=False):
                 "CREATE INDEX note_manuale_dosar ON note_manuale(dosar_id,modificat_la DESC,id)"
             )
             version = 10
+        if write and version == 10:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS watchlist_dosare (id TEXT PRIMARY KEY, "
+                "dosar_id TEXT NOT NULL "
+                "REFERENCES dosare(id), tip TEXT NOT NULL, valoare TEXT NOT NULL, "
+                "eticheta TEXT NOT NULL, revizuit_la TEXT, nota_revizie TEXT NOT NULL DEFAULT '', "
+                "creat_la TEXT NOT NULL, UNIQUE(dosar_id,tip,valoare))"
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS watchlist_dosare_dosar "
+                "ON watchlist_dosare(dosar_id,tip,valoare)"
+            )
+            version = 11
         if write:
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con

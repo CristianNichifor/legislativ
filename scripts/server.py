@@ -475,6 +475,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/coada-ue",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/watchlist",
                 "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
@@ -576,6 +577,12 @@ def face_handler(stare: Stare, *, runtime=None):
                                 qs.get("status", [None])[0],
                             )
                         )
+                    elif ruta.path == "/api/dosare/watchlist":
+                        from scripts import watchlist_dosare
+
+                        out = watchlist_dosare.feed(
+                            stare, path, ident, int(qs.get("offset", ["0"])[0])
+                        )
                     elif ruta.path == "/api/dosare/dovezi":
                         from scripts.dependente_dovezi import verifica
 
@@ -641,6 +648,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/watchlist",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -746,6 +754,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/watchlist",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -801,6 +810,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.note_manuale import salveaza
 
                         out = salveaza(path, cerere)
+                    elif ruta == "/api/dosare/watchlist":
+                        from scripts.watchlist_dosare import executa
+
+                        out = executa(path, cerere)
                     elif ruta == "/api/dosare/ai-draft":
                         from scripts.ai_drafting import preview
 

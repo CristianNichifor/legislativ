@@ -90,6 +90,7 @@ def route(stare, route, qs, body, method="GET"):
         revizuiri,
         surse_propuneri,
         verificari_dovezi,
+        watchlist_dosare,
     )
 
     path = dosare.cale(stare)
@@ -110,6 +111,7 @@ def route(stare, route, qs, body, method="GET"):
             "/verificari": lambda: verificari_dovezi.salveaza(stare, body),
             "/context": lambda: revizuiri.context_salveaza(path, body),
             "/note": lambda: note_manuale.salveaza(path, body),
+            "/watchlist": lambda: watchlist_dosare.executa(path, body),
             "/propuneri": lambda: propuneri.salveaza(path, body, stare),
             "/propuneri/previzualizare": lambda: propuneri.previzualizeaza(stare, body),
             "/propuneri/analize": lambda: analize_propuneri.salveaza(stare, body),
@@ -149,6 +151,7 @@ def route(stare, route, qs, body, method="GET"):
                 if "note_id" in qs
                 else note_manuale.lista(path, ident, offset, get("status"))
             ),
+            "/watchlist": lambda: watchlist_dosare.feed(stare, path, ident, offset),
             "/dovezi": lambda: dependente_dovezi.verifica(stare, ident, run),
             "/propuneri": lambda: propuneri.citeste_cerere(path, qs),
             "/propuneri/analize": lambda: analize_propuneri.citeste_cerere(path, qs),
