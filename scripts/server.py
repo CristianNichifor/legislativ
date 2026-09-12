@@ -632,6 +632,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/note-ue",
+                "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -718,6 +720,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/verificari",
                 "/api/dosare/context",
                 "/api/dosare/note",
+                "/api/dosare/note-ue",
+                "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -738,6 +742,14 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.legaturi_ue import preview
 
                         out = preview(stare, cerere)
+                    elif ruta == "/api/dosare/note-ue/previzualizare":
+                        from scripts.note_ue import preview
+
+                        out = preview(stare, cerere)
+                    elif ruta == "/api/dosare/note-ue":
+                        from scripts.note_ue import save
+
+                        out = save(stare, cerere)
                     elif ruta == "/api/dosare/propuneri/legaturi-ue":
                         from scripts.legaturi_ue_store import salveaza
 

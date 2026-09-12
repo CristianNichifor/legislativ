@@ -289,3 +289,32 @@ def test_eu_source_language_status_and_provenance_renderer():
         "assert.ok(h.includes('SHA-256 text extras')&&h.includes('alternativă'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_eu_issue_note_builder_renderer_escapes_sources_and_blockers():
+    source = (Path(__file__).parents[1] / "app/index.html").read_text()
+    renderer = source.split("const EU_ISSUE_STATES", 1)[1].split(
+        "function manualNoteSummaryHtml", 1
+    )[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        'const acquisitionLink=(u,t)=>`<a href="${esc(u)}">${esc(t)}</a>`;'
+        "const ueLimitariHtml=lim=>lim.map(x=>esc(x)).join('|');"
+        "const MANUAL_NOTE_STATUS={needs_evidence:'Necesită dovezi',"
+        "ready_for_review:'Pregătită pentru revizie',reviewed:'Revizuită'};"
+        "const EU_ISSUE_STATES" + renderer + "const form=euIssueNoteBuilderHtml();"
+        "assert.ok(form.includes('data-eu-issue-form'));"
+        "const html=euIssuePreviewHtml({issue_state:'possible_gap',base_sha256:'<hash>',"
+        "blockers:[{side:'eu<script>',code:'missing<img>'}],limitari:['lim<script>'],base:{"
+        "legal_effect:'unknown',national_evidence:{kind:'prevedere',title:'<RO>',"
+        "language:'RON',locator:'art1',text_sha256:'abc',quote:'text <b>'},"
+        "eu_evidence:{kind:'eu_article',title:'<UE>',language:'RON',locator:'art2',"
+        "text_sha256:'def',article_sha256:'ghi',source_url:'https://example.test',"
+        "quote:'ue <i>'}}});"
+        "assert.ok(html.includes('Lacună posibilă'));"
+        "assert.ok(html.includes('eu&lt;script&gt; · missing&lt;img&gt;'));"
+        "assert.ok(!html.includes('<script>')&&!html.includes('<img>')&&!html.includes('<RO>'));"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
