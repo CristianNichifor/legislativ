@@ -41,6 +41,12 @@ applicability, hierarchy or whether a provision is suitable for executable legal
 rules. Source state comes from the local registry and no official portal is
 refetched.
 
+The matrix UI exposes this through the selected-row `graf matrice` action. The
+panel lists the selected nodes, local source quality, candidate edges and
+provision drilldown buttons when the edge carries addressable provision actions.
+The wording deliberately keeps the result as scaffold evidence, not a legal
+verdict.
+
 Coverage is bounded to the newest 100 matching acts, 1000 provisions per act and
 5000 extracted definitions and 5000 comparable deadlines. `trunchiat` identifies partial results, including
 result-limit overflow or unavailable corpus data. Counters describe the selected

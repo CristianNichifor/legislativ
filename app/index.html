@@ -524,6 +524,10 @@
   .matrix-prev-text{white-space:pre-wrap;overflow-wrap:break-word}
   .matrix-acte{margin-top:.45rem}
   .matrix-act-meta{font-family:var(--sans);font-size:.7rem;color:var(--ink-mute)}
+  .matrix-graph-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,17rem),1fr));gap:.5rem;margin:.55rem 0}
+  .matrix-graph-node{border:1px solid var(--rule-soft);border-radius:var(--r1);padding:.5rem .6rem;background:var(--surface)}
+  .matrix-graph-edge{border-left:2px solid var(--note);padding:.45rem .55rem;margin:.35rem 0;background:var(--surface)}
+  .matrix-graph-meta{font-family:var(--sans);font-size:.68rem;color:var(--ink-mute);overflow-wrap:anywhere}
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -6223,6 +6227,56 @@ function mActeHtml(d){
       +(dom?` · ${esc(dom)}`:"")+esc(sq)+dovezi+`</span></div>`;
   }).join("")+(d.total>acte.length?`<p class="hint">Se afișează ${nf(acte.length)} din ${nf(d.total)} acte.</p>`:"")+`</div>`;
 }
+function mGraphSourceLabel(q){
+  if(!q) return "sursă necunoscută";
+  if(typeof q==="string") return q;
+  return q.eticheta||q.stare||q.status||"sursă necunoscută";
+}
+function mGraphNodeHtml(n){
+  const href=urlSigur(n.sursa_url);
+  const key=href
+    ? `<a class="dom-cheie" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(n.cheie_citare||n.act_id)}</a>`
+    : `<span class="dom-cheie">${esc(n.cheie_citare||n.act_id)}</span>`;
+  const rang=n.rang&&n.rang.eticheta?n.rang.eticheta:n.rang||"rang necunoscut";
+  const domeniu=n.domeniu&&n.domeniu.eticheta?n.domeniu.eticheta:n.domeniu||"domeniu orientativ necunoscut";
+  return `<div class="matrix-graph-node">${key} <span class="parc-data">${esc(String(n.an||""))}</span>`
+    +`<div>${esc((n.titlu||"").slice(0,190))}</div>`
+    +`<div class="matrix-graph-meta">${esc(n.emitent||"")} · ${esc(rang)} · ${esc(domeniu)}`
+    +` · ${esc(mGraphSourceLabel(n.source_quality))}</div></div>`;
+}
+function mGraphEndpointHtml(e, side){
+  const p=e&&e[side]||{};
+  const loc=p.locator?` · ${esc(locRo(p.locator))}`:"";
+  return `<p><b>${side==="from"?"Din":"Către"}:</b> ${esc(p.act_id||"")}${loc} ${mActiuni(p.actiuni)}</p>`;
+}
+function mGraphHtml(d){
+  if(!d) return empty("Nu am putut citi graful matricei.");
+  let h=`<div class="parc-h">Graf matrice · scaffold law-as-code</div>`
+    +`<p class="hint">${nf(d.acte_selectate||0)} acte selectate din ${nf(d.acte_total||0)}. `
+    +`Relațiile sunt candidate extrase/indexate, nu verdict juridic.</p>`;
+  if(d.graph_state==="indisponibil"){
+    h+=`<p class="hint">Baza locală de graf este indisponibilă pentru această instalare.</p>`;
+  }
+  const nodes=d.nodes||[];
+  h+=nodes.length
+    ? `<div class="parc-h">Acte în selecție</div><div class="matrix-graph-grid">${nodes.map(mGraphNodeHtml).join("")}</div>`
+    : `<p class="hint">Niciun act selectat pentru filtrele curente.</p>`;
+  const edges=d.edges||[];
+  h+=`<div class="parc-h">Relații candidate</div>`;
+  if(edges.length){
+    h+=edges.map(e=>`<div class="matrix-graph-edge">`
+      +`<div class="matrix-graph-meta">${esc(e.status||"relatie_candidata_neconfirmata")} · `
+      +`${esc(e.fel||"relație")} · încredere: ${esc(String(e.incredere??"necunoscută"))}`
+      +(e.de_la?` · ${esc(e.de_la)}`:"")+`</div>`
+      +mGraphEndpointHtml(e,"from")+mGraphEndpointHtml(e,"to")
+      +`</div>`).join("");
+  }else{
+    h+=`<p class="hint">Nicio relație din graful local nu atinge actele selectate.</p>`;
+  }
+  if(d.trunchiat) h+=`<p class="hint">Rezultat parțial: limita de afișare sau de selecție a fost atinsă.</p>`;
+  h+=(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
+  return h;
+}
 async function mArataActe(buton){
   const out=$("#m-acte-rand"); if(!out) return;
   if(buton.dataset.deschis==="1"){
@@ -6245,6 +6299,29 @@ async function mArataActe(buton){
     out.innerHTML=mActeHtml(d);
   }catch(e){
     out.innerHTML=empty("Nu am putut lista actele pentru acest rând.");
+  }
+}
+async function mArataGrafMatrice(buton){
+  const out=$("#m-graf-rand"); if(!out) return;
+  if(buton.dataset.deschis==="1"){
+    out.innerHTML="";
+    buton.dataset.deschis="";
+    buton.textContent="graf matrice";
+    return;
+  }
+  buton.dataset.deschis="1";
+  buton.textContent="ascunde graful";
+  out.innerHTML=`<div class="parc"><span class="spin"></span> încarc graful…</div>`;
+  const f=mFiltreCurente();
+  const qs=new URLSearchParams({emitent:buton.dataset.emitent||"",limita:"60"});
+  for(const key of ["tip","rang","domeniu","source_quality"]) if(f[key]) qs.set(key,f[key]);
+  try{
+    const d=await fetch("/api/matrice-graf?"+qs.toString()).then(r=>r.json());
+    if(!out.isConnected||buton.dataset.deschis!=="1") return;
+    out.innerHTML=mGraphHtml(d);
+    out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+  }catch(e){
+    out.innerHTML=empty("Nu am putut încărca graful pentru acest rând.");
   }
 }
 function mVersiuni(panel, plx, initial, valid){
@@ -6634,9 +6711,10 @@ function mArataRand(el){
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`
     +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button>`
+    +`<button type="button" class="ghost mini matrix-graph" data-emitent="${esc(r.emitent)}">graf matrice</button>`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
     +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">Contradicții candidate</button>`
-    +`<div id="m-acte-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
+    +`<div id="m-acte-rand"></div><div id="m-graf-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
   h+=`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(r.emitent)}">Compară proiecte</button><div id="m-proiecte-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
@@ -6663,6 +6741,7 @@ function mArataRand(el){
   $("#m-detalii").innerHTML=h+`</div>`;
   $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
   $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
+  $("#m-detalii").querySelectorAll(".matrix-graph").forEach(b=>b.onclick=()=>mArataGrafMatrice(b));
   $("#m-detalii").querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
   $("#m-detalii").querySelectorAll(".matrix-contradictii").forEach(b=>b.onclick=()=>mArataContradictii(b));
   $("#m-detalii").querySelectorAll(".matrix-drafts").forEach(b=>b.onclick=()=>mArataProiecte(b));
