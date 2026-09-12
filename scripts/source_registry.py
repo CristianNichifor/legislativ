@@ -20,9 +20,14 @@ FAMILIES = {
     "camera": "Camera Deputaților",
     "senat": "Senat",
     "consultare_guvern": "Consultări Guvern",
+    "consultare_econsultare": "Consultări publice · e-consultare",
     "consultare_minister": "Consultări ministere",
     "monitorul_oficial": "Monitorul Oficial",
+    "monitorul_oficial_pi": "Monitorul Oficial · Partea I",
+    "monitorul_oficial_other_parts": "Monitorul Oficial · Părțile II-VII",
+    "monitorul_oficial_local": "Monitorul Oficial Local",
     "ccr": "Decizii CCR",
+    "avize": "Avize și opinii instituționale",
     "ue_cellar": "Drept UE · Cellar/EUR-Lex",
 }
 SCHEMA_VERSION = 1

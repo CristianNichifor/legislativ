@@ -16,9 +16,12 @@ REQUIRED_FAMILIES = (
     "camera",
     "senat",
     "consultare_guvern",
+    "consultare_econsultare",
     "consultare_minister",
     "monitorul_oficial",
+    "monitorul_oficial_pi",
     "ccr",
+    "avize",
     "ue_cellar",
 )
 ATTENTION = source_registry.ATTENTION_STATES
