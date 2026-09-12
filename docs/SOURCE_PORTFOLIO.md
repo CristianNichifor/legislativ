@@ -79,6 +79,13 @@ The local append-only storage/API contract for these normalized observations is
 `POST /api/tracker-evenimente` records one event. Neither endpoint fetches public
 sources or mutates saved legal conclusions.
 
+`scripts/monitor_tracker.py` is the bounded Monitorul Oficial Part I replay
+slice. It converts publication references already present in local `acte`,
+`documente`, `initiative` or `initiativa_etapa` rows into
+`published_in_monitor` event-shaped dictionaries, then can store them through the
+same tracker contract. It does not crawl Monitorul Oficial and it does not bulk
+ingest PDFs; missing issue numbers or dates remain missing.
+
 ## Execution order
 
 1. Keep one-source sync as the operational boundary.
