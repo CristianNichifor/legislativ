@@ -47,6 +47,23 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert any("Serverul nu a apelat niciun model" in item for item in out["limitari"])
 
 
+@pytest.mark.parametrize(
+    ("task", "label"),
+    [
+        ("explain_issue", "explică problema"),
+        ("issue_note", "notă de constatare"),
+        ("draft_amendment", "ciornă amendament"),
+        ("review_checklist", "listă de verificare"),
+        ("amendment_rationale", "ciornă amendament"),
+    ],
+)
+def test_ai_drafting_supports_byok_ui_tasks(task, label):
+    out = ai_drafting.preview(payload(task=task))
+
+    assert out["task"] == ("draft_amendment" if task == "amendment_rationale" else task)
+    assert label in out["prompt"]
+
+
 def test_ai_drafting_requires_bounded_source_evidence():
     with pytest.raises(ValueError, match="URL sau SHA"):
         ai_drafting.preview(

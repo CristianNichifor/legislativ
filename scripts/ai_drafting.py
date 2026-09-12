@@ -17,10 +17,12 @@ MAX_PROMPT = 12000
 ESTIMATED_OUTPUT_TOKENS = 900
 
 TASKS = {
+    "explain_issue": "explică problema",
     "issue_note": "notă de constatare",
-    "amendment_rationale": "motivare amendament",
+    "draft_amendment": "ciornă amendament",
     "review_checklist": "listă de verificare",
 }
+TASK_ALIASES = {"amendment_rationale": "draft_amendment"}
 
 SYSTEM = (
     "Redactezi text de lucru pentru o analiză legislativă românească. "
@@ -40,6 +42,7 @@ def _text(value, limit: int, *, required: bool = False) -> str:
 
 def _task(value) -> str:
     key = str(value or "issue_note").strip().lower().replace("-", "_")
+    key = TASK_ALIASES.get(key, key)
     if key not in TASKS:
         raise ValueError("Tip de ciornă AI invalid.")
     return key

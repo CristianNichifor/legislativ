@@ -232,11 +232,15 @@ cost estimate and approval/audit metadata. The server-side cost is always
 `none`; online BYOK or MCP usage is paid only through the user's provider,
 after explicit user action.
 
-The manual-note editor can send that prompt through the user's configured AI mode:
-local WebGPU, or online BYOK with the existing confirmation before text leaves the
-browser. The generated text is inserted only by explicit user action, labelled as
-an unreviewed AI draft, and remains ordinary note text until the user saves it.
-It cannot mark a note reviewed, accepted or legally final.
+The manual-note editor exposes four bounded tasks from the selected evidence:
+explain the issue, draft a finding note, draft amendment text/rationale, or
+prepare a reviewer checklist. The user first prepares the prompt and sees the
+evidence manifest, prompt hash, token estimate, server cost (`none`), external
+cost owner and approval rule. Only after that can the user run local WebGPU,
+run online BYOK with the existing confirmation, copy the prompt, or move to MCP.
+The generated text is inserted only by explicit user action, labelled as an
+unreviewed AI draft, and remains ordinary note text until the user saves it. It
+cannot mark a note reviewed, accepted or legally final.
 
 The same editor also exposes an MCP handoff for the prompt. `POST
 /api/dosare/ai-draft/mcp-preview` returns the AI prompt plus the MCP approval
