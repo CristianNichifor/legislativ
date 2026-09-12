@@ -1356,7 +1356,7 @@
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
           <form id="lifecycle-search" class="lifecycle-toolbar">
             <label>Caută proiect<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label>
-            <label>Filtru<select id="lifecycle-filter"><option value="watched">Urmărite</option><option value="affected">Cu dosare afectate</option><option value="attention">Necesită atenție</option><option value="stale">Date vechi</option><option value="unknown">Etapă necunoscută</option><option value="toate">Toate proiectele</option></select></label>
+            <label>Filtru<select id="lifecycle-filter"><option value="watched">Urmărite</option><option value="affected">Cu dosare afectate</option><option value="attention">Necesită atenție</option><option value="stale">Date vechi</option><option value="unknown">Etapă necunoscută</option><option value="unavailable">Sursă indisponibilă</option><option value="toate">Toate proiectele</option></select></label>
             <button type="submit" class="ghost mini">Caută</button>
             <button type="button" id="lifecycle-refresh" class="ghost mini" title="Reîncarcă stadiile locale" aria-label="Reîncarcă stadiile locale">↻</button>
           </form>
@@ -5754,7 +5754,7 @@ $('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true
 $('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null};
-const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',toate:'toate proiectele'};
+const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',unavailable:'sursă indisponibilă',toate:'toate proiectele'};
 function projectWatchList(){
   try{return JSON.parse(localStorage.getItem(PROJECT_WATCH_KEY)||'[]').filter(Boolean);}
   catch{return [];}
@@ -5791,6 +5791,7 @@ function lifecycleVisible(project,filter=LIFECYCLE.filter){
   if(filter==='affected') return Number(project.affected_dossiers||0)>0;
   if(filter==='stale') return project.source_state==='stale'||project.stale;
   if(filter==='unknown') return project.source_state==='unknown'||project.stage?.key==='unknown';
+  if(filter==='unavailable') return project.source_state==='unavailable'||project.unavailable;
   return !!project.needs_attention;
 }
 function lifecycleCounts(data){
@@ -5800,6 +5801,7 @@ function lifecycleCounts(data){
     attention: projects.filter(p=>p.needs_attention).length,
     stale: projects.filter(p=>p.source_state==='stale'||p.stale).length,
     unknown: projects.filter(p=>p.source_state==='unknown'||p.stage?.key==='unknown').length,
+    unavailable: projects.filter(p=>p.source_state==='unavailable'||p.unavailable).length,
     registry: projects.filter(p=>p.registry_needs_attention).length,
     affected: projects.filter(p=>Number(p.affected_dossiers||0)>0).length,
   };
@@ -5814,7 +5816,7 @@ function lifecycleRowHtml(project,index=0){
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4><p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4><p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -5947,6 +5949,9 @@ function renderLifecycleList(){
   list.querySelectorAll('[data-lifecycle-open]').forEach(button=>{
     button.onclick=()=>openAcquisitionProject(projects[Number(button.dataset.lifecycleOpen)]?.project_id);
   });
+  list.querySelectorAll('[data-lifecycle-dossier]').forEach(button=>{
+    button.onclick=()=>lifecyclePrefillDossier(projects[Number(button.dataset.lifecycleDossier)]||{});
+  });
   list.querySelectorAll('[data-lifecycle-sync-source]').forEach(button=>button.onclick=async()=>{
     const project=projects[Number(button.dataset.lifecycleSyncSource)], id=project?.registry_source_id;
     if(!id)return;button.disabled=true;$('#lifecycle-status').textContent='Sincronizez sursa urmărită…';
@@ -5961,7 +5966,7 @@ function renderLifecycleList(){
 function updateLifecycleStatus(){
   if(!LIFECYCLE.last)return;
   const visible=lifecycleFilteredProjects(LIFECYCLE.last).length, counts=lifecycleCounts(LIFECYCLE.last);
-  $('#lifecycle-status').textContent=`${visible} proiecte afișate în filtrul ${LIFECYCLE_FILTERS[LIFECYCLE.filter]} · urmărite ${counts.watched} · dosare afectate ${counts.affected} · atenție ${counts.attention} · surse schimbate ${counts.registry} · vechi ${counts.stale} · etapă necunoscută ${counts.unknown}.`;
+  $('#lifecycle-status').textContent=`${visible} proiecte afișate în filtrul ${LIFECYCLE_FILTERS[LIFECYCLE.filter]} · urmărite ${counts.watched} · dosare afectate ${counts.affected} · atenție ${counts.attention} · surse schimbate ${counts.registry} · vechi ${counts.stale} · etapă necunoscută ${counts.unknown} · indisponibile ${counts.unavailable}.`;
 }
 async function loadLifecycleList(offset=0){
   const token=++LIFECYCLE.sequence;LIFECYCLE.offset=offset;

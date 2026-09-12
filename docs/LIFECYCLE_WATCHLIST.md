@@ -51,11 +51,12 @@ project list/detail responses:
 The act watch backend (`initiative_pe_act`) also includes `lifecycle` on each
 project that targets the watched act.
 
-No frontend migration is required for this PR. Existing UI can ignore the new
-fields, while future watchlist screens can render them directly.
+Older browser builds can ignore these fields. Current builds render them in the
+project lifecycle tracker.
 
-`GET /api/lifecycle-proiecte` exposes the same state as a feed for future
-project and consultation tracking screens. Query parameters:
+`GET /api/lifecycle-proiecte` exposes the same state as a feed for project and
+consultation tracking screens. The browser app renders it in **Proiecte urmărite
+· Stadiu legislativ**. Query parameters:
 
 - `q`: optional literal search over project id/title
 - `limit`: 1-100, default 50
@@ -78,6 +79,18 @@ Each project in the response includes:
 
 The feed returns unavailable/empty/stale/review states explicitly, so a UI can
 show missing source coverage without pretending the project has no lifecycle.
+
+The visible tracker supports:
+
+- search by project id/title;
+- filters for watched projects, affected dossiers, attention, stale rows,
+  unknown stages, unavailable sources and all projects;
+- local browser watch/unwatch for project ids;
+- opening the project import workspace for the selected project;
+- preparing a dossier from the project context when no existing dossier should
+  be faked;
+- source sync/review actions when the source registry exposes a matching tracked
+  source.
 
 ## Watchlist intent
 
