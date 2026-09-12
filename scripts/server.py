@@ -53,6 +53,7 @@ to a separate `initiative.documente.db` beside the initiative database.
 - `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
 - `POST /api/dosare/rule-candidates/preview` — validate an unsaved source-bound rule candidate
   for later law-as-code review.
+- `GET/POST /api/dosare/rule-drafts` — promote reviewed candidates into immutable draft rules.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET/POST /api/dosare/reguli` — local review queue for validated law-as-code rule candidates.
@@ -490,6 +491,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note",
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
+                "/api/dosare/rule-drafts",
                 "/api/dosare/ai-draft",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
@@ -606,6 +608,16 @@ def face_handler(stare: Stare, *, runtime=None):
                             int(qs.get("offset", ["0"])[0]),
                             qs.get("stare", ["all"])[0],
                         )
+                    elif ruta.path == "/api/dosare/rule-drafts":
+                        from scripts import law_rule_drafts
+
+                        out = law_rule_drafts.lista(
+                            path,
+                            ident,
+                            int(qs.get("offset", ["0"])[0]),
+                            act_id=qs.get("act", [""])[0],
+                            provision_id=qs.get("provision_id", [""])[0],
+                        )
                     elif ruta.path == "/api/dosare/dovezi":
                         from scripts.dependente_dovezi import verifica
 
@@ -673,6 +685,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note",
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
+                "/api/dosare/rule-drafts",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -782,6 +795,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note",
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
+                "/api/dosare/rule-drafts",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -845,6 +859,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         out = executa(path, cerere)
                     elif ruta == "/api/dosare/reguli":
                         from scripts.rule_candidate_queue import executa
+
+                        out = executa(path, cerere)
+                    elif ruta == "/api/dosare/rule-drafts":
+                        from scripts.law_rule_drafts import executa
 
                         out = executa(path, cerere)
                     elif ruta == "/api/dosare/ai-draft":

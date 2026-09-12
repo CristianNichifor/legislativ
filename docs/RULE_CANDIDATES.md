@@ -119,3 +119,33 @@ review tasks.
 
 The queue is an operational review surface. It does not certify that a candidate
 is legally correct, executable or accepted into the future rule engine.
+
+## Promotion to draft rules
+
+Reviewed candidates can be promoted into immutable dossier-scoped draft rules via
+`POST /api/dosare/rule-drafts`:
+
+```json
+{
+  "action": "promote",
+  "id": "cccccccccccccccccccccccccccccccc",
+  "dosar_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "queue_id": "11111111111111111111111111111111",
+  "accepted_by": "autor",
+  "acceptance_note": "Structura exprimă obligația din textul citat."
+}
+```
+
+The response contract is `law-rule-draft-v1`. It copies the exact validated
+candidate, source provision identity, source hash, text hash and reviewer note.
+Draft rules are append-only and deduplicated by `dosar_id,candidate_id`.
+
+Promotion is allowed only for candidates in the `reviewable` or `human_reviewed`
+buckets. Candidates needing more structure, legal review or marked as not
+codeable must stay in the queue.
+
+`GET /api/dosare/rule-drafts?id=...` lists promoted draft rules, with optional
+`act=...` and `provision_id=...` filters. These records are the first persistent
+law-as-code bridge, but they are still explicitly labelled
+`draft_rule_not_legal_verdict`; deterministic checks may consume them only as
+reviewable source-backed inputs.
