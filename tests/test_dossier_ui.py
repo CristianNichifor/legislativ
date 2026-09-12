@@ -208,6 +208,46 @@ assert.deepEqual(manualNotePayload({},'dossier',null),{
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_gap_workflow_summarizes_next_action_and_shortcuts():
+    source = (
+        APP.read_text()
+        .split("const MANUAL_NOTE_TYPES=", 1)[1]
+        .split("function manualNoteText", 1)[0]
+    )
+    code = (
+        r"""
+const assert=require('node:assert/strict');
+const escapes={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>escapes[c]);
+const dossierTime=s=>s;
+const MANUAL_NOTE_TYPES="""
+        + source
+        + r"""
+const empty=gapWorkflowSummary({pe_stare:{},pe_tip:{},total:0});
+assert.equal(empty.next,'Scrie prima notă cu citat și sursă.');
+const needs=gapWorkflowSummary({
+  total:3,
+  pe_stare:{needs_evidence:1,draft:1,ready_for_review:1},
+  pe_tip:{risc_ue:1}
+});
+assert.equal(needs.evidence,2);
+assert.ok(needs.next.includes('dovezile lipsă'));
+const ready=gapWorkflowSummary({total:2,pe_stare:{ready_for_review:2},pe_tip:{}});
+assert.ok(ready.next.includes('Revizuiește'));
+const html=gapWorkflowHtml({total:2,pe_stare:{ready_for_review:1,reviewed:1},pe_tip:{risc_ue:1}});
+assert.ok(html.includes('data-gap-flow-new-note'));
+assert.ok(html.includes('data-gap-flow-eu-note'));
+assert.ok(html.includes('data-gap-flow-ai-note'));
+assert.ok(html.includes('data-gap-flow-proposals'));
+assert.ok(html.includes('data-gap-flow-runs'));
+assert.ok(html.includes('✓ 1. Constatare')||html.includes('1. Constatare'));
+assert.ok(!html.includes('<script>'));
+"""
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_review_form_escapes_evidence_and_history():
     source = (
         APP.read_text()
