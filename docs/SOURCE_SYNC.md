@@ -5,6 +5,10 @@ not introduce a backend scheduler, bulk imports, public data releases or AI
 analysis. The first product goal is smaller: add or select one public source,
 sync only that source, and show exactly what happened.
 
+The broader source portfolio, Monitorul Oficial ingestion policy, R2 storage
+bands and legislative tracker event vocabulary are defined in
+[`SOURCE_PORTFOLIO.md`](SOURCE_PORTFOLIO.md).
+
 ## State vocabulary
 
 Every registry or queue row must use one of these states:

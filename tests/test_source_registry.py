@@ -133,6 +133,17 @@ def test_registry_status_contract_for_non_sync_source(tmp_path):
     assert row["sync_status"]["severity"] == "ready"
 
 
+def test_registry_names_precise_public_source_families():
+    families = registry.families()
+
+    assert families["consultare_econsultare"] == "Consultări publice · e-consultare"
+    assert families["monitorul_oficial_pi"] == "Monitorul Oficial · Partea I"
+    assert families["monitorul_oficial_other_parts"] == "Monitorul Oficial · Părțile II-VII"
+    assert families["monitorul_oficial_local"] == "Monitorul Oficial Local"
+    assert families["avize"] == "Avize și opinii instituționale"
+    assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
+
+
 def test_registry_rejects_invalid_sources_and_transitions(tmp_path):
     stare = state(tmp_path)
     with pytest.raises(ValueError, match="Familie"):
