@@ -57,6 +57,14 @@ def test_saved_finding_review_exposes_manual_note_action():
     assert "Creează notă" in source
 
 
+def test_provision_detail_panels_expose_identity_metadata():
+    source = APP.read_text()
+    assert "function provisionIdentityMeta" in source
+    assert "provision-identity-v1" in source
+    assert "provision-id-meta" in source
+    assert "provisionIdentityMeta(d)" in source
+
+
 def test_library_is_in_matrix_tab():
     class Placement(HTMLParser):
         def __init__(self):

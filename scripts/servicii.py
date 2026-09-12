@@ -3228,6 +3228,27 @@ def _prevedere(qs: dict, stare: Stare) -> dict:
     if not act_id or not locator:
         return {"gasit": False, "act_id": act_id, "locator": locator, "text": ""}
     with depozit.deschide(stare.corpus, readonly=True) as con:
+        try:
+            from scripts import provision_identity
+
+            identity = provision_identity.resolve(con, act_id, locator).to_dict()
+            locator = identity["locator"]
+        except ValueError as exc:
+            return {
+                "gasit": False,
+                "act_id": act_id,
+                "locator": locator,
+                "text": "",
+                "identity": {
+                    "contract": "provision-identity-v1",
+                    "status": "unavailable",
+                    "provision_id": "",
+                    "act_id": act_id,
+                    "locator": locator,
+                    "source_hash": "",
+                    "unavailable_reason": str(exc),
+                },
+            }
         rand = con.execute(
             "SELECT text FROM provizii WHERE act_id = ? AND locator = ? ORDER BY ord LIMIT 1",
             (act_id, locator),
@@ -3238,6 +3259,7 @@ def _prevedere(qs: dict, stare: Stare) -> dict:
         "locator": locator,
         "titlu": stare.titlu(act_id),
         "text": (rand[0] if rand else "") or "",
+        "identity": identity,
     }
 
 

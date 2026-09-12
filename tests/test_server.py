@@ -784,6 +784,10 @@ def test_prevedere_returns_a_provisions_stored_text(tmp_path):
     d = _prevedere({"act": ["lege-98-2016"], "loc": ["text"]}, stare)
     assert d["gasit"] and "achiziție publică" in d["text"]
     assert d["act_id"] == "lege-98-2016" and d["locator"] == "text"
+    assert d["identity"]["contract"] == "provision-identity-v1"
+    assert d["identity"]["provision_id"] == "ro:lege-98-2016#text"
+    assert d["identity"]["status"] == "available"
+    assert len(d["identity"]["source_hash"]) == 64
 
 
 def test_prevedere_says_so_for_an_act_with_no_article_tree(tmp_path):
@@ -797,6 +801,9 @@ def test_prevedere_says_so_for_an_act_with_no_article_tree(tmp_path):
     stare = _build(tmp_path)
     d = _prevedere({"act": ["lege-98-2016"], "loc": ["art3"]}, stare)
     assert d["gasit"] is False and d["text"] == ""
+    assert d["identity"]["provision_id"] == "ro:lege-98-2016#art3"
+    assert d["identity"]["status"] == "unavailable"
+    assert d["identity"]["unavailable_reason"] == "provision-not-found"
 
 
 def test_prevedere_refuses_an_incomplete_request(tmp_path):
