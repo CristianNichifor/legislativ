@@ -49,6 +49,17 @@ Supported review states:
 - `effect`
 - `reviewer`
 
+## Preview workflow
+
+`POST /api/dosare/rule-candidates/preview` validates the same payload and
+returns the `rule-candidate-v1` packet. The endpoint is read-only: it does not
+save a candidate, call AI or promote the output to an executable rule.
+
+The browser exposes this as **Propune regulă** from a provision preview and from
+manual notes. A reviewer can fill the structured fields, preview the normalized
+candidate, then decide later whether it belongs in a review queue. Until a
+persistence store exists, the result is explicitly unsaved.
+
 ## Output states
 
 - `reviewable`: enough structure for later human review or deterministic checks.

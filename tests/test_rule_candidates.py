@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import io
+import json
+from types import SimpleNamespace
+
 import pytest
 
 from scripts import rule_candidates
+from scripts.browser_workspace import route
+from scripts.server import face_handler
 
 
 def payload(**patch):
@@ -74,3 +80,53 @@ def test_non_executable_states_are_explicit(modality, status):
 def test_invalid_candidate_payload_is_rejected(patch):
     with pytest.raises(ValueError):
         rule_candidates.validate(payload(**patch))
+
+
+def request(state, method, url, body=None, host="localhost:8123", origin=None):
+    handler = object.__new__(face_handler(state))
+    handler.path = url
+    raw = json.dumps(body).encode() if body is not None else b""
+    handler.rfile = io.BytesIO(raw)
+    handler.headers = {"Host": host, "Content-Length": str(len(raw))}
+    if origin:
+        handler.headers["Origin"] = origin
+    handler.server = SimpleNamespace(server_port=8123)
+    result = []
+    handler._json = lambda data, code=200: result.append((code, data))
+    getattr(handler, "do_" + method)()
+    return result[0]
+
+
+def test_rule_candidate_preview_http_is_local_only(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db", date_dir=None)
+
+    assert (
+        request(
+            state,
+            "POST",
+            "/api/dosare/rule-candidates/preview",
+            payload(),
+            origin="https://evil.test",
+        )[0]
+        == 403
+    )
+    code, data = request(state, "POST", "/api/dosare/rule-candidates/preview", payload())
+
+    assert code == 200
+    assert data["contract"] == "rule-candidate-v1"
+    assert data["status"] == "reviewable"
+
+
+def test_browser_workspace_routes_rule_candidate_preview(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+
+    out = route(
+        state,
+        "/api/dosare/rule-candidates/preview",
+        {},
+        payload(modality="deadline"),
+        method="POST",
+    )
+
+    assert out["contract"] == "rule-candidate-v1"
+    assert out["modality"] == "deadline"

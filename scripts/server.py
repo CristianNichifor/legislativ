@@ -51,6 +51,8 @@ to a separate `initiative.documente.db` beside the initiative database.
 - `GET /api/matrice-dosar?emitent=&tip=&rang=&domeniu=&problema=` — a printable work dossier for
   one matrix row.
 - `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
+- `POST /api/dosare/rule-candidates/preview` — validate an unsaved source-bound rule candidate
+  for later law-as-code review.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
 - `GET/POST /api/dosare/reguli` — local review queue for validated law-as-code rule candidates.
@@ -675,6 +677,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
                 "/api/dosare/ai-draft/mcp-preview",
+                "/api/dosare/rule-candidates/preview",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -783,6 +786,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
                 "/api/dosare/ai-draft/mcp-preview",
+                "/api/dosare/rule-candidates/preview",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -851,6 +855,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.mcp_ai_draft import preview
 
                         out = preview(cerere)
+                    elif ruta == "/api/dosare/rule-candidates/preview":
+                        from scripts.rule_candidates import validate
+
+                        out = validate(cerere)
                     elif ruta == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import salveaza
 
