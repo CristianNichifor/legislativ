@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 ENGINE_VERSION = "matrice-dosar-v2"
 LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
@@ -81,7 +81,10 @@ def _open(path, *, write=False):
             con.execute(f"PRAGMA application_id={APPLICATION_ID}")
             version = 1
             app = APPLICATION_ID
-        if version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, SCHEMA_VERSION) or app != APPLICATION_ID:
+        if (
+            version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, SCHEMA_VERSION)
+            or app != APPLICATION_ID
+        ):
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
         if write and version == 1:
             con.execute(
@@ -204,6 +207,26 @@ def _open(path, *, write=False):
                 "ON watchlist_dosare(dosar_id,tip,valoare)"
             )
             version = 11
+        if write and version == 11:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS rule_candidate_queue (id TEXT PRIMARY KEY, "
+                "dosar_id TEXT NOT NULL REFERENCES dosare(id), candidate_id TEXT NOT NULL, "
+                "provision_id TEXT NOT NULL, act_id TEXT NOT NULL, locator TEXT NOT NULL, "
+                "status TEXT NOT NULL, review_state TEXT NOT NULL, modality TEXT NOT NULL, "
+                "source_hash TEXT NOT NULL, text_sha256 TEXT NOT NULL, payload_json TEXT NOT NULL, "
+                "creat_la TEXT NOT NULL, UNIQUE(dosar_id,candidate_id))"
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS rule_candidate_queue_dosar "
+                "ON rule_candidate_queue(dosar_id,status,review_state,creat_la DESC)"
+            )
+            for operation in ("UPDATE", "DELETE"):
+                con.execute(
+                    f"CREATE TRIGGER IF NOT EXISTS rule_candidate_queue_no_{operation.lower()} "
+                    f"BEFORE {operation} ON rule_candidate_queue BEGIN "
+                    "SELECT RAISE(ABORT,'Rule candidate queue is append-only'); END"
+                )
+            version = 12
         if write:
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con

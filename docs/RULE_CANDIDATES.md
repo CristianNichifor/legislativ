@@ -71,3 +71,40 @@ Executable legal checks should only consume candidates that remain tied to exact
 source text and a provision identity. AI and MCP tools may draft candidate
 structure, but they must not silently promote a candidate to a legally validated
 rule.
+
+## Local review queue
+
+Validated candidates can be saved into a dossier-scoped local queue:
+
+- `POST /api/dosare/reguli`
+- `GET /api/dosare/reguli?id=<dosar_id>&stare=<bucket>`
+
+The POST body is:
+
+```json
+{
+  "action": "save",
+  "id": "caller supplied 32-char retry id",
+  "dosar_id": "dossier id",
+  "candidate": {
+    "contract fields": "same payload accepted by scripts.rule_candidates.validate"
+  }
+}
+```
+
+The server validates the candidate before storage and groups queue items into:
+
+- `needs_more_structure`
+- `needs_legal_review`
+- `not_codeable`
+- `reviewable`
+- `human_reviewed`
+
+`stare=all` returns the paginated queue plus the first 20 rows per group.
+Saving is local-only, dossier-scoped and idempotent for the same caller retry id
+and stable `candidate_id`. A duplicate candidate with a different retry id is
+rejected so the review queue does not silently fork one extraction into multiple
+review tasks.
+
+The queue is an operational review surface. It does not certify that a candidate
+is legally correct, executable or accepted into the future rule engine.
