@@ -59,6 +59,15 @@ def test_mcp_ai_draft_requires_approval_and_reuses_source_grounded_prompt():
     assert out["mcp"]["audit_event"]["approved"] is False
     assert out["mcp"]["approval"]["server"] == "desktop-claude"
     assert out["mcp"]["approval"]["data_sha256"] == out["mcp"]["audit_event"]["data_sha256"]
+    assert out["approval"]["required"] is True
+    assert out["approval"]["server_calls_model"] is False
+    assert out["approval"]["mcp_executes_now"] is False
+    assert out["audit"]["approved_external_send"] is False
+    assert out["audit"]["model_invoked_by_server"] is False
+    assert out["audit"]["mcp_data_sha256"] == out["mcp"]["approval"]["data_sha256"]
+    assert out["cost_estimate"]["server_cost"] == "none"
+    assert out["cost_estimate"]["cost_owner"] == "user_if_sent_to_external_tool"
+    assert out["evidence_manifest"][0]["quote_sha256"]
     assert "Guvernul aprobă normele" in out["prompt"]
     assert "nerevizuită" in out["insert_header"]
     assert any("nu a apelat niciun MCP" in item for item in out["limitari"])

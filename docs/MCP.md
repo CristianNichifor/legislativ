@@ -12,6 +12,8 @@ The first contract is `mcp-boundary-v1`:
   wraps it in the MCP approval contract, and returns a copyable handoff packet.
 - The preview includes server, tool, purpose, capability, visible data preview, truncation state, and
   SHA-256 of the full text.
+- The preview includes cost ownership and token estimate metadata. Server cost is `none`; a real
+  executor must disclose provider-side pricing/retention before approval.
 - The audit event is always `approved: false`; a later executor must persist a user-approved event
   before calling any MCP server.
 

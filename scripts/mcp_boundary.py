@@ -72,6 +72,12 @@ def capabilities() -> dict:
     return {
         "contract": "mcp-boundary-v1",
         "capabilities": [{"key": key, **value} for key, value in CAPABILITIES.items()],
+        "execution": {
+            "implemented": False,
+            "requires_user_approval": True,
+            "approval_event_contract": "mcp-audit-event-v1",
+            "cost_owner": "user_account_or_user_key",
+        },
         "limitari": [
             "Acest contract nu execută apeluri MCP.",
             "Textul juridic poate fi trimis extern numai după aprobare explicită.",
@@ -96,6 +102,8 @@ def preview(request: dict) -> dict:
     data = _text(
         request["data"], MAX_TEXT, required=CAPABILITIES[capability]["requires_external_text"]
     )
+    data_sha256 = hashlib.sha256(data.encode()).hexdigest()
+    created_at = datetime.now(UTC).isoformat()
     payload = {
         "server": server,
         "tool": tool,
@@ -103,21 +111,45 @@ def preview(request: dict) -> dict:
         "purpose": purpose,
         "data_preview": data[:MAX_PREVIEW],
         "data_truncated": len(data) > MAX_PREVIEW,
-        "data_sha256": hashlib.sha256(data.encode()).hexdigest(),
+        "data_sha256": data_sha256,
+        "data_chars": len(data),
+        "estimated_input_tokens": max(0, len(data) // 4),
+        "data_classification": (
+            "legal_text_or_evidence"
+            if CAPABILITIES[capability]["requires_external_text"]
+            else "metadata"
+        ),
+    }
+    approval = {
+        **payload,
+        "capability_label": CAPABILITIES[capability]["label"],
+        "expected_output": CAPABILITIES[capability]["expected_output"],
+        "external_text": bool(data),
+        "requires_user_approval": True,
+        "approved": False,
+        "cost_owner": "user_account_or_user_key",
+        "retention_policy": "executor_must_disclose_destination_retention",
     }
     return {
         "contract": "mcp-boundary-v1",
         "status": "requires_user_approval",
-        "approval": {
-            **payload,
-            "capability_label": CAPABILITIES[capability]["label"],
-            "expected_output": CAPABILITIES[capability]["expected_output"],
-            "external_text": bool(data),
-        },
+        "approval": approval,
         "audit_event": {
             **payload,
+            "contract": "mcp-audit-event-v1",
+            "event": "mcp_preview_created",
             "approved": False,
-            "created_at": datetime.now(UTC).isoformat(),
+            "requires_user_approval": True,
+            "cost_owner": "user_account_or_user_key",
+            "created_at": created_at,
+        },
+        "cost_estimate": {
+            "contract": "mcp-cost-estimate-v1",
+            "estimated_input_tokens": payload["estimated_input_tokens"],
+            "estimated_output_tokens": None,
+            "server_cost": "none",
+            "cost_owner": "user_account_or_user_key",
+            "price_unknown_until_user_selects_mcp_server": True,
         },
         "limitari": [
             "Previzualizare locală; nu s-a apelat niciun server MCP.",

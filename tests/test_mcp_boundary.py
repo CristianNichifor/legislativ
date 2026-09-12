@@ -45,6 +45,8 @@ def test_capabilities_describe_non_executing_contract():
 
     assert result["contract"] == "mcp-boundary-v1"
     assert {item["key"] for item in result["capabilities"]} >= {"ai_draft", "github_issue"}
+    assert result["execution"]["implemented"] is False
+    assert result["execution"]["cost_owner"] == "user_account_or_user_key"
     assert any("nu execută" in item for item in result["limitari"])
 
 
@@ -54,7 +56,13 @@ def test_preview_requires_explicit_payload_and_never_marks_approved():
     assert result["status"] == "requires_user_approval"
     assert result["approval"]["server"] == "desktop-claude"
     assert result["approval"]["external_text"] is True
+    assert result["approval"]["requires_user_approval"] is True
+    assert result["approval"]["approved"] is False
+    assert result["approval"]["cost_owner"] == "user_account_or_user_key"
     assert result["audit_event"]["approved"] is False
+    assert result["audit_event"]["contract"] == "mcp-audit-event-v1"
+    assert result["cost_estimate"]["server_cost"] == "none"
+    assert result["cost_estimate"]["cost_owner"] == "user_account_or_user_key"
     assert result["approval"]["data_preview"] == "Art. 1: dovada citata."
     assert len(result["approval"]["data_sha256"]) == 64
 

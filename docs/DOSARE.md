@@ -217,6 +217,10 @@ and upgrade on the next successful write.
 returns a prompt contract for the browser. It does not call a model and does not
 store output. Each evidence item must include a quote plus either a source URL or
 source hash, so the prompt cannot be built from unsupported memory.
+The response also carries an evidence manifest, prompt hash, evidence hash,
+cost estimate and approval/audit metadata. The server-side cost is always
+`none`; online BYOK or MCP usage is paid only through the user's provider,
+after explicit user action.
 
 The manual-note editor can send that prompt through the user's configured AI mode:
 local WebGPU, or online BYOK with the existing confirmation before text leaves the

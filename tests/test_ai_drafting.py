@@ -31,8 +31,18 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert out["status"] == "draft_unreviewed"
     assert out["evidence_count"] == 1
     assert len(out["input_sha256"]) == 64
+    assert len(out["evidence_sha256"]) == 64
+    assert out["evidence_manifest"][0]["quote_sha256"]
+    assert "quote" not in out["evidence_manifest"][0]
+    assert out["approval"]["required_for_external_ai"] is True
+    assert out["approval"]["server_calls_model"] is False
+    assert out["cost_estimate"]["server_cost"] == "none"
+    assert out["cost_estimate"]["cost_owner"] == "user_if_byok_or_mcp"
+    assert out["audit"]["approved_external_send"] is False
+    assert out["audit"]["model_invoked_by_server"] is False
     assert "Nu inventa surse" in out["system"]
     assert "Guvernul aprobă normele" in out["prompt"]
+    assert "evidence_manifest" in out["prompt"]
     assert "verdict juridic final" in out["prompt"]
     assert any("Serverul nu a apelat niciun model" in item for item in out["limitari"])
 
