@@ -386,6 +386,15 @@
   [data-eu-proposal-links] input,[data-eu-proposal-links] select,[data-eu-proposal-links] textarea{width:100%;box-sizing:border-box}
   [data-eu-proposal-links] h4{font-size:.9rem;margin:.6rem 0 .3rem}
   [data-eu-proposal-links] pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto}
+  .eu-workflow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.35rem;margin:.55rem 0;padding:0;list-style:none}
+  .eu-workflow-steps li{border-top:2px solid var(--rule);padding:.35rem 0;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);min-width:0}
+  .eu-workflow-steps b{display:block;color:var(--ink);font-size:.78rem}
+  .eu-workflow-steps .done{border-color:var(--accent)}
+  .eu-workflow-steps .current{border-color:var(--material);color:var(--ink)}
+  .eu-workflow-steps .blocked{border-color:var(--blocking)}
+  .eu-blockers{border-left:3px solid var(--material);padding:.35rem .55rem;background:var(--surface);font-family:var(--sans);font-size:.78rem}
+  .eu-empty-state{border:1px solid var(--rule-soft);border-left:3px solid var(--material);padding:.5rem .65rem;margin:.45rem 0;background:var(--surface);font-family:var(--sans);font-size:.8rem;color:var(--ink-mid)}
+  .eu-empty-state b{display:block;color:var(--ink);margin-bottom:.15rem}
   .review-workspace{display:grid;grid-template-columns:minmax(210px,270px) minmax(0,1fr);gap:1rem;border-top:1px solid var(--rule);margin-top:.7rem}
   .review-finding-nav{padding:.7rem 0;min-width:0}
   .review-finding-nav [data-finding-buttons]{max-height:65vh;overflow:auto}
@@ -4733,11 +4742,45 @@ function bindManualNoteMcpDraft(form,section){
   };
 }
 
+const EU_BLOCKER_LABELS={
+  corpus_unavailable:'Corpusul național local nu poate fi citit.',
+  act_missing:'Actul național nu există în corpusul local.',
+  locator_missing:'Locatorul național nu are prevedere păstrată.',
+  unresolved_national_target:'Ținta națională a propunerii nu este rezolvată.',
+  ambiguous_locator:'Ținta națională este ambiguă.',
+  invalid_saved_target:'Ținta națională salvată nu mai poate fi verificată.',
+  unverified_hash:'Hash-ul păstrat nu verifică textul sursei.',
+  project_unavailable:'Proiectul parlamentar local nu poate fi citit.',
+  project_version_required:'Alege explicit versiunea proiectului parlamentar.',
+  project_version_missing:'Versiunea proiectului nu este disponibilă local.',
+  source_unavailable:'Sursa UE locală nu poate fi citită.',
+  missing_snapshot:'Alege explicit instantaneea UE locală.',
+  missing_text:'Textul necesar nu este disponibil local.',
+  snapshot_unavailable_or_invalid_hash:'Instantaneea UE lipsește sau hash-ul nu verifică textul.',
+  unsupported_language:'Limba sursei UE nu este suportată pentru această comparație.',
+  ambiguous_or_missing_locator:'Articolul UE lipsește sau este ambiguu.',
+  capture_limit:'Textul depășește limita de captură a fluxului.'
+};
+function euBlockerText(blocker){
+  const side=blocker.side==='eu'?'UE':'RO';
+  const label=EU_BLOCKER_LABELS[blocker.code]||blocker.code;
+  return side+' · '+label+(label===blocker.code?'':' ('+blocker.code+')');
+}
+function euBlockersHtml(blockers){
+  return blockers?.length?`<div class="eu-blockers" role="status">${blockers.map(b=>esc(euBlockerText(b))).join('<br>')}</div>`:'';
+}
+function euEmptyState(title,body){
+  return `<div class="eu-empty-state"><b>${esc(title)}</b>${esc(body)}</div>`;
+}
+function euWorkflowStepsHtml(steps){
+  return `<ol class="eu-workflow-steps">${steps.map(s=>`<li class="${esc(s.state||'')}"><b>${esc(s.label)}</b><span>${esc(s.text)}</span></li>`).join('')}</ol>`;
+}
+
 function euIssueNoteBuilderHtml(){
   const states=Object.entries(EU_ISSUE_STATES).map(([key,label])=>`<option value="${key}">${label}</option>`).join('');
   const statuses=['needs_evidence','ready_for_review','reviewed'].map(key=>`<option value="${key}" ${key==='ready_for_review'?'selected':''}>${MANUAL_NOTE_STATUS[key]}</option>`).join('');
   return `<details class="manual-notes" data-eu-issue-builder><summary>Notă UE din surse păstrate</summary>`
-    +'<p class="hint">Creează o notă revizuibilă dintr-o prevedere/proiect românesc și un articol UE importat/păstrat local. Nu produce verdict juridic.</p>'
+    +'<p class="hint">Creează o notă revizuibilă dintr-o prevedere/proiect românesc și un articol UE importat/păstrat local. Numai risc și dovezi de sprijin; nu verdict juridic.</p>'
     +'<form data-eu-issue-form>'
     +`<label>Tip ipoteză<select name="issue_state">${states}</select></label>`
     +'<label>Sursă națională<select name="national_kind"><option value="prevedere">Prevedere din corpus</option><option value="proiect">Proiect parlamentar importat</option></select></label>'
@@ -4762,11 +4805,11 @@ function euIssueEvidenceHtml(e,label){
     +`<pre>${esc(e.quote||'')}</pre></details>`;
 }
 function euIssuePreviewHtml(data){
-  if(!data)return '<p class="hint">Nicio previzualizare.</p>';
+  if(!data)return euEmptyState('Bază neprevizualizată','Completează sursa națională, CELEX, instantaneea și articolul UE, apoi previzualizează.');
   const base=data.base||{};
   return `<p><b>${esc(data.blockers?.length?'Dovezi blocate':'Bază pregătită pentru revizie umană')}</b> · ${esc(EU_ISSUE_STATES[data.issue_state]||data.issue_state)}</p>`
-    +(data.blockers?.length?`<p role="status">${data.blockers.map(b=>esc(b.side+' · '+b.code)).join('<br>')}</p>`:'')
-    +`<p class="hint">Bază SHA-256: ${esc(data.base_sha256||'')} · efect juridic: ${esc(base.legal_effect||'unknown')}</p>`
+    +euBlockersHtml(data.blockers)
+    +`<p class="hint">Bază SHA-256: ${esc(data.base_sha256||'')} · efect juridic: ${esc(base.legal_effect||'unknown')} · comparație de sprijin, nu concluzie.</p>`
     +euIssueEvidenceHtml(base.national_evidence,'RO')
     +euIssueEvidenceHtml(base.eu_evidence,'UE')
     +ueLimitariHtml(data.limitari||[]);
@@ -4791,7 +4834,17 @@ function bindEuIssueNoteBuilder(host,dossierId){
     : {kind:'prevedere',act_id:form.elements.national_id.value,locator:form.elements.national_locator.value};
   const selection=()=>({dosar_id:dossierId,national:national(),eu:{celex:celex(),instantanee:form.elements.instantanee.value,locator:form.elements.locator.value},issue_state:form.elements.issue_state.value});
   const invalidate=()=>{preview=null;retry=null;save.disabled=true;result.innerHTML=euIssuePreviewHtml(null);savedHost.innerHTML='';};
+  const renderSteps=()=>{
+    const hasCelex=(form.elements.celex.value||'').trim(),hasSnapshot=form.elements.instantanee.value,hasArticle=form.elements.locator.value;
+    result.insertAdjacentHTML('afterbegin',euWorkflowStepsHtml([
+      {label:'1. Import CELEX',text:hasCelex?'CELEX completat; verifică textul local.':'Introdu CELEX sau URL EUR-Lex.',state:hasCelex?'done':'current'},
+      {label:'2. Alege articolul UE',text:hasSnapshot&&hasArticle?'Instantanee și articol selectate.':'Încarcă instantanee, apoi articole.',state:hasSnapshot&&hasArticle?'done':hasCelex?'current':''},
+      {label:'3. Compară cu RO',text:preview?'Baza a fost rezolvată din surse locale.':'Previzualizează baza înainte de salvare.',state:preview?'done':hasArticle?'current':''},
+      {label:'4. Salvează risc',text:'Nota păstrează ipoteza și contextul pentru propunere.',state:preview?.blockers?.length?'blocked':preview?'current':''}
+    ]));
+  };
   form.querySelectorAll('input,select,textarea').forEach(input=>input.oninput=()=>{if(!['title','status','uncertainty','rationale'].includes(input.name))invalidate();});
+  invalidate();renderSteps();
   host.querySelector('[data-eu-issue-import]').onclick=async()=>{
     status.textContent='Import CELEX din sursa oficială…';invalidate();
     try{
@@ -4813,6 +4866,7 @@ function bindEuIssueNoteBuilder(host,dossierId){
       const snapshots=[...(d.curenta?.id?[d.curenta]:[]),...(d.instantanee||[])].filter((s,i,a)=>a.findIndex(x=>x.id===s.id)===i);
       form.elements.instantanee.innerHTML='<option value="">Selectează explicit</option>'+snapshots.map(s=>`<option value="${esc(s.id)}">${esc((s.limba||s.sursa?.limba||'')+' · '+(s.citit_la||s.sursa?.citit_la||'')+' · '+s.id.slice(0,12))}</option>`).join('');
       status.textContent=snapshots.length?'Alege instantaneea UE.':'Nu există instantanee UE locală pentru CELEX.';
+      if(!snapshots.length)result.innerHTML=euEmptyState('Text UE local indisponibil','Importă CELEX sau verifică dacă sursa are text RON/ENG compatibil înainte de comparare.');
     }catch(err){status.textContent=err.message;}
   };
   host.querySelector('[data-eu-issue-load-articles]').onclick=async()=>{
@@ -4821,13 +4875,15 @@ function bindEuIssueNoteBuilder(host,dossierId){
       const d=await dossierApi('/api/dosare/propuneri/legaturi-ue/obligatii?'+new URLSearchParams({celex:celex(),instantanee:form.elements.instantanee.value}));
       form.elements.locator.innerHTML='<option value="">Selectează explicit</option>'+(d.articole||[]).map(a=>`<option value="${esc(a.locator)}" ${a.selectabil?'':'disabled'}>${esc(a.locator+' · '+(a.titlu||''))}${a.selectabil?'':' · ambiguu'}</option>`).join('');
       status.textContent=d.blockers?.length?d.blockers.map(b=>b.code).join(', '):'Alege articolul UE.';
+      if(d.blockers?.length)result.innerHTML=euBlockersHtml(d.blockers);
+      else if(!(d.articole||[]).length)result.innerHTML=euEmptyState('Niciun articol selectabil','Instantaneea există, dar parserul nu a delimitat articole utile pentru comparație.');
     }catch(err){status.textContent=err.message;}
   };
   host.querySelector('[data-eu-issue-preview]').onclick=async()=>{
     status.textContent='Rezolv baza notei UE…';save.disabled=true;
     try{
       preview=await dossierApi('/api/dosare/note-ue/previzualizare',selection());
-      result.innerHTML=euIssuePreviewHtml(preview);save.disabled=!!preview.blockers?.length;status.textContent=preview.blockers?.length?'Dovezile nu sunt complete.':'Completează incertitudinea și raționamentul, apoi salvează.';
+      result.innerHTML=euIssuePreviewHtml(preview);renderSteps();save.disabled=!!preview.blockers?.length;status.textContent=preview.blockers?.length?'Dovezile nu sunt complete.':'Completează incertitudinea și raționamentul, apoi salvează ipoteza de risc.';
     }catch(err){status.textContent=err.message;}
   };
   form.onsubmit=async e=>{
@@ -7272,12 +7328,12 @@ window.addEventListener('beforeunload',event=>{
 const EU_LINK_API='/api/dosare/propuneri/legaturi-ue';
 const EU_LINK_HYPOTHESES={potential_coverage:'Acoperire potențială',potential_conflict:'Conflict potențial',potential_gap:'Lacună potențială'};
 function euProposalLinkResult(data){
-  if(!data)return '<p class="hint">Nicio bază selectată.</p>';
+  if(!data)return euEmptyState('Nicio bază selectată','Alege CELEX, instantanee și articol UE, apoi previzualizează înainte de salvare.');
   const basis=data.baza,source=basis.eu_snapshot?.sursa,proposal=basis.proposal;
   return `<p><b>${data.scope==='substantive_candidate'?'Ipoteză salvată, nu verdict juridic':data.blockers.length?'Legătură blocată · doar context':'Bază disponibilă · confirmare explicită necesară'}</b></p>`
-    +(data.blockers.length?`<p role="status">${data.blockers.map(b=>esc(b.side+' · '+b.code)).join('<br>')}</p>`:'')
-    +`<p class="hint">Revizia propunerii ${esc(proposal.revizie)} · ${esc(basis.proposal_sha256)}<br>Bază: ${esc(data.baza_sha256)}<br>Aplicabilitate juridică: necunoscută.</p>`
-    +(data.substantive_candidate?`<p>Autor declarat (neautentificat): ${esc(data.substantive_candidate.autor)}<br>${esc(EU_LINK_HYPOTHESES[data.substantive_candidate.ipoteza])}</p><p>${esc(data.substantive_candidate.obligatie)}</p><p>${esc(data.substantive_candidate.motiv)}</p>`:'')
+    +euBlockersHtml(data.blockers)
+    +`<p class="hint">Revizia propunerii ${esc(proposal.revizie)} · ${esc(basis.proposal_sha256)}<br>Bază: ${esc(data.baza_sha256)}<br>Aplicabilitate juridică: necunoscută · comparație de sprijin, nu concluzie.</p>`
+    +(data.substantive_candidate?`<p>Autor declarat (neautentificat): ${esc(data.substantive_candidate.autor)}<br>${esc(EU_LINK_HYPOTHESES[data.substantive_candidate.ipoteza])}</p><p><b>Pasaj obligație declarat</b><br>${esc(data.substantive_candidate.obligatie)}</p><p><b>Motivare risc</b><br>${esc(data.substantive_candidate.motiv)}</p>`:'')
     +`<details><summary>Propunere și țintă națională istorică</summary><pre>${esc(proposal.text)}</pre><pre>${esc(proposal.interventie?.tinta?.text||'Țintă națională nerezolvată')}</pre></details>`
     +(source?`<h4>${esc(source.celex)} · ${esc(basis.eu_article?.locator||'Articol nerezolvat')}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Sursă UE')} · ${esc(source.citit_la)}</p><p class="hint">SHA-256 text: ${esc(source.text_sha256)}</p><pre>${esc(basis.eu_article?.text||'')}</pre><details><summary>Text integral UE păstrat și context</summary><pre>${esc(source.text)}</pre><pre>${esc(JSON.stringify(basis.context,null,2))}</pre></details>`:'');
 }
@@ -7305,6 +7361,12 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
     const v=state.values;
     const field=(name,label,body)=>`<label>${label}${body||`<input data-eu-link-field="${name}" value="${esc(v[name])}" ${name==='revizie'?'type="number" min="1" max="1000001" step="1"':name==='autor'?'type="text" maxlength="120"':'type="text" maxlength="50"'}>`}</label>`;
     section.innerHTML='<summary>Legături UE · obligație și revizie salvate</summary><p class="hint">Ipoteze declarate de autor, fără verdict juridic. Textul național este ținta istorică a propunerii; sursa UE este instantaneea selectată explicit. Ciorna acestei legături rămâne numai în sesiunea paginii.</p>'
+      +euWorkflowStepsHtml([
+        {label:'1. Import CELEX',text:v.celex?'CELEX completat; citește sursele locale.':'Completează CELEX sau folosește managerul UE.',state:v.celex?'done':'current'},
+        {label:'2. Alege articol UE',text:v.instantanee&&v.locator?'Instantanee și articol selectate.':'Alege instantaneea, apoi articolul.',state:v.instantanee&&v.locator?'done':v.celex?'current':''},
+        {label:'3. Compară cu RO',text:state.preview?'Baza propunerii și articolul UE au fost rezolvate.':'Previzualizează baza surselor.',state:state.preview?'done':v.locator?'current':''},
+        {label:'4. Salvează ipoteza',text:'Se salvează risc/evidență, nu verdict juridic.',state:state.preview?.blockers?.length?'blocked':state.preview?'current':''}
+      ])
       +field('revizie','Revizia propunerii')+`<p class="hint" data-eu-link-revision-label>Ultima revizie salvată disponibilă: ${esc(saved.revizie)}. Selecția curentă: ${esc(v.revizie)}.</p>`+field('celex','CELEX')
       +'<button type="button" class="ghost mini" data-eu-link-sources>Citește sursele locale UE</button>'
       +field('instantanee','Instantanee UE',`<select data-eu-link-field="instantanee"><option value="">Selectează explicit</option>${state.snapshots.map(s=>`<option value="${esc(s.id)}" ${v.instantanee===s.id?'selected':''}>${esc(s.limba||s.sursa?.limba)} · ${esc(s.citit_la||s.sursa?.citit_la)} · ${esc(s.id.slice(0,12))}</option>`).join('')}</select>`)
@@ -7314,8 +7376,8 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
       +'<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-preview>Previzualizează baza</button></div>'
       +field('autor','Autor declarat (neautentificat)')
       +field('ipoteza','Ipoteză',`<select data-eu-link-field="ipoteza">${Object.entries(EU_LINK_HYPOTHESES).map(([k,label])=>`<option value="${k}" ${v.ipoteza===k?'selected':''}>${label}</option>`).join('')}</select>`)
-      +field('obligatie','Pasajul obligației (citat exact din corpul articolului)',`<textarea rows="3" maxlength="2000" data-eu-link-field="obligatie">${esc(v.obligatie)}</textarea>`)
-      +field('motiv','Motivarea legăturii',`<textarea rows="3" maxlength="4000" data-eu-link-field="motiv">${esc(v.motiv)}</textarea>`)
+      +field('obligatie','Pasajul obligației (citat exact din corpul articolului UE)',`<textarea rows="3" maxlength="2000" data-eu-link-field="obligatie">${esc(v.obligatie)}</textarea>`)
+      +field('motiv','Motivarea riscului / dovezi de sprijin',`<textarea rows="3" maxlength="4000" data-eu-link-field="motiv">${esc(v.motiv)}</textarea>`)
       +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-confirm ${!state.preview||state.preview.blockers.length||state.confirmed?'disabled':''}>${state.retry?'Reîncearcă salvarea ipotezei':'Confirmă și salvează ipoteza'}</button><button type="button" class="ghost mini" data-eu-link-cancel>Renunță la ciorna legăturii</button></div>`
       +`<p class="hint" role="status" data-eu-link-status>${esc(state.busy?'În curs…':state.error||state.status||'')}</p><div data-eu-link-preview-result>${euProposalLinkResult(state.preview)}</div>`
       +'<h4>Istoric pentru revizia selectată</h4><button type="button" class="ghost mini" data-eu-link-refresh>Reîncarcă istoricul</button>'
@@ -7323,7 +7385,7 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
       +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-prev ${!state.offset?'disabled':''} title="Pagina precedentă">←</button><button type="button" class="ghost mini" data-eu-link-next ${state.offset+20>=state.total?'disabled':''} title="Pagina următoare">→</button></div><p class="hint">${state.total} legături · offset ${state.offset}</p><div data-eu-link-saved-result>${euProposalLinkResult(state.saved)}</div>`
       +`<div class="dossier-actions"><button type="button" class="ghost mini" data-eu-link-export="json" ${state.saved?'':'disabled'}>Exportă legătura JSON</button><button type="button" class="ghost mini" data-eu-link-export="md" ${state.saved&&state.markdown?'':'disabled'}>Exportă legătura Markdown</button></div>`;
     const get=name=>section.querySelector('[data-eu-link-'+name+']');
-    const invalidate=()=>{state.preview=null;state.retry=null;state.confirmed=false;state.status='';state.error='';get('status').textContent='';get('confirm').disabled=true;get('preview-result').textContent='Bază neconfirmată.';};
+    const invalidate=()=>{state.preview=null;state.retry=null;state.confirmed=false;state.status='';state.error='';get('status').textContent='';get('confirm').disabled=true;get('preview-result').innerHTML=euEmptyState('Bază neconfirmată','Previzualizează din nou după schimbarea selecției.');};
     section.querySelectorAll('[data-eu-link-field]').forEach(input=>{
       input.oninput=()=>{
         const name=input.dataset.euLinkField;v[name]=input.value;
@@ -7351,12 +7413,12 @@ function bindEuProposalLinks(host,panel,saved,identity,alive){
       const data=await dossierApi('/api/ue/surse?'+new URLSearchParams({celex:v.celex,offset}));
       const snapshots=[...(offset?state.snapshots:[]),...(data.curenta?.id?[data.curenta]:[]),...data.instantanee];
       state.snapshots=snapshots.filter((s,i,a)=>a.findIndex(x=>x.id===s.id)===i);state.sourceOffset=offset;state.moreSnapshots=data.mai_multe;
-      state.status=state.snapshots.length?'Instantanee locale disponibile.':'Text UE lipsă sau nevalidat · legătura substantivă este blocată.';
+      state.status=state.snapshots.length?'Instantanee locale disponibile; alege una pentru articole.':'Text UE lipsă sau nevalidat · importă CELEX înainte de comparație.';
     };
     const loadArticles=async(offset=0)=>{
       const data=await dossierApi(EU_LINK_API+'/obligatii?'+new URLSearchParams({celex:v.celex,instantanee:v.instantanee,offset}));
       state.articles=[...(offset?state.articles:[]),...data.articole];state.articleOffset=offset;state.moreArticles=data.mai_multe;
-      state.status=data.blockers.map(b=>b.code).join(', ')||'Articole din instantaneea selectată.';
+      state.status=data.blockers.map(euBlockerText).join(', ')||((data.articole||[]).length?'Articole din instantaneea selectată; alege articolul de comparat.':'Niciun articol selectabil în instantaneea aleasă.');
     };
     get('sources').onclick=()=>run(()=>loadSources());
     if(get('more-sources'))get('more-sources').onclick=()=>run(()=>loadSources(state.sourceOffset+20));
