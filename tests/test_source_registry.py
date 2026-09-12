@@ -56,9 +56,27 @@ def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
     assert listed["total"] == 1
     assert listed["families"]["ue_cellar"].startswith("Drept UE")
     assert listed["sources"][0]["identifier"] == "32014L0024"
+    assert listed["sources"][0]["sync_status"] == {
+        "state": "discovered",
+        "label": "Source known by URL or public identifier; no fetch attempted in this queue.",
+        "severity": "ready",
+        "can_queue": True,
+        "can_sync": True,
+        "can_review": False,
+        "next_action": "Pune sursa în coadă sau sincronizeaz-o explicit.",
+    }
+    selected = registry.lista(stare, {"id": [row["id"]]})
+    assert selected["total"] == 1
+    assert selected["sources"][0]["id"] == row["id"]
 
     queued = registry.executa(stare, {"action": "queue", "id": row["id"]})
     assert queued["state"] == "queued"
+    assert queued["sync_status"]["can_queue"] is False
+    assert queued["sync_status"]["can_sync"] is True
+    assert (
+        queued["sync_status"]["next_action"]
+        == "Rulează sincronizarea pentru această singură sursă."
+    )
 
     fetched = registry.executa(
         stare,
@@ -74,12 +92,23 @@ def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
     assert fetched["state"] == "fetched"
     assert fetched["last_hash"] == "a" * 64
     assert fetched["parser_version"] == "cellar-v1"
+    assert fetched["sync_status"]["severity"] == "ready"
 
     filtered = registry.lista(stare, {"family": ["ue_cellar"], "state": ["fetched"]})
     assert filtered["total"] == 1
     assert filtered["counts"]["ue_cellar:fetched"] == 1
     assert filtered["sources"][0]["attempts"][0]["state"] == "fetched"
     assert filtered["sources"][0]["attempts"][0]["content_hash"] == "a" * 64
+
+
+def test_registry_status_contract_for_non_sync_source(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(stare, {"family": "ccr", "identifier": "decizie-1"})
+
+    assert row["sync_status"]["can_queue"] is False
+    assert row["sync_status"]["can_sync"] is False
+    assert row["sync_status"]["can_review"] is False
+    assert row["sync_status"]["severity"] == "ready"
 
 
 def test_registry_rejects_invalid_sources_and_transitions(tmp_path):
