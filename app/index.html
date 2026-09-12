@@ -6533,6 +6533,15 @@ function lifecycleOverviewHtml(data){
     +`<section class="lifecycle-overview-card"><span class="hint">Calitate stadii</span><strong>${esc(counts.unknown+counts.unavailable)}</strong><span class="hint">${esc(counts.stale)} surse vechi</span></section>`
     +lifecycleAttentionFeedHtml(data);
 }
+function lifecycleStatusSummaryHtml(project){
+  const missing=[];
+  if(project.source_state==='stale'||project.stale)missing.push('sursă veche');
+  if(project.source_state==='unknown'||project.stage?.key==='unknown')missing.push('etapă nemapată');
+  if(project.source_state==='unavailable'||project.unavailable)missing.push('sursă indisponibilă');
+  if(project.registry_needs_attention)missing.push('sursă urmărită de revizuit');
+  const next=project.registry_can_sync?'sincronizează sursa urmărită':project.needs_attention?'deschide revizia sursei':'monitorizează următorul eveniment oficial';
+  return `<section class="lifecycle-overview-card"><span class="hint">Stadiu curent</span><strong>${esc(project.stage?.label||project.status||'Necunoscut')}</strong><span class="hint">Ultimul pas: ${esc(lifecycleEventText(project))}</span><br><span class="hint">Date lipsă: ${esc(missing.join(', ')||'niciuna semnalată')}</span><br><span class="hint">Următorul pas: ${esc(next)}</span></section>`;
+}
 function lifecycleRowHtml(project,index=0){
   const attention=project.needs_attention?'attention':'ok', url=urlSigur(project.url);
   const stage=project.stage?.label||project.status||'Stadiu necunoscut';
@@ -6544,7 +6553,7 @@ function lifecycleRowHtml(project,index=0){
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4><p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -6747,7 +6756,11 @@ function trackerEventHtml(event){
   const summary=trackerEventSummary(event);
   const review=event.review||{};
   const reviewText=review.reviewed?`Revizuit ${dossierTime(review.reviewed_at)}${review.reviewer?` de ${review.reviewer}`:''}${review.note?` · ${review.note}`:''}`:'Nerevizuit';
-  return `<li class="tracker-timeline-event" data-tracker-event="${esc(event.id)}"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(event.title||event.event_label||event.event_type)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p><p class="hint">${esc(reviewText)}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-tracker-note-event="${esc(event.id)}">Creează notă în dosar</button><button type="button" class="ghost mini" data-tracker-review-event="${esc(event.id)}" ${review.reviewed?'disabled':''}>Marchează revizuit</button></div></div></li>`;
+  const label=event.title||event.display_label||event.event_label||event.event_type;
+  const normalized=event.display_label&&event.display_label!==event.title?` · ${event.display_label}`:'';
+  const stage=event.stage_label?` · etapa ${event.stage_label}`:'';
+  const evidence=`<details><summary>Dovezi eveniment</summary><dl class="hint"><dt>Sursă</dt><dd>${esc(event.source_family||'necunoscută')}</dd><dt>ID sursă</dt><dd>${esc(event.source_id||'necunoscut')}</dd><dt>Hash</dt><dd>${esc(event.content_hash||'necunoscut')}</dd></dl>${source?`<p><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a></p>`:''}</details>`;
+  return `<li class="tracker-timeline-event" data-tracker-event="${esc(event.id)}"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(label)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)}${esc(normalized)}${esc(stage)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p>${evidence}<p class="hint">${esc(reviewText)}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-tracker-note-event="${esc(event.id)}">Creează notă în dosar</button><button type="button" class="ghost mini" data-tracker-review-event="${esc(event.id)}" ${review.reviewed?'disabled':''}>Marchează revizuit</button></div></div></li>`;
 }
 async function trackerTimelineApi(body){
   const response=await fetch('/api/tracker-evenimente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
