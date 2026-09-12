@@ -73,6 +73,12 @@ The tracker should normalize public-source movement into these events:
 | `vote_recorded` | Camera/Senat | chamber, vote date, result, counts, nominal-vote URL |
 | `published_in_monitor` | Monitorul Oficial Part I | part, number, date, act id, source hash |
 
+The local append-only storage/API contract for these normalized observations is
+`scripts/tracker_events.py`. It is intentionally separate from source sync:
+`GET /api/tracker-evenimente` reads local normalized events and
+`POST /api/tracker-evenimente` records one event. Neither endpoint fetches public
+sources or mutates saved legal conclusions.
+
 ## Execution order
 
 1. Keep one-source sync as the operational boundary.
