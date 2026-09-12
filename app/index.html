@@ -6140,6 +6140,10 @@ function sourceRegistrySnapshotSummary(row,compact=false){
   ];
   return `<details open><summary>${isEconsultare?'Date parsate E-Consultare':'Ultima captură parsată'}</summary><dl class="hint">${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl><p class="hint">Captură: ${esc(dossierTime(snapshot.captured_at))}${snapshot.content_hash?` · SHA-256 ${esc(snapshot.content_hash)}`:''}${snapshot.parser_version?` · Parser ${esc(snapshot.parser_version)}`:''}${summary.truncated?' · rezultat trunchiat':''}</p></details>`;
 }
+function sourceRegistryTrackerProject(row){
+  const value=String(row.identifier||'').trim();
+  return /^[a-z0-9_.:/ -]{1,200}$/i.test(value)&&!/^https?:/i.test(value)?value:'';
+}
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
@@ -6159,7 +6163,7 @@ function sourceRegistryConfigure(data){
   family.innerHTML=Object.entries(data.families).map(([k,v])=>`<option value="${esc(k)}">${esc(v)}</option>`).join('');
   $('#source-registry-state').innerHTML='<option value="">Toate</option><option value="_attention">Necesită atenție</option>'+data.states.map(s=>`<option value="${esc(s)}">${esc(SOURCE_STATE_LABELS[s]||s)}</option>`).join('');
 }
-function sourceRegistryRowHtml(row,families){
+function sourceRegistryRowHtml(row,families,index=0){
   const state=SOURCE_STATE_LABELS[row.state]||row.state, family=families[row.family]||row.family;
   const syncStatus=row.sync_status||{};
   const source=row.url?`<br><a href="${esc(row.url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:'';
@@ -6172,8 +6176,9 @@ function sourceRegistryRowHtml(row,families){
   const sync=canSync?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">${row.family==='ue_cellar'?'Sincronizează CELEX':'Sincronizează sursa'}</button>`:'';
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
+  const tracker=`<button type="button" class="ghost mini" data-source-tracker="${esc(index)}">Evenimente tracker</button>`;
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button><button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
@@ -6195,10 +6200,16 @@ async function loadSourceRegistry(offset=0,notice=''){
   status.textContent='Încarc registrul surselor…';list.textContent='';
   try{
     const data=await sourceRegistryApi(null,params);sourceRegistryConfigure(data);SOURCE_REGISTRY.offset=offset;
-    list.innerHTML=data.sources.map(row=>sourceRegistryRowHtml(row,data.families)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
+    list.innerHTML=data.sources.map((row,i)=>sourceRegistryRowHtml(row,data.families,i)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
     $('#source-registry-prev').disabled=offset===0;$('#source-registry-next').disabled=!data.more;
     status.textContent=notice||`${data.total} surse urmărite. Sync-ul este explicit, câte o sursă, fără rebuild.`;
     list.querySelectorAll('[data-source-inspect]').forEach(button=>button.onclick=()=>inspectSourceRegistryRow(button.dataset.sourceInspect));
+    list.querySelectorAll('[data-source-tracker]').forEach(button=>button.onclick=()=>{
+      const row=data.sources[Number(button.dataset.sourceTracker)];if(!row)return;
+      openTrackerTimeline({project_id:sourceRegistryTrackerProject(row)});
+      const form=$('#tracker-timeline-search');
+      form.elements.source_family.value=row.family||'';loadTrackerTimeline(0);
+    });
     list.querySelectorAll('[data-source-queue]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;status.textContent='Pun sursa în coadă…';
       try{await sourceRegistryApi({action:'queue',id:button.dataset.sourceQueue});await loadSourceRegistry(SOURCE_REGISTRY.offset);}
