@@ -193,6 +193,7 @@ def face_handler(stare: Stare, *, runtime=None):
             if urlparse(self.path).path.startswith(
                 (
                     "/api/dosare",
+                    "/api/mcp",
                     "/api/lifecycle-proiecte",
                     "/api/acoperire-surse",
                     "/api/surse-proiecte",
@@ -432,6 +433,12 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json(lista(stare, parse_qs(ruta.query)))
                 except (ValueError, OSError, sqlite3.Error):
                     self._json({"error": "Registrul surselor nu este disponibil."}, 503)
+            elif ruta.path == "/api/mcp/capabilities":
+                from scripts.mcp_boundary import capabilities
+
+                if not self._dosare_permis():
+                    return
+                self._json(capabilities())
             elif ruta.path == "/api/surse-proiecte":
                 from scripts import achizitii_proiecte
 
@@ -624,6 +631,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/surse-proiecte",
                 "/api/ue/surse",
                 "/api/registru-surse",
+                "/api/mcp/preview",
                 "/api/dosare",
                 "/api/dosare/metadate",
                 "/api/dosare/ciorne",
@@ -659,7 +667,13 @@ def face_handler(stare: Stare, *, runtime=None):
                 if ruta in ("/api/dosare/propuneri", "/api/dosare/propuneri/previzualizare")
                 else 16000
                 if ruta.startswith(
-                    ("/api/dosare", "/api/surse-proiecte", "/api/ue/surse", "/api/registru-surse")
+                    (
+                        "/api/dosare",
+                        "/api/surse-proiecte",
+                        "/api/ue/surse",
+                        "/api/registru-surse",
+                        "/api/mcp",
+                    )
                 )
                 else MAX_CERERE
             ):
@@ -708,6 +722,16 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Registrul surselor nu este disponibil."}, 503)
+                return
+            if ruta == "/api/mcp/preview":
+                from scripts.mcp_boundary import preview
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(preview(cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
                 return
             if ruta in (
                 "/api/dosare",

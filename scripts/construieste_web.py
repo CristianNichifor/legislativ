@@ -417,6 +417,11 @@ def _raspunde(path, query, body, method='GET'):
         out = {'mod': 'static', 'error': 'Achizitia surselor este disponibila numai in aplicatia locala.'}
     elif path == '/api/ue/surse':
         out = {'mod': 'static', 'error': 'Importul si istoricul surselor UE sunt disponibile numai in aplicatia locala.'}
+    elif path == '/api/mcp/capabilities':
+        from scripts.mcp_boundary import capabilities
+        out = capabilities()
+    elif path == '/api/mcp/preview':
+        out = {'mod': 'static', 'error': 'MCP este disponibil doar printr-un executor local aprobat explicit.'}
     elif path in ('/api/documente-proiect', '/api/importa-proiect',
                   '/api/diferente-versiuni', '/api/actualizare-proiect'):
         out = {'error': 'Importul oficial este disponibil în aplicația locală.'}

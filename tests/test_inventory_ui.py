@@ -267,6 +267,8 @@ def test_static_worker_explicitly_rejects_source_acquisition():
     assert "'mod': 'static'" in branch and "'error':" in branch
     eu = source.split("elif path == '/api/ue/surse':", 1)[1].split("elif path", 1)[0]
     assert "'mod': 'static'" in eu and "'error':" in eu
+    mcp = source.split("elif path == '/api/mcp/preview':", 1)[1].split("elif path", 1)[0]
+    assert "'mod': 'static'" in mcp and "'error':" in mcp
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
