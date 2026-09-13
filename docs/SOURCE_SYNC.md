@@ -93,6 +93,17 @@ portal, follow ministry pages, translate documents, run AI or decide whether the
 draft is legally compatible with existing law. Pages without a clear title or
 document links are retained as `needs_review`, not treated as empty results.
 
+For `consultare_minister` and `avize`, the first usable slice is metadata-first:
+the caller registers one official URL or public identifier and may pass bounded
+metadata in a `sync` request. The registry stores a
+`manual-source-metadata-snapshot-v1` record with title/authority/deadline and
+document link/hash metadata for ministry consultations, or issuer/position/
+observations/document-hash metadata for avize. This path intentionally does not
+scrape ministry pages, follow portals or infer legal conclusions from document
+text. If the metadata is enough to identify a consultation or received opinion,
+the sync stores a tracker event candidate and returns `tracker_sync.stored` plus
+`tracker_sync.event_types`; otherwise the row remains visible as `needs_review`.
+
 The registry hash for a project ficha is computed from the official ficha URL,
 document links and truncation flag. Local retained-version history is exposed in
 snapshot summaries but is excluded from that hash, so importing a document does
@@ -157,11 +168,12 @@ The local acceptance contract for one registered source is intentionally narrow:
   local dependency.
 
 The current app infers bounded tracker events for supported parliamentary and
-e-consultare syncs, then reports the stored event counts in the sync response.
-It still does not create dossier notes from a source change. Tests therefore
-assert the concrete API contracts above: registration/sync writes the source
-state, tracker writes make events visible by project and dossier, and manual
-notes are counted conservatively as direct source references.
+e-consultare syncs, and for metadata-first ministry consultation / avize syncs
+when the request supplies enough fields, then reports the stored event counts in
+the sync response. It still does not create dossier notes from a source change.
+Tests therefore assert the concrete API contracts above: registration/sync writes
+the source state, tracker writes make events visible by project and dossier, and
+manual notes are counted conservatively as direct source references.
 
 ## Acceptance
 
