@@ -47,6 +47,9 @@ def test_exact_retained_article_and_revision_without_writes(linked_case):
     assert links.preview(state, selection) == result
     options = links.obligatii(state, CELEX, selection["instantanee"])
     assert [a["locator"] for a in options["articole"]] == ["art1", "art2"]
+    assert "text" not in options["articole"][0]
+    assert "body" not in options["articole"][0]
+    assert options["articole"][0]["boundary"]["contract"] == "celex-article-boundary-v1"
     assert options["sursa"]["limba"] == "RON"
 
 

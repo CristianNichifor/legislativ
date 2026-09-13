@@ -167,3 +167,9 @@ choose only one candidate state: `possible_conflict`, `possible_gap` or
 status and structured source metadata in its reasoning JSON. These states are
 review queues, not findings that Romanian law conflicts with, lacks or satisfies
 EU law.
+
+Saved EU notes also carry a `ro-eu-issue-note-export-v1` Markdown export inside
+the note reasoning. The export contains the Romanian quote, EU article quote,
+source URLs, retained text hashes, article/body hashes and the best-effort
+`celex-article-boundary-v1` line boundary metadata. It keeps
+`legal_effect: unknown` and repeats that the record is not a legal verdict.

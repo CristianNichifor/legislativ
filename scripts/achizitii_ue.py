@@ -8,7 +8,7 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-from scripts import cellar, instantanee_ue
+from scripts import articole_ue, cellar, instantanee_ue
 from scripts.transport_cellar import TransportCellar, url_oficial
 
 IMPORT_LOCK = threading.Lock()
@@ -64,28 +64,7 @@ def _attempt(con, celex, status, error=None):
 
 
 def _article_summary(snapshot):
-    if snapshot.get("stare") != "capturat":
-        return {"total": 0, "randuri": [], "trunchiat": False}
-    source = snapshot.get("sursa") or {}
-    try:
-        blocks = cellar.provizii_din_text(source["celex"], source["text"], source["limba"])
-    except (KeyError, TypeError, ValueError):
-        return {"total": 0, "randuri": [], "trunchiat": False, "stare": "indisponibil"}
-    articles = [b for b in blocks if b.fel == "articol"]
-    return {
-        "total": len(articles),
-        "randuri": [
-            {
-                "locator": a.locator,
-                "titlu": a.titlu,
-                "limba": a.limba,
-                "ord": a.ord,
-                "sha256": hashlib.sha256(a.text.encode()).hexdigest(),
-            }
-            for a in articles[:ARTICLE_PAGE_SIZE]
-        ],
-        "trunchiat": len(articles) > ARTICLE_PAGE_SIZE,
-    }
+    return articole_ue.summary(snapshot, page_size=ARTICLE_PAGE_SIZE)
 
 
 def _provision_summary(snapshot):

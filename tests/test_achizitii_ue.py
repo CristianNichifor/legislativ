@@ -124,7 +124,18 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     assert first["manifestari"]["readable"][0]["language"] == "RON"
     assert first["articole"]["total"] == 1
     assert first["articole"]["randuri"][0]["locator"] == "art1"
+    assert first["articole"]["contract"] == "celex-article-boundary-v1"
     assert len(first["articole"]["randuri"][0]["sha256"]) == 64
+    boundary = first["articole"]["randuri"][0]["boundary"]
+    assert boundary["contract"] == "celex-article-boundary-v1"
+    assert boundary["celex"] == CELEX
+    assert boundary["snapshot_id"] == first["instantanee"]
+    assert boundary["locator"] == "art1"
+    assert boundary["language"] == "RON"
+    assert boundary["source_text_sha256"] == first["text_sha256"]
+    assert boundary["article_sha256"] == first["articole"]["randuri"][0]["sha256"]
+    assert boundary["body_sha256"] and len(boundary["body_sha256"]) == 64
+    assert boundary["boundary_status"] in {"line_exact", "parser_block_only"}
     assert first["provizii"]["total"] == 1
     assert first["provizii"]["randuri"][0]["fel"] == "articol"
     detail = au.detaliu(state, CELEX)
@@ -134,6 +145,7 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     assert detail["curenta"]["limba_import"]["aleasa"] == "RON"
     assert detail["curenta"]["source_metadata"]["item_url"] == ITEM
     assert detail["curenta"]["articole"]["total"] == 1
+    assert detail["curenta"]["articole"]["randuri"][0]["boundary"]["snapshot_id"] == snapshot_id
     assert detail["curenta"]["provizii"]["randuri"][0]["locator"] == "art1"
     assert "achizitii" in au.detaliu(state, CELEX, snapshot_id=snapshot_id)["sursa"]["text"]
     second = au.importa(state, {"celex": CELEX})

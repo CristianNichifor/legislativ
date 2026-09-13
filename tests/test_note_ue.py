@@ -86,7 +86,18 @@ def test_save_revalidates_base_and_stores_manual_risk_note(source_backed_case):
     assert reasoning["human_review_status"] == "ready_for_review"
     assert reasoning["national"]["text_sha256"]
     assert reasoning["eu"]["article_sha256"]
+    assert reasoning["eu"]["article_text_sha256"]
+    assert reasoning["eu"]["article_body_sha256"]
+    assert reasoning["eu"]["article_boundary"]["contract"] == "celex-article-boundary-v1"
+    assert reasoning["eu"]["article_boundary"]["locator"] == "art1"
+    assert reasoning["eu"]["article_boundary"]["boundary_status"] == "line_exact"
     assert reasoning["limitations"]
+    assert reasoning["export"].startswith("# Conflict posibil")
+    assert "Contract: `ro-eu-issue-note-export-v1`" in reasoning["export"]
+    assert "Text românesc păstrat local." in reasoning["export"]
+    assert "Obligație UE păstrată local." in reasoning["export"]
+    assert "Efect juridic: `unknown`" in reasoning["export"]
+    assert "Nu este verdict juridic." in reasoning["export"]
     context = saved["proposal_context"]
     assert context["contract"] == "ro-eu-proposal-context-v1"
     assert context["kind"] == "possible_eu_issue"

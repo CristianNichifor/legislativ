@@ -14,6 +14,7 @@ from pathlib import Path
 from scripts import achizitii_proiecte, documente_proiecte, dosare, legaturi_ue, note_manuale
 
 CONTRACT = "ro-eu-issue-note-v1"
+EXPORT_CONTRACT = "ro-eu-issue-note-export-v1"
 ISSUE_STATES = {
     "possible_conflict": "Conflict posibil",
     "possible_gap": "Lacună posibilă",
@@ -180,8 +181,13 @@ def _eu(stare, data) -> tuple[dict | None, list[dict]]:
         "language": source["limba"],
         "quote": _excerpt(body),
         "article_sha256": _sha(article),
+        "article_text_sha256": article["boundary"]["article_sha256"],
+        "article_body_sha256": article["boundary"]["body_sha256"],
+        "article_boundary": article["boundary"],
         "text_sha256": source["text_sha256"],
         "source_url": source.get("item_url") or source.get("sursa_url") or "",
+        "celex_url": source.get("sursa_url") or "",
+        "item_url": source.get("item_url") or "",
         "captured_at": source.get("citit_la") or "",
         "title": source.get("titlu") or celex,
         "article": article,
@@ -299,6 +305,7 @@ def save(stare, request: dict) -> dict:
         "limitations": PROPOSAL_CONTEXT_LIMITATIONS,
     }
     payload["proposal_context"] = proposal_context
+    payload["export"] = export_markdown(payload)
     evidence_quote = (
         f"[RO {national['language']}] {national['quote']}\n\n[UE {eu['language']}] {eu['quote']}"
     )
@@ -326,3 +333,57 @@ def save(stare, request: dict) -> dict:
         "proposal_context": proposal_context,
         "limitari": LIMITATIONS,
     }
+
+
+def export_markdown(payload: dict) -> str:
+    national = payload["national"]
+    eu = payload["eu"]
+    boundary = eu.get("article_boundary") or {}
+    return "\n".join(
+        [
+            f"# {payload['issue_label']}",
+            "",
+            f"Contract: `{EXPORT_CONTRACT}`",
+            f"Stare revizie: `{payload['human_review_status']}`",
+            "Efect juridic: `unknown`",
+            "",
+            "## Sursa romaneasca",
+            "",
+            f"- Titlu: {national['title']}",
+            f"- Locator: `{national.get('locator') or national.get('version_id') or ''}`",
+            f"- Limba: `{national['language']}`",
+            f"- URL: {national['source_url']}",
+            f"- SHA text: `{national['text_sha256']}`",
+            "",
+            "> " + national["quote"].replace("\n", "\n> "),
+            "",
+            "## Sursa UE",
+            "",
+            f"- CELEX: `{eu['celex']}`",
+            f"- Locator: `{eu['locator']}`",
+            f"- Limba: `{eu['language']}`",
+            f"- URL document: {eu.get('item_url') or eu['source_url']}",
+            f"- URL CELEX: {eu.get('celex_url') or ''}",
+            f"- Snapshot: `{eu['instantanee']}`",
+            f"- SHA text sursa: `{eu['text_sha256']}`",
+            f"- SHA articol: `{eu.get('article_text_sha256') or eu['article_sha256']}`",
+            f"- SHA corp articol: `{eu.get('article_body_sha256') or ''}`",
+            f"- Delimitare: `{boundary.get('boundary_status', 'unknown')}` "
+            f"liniile {boundary.get('start_line') or '?'}-{boundary.get('end_line') or '?'}",
+            "",
+            "> " + eu["quote"].replace("\n", "\n> "),
+            "",
+            "## Ipoteza de lucru",
+            "",
+            payload["rationale"],
+            "",
+            "## Incertitudine",
+            "",
+            payload["uncertainty"],
+            "",
+            "## Limite",
+            "",
+            *[f"- {item}" for item in payload["limitations"]],
+            "- Nu este verdict juridic.",
+        ]
+    )
