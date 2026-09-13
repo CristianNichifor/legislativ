@@ -62,9 +62,7 @@ def test_browser_byok_settings_contract_persists_no_secret():
         "const MODELE=[{id:'Qwen-test'}];"
         "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
         "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
-        "const MODELE_ONLINE="
-        + source
-        + "const s=aiSettings();"
+        "const MODELE_ONLINE=" + source + "const s=aiSettings();"
         "assert.equal(s.contract,'ai-byok-settings-v1');"
         "assert.equal(s.mode,'online');"
         "assert.equal(s.default_ai,'off');"
