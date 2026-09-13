@@ -580,6 +580,60 @@ def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_evidence_draft_execution_failure_states_are_mocked_and_secret_free():
+    source = (
+        APP.read_text()
+        .split("function aiDraftBoundaryHtml", 1)[1]
+        .split("function ruleCandidateOptions", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function confirm(){return true;}"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiMode(){return 'online';}"
+        "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
+        "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
+        "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
+        "let next='';"
+        "async function aiComplete(){"
+        "if(next==='timeout')throw Object.assign(new Error('timeout SECRET'),{code:'ETIMEDOUT'});"
+        "if(next==='bad_key')throw Object.assign(new Error('401 invalid key SECRET'),{status:401});"
+        "if(next==='quota')throw Object.assign(new Error('429 quota SECRET'),{status:429});"
+        "if(next==='refusal')return {refusal:true,text:'SECRET'};"
+        "if(next==='malformed_response')return {choices:[]};"
+        "if(next==='provider_unavailable')throw Object.assign("
+        "new Error('fetch failed SECRET'),{name:'TypeError'});"
+        "return {text:'ok'};}"
+        "function aiDraftBoundaryHtml"
+        + source
+        + "const plan={contract:'ai-evidence-draft-v1',prompt:'PROMPT EVIDENCE ONLY',"
+        "system:'SYSTEM EVIDENCE ONLY',input_sha256:'i'.repeat(64),"
+        "evidence_sha256:'e'.repeat(64),evidence_count:1,estimated_tokens:100,"
+        "cost_estimate:{estimated_total_tokens:1000,server_cost:'none',"
+        "cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'}};"
+        "(async()=>{"
+        "const codes=['timeout','bad_key','quota','refusal','malformed_response',"
+        "'provider_unavailable'];for(const code of codes){"
+        "next=code;const out=await aiRunEvidenceDraft(plan,'online_byok',()=>{});"
+        "assert.equal(out.contract,'ai-byok-execution-result-v1');"
+        "assert.equal(out.status,'failed');"
+        "assert.equal(out.failure.contract,'ai-byok-provider-failure-v1');"
+        "assert.equal(out.failure.failure_code,code);"
+        "assert.equal(out.failure.output_status,'no_draft_created');"
+        "assert.equal(out.audit.event,'ai_draft_execution_failed_in_browser');"
+        "assert.equal(out.audit.failure_code,code);"
+        "assert.equal(out.audit.stores_api_key,false);"
+        "assert.equal(out.audit.server_calls_model,false);"
+        "assert.equal(out.text,'');"
+        "assert.ok(!JSON.stringify(out).includes('SECRET'));}"
+        "})().catch(e=>{console.error(e);process.exit(1);});"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_rule_candidate_controls_build_preview_payload():
     source = (
         APP.read_text()
