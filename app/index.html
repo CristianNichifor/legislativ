@@ -6924,6 +6924,21 @@ function projectWorkbenchNotesHtml(notes=[]){
   if(!notes.length)return '<p>Nicio notă de dosar legată de proiect.</p>';
   return notes.map(note=>`<article class="source-affected-run"><h5>${esc(note.title)}</h5><p class="hint">${esc(note.type)} · ${esc(note.status)} · ${esc(note.locator||'fără locator')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('');
 }
+function projectWorkbenchWarnings(project,pack){
+  const warnings=[];
+  const events=pack.events||[], evidence=pack.evidence||[];
+  if(!pack.dossier_id)warnings.push('Alege un dosar pentru note și urmărire privată.');
+  if(!events.length)warnings.push('Nu există evenimente tracker locale pentru proiect.');
+  if(events.length&&!events.some(e=>e.review?.reviewed))warnings.push('Niciun eveniment nu este revizuit.');
+  if(evidence.some(row=>!row.source_url))warnings.push('Există dovezi fără URL oficial.');
+  if(evidence.some(row=>!row.content_hash))warnings.push('Există dovezi fără hash de conținut.');
+  if(project.source_state==='stale'||project.stale)warnings.push('Sursa proiectului este veche.');
+  if(project.source_state==='unavailable'||project.unavailable)warnings.push('Sursa proiectului este indisponibilă.');
+  return warnings;
+}
+function projectWorkbenchReviewCandidate(pack){
+  return (pack.events||[]).find(event=>!event.review?.reviewed)||null;
+}
 function projectWorkbenchMarkdown(project,pack){
   const summary=pack.summary||{}, lines=[
     `# Pachet dovezi proiect: ${pack.project_id||project.project_id||'proiect'}`,
@@ -6964,17 +6979,31 @@ function projectWorkbenchFilename(pack){
 function projectWorkbenchHtml(project,pack){
   const summary=pack.summary||{};
   const actions=pack.next_actions||[];
+  const warnings=projectWorkbenchWarnings(project,pack);
+  const candidate=projectWorkbenchReviewCandidate(pack);
   const lifecycleMatches=pack.lifecycle?.projects||[];
   const title=project.title||lifecycleMatches[0]?.title||'Fără titlu';
   return `<section class="source-review"><h4>Workbench · ${esc(pack.project_id||project.project_id||'proiect')}</h4>`
     +`<p><strong>${esc(title)}</strong></p>`
     +`<div class="lifecycle-overview"><section class="lifecycle-overview-card"><span class="hint">Evenimente</span><strong>${esc(summary.events||0)}</strong><span class="hint">${esc(summary.open_events||0)} nerevizuite</span></section><section class="lifecycle-overview-card"><span class="hint">Note dosar</span><strong>${esc(summary.notes||0)}</strong><span class="hint">${pack.dossier_id?esc(pack.dossier_id):'fără dosar ales'}</span></section><section class="lifecycle-overview-card"><span class="hint">Potriviri lifecycle</span><strong>${esc(summary.lifecycle_matches||0)}</strong><span class="hint">${esc(pack.source_status||'necunoscut')}</span></section></div>`
+    +(warnings.length?`<h5>Atenție</h5><ul>${warnings.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:'')
     +(actions.length?`<h5>Următorul pas</h5><ul>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:'')
     +`<h5>Evenimente</h5>${projectWorkbenchEventsHtml(pack.events||[])}`
     +`<h5>Dovezi</h5>${projectWorkbenchEvidenceHtml(pack.evidence||[])}`
     +`<h5>Note</h5>${projectWorkbenchNotesHtml(pack.dossier_notes||[])}`
     +(pack.limitari?.length?`<p class="hint">${pack.limitari.map(esc).join(' ')}</p>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-workbench-timeline>Timeline</button><button type="button" class="ghost mini" data-workbench-note>Notă în dosar</button><button type="button" class="ghost mini" data-workbench-copy>Copie Markdown</button><button type="button" class="ghost mini" data-workbench-download>Descarcă Markdown</button><button type="button" class="ghost mini" data-workbench-refresh>Reîncarcă</button></div></section>`;
+    +`<div class="dossier-actions">${candidate?'<button type="button" class="ghost mini" data-workbench-review-next>Revizuiește următorul eveniment</button>':''}<button type="button" class="ghost mini" data-workbench-timeline>Timeline</button><button type="button" class="ghost mini" data-workbench-note>Notă în dosar</button><button type="button" class="ghost mini" data-workbench-copy>Copie Markdown</button><button type="button" class="ghost mini" data-workbench-download>Descarcă Markdown</button><button type="button" class="ghost mini" data-workbench-refresh>Reîncarcă</button></div></section>`;
+}
+async function projectWorkbenchReviewNext(project,pack){
+  const status=$('#project-workbench-status'), event=projectWorkbenchReviewCandidate(pack);
+  if(!event){status.textContent='Nu există evenimente nerevizuite în pachet.';return;}
+  if(!DOSARE_UI.selected?.id){lifecyclePrefillDossier(project);status.textContent='Alege sau creează un dosar înainte de revizia rapidă.';return;}
+  status.textContent='Creez nota și marchez evenimentul ca revizuit…';
+  try{
+    await trackerTimelineApi({action:'create_note',id:event.id,dosar_id:DOSARE_UI.selected.id});
+    await trackerTimelineApi({action:'review',id:event.id,reviewer:'utilizator',note:'Revizuit din Workbench proiect.'});
+    await openProjectWorkbench(project);
+  }catch(err){status.textContent=err.message;}
 }
 async function openProjectWorkbench(project){
   const panel=$('#project-workbench'), status=$('#project-workbench-status'), body=$('#project-workbench-body');
@@ -6989,6 +7018,8 @@ async function openProjectWorkbench(project){
     if(token!==PROJECT_WORKBENCH.sequence)return;
     PROJECT_WORKBENCH.pack=pack;body.innerHTML=projectWorkbenchHtml(project,pack);
     bindTrackerTimelineActions('#project-workbench-body','#project-workbench-status',()=>openProjectWorkbench(project));
+    const reviewNext=body.querySelector('[data-workbench-review-next]');
+    if(reviewNext)reviewNext.onclick=()=>projectWorkbenchReviewNext(project,pack);
     const timeline=body.querySelector('[data-workbench-timeline]');
     if(timeline)timeline.onclick=()=>openTrackerTimeline({project_id:projectId,dossier_id:pack.dossier_id||''});
     const note=body.querySelector('[data-workbench-note]');
