@@ -549,6 +549,55 @@ def test_legislative_writing_workspace_renders_context_and_actions():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_project_cockpit_handoff_opens_writing_workspace():
+    source = (
+        APP.read_text()
+        .split("function projectWritingSourceContext", 1)[1]
+        .split("function projectWorkbenchFilename", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "class Event{constructor(type,opts={}){this.type=type;this.opts=opts;}}"
+        "let DOSARE_UI={selected:{id:'d1'}};"
+        "const draft={value:'',dispatchEvent:e=>calls.push(['draft-event',e.type])};"
+        "const writingForm={elements:{project_id:{value:''}},"
+        "dispatchEvent:e=>calls.push(['form-submit',writingForm.elements.project_id.value,e.type])};"
+        "const draftBox={value:''},notesBox={value:''};"
+        "const host={querySelector:sel=>({'[data-writing-project-form]':writingForm,"
+        "'[data-writing-draft]':draftBox,'[data-writing-notes]':notesBox}[sel]||null),"
+        "closest:()=>({setAttribute:(k,v)=>calls.push(['open-writing',k,v])}),"
+        "scrollIntoView:opts=>calls.push(['scroll',opts.block])};"
+        "const dossierLibrary={open:false},dossierStatus={},cockpitStatus={};"
+        "function $(sel){return {'#project-cockpit-status':cockpitStatus,"
+        "'#dossier-status':dossierStatus,'#draft':draft,"
+        "'#dossier-writing':host,'#dossier-library':dossierLibrary}[sel]||null;}"
+        "async function projectDraftSeed(projectId){calls.push(['seed',projectId]);"
+        "return {text:'Draft factual <x>',summary:{events:2}};}"
+        "async function selectDossier(id){calls.push(['select',id]);}"
+        "function lifecyclePrefillDossier(project){calls.push(['prefill',project.project_id]);}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "function projectWritingSourceContext" + source + "(async()=>{"
+        "await openProjectWritingWorkspace({project_id:'PL <x>',dossier_id:'d1',"
+        "title:'Titlu <x>',stage:{label:'Avizare'}},{project_id:'PL <x>',"
+        "dossier_id:'d1',tracker:{total:3,latest_event:{event_label:'Vot <x>'}},"
+        "source_attention:{registry_source_state:'changed'}});"
+        "assert.deepEqual(calls.slice(0,2),[['select','d1'],['form-submit','PL <x>','submit']]);"
+        "assert.equal(draftBox.value,'Draft factual <x>');"
+        "assert.ok(notesBox.value.includes('Context proiect: PL <x>'));"
+        "assert.ok(notesBox.value.includes('nu este verdict juridic'));"
+        "assert.ok(dossierStatus.textContent.includes('Spațiu de redactare pregătit'));"
+        "calls.length=0;DOSARE_UI={selected:null};draft.value='';"
+        "await openProjectWritingWorkspace({project_id:'PL-2'},null);"
+        "assert.deepEqual(calls.map(c=>c[0]),['prefill','seed','draft-event','tab']);"
+        "assert.equal(draft.value,'Draft factual <x>');"
+        "assert.equal(dossierLibrary.open,true);"
+        "})().catch(err=>{console.error(err);process.exit(1);});"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_rule_check_candidate_prefills_manual_note():
     source = (
         APP.read_text()
