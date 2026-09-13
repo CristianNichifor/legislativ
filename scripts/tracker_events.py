@@ -228,7 +228,57 @@ def _empty(limit: int = 50, offset: int = 0) -> dict:
             for index, (key, label) in enumerate(LIFECYCLE_STAGES)
         ],
         "source_status": "missing",
+        "summary": {
+            "returned": 0,
+            "total": 0,
+            "reviewed": 0,
+            "unreviewed": 0,
+            "by_type": {},
+            "by_stage": {},
+            "latest_event": None,
+        },
         "limitari": ["Tracker-ul legislativ nu este inițializat."],
+    }
+
+
+def _summary(rows: list[dict], total: int) -> dict:
+    reviewed = sum(1 for row in rows if row.get("review", {}).get("reviewed"))
+    by_type: dict[str, int] = {}
+    by_stage: dict[str, dict] = {}
+    for row in rows:
+        event_type = row.get("event_type") or "unknown"
+        by_type[event_type] = by_type.get(event_type, 0) + 1
+        stage_key = row.get("stage_key") or "unknown"
+        stage = by_stage.setdefault(
+            stage_key,
+            {
+                "key": stage_key,
+                "label": row.get("stage_label") or stage_key,
+                "order": row.get("stage_order", 999),
+                "count": 0,
+                "reviewed": 0,
+                "unreviewed": 0,
+            },
+        )
+        stage["count"] += 1
+        if row.get("review", {}).get("reviewed"):
+            stage["reviewed"] += 1
+        else:
+            stage["unreviewed"] += 1
+    return {
+        "returned": len(rows),
+        "total": total,
+        "reviewed": reviewed,
+        "unreviewed": max(0, len(rows) - reviewed),
+        "by_type": by_type,
+        "by_stage": {
+            key: {
+                **value,
+                "order": int(value["order"]) if isinstance(value["order"], int) else 999,
+            }
+            for key, value in sorted(by_stage.items(), key=lambda item: (item[1]["order"], item[0]))
+        },
+        "latest_event": rows[0] if rows else None,
     }
 
 
@@ -358,6 +408,7 @@ def lista(stare, query: dict | None = None) -> dict:
             for index, (key, label) in enumerate(LIFECYCLE_STAGES)
         ],
         "source_status": "ok",
+        "summary": _summary(rows, total),
         "limitari": [
             "Tracker-ul citește evenimente locale normalizate; nu sincronizează surse publice."
         ],

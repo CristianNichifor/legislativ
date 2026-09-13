@@ -50,18 +50,32 @@ def _first_lifecycle_project(lifecycle: dict, project_id: str) -> dict:
     return projects[0] if projects else {}
 
 
-def _tracker_summary(events: list[dict], total: int) -> dict:
+def _tracker_summary(events: list[dict], total: int, summary: dict | None = None) -> dict:
+    if summary:
+        return {
+            "total": int(summary.get("total") or total),
+            "returned": int(summary.get("returned") or len(events)),
+            "reviewed": int(summary.get("reviewed") or 0),
+            "unreviewed": int(summary.get("unreviewed") or 0),
+            "by_type": summary.get("by_type") or {},
+            "by_stage": summary.get("by_stage") or {},
+            "latest_event": summary.get("latest_event") or (events[0] if events else None),
+        }
     reviewed = sum(1 for event in events if event.get("review", {}).get("reviewed"))
     by_type: dict[str, int] = {}
+    by_stage: dict[str, int] = {}
     for event in events:
         event_type = event.get("event_type") or "unknown"
         by_type[event_type] = by_type.get(event_type, 0) + 1
+        stage = event.get("stage_key") or "unknown"
+        by_stage[stage] = by_stage.get(stage, 0) + 1
     return {
         "total": total,
         "returned": len(events),
         "reviewed": reviewed,
         "unreviewed": max(0, len(events) - reviewed),
         "by_type": by_type,
+        "by_stage": by_stage,
         "latest_event": events[0] if events else None,
     }
 
@@ -195,7 +209,9 @@ def build(stare, query: dict | None = None) -> dict:
             },
         )
 
-    tracker_info = _tracker_summary(tracker.get("events", []), int(tracker.get("total") or 0))
+    tracker_info = _tracker_summary(
+        tracker.get("events", []), int(tracker.get("total") or 0), tracker.get("summary")
+    )
     source_info = _source_attention(project)
     evidence_info = _evidence_summary(evidence_pack)
     limitations = [
