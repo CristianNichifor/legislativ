@@ -3,12 +3,14 @@ import json
 from types import SimpleNamespace
 
 from scripts import achizitii_econsultare as ec
-from scripts import cellar, dosare
+from scripts import cellar, dosare, law_rule_drafts, rule_candidate_queue
 from scripts.server import face_handler
 from tests.test_achizitii_econsultare import HTML
 
 DOSSIER_ID = "a" * 32
 NOTE_ID = "b" * 32
+QUEUE_ID = "c" * 32
+RULE_DRAFT_ID = "d" * 32
 
 
 def state(tmp_path):
@@ -61,6 +63,38 @@ def note_payload(source, dossier_id=DOSSIER_ID):
         "reasoning": "Nota păstrează referința la sursa locală sincronizată.",
         "status": "ready_for_review",
     }
+
+
+def save_promoted_rule(path, *, project_id: str, dossier_id=DOSSIER_ID):
+    candidate = {
+        "provision_id": f"ro:{project_id}#consultare",
+        "act_id": project_id,
+        "locator": "consultare",
+        "source_hash": "c" * 64,
+        "text": "Ministerul publică raportul consultării publice în termen de 10 zile.",
+        "modality": "obligation",
+        "review_state": "human_reviewed",
+        "actor": "Ministerul",
+        "condition": "consultarea publică se închide",
+        "action": "publică raportul consultării publice",
+        "deadline": "10 zile",
+        "exceptions": [],
+        "effect": "",
+        "reviewer": "acceptance",
+    }
+    rule_candidate_queue.salveaza(
+        path, {"id": QUEUE_ID, "dosar_id": dossier_id, "candidate": candidate}
+    )
+    return law_rule_drafts.promoveaza(
+        path,
+        {
+            "id": RULE_DRAFT_ID,
+            "dosar_id": dossier_id,
+            "queue_id": QUEUE_ID,
+            "accepted_by": "acceptance",
+            "acceptance_note": "Regula este folosită doar pentru smoke flow local.",
+        },
+    )
 
 
 def test_register_sync_tracker_timeline_and_dossier_note_reference_acceptance(
@@ -242,6 +276,27 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
         "Creează o notă de dosar cu citat, sursă și raționament.",
     ]
 
+    code, cockpit = request(
+        stare,
+        "GET",
+        "/api/project-cockpit?"
+        + "project_id="
+        + review_queue["events"][0]["project_id"]
+        + "&dossier_id="
+        + DOSSIER_ID,
+    )
+    assert code == 200
+    assert cockpit["contract"] == "project-cockpit-summary-v1"
+    assert cockpit["tracker"]["unreviewed"] == 1
+    assert cockpit["evidence_pack"]["available"] is True
+    assert cockpit["evidence_pack"]["open_events"] == 1
+    assert cockpit["source_attention"]["attention_state"] in {
+        "changed",
+        "unknown",
+        "unavailable",
+    }
+    assert any(action["key"] == "review_tracker_events" for action in cockpit["next_actions"])
+
     code, draft = request(
         stare,
         "GET",
@@ -253,6 +308,25 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     assert "Proiect urmărit: " + review_queue["events"][0]["project_id"] in draft["text"]
     assert "Consultare publică deschisă" in draft["text"]
     assert "nu verdict juridic" in draft["text"]
+
+    save_promoted_rule(dosare.cale(stare), project_id=review_queue["events"][0]["project_id"])
+    code, rule_check = request(
+        stare,
+        "POST",
+        "/api/dosare/rule-drafts/execute-draft",
+        {
+            "id": DOSSIER_ID,
+            "act": review_queue["events"][0]["project_id"],
+            "text": (
+                draft["text"]
+                + "\nMinisterul publică raportul consultării publice în termen de 10 zile."
+            ),
+        },
+    )
+    assert code == 200
+    assert rule_check["contract"] == "law-rule-draft-text-execution-v1"
+    assert rule_check["possible_matches"] == 1
+    assert rule_check["rows"][0]["status"] == "possible_match_not_verdict"
 
     code, note = request(
         stare,
@@ -276,6 +350,38 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     assert code == 200
     assert evidence_pack_after_note["summary"]["notes"] == 1
     assert evidence_pack_after_note["dossier_notes"][0]["id"] == note["note"]["id"]
+
+    code, mcp_export = request(
+        stare,
+        "POST",
+        "/api/dosare/ai-draft/mcp-preview",
+        {
+            "server": "desktop-claude",
+            "tool": "draft",
+            "draft": {
+                "task": "draft_amendment",
+                "type": "lacuna",
+                "title": "Amendament consultare publică",
+                "context": "Smoke flow local pentru redactare cu dovezi selectate.",
+                "evidence": [
+                    {
+                        "label": review_queue["events"][0]["title"],
+                        "act_id": review_queue["events"][0]["project_id"],
+                        "locator": "consultare",
+                        "source_url": review_queue["events"][0]["source_url"],
+                        "source_hash": review_queue["events"][0]["content_hash"],
+                        "quote": "Consultare publică deschisă pentru proiect urmărit.",
+                    }
+                ],
+            },
+        },
+    )
+    assert code == 200
+    assert mcp_export["contract"] == "mcp-ai-evidence-draft-v1"
+    assert mcp_export["status"] == "requires_user_approval"
+    assert mcp_export["export_manifest"]["contract"] == "bounded-evidence-export-manifest-v1"
+    assert mcp_export["approval"]["mcp_executes_now"] is False
+    assert mcp_export["approval"]["private_data_excluded"]
 
     code, reviewed = request(
         stare,
@@ -312,3 +418,18 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     )
     assert code == 200
     assert empty_queue["total"] == 0
+
+
+def test_project_cockpit_makes_unavailable_source_state_explicit(tmp_path):
+    stare = state(tmp_path)
+
+    code, cockpit = request(stare, "GET", "/api/project-cockpit?project_id=PL-x%2099/2026")
+
+    assert code == 200
+    assert cockpit["contract"] == "project-cockpit-summary-v1"
+    assert cockpit["source_status"] in {"missing", "unknown", "unavailable"}
+    assert cockpit["tracker"]["total"] == 0
+    assert cockpit["evidence_pack"]["events"] == 0
+    assert cockpit["source_attention"]["attention_state"] in {"unknown", "unavailable"}
+    assert any(action["key"] == "sync_attention_sources" for action in cockpit["next_actions"])
+    assert any("nesincronizate" in item or "incomplet" in item for item in cockpit["limitari"])
