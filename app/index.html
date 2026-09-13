@@ -7061,7 +7061,15 @@ function projectCockpitSourceHtml(info={}){
   const uncertainty=info.uncertainty||{};
   const reasons=(uncertainty.reasons||[]).join(', ')||'fără motiv suplimentar';
   const attention=info.needs_attention?'Necesită atenție':'Fără alertă critică';
-  return `<section class="lifecycle-overview-card"><span class="hint">Surse</span><strong>${esc(label)}</strong><span class="hint">${esc(attention)} · ${esc(info.registry_can_sync?'sync disponibil':'sync manual/indisponibil')}</span><br><span class="hint">Incertitudine: ${esc(uncertainty.level||'necunoscută')} · ${esc(reasons)}</span></section>`;
+  const sourceFamily=info.source_family_label||info.source_name||info.source_family||'';
+  const sourceItem=info.source_label||info.registry_source_id||'';
+  const source=sourceFamily&&sourceItem&&sourceFamily!==sourceItem?`${sourceFamily} · ${sourceItem}`:(sourceFamily||sourceItem||'sursă necunoscută');
+  const action=info.next_action||(
+    info.registry_can_sync?'Sincronizează sursa înainte de concluzii.':
+    info.needs_attention?'Verifică manual sau importă sursa publică.':
+    'Continuă redactarea cu sursa locală curentă.'
+  );
+  return `<section class="lifecycle-overview-card"><span class="hint">Surse</span><strong>${esc(label)}</strong><span class="hint">${esc(source)} · ${esc(attention)} · ${esc(info.registry_can_sync?'sync disponibil':'sync manual/indisponibil')}</span><br><span class="hint">Următorul pas: ${esc(action)}</span><br><span class="hint">Incertitudine: ${esc(uncertainty.level||'necunoscută')} · ${esc(reasons)}</span></section>`;
 }
 function projectCockpitTrackerHtml(tracker={}){
   const latest=tracker.latest_event||{};

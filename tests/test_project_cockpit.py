@@ -98,6 +98,10 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     assert out["tracker"]["latest_event"]["event_type"] == "report_filed"
     assert out["source_attention"]["needs_attention"] is True
     assert out["source_attention"]["registry_source_state"] == "changed"
+    assert out["source_attention"]["source_family"] == "camera"
+    assert out["source_attention"]["source_family_label"] == "Camera Deputaților"
+    assert out["source_attention"]["source_label"] == "PL-x 10/2026"
+    assert out["source_attention"]["next_action"] == "Revizuiește schimbarea sursei urmărite."
     assert out["evidence_pack"]["notes"] == 1
     assert {action["key"] for action in out["next_actions"]} >= {
         "review_tracker_events",
