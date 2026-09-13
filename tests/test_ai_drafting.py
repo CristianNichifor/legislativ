@@ -34,8 +34,23 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert len(out["evidence_sha256"]) == 64
     assert out["evidence_manifest"][0]["quote_sha256"]
     assert "quote" not in out["evidence_manifest"][0]
+    assert out["export_manifest"]["contract"] == "bounded-evidence-export-manifest-v1"
+    assert out["export_manifest"]["max_evidence_items"] == ai_drafting.MAX_EVIDENCE
+    assert out["export_manifest"]["max_quote_chars"] == ai_drafting.MAX_QUOTE
+    assert out["export_manifest"]["max_context_chars"] == ai_drafting.MAX_CONTEXT
+    assert out["export_manifest"]["max_prompt_bytes"] == ai_drafting.MAX_PROMPT
+    assert out["export_manifest"]["source_hashes_and_urls_preserved"] is True
+    assert out["export_manifest"]["server_calls_model"] is False
+    assert out["export_manifest"]["credentials_stored"] is False
+    assert out["export_manifest"]["non_verdict_notice"] == "Ciornă de lucru; nu verdict juridic."
+    assert (
+        out["export_manifest"]["source_references"][0]["source_url"] == "https://example.test/lege"
+    )
+    assert out["export_manifest"]["source_references"][0]["quote_sha256"]
+    assert any("chei API" in item for item in out["export_manifest"]["private_data_excluded"])
     assert out["approval"]["required_for_external_ai"] is True
     assert out["approval"]["server_calls_model"] is False
+    assert any("BYOK" in item for item in out["approval"]["private_data_excluded"])
     assert out["cost_estimate"]["server_cost"] == "none"
     assert out["cost_estimate"]["cost_owner"] == "user_if_byok_or_mcp"
     assert out["audit"]["approved_external_send"] is False
@@ -43,6 +58,7 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert "Nu inventa surse" in out["system"]
     assert "Guvernul aprobă normele" in out["prompt"]
     assert "evidence_manifest" in out["prompt"]
+    assert "bounded-evidence-export-manifest-v1" in out["prompt"]
     assert "verdict juridic final" in out["prompt"]
     assert any("Serverul nu a apelat niciun model" in item for item in out["limitari"])
 

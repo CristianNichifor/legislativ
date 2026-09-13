@@ -77,11 +77,27 @@ def capabilities() -> dict:
             "requires_user_approval": True,
             "approval_event_contract": "mcp-audit-event-v1",
             "cost_owner": "user_account_or_user_key",
+            "credentials_stored": False,
+            "hidden_external_calls": False,
         },
+        "limits": {
+            "contract": "mcp-boundary-limits-v1",
+            "max_data_chars": MAX_TEXT,
+            "max_preview_chars": MAX_PREVIEW,
+            "max_server_id_chars": 120,
+            "max_tool_id_chars": 160,
+        },
+        "private_data_excluded": [
+            "chei API sau tokenuri",
+            "configurări BYOK salvate în browser",
+            "baze de date locale/private",
+            "date neselectate explicit de utilizator pentru payload",
+        ],
         "limitari": [
             "Acest contract nu execută apeluri MCP.",
             "Textul juridic poate fi trimis extern numai după aprobare explicită.",
             "Aplicația rămâne utilizabilă fără MCP.",
+            "Nu se stochează credentiale și nu există apeluri externe ascunse.",
         ],
     }
 
@@ -119,6 +135,7 @@ def preview(request: dict) -> dict:
             if CAPABILITIES[capability]["requires_external_text"]
             else "metadata"
         ),
+        "max_data_chars": MAX_TEXT,
     }
     approval = {
         **payload,
@@ -129,6 +146,14 @@ def preview(request: dict) -> dict:
         "approved": False,
         "cost_owner": "user_account_or_user_key",
         "retention_policy": "executor_must_disclose_destination_retention",
+        "private_data_excluded": [
+            "chei API sau tokenuri",
+            "configurări BYOK salvate în browser",
+            "baze de date locale/private",
+            "date neselectate explicit de utilizator pentru payload",
+        ],
+        "credentials_stored": False,
+        "hidden_external_calls": False,
     }
     return {
         "contract": "mcp-boundary-v1",

@@ -16,6 +16,14 @@ MAX_CONTEXT = 2000
 MAX_PROMPT = 12000
 ESTIMATED_OUTPUT_TOKENS = 900
 
+PRIVATE_DATA_EXCLUSIONS = [
+    "chei API sau tokenuri",
+    "configurări BYOK salvate în browser",
+    "note private neselectate explicit",
+    "baze de date locale/private",
+    "istoric de lucru din dosar în afara dovezilor selectate",
+]
+
 TASKS = {
     "explain_issue": "explică problema",
     "issue_note": "notă de constatare",
@@ -98,6 +106,38 @@ def _cost_estimate(prompt: str) -> dict:
     }
 
 
+def _export_manifest(evidence: list[dict]) -> dict:
+    source_references = [
+        {
+            "index": item["index"],
+            "label": item["label"],
+            "act_id": item["act_id"],
+            "locator": item["locator"],
+            "language": item["language"],
+            "source_url": item["source_url"],
+            "source_hash": item["source_hash"],
+            "quote_sha256": hashlib.sha256(item["quote"].encode()).hexdigest(),
+        }
+        for item in evidence
+    ]
+    return {
+        "contract": "bounded-evidence-export-manifest-v1",
+        "purpose": "drafting_support_only",
+        "evidence_count": len(evidence),
+        "max_evidence_items": MAX_EVIDENCE,
+        "max_quote_chars": MAX_QUOTE,
+        "max_context_chars": MAX_CONTEXT,
+        "max_prompt_bytes": MAX_PROMPT,
+        "source_references": source_references,
+        "private_data_excluded": PRIVATE_DATA_EXCLUSIONS,
+        "source_hashes_and_urls_preserved": True,
+        "external_send_requires_user_approval": True,
+        "server_calls_model": False,
+        "credentials_stored": False,
+        "non_verdict_notice": "Ciornă de lucru; nu verdict juridic.",
+    }
+
+
 def preview(data: dict) -> dict:
     if not isinstance(data, dict):
         raise ValueError("Cerere AI invalidă.")
@@ -113,6 +153,7 @@ def preview(data: dict) -> dict:
         (item["eticheta"] for item in constatari_manuale.tipuri() if item["cheie"] == note_type),
         note_type,
     )
+    export_manifest = _export_manifest(evidence)
     payload = {
         "contract": "ai-evidence-prompt-payload-v1",
         "task": task,
@@ -122,6 +163,7 @@ def preview(data: dict) -> dict:
         "title": title,
         "context": user_context,
         "evidence_manifest": _evidence_manifest(evidence),
+        "export_manifest": export_manifest,
         "evidence": evidence,
         "required_output": [
             "titlu de lucru",
@@ -141,6 +183,7 @@ def preview(data: dict) -> dict:
             "online_byok: utilizatorul confirmă trimiterea textului către furnizor",
             "mcp_handoff: utilizatorul aprobă payload-ul MCP înainte de trimitere",
         ],
+        "non_verdict_notice": "Ciornă de lucru; nu verdict juridic.",
     }
     prompt = "Construiește o ciornă, nu o concluzie. Răspunde în română.\n\n" + dosare._json(
         payload
@@ -156,6 +199,7 @@ def preview(data: dict) -> dict:
         "prompt": prompt,
         "input_sha256": fingerprint,
         "evidence_manifest": payload["evidence_manifest"],
+        "export_manifest": export_manifest,
         "evidence_sha256": hashlib.sha256(
             dosare._json(payload["evidence_manifest"]).encode()
         ).hexdigest(),
@@ -168,6 +212,7 @@ def preview(data: dict) -> dict:
             "allowed_modes": ["local_ai", "online_byok", "mcp_handoff"],
             "key_retention": "browser_session_only_for_byok",
             "output_status": "draft_unreviewed",
+            "private_data_excluded": PRIVATE_DATA_EXCLUSIONS,
         },
         "audit": {
             "contract": "ai-draft-audit-v1",

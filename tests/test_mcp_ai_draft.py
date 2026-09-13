@@ -68,6 +68,16 @@ def test_mcp_ai_draft_requires_approval_and_reuses_source_grounded_prompt():
     assert out["cost_estimate"]["server_cost"] == "none"
     assert out["cost_estimate"]["cost_owner"] == "user_if_sent_to_external_tool"
     assert out["evidence_manifest"][0]["quote_sha256"]
+    assert out["export_manifest"]["contract"] == "bounded-evidence-export-manifest-v1"
+    assert out["export_manifest"]["external_send_requires_user_approval"] is True
+    assert out["export_manifest"]["credentials_stored"] is False
+    assert (
+        out["export_manifest"]["source_references"][0]["source_url"] == "https://example.test/lege"
+    )
+    assert out["audit"]["source_references"][0]["source_url"] == "https://example.test/lege"
+    assert (
+        out["approval"]["private_data_excluded"] == out["export_manifest"]["private_data_excluded"]
+    )
     assert "Guvernul aprobă normele" in out["prompt"]
     assert "nerevizuită" in out["insert_header"]
     assert any("nu a apelat niciun MCP" in item for item in out["limitari"])
