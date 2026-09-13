@@ -201,6 +201,13 @@ builder, AI-from-evidence draft panel, saved proposals and saved analyses. This 
 only workflow navigation over existing local records; it does not create new
 findings, run AI, fetch sources or change review state by itself.
 
+The matrix tab also exposes a compact daily workflow rail for end users. Its
+steps are: search the law/project, filter the matrix, open the local dossier,
+create a gap/contradiction/EU note with evidence, prepare a draft and reach the
+saved analysis/proposal export areas. These buttons only reveal and focus existing
+panels; they do not fetch public sources, execute AI, create dossiers or export
+files by themselves.
+
 ## Dossier watchlist and changed-source feed
 
 `GET /api/dosare/watchlist?id=<dossier>&offset=0` returns private watchlist items
