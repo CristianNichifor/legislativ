@@ -351,9 +351,7 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_ai_note_settings_persist_only_safe_defaults():
     source = (
-        APP.read_text()
-        .split("const AI_NOTE_SETTINGS_KEY=", 1)[1]
-        .split("let _onlineOk=", 1)[0]
+        APP.read_text().split("const AI_NOTE_SETTINGS_KEY=", 1)[1].split("let _onlineOk=", 1)[0]
     )
     code = (
         "const assert=require('node:assert/strict');"
@@ -367,7 +365,8 @@ def test_ai_note_settings_persist_only_safe_defaults():
         "function aiEndpoint(){return 'https://api.test';}"
         "const AI_NOTE_SETTINGS_KEY="
         + source
-        + "const form={elements:{ai_boundary:{value:'mcp_handoff'},ai_task:{value:'draft_amendment'},"
+        + "const form={elements:{ai_boundary:{value:'mcp_handoff'},"
+        "ai_task:{value:'draft_amendment'},"
         "mcp_server:{value:'desktop-claude'},mcp_tool:{value:'claude.chat'}}};"
         "const saved=aiNoteSettingsSave(form);"
         "assert.equal(saved.contract,'ai-note-settings-v1');"
