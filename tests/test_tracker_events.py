@@ -111,16 +111,19 @@ def test_tracker_events_carry_unified_lifecycle_metadata(tmp_path):
     }
     assert by_type["public_consultation_opened"]["display_label"] == ("Consultare publică deschisă")
     assert by_type["public_consultation_opened"]["stage_key"] == "consultation_open"
-    assert tracker_events.adauga(
-        stare,
-        event(
-            event_type="public_consultation_closed",
-            source_family="consultare_econsultare",
-            source_url="https://e-consultare.gov.ro/consultare/1",
-            occurred_at="2026-09-02T10:00:00+00:00",
-            payload={"deadline": "2026-09-02"},
-        ),
-    )["event"]["stage_key"] == "consultation_closed"
+    assert (
+        tracker_events.adauga(
+            stare,
+            event(
+                event_type="public_consultation_closed",
+                source_family="consultare_econsultare",
+                source_url="https://e-consultare.gov.ro/consultare/1",
+                occurred_at="2026-09-02T10:00:00+00:00",
+                payload={"deadline": "2026-09-02"},
+            ),
+        )["event"]["stage_key"]
+        == "consultation_closed"
+    )
     assert by_type["vote_recorded"]["stage_key"] == "adopted"
     assert by_type["promulgated"]["stage_label"] == "Promulgat"
     assert by_type["published_in_monitor"]["stage_order"] > by_type["vote_recorded"]["stage_order"]
