@@ -5,8 +5,10 @@ from types import SimpleNamespace
 from scripts import depozit, dosare, source_registry
 from scripts.lifecycle import (
     ACTIVE_STAGE_KEYS,
+    CANONICAL_PROJECT_STATUSES,
     STAGES,
     TERMINAL_STAGE_KEYS,
+    canonical_project_status,
     is_active_stage,
     normalize_stage_label,
     project_lifecycle_item,
@@ -39,6 +41,37 @@ def test_lifecycle_model_covers_public_consultation_and_parliamentary_stages():
     } <= keys
     assert "report" in ACTIVE_STAGE_KEYS
     assert {"rejected", "promulgated", "published", "withdrawn_archived"} <= TERMINAL_STAGE_KEYS
+
+
+def test_canonical_project_status_contract_groups_portal_specific_stages():
+    keys = {status.key for status in CANONICAL_PROJECT_STATUSES}
+    assert {
+        "consultation",
+        "drafting",
+        "parliamentary",
+        "committee",
+        "plenary",
+        "promulgation",
+        "published",
+        "closed",
+        "unknown",
+        "unavailable",
+    } <= keys
+    assert canonical_project_status({"key": "consultation_open"}) == {
+        "key": "consultation",
+        "label": "consultation",
+        "order": 10,
+        "terminal": False,
+        "available": True,
+        "known": True,
+        "stage_key": "consultation_open",
+        "contract": "canonical-project-status-v1",
+    }
+    assert canonical_project_status("report")["key"] == "committee"
+    assert canonical_project_status("adopted")["key"] == "plenary"
+    assert canonical_project_status("published")["terminal"] is True
+    assert canonical_project_status("withdrawn_archived")["key"] == "closed"
+    assert canonical_project_status(None)["key"] == "unknown"
 
 
 def test_known_stage_labels_normalize_to_bounded_states():
@@ -112,6 +145,8 @@ def test_project_lifecycle_item_exposes_stale_unknown_and_unavailable_states():
     assert ok["project_id"] == "plx-1-2026"
     assert ok["source_name"] == "Camera Deputaților"
     assert ok["stage"]["key"] == "report"
+    assert ok["canonical_status"]["key"] == "committee"
+    assert ok["canonical_status"]["contract"] == "canonical-project-status-v1"
     assert ok["stage_date"] == "2026-09-01"
     assert ok["latest_event"]["source_url"] == "https://www.cdep.ro/proiect"
     assert ok["latest_event"]["from_timeline"] is False
