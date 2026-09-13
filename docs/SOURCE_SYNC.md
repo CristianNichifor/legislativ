@@ -196,6 +196,28 @@ Tests therefore assert the concrete API contracts above: registration/sync write
 the source state, tracker writes make events visible by project and dossier, and
 manual notes are counted conservatively as direct source references.
 
+## Bounded public tracking replay
+
+`data/public_tracking_snapshot.json` and `scripts.public_tracking` define the
+first offline monitoring slice for legislative project tracking. It records a
+small, deterministic source bundle with CDEP, Senat, e-consultare and avize
+rows, then replays these already-captured facts into the existing source
+registry and tracker event store. The bundle covers:
+
+- CDEP/Senat committee assignment and stage-change signals;
+- committee report filing;
+- institutional opinion/aviz receipt;
+- final vote metadata;
+- public-consultation open/closed events and deadline changes;
+- changed-source alerts that feed `/api/needs-attention`.
+
+This replay is intentionally not a scheduler and not a crawler. It does not
+fetch live public sources, download documents, infer legal effects, create
+dossier notes automatically or mark findings as current. Its purpose is to prove
+that once source adapters produce these normalized rows, the app can route them
+through one visible monitoring path: source registry state, project timeline and
+needs-attention review queue.
+
 ## Acceptance
 
 A first backend slice is acceptable when:
