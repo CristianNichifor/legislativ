@@ -8,6 +8,12 @@ import pytest
 APP = Path(__file__).parents[1] / "app/index.html"
 
 
+def run_node(code: str):
+    return subprocess.run(
+        ["node"], input=code, text=True, check=True, capture_output=True, timeout=10
+    )
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_refresh_waits_for_pending_review_or_context_save():
     source = (
@@ -26,7 +32,7 @@ def test_refresh_waits_for_pending_review_or_context_save():
         "panel.reviewDrafts=new Map([['proposal:a',{saving:true}]]);refresh();"
         "panel.reviewDrafts.clear();assert.throws(refresh,/Unexpected reload/);"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -48,7 +54,7 @@ def test_cleared_review_draft_does_not_block_recalculation():
         "values.motiv='';handle();assert.equal(drafts.size,0);"
         "values.stare='needs_evidence';handle();assert.equal(drafts.size,1);"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 def test_saved_finding_review_exposes_manual_note_action():
@@ -95,6 +101,11 @@ def test_matrix_tab_exposes_daily_legislative_workflow():
     source = APP.read_text()
     assert 'id="legislative-workflow"' in source
     assert "Flux zilnic pentru lacune și contradicții" in source
+    assert 'class="daily-workflow-status"' in source
+    assert 'data-workflow-step="source"' in source
+    assert 'data-workflow-step="evidence"' in source
+    assert "ieșire: URL + identificator" in source
+    assert "ieșire: Markdown/JSON" in source
     assert "data-workflow-open-search" in source
     assert "data-workflow-open-note" in source
     assert "data-workflow-open-draft" in source
@@ -110,7 +121,11 @@ def test_daily_workflow_buttons_open_existing_panels():
         "const assert=require('node:assert/strict');"
         "const calls=[];"
         "const buttons=new Map();"
-        "const root={querySelector:s=>buttons.get(s)};"
+        "const steps=['source','note','evidence','draft','export'].map(step=>({"
+        "dataset:{workflowStep:step},"
+        "classList:{active:false,toggle(cls,on){if(cls==='current')this.active=on;}}}));"
+        "const root={querySelector:s=>buttons.get(s),"
+        "querySelectorAll:s=>s==='[data-workflow-step]'?steps:[]};"
         "for(const key of ['search','matrix','dossier','note','draft','export'])"
         "{buttons.set('[data-workflow-open-'+key+']',{onclick:null});}"
         "const status={},q={focus:()=>calls.push(['focus','q'])},"
@@ -131,20 +146,26 @@ def test_daily_workflow_buttons_open_existing_panels():
         "function loadManualNotes(){calls.push(['notes-loaded']);}"
         "function bindDailyWorkflow"
         + source
+        + "assert.equal(steps.find(s=>s.dataset.workflowStep==='source').classList.active,true);"
         + "buttons.get('[data-workflow-open-search]').onclick();"
         "assert.deepEqual(calls.slice(-2),[['tab','cauta'],['focus','q']]);"
+        "assert.ok(status.textContent.includes('sursa oficială'));"
         "buttons.get('[data-workflow-open-matrix]').onclick();"
         "assert.deepEqual(calls.slice(-2),[['tab','matrice'],['focus','m']]);"
         "buttons.get('[data-workflow-open-note]').onclick();"
         "assert.equal(dossier.open,true);"
+        "assert.equal(steps.find(s=>s.dataset.workflowStep==='note').classList.active,true);"
         "assert.ok(dossierStatus.textContent.includes('Alege sau creează'));"
         "DOSARE_UI={selected:{id:'d1'}};buttons.get('[data-workflow-open-note]').onclick();"
         "assert.equal(MANUAL_NOTES_UI.editing,null);"
         "assert.ok(calls.some(c=>c[0]==='notes-loaded'));"
+        "buttons.get('[data-workflow-open-draft]').onclick();"
+        "assert.equal(steps.find(s=>s.dataset.workflowStep==='draft').classList.active,true);"
         "buttons.get('[data-workflow-open-export]').onclick();"
+        "assert.equal(steps.find(s=>s.dataset.workflowStep==='export').classList.active,true);"
         "assert.deepEqual(calls.slice(-1),[['scroll','saved','start']]);"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 def test_dossier_creation_surfaces_source_freshness_warning():
@@ -174,7 +195,7 @@ def test_saved_run_provenance_is_escaped_and_labeled_historical():
         "assert.ok(h.includes('saved report'));"
         "assert.ok(!h.includes('<img>')&&!h.includes('<script>'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -202,7 +223,7 @@ def test_law_workbench_shows_eu_availability_and_import_action():
         "assert.ok(html.includes('text local disponibil'));"
         "assert.ok(html.includes('python -m scripts.achizitii_ue 32014L0024'));"
     )
-    result = subprocess.run(["node", "-e", code], capture_output=True, timeout=10)
+    result = run_node(code)
     assert result.returncode == 0, result.stderr.decode()
 
 
@@ -291,7 +312,7 @@ assert.deepEqual(
 assert.equal(manualNoteDraftReady(manualNotePayload({},'dossier',null)),false);
 """
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -322,16 +343,20 @@ assert.ok(needs.next.includes('dovezile lipsă'));
 const ready=gapWorkflowSummary({total:2,pe_stare:{ready_for_review:2},pe_tip:{}});
 assert.ok(ready.next.includes('Revizuiește'));
 const html=gapWorkflowHtml({total:2,pe_stare:{ready_for_review:1,reviewed:1},pe_tip:{risc_ue:1}});
+assert.ok(html.includes('Dosar de lucru · constatare → propunere'));
+assert.ok(html.includes('data-gap-step="source"'));
+assert.ok(html.includes('data-gap-step="evidence"'));
+assert.ok(html.includes('5. Export'));
 assert.ok(html.includes('data-gap-flow-new-note'));
 assert.ok(html.includes('data-gap-flow-eu-note'));
 assert.ok(html.includes('data-gap-flow-ai-note'));
 assert.ok(html.includes('data-gap-flow-proposals'));
 assert.ok(html.includes('data-gap-flow-runs'));
-assert.ok(html.includes('✓ 1. Constatare')||html.includes('1. Constatare'));
+assert.ok(html.includes('1. Sursă deschisă'));
 assert.ok(!html.includes('<script>'));
 """
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -370,7 +395,7 @@ assert.equal(prefill.source_hash,'c'.repeat(64));
 assert.ok(prefill.evidence_quote.includes('changed'));
 """
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -414,7 +439,7 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "assert.ok(form.includes('data-mcp-copy'));"
         "assert.ok(form.includes('data-mcp-insert'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -453,7 +478,7 @@ def test_ai_note_settings_persist_only_safe_defaults():
         "assert.ok(html.includes('MCP aprobat'));"
         "assert.ok(html.includes('cheia API: nepăstrată'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -483,7 +508,7 @@ def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
         "assert.ok(html.includes('&lt;Act&gt;'));"
         "assert.ok(html.includes('PROMPT'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -524,7 +549,7 @@ def test_ai_external_approval_packet_has_cost_provider_and_no_key():
         "assert.ok(confirmMessage.includes('Cheia API: sesiunea browserului'));"
         "assert.ok(!JSON.stringify(packet).includes('SECRET'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -576,7 +601,7 @@ def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
         "assert.ok(out.insert_header.includes('Ciornă AI'));"
         "assert.ok(!JSON.stringify(out).includes('SECRET'));})().catch(e=>{console.error(e);process.exit(1);});"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -630,7 +655,7 @@ def test_ai_evidence_draft_execution_failure_states_are_mocked_and_secret_free()
         "assert.ok(!JSON.stringify(out).includes('SECRET'));}"
         "})().catch(e=>{console.error(e);process.exit(1);});"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -663,7 +688,7 @@ def test_rule_candidate_controls_build_preview_payload():
         "assert.ok(html.includes('data-rule-save'));"
         "assert.ok(!html.includes('<script>'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -722,7 +747,7 @@ def test_rule_drafts_panel_renders_queue_and_promoted_rules():
         "assert.ok(draftText.includes('Contract execuție text proiect'));"
         "assert.ok(!html.includes('<script>'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -767,7 +792,7 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "assert.ok(html.includes('Trimite în Verifică'));"
         "assert.ok(!html.includes('<x>'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -816,7 +841,7 @@ def test_project_cockpit_handoff_opens_writing_workspace():
         "assert.equal(dossierLibrary.open,true);"
         "})().catch(err=>{console.error(err);process.exit(1);});"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -849,7 +874,7 @@ def test_rule_check_candidate_prefills_manual_note():
         "assert.equal(noSignal.status,'needs_evidence');"
         "assert.ok(noSignal.reasoning.includes('nu înseamnă conformitate'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -883,7 +908,7 @@ def test_review_form_escapes_evidence_and_history():
         "assert.ok(draft.includes('Text extras: neschimbat'));"
         "assert.ok(draft.includes('data-draft-versions')&&!draft.includes('<script>'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -907,7 +932,7 @@ def test_eu_snapshot_renderer_escapes_text_provenance_and_labels_unknown():
         "run.dovezi.surse_ue.instantanee[0]={stare:'limita_depasita'};"
         "assert.ok(dossierEuSnapshotsHtml(run).includes('Limită de captură depășită'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -930,7 +955,7 @@ def test_eu_check_renderer_keeps_unknown_and_language_change_distinct():
         "assert.ok(!h.includes('<img>')&&!h.includes('<script>'));"
         "assert.ok(h.includes('nu este o comparație a sensului'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -953,7 +978,7 @@ def test_eu_queue_renderer_escapes_titles_and_separates_unchecked():
         "assert.ok(h.includes('Limbi schimbate: 2')&&h.includes('Doar metadate: 3'));"
         "assert.ok(h.includes('Comparație incompletă'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -977,7 +1002,7 @@ def test_context_renderer_escapes_values_and_citations_and_labels_unknown():
         "context_juridic:{a:{curent:null,istoric:[]}}};"
         "assert.ok(legalContextHtml(f).includes('Context juridic · A'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -1007,7 +1032,7 @@ def test_workspace_filter_and_saved_evidence_rendering():
         "assert.ok(workspaceFindingHtml(a,'a',true).includes('aria-current=\"true\"'));"
         "assert.ok(workspaceFindingHtml(a,'a',true).includes('Note nesalvate'));"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -1027,4 +1052,4 @@ def test_workspace_navigation_guard_restores_selectors():
         "assert.equal(nodes['#dossier-run-select'].value,'run');"
         "dirty=false;assert.equal(dossierMayNavigate(),true);"
     )
-    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+    run_node(code)

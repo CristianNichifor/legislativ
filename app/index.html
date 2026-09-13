@@ -434,19 +434,26 @@
   .manual-note-summary button{text-align:left;white-space:normal;overflow-wrap:anywhere}
   .daily-workflow{border-block:1px solid var(--rule);padding:.7rem 0;margin:.2rem 0 .9rem}
   .daily-workflow h3{font-size:1rem;margin:.1rem 0 .25rem}
-  .daily-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.45rem;margin:.65rem 0;padding:0;list-style:none}
-  .daily-flow-steps li{border-top:1px solid var(--rule-soft);padding:.45rem 0;min-width:0}
+  .daily-workflow-status{border-left:3px solid var(--material);padding:.35rem .55rem;background:var(--surface);
+    font-size:.78rem;margin:.45rem 0}
+  .daily-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(10.5rem,1fr));gap:.45rem;margin:.65rem 0;padding:0;list-style:none}
+  .daily-flow-steps li{border-top:2px solid var(--rule-soft);padding:.45rem 0;min-width:0}
+  .daily-flow-steps li[data-workflow-step="source"]{border-color:var(--accent)}
+  .daily-flow-steps li[data-workflow-step="note"],.daily-flow-steps li[data-workflow-step="evidence"]{border-color:var(--material)}
+  .daily-flow-steps li.current{background:color-mix(in srgb,var(--accent) 8%,transparent);padding-inline:.35rem}
   .daily-flow-steps b{display:block;font-size:.82rem}
   .daily-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
-  .gap-workflow{border:1px solid var(--rule);border-left:3px solid #18745b;padding:.65rem;margin:.65rem 0;background:#f8fbfa;overflow-wrap:anywhere}
-  .gap-workflow h4{font-size:.92rem;margin:0 0 .3rem}
+  .daily-flow-steps code{font-family:var(--mono);font-size:.7rem;color:var(--ink-mid)}
+  .daily-flow-output{display:block;margin-top:.25rem}
+  .gap-workflow{border:1px solid var(--rule-soft);border-left:3px solid var(--accent);padding:.55rem .65rem;margin:.35rem 0 .7rem;background:var(--surface);overflow-wrap:anywhere}
+  .gap-workflow h4{font-size:.9rem;margin:.05rem 0 .25rem}
   .gap-workflow p{margin:.25rem 0}
-  .gap-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.4rem;margin:.65rem 0;padding:0;list-style:none}
-  .gap-flow-steps li{border-top:1px solid var(--rule-soft);padding:.45rem 0;min-width:0}
-  .gap-flow-steps b{display:block;font-size:.82rem}
-  .gap-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
-  .gap-flow-steps .done b::before{content:"✓ ";color:#18745b}
-  .gap-flow-steps .todo b::before{content:"• ";color:#9a5b00}
+  .gap-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.4rem;margin:.5rem 0;padding:0;list-style:none}
+  .gap-flow-steps li{border-top:2px solid var(--rule-soft);padding:.35rem 0;font-size:.74rem;min-width:0}
+  .gap-flow-steps li.done{border-color:var(--accent)}
+  .gap-flow-steps li.current{border-color:var(--material)}
+  .gap-flow-steps b{display:block;font-size:.78rem}
+  .gap-flow-steps span{display:block;font-family:var(--sans);color:var(--ink-mute);margin-top:.15rem}
   .watchlist-feed{border-top:1px solid var(--rule);padding:.7rem 0;margin:.6rem 0;overflow-wrap:anywhere}
   .watchlist-feed form{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.45rem;align-items:end}
   .watchlist-feed article{border-top:1px solid var(--rule-soft);padding:.55rem 0}
@@ -1379,16 +1386,15 @@
       <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
         <section class="daily-workflow" id="legislative-workflow" aria-labelledby="legislative-workflow-title">
           <h3 id="legislative-workflow-title">Flux zilnic pentru lacune și contradicții</h3>
-          <p class="hint" id="legislative-workflow-status" role="status">
-            Pornește de la o lege sau un proiect, deschide matricea, salvează nota cu dovezi,
-            apoi pregătește ciorna și exportul din dosarul local.
+          <p class="daily-workflow-status" id="legislative-workflow-status" role="status">
+            Următorul pas: caută și deschide sursa oficială, apoi păstrează constatarea în dosarul local.
           </p>
           <ol class="daily-flow-steps">
-            <li><b>1. Caută legea/proiectul</b><span>Identifică actul, proiectul sau consultarea publică.</span></li>
-            <li><b>2. Deschide matricea</b><span>Filtrează domeniu, rang, problemă și calitatea surselor.</span></li>
-            <li><b>3. Notează semnalul</b><span>Lacună, contradicție, CCR sau risc UE, cu citat și sursă.</span></li>
-            <li><b>4. Redactează</b><span>Folosește dovezile pentru ciornă, reguli și propuneri.</span></li>
-            <li><b>5. Exportă</b><span>Păstrează raportul, nota, propunerea și limitările.</span></li>
+            <li data-workflow-step="source"><b>1. Sursă</b><span>Caută actul, proiectul, consultarea sau CELEX și deschide fișa oficială.</span><code class="daily-flow-output">ieșire: URL + identificator</code></li>
+            <li data-workflow-step="note"><b>2. Notă</b><span>Adaugă lacună, contradicție, CCR sau risc UE în dosarul ales.</span><code class="daily-flow-output">ieșire: constatare locală</code></li>
+            <li data-workflow-step="evidence"><b>3. Dovezi</b><span>Completează citatul, locatorul, sursa și SHA-256 când există.</span><code class="daily-flow-output">ieșire: pachet verificabil</code></li>
+            <li data-workflow-step="draft"><b>4. Ciornă</b><span>Pornește propunerea sau regula numai din nota cu dovezi.</span><code class="daily-flow-output">ieșire: amendament salvat</code></li>
+            <li data-workflow-step="export"><b>5. Export</b><span>Descarcă raportul, propunerea sau analiza cu limitările păstrate.</span><code class="daily-flow-output">ieșire: Markdown/JSON</code></li>
           </ol>
           <div class="dossier-actions">
             <button type="button" class="ghost mini" data-workflow-open-search>Caută sursă</button>
@@ -1930,6 +1936,11 @@ $(".app").dataset.pane = "lint";   // initial tab
 function bindDailyWorkflow(){
   const root=$('#legislative-workflow');if(!root)return;
   const status=$('#legislative-workflow-status');
+  const mark=step=>{
+    root.querySelectorAll('[data-workflow-step]').forEach(li=>{
+      li.classList.toggle('current',li.dataset.workflowStep===step);
+    });
+  };
   const reveal=(selector,message)=>{
     selectTab('matrice');
     const node=$(selector);
@@ -1939,29 +1950,33 @@ function bindDailyWorkflow(){
     status.textContent=message;
     return node;
   };
-  root.querySelector('[data-workflow-open-search]').onclick=()=>{selectTab('cauta');status.textContent='Caută actul, proiectul sau termenul de domeniu.';$('#q')?.focus();};
-  root.querySelector('[data-workflow-open-matrix]').onclick=()=>{selectTab('matrice');status.textContent='Alege filtrele și deschide un rând pentru dovezi.';$('#m-q')?.focus();};
-  root.querySelector('[data-workflow-open-dossier]').onclick=()=>{reveal('#dossier-library','Alege sau creează dosarul local înainte de notă și export.');};
+  root.querySelector('[data-workflow-open-search]').onclick=()=>{mark('source');selectTab('cauta');status.textContent='Caută sursa oficială, apoi deschide fișa actului/proiectului pentru URL, locator și context.';$('#q')?.focus();};
+  root.querySelector('[data-workflow-open-matrix]').onclick=()=>{mark('source');selectTab('matrice');status.textContent='Filtrează matricea și deschide un rând cu sursă verificabilă înainte de notă.';$('#m-q')?.focus();};
+  root.querySelector('[data-workflow-open-dossier]').onclick=()=>{mark('note');reveal('#dossier-library','Alege sau creează dosarul local care va ține nota, dovezile, ciorna și exportul.');};
   root.querySelector('[data-workflow-open-note]').onclick=()=>{
-    const panel=reveal('#dossier-library','Alege un dosar, apoi salvează nota cu citat și sursă.');
+    mark('note');
+    const panel=reveal('#dossier-library','Scrie nota manuală: tipul problemei, locatorul, citatul, sursa și raționamentul.');
     if(!panel)return;
     if(DOSARE_UI.selected?.id){
       MANUAL_NOTES_UI.editing=null;
       loadManualNotes(DOSARE_UI.selected.id,0);
       $('#dossier-notes')?.scrollIntoView({block:'start'});
-    }else $('#dossier-status').textContent='Alege sau creează un dosar înainte de nota gap/UE.';
+    }else $('#dossier-status').textContent='Alege sau creează un dosar înainte de nota de lacună, contradicție sau risc UE.';
   };
   root.querySelector('[data-workflow-open-draft]').onclick=()=>{
-    const panel=reveal('#dossier-library','Spațiul de redactare folosește proiectul, dovezile și regulile locale.');
+    mark('draft');
+    const panel=reveal('#dossier-library','Deschide propuneri sau reguli numai după ce nota are dovezi atașate.');
     if(!panel)return;
     if(DOSARE_UI.selected?.id)$('#dossier-writing')?.scrollIntoView({block:'start'});
     else $('#dossier-status').textContent='Alege sau creează un dosar înainte de ciorna de amendament.';
   };
   root.querySelector('[data-workflow-open-export]').onclick=()=>{
-    const panel=reveal('#dossier-library','Exportă din analiza salvată, propuneri sau pachetul de dovezi.');
+    mark('export');
+    const panel=reveal('#dossier-library','Exportă revizia salvată: raport, notă, propunere sau analiză cu limitările incluse.');
     if(!panel)return;
     ($('#dossier-saved')?.textContent?$('#dossier-saved'):$('#dossier-proposals')||panel).scrollIntoView({block:'start'});
   };
+  mark('source');
 }
 bindDailyWorkflow();
 
@@ -5354,13 +5369,15 @@ function gapWorkflowSummary(data){
 }
 function gapWorkflowHtml(data){
   const s=gapWorkflowSummary(data);
-  const step=(done,title,detail)=>`<li class="${done?'done':'todo'}"><b>${esc(title)}</b><span>${esc(detail)}</span></li>`;
-  return `<section class="gap-workflow" aria-labelledby="gap-workflow-title"><h4 id="gap-workflow-title">Spațiu ghidat pentru constatare legislativă</h4>`
+  const current=!s.total?'source':(s.total&&!s.evidence?'evidence':(s.ready||s.reviewed?'draft':'note'));
+  const step=(key,done,title,detail)=>`<li class="${done?'done':key===current?'current':'todo'}" data-gap-step="${key}"><b>${esc(title)}</b><span>${esc(detail)}</span></li>`;
+  return `<section class="gap-workflow" aria-labelledby="gap-workflow-title"><h4 id="gap-workflow-title">Dosar de lucru · constatare → propunere</h4>`
     +`<p class="hint">${esc(s.next)}</p><ol class="gap-flow-steps">`
-    +step(!!s.total,'1. Constatare',s.total?`${s.total} note salvate`:'Nicio notă salvată')
-    +step(s.evidence>0,'2. Dovezi',s.evidence?`${s.evidence} note au citate/surse`:'Adaugă citat și sursă')
-    +step(!!s.eu,'3. Drept UE',s.eu?`${s.eu} note de risc UE`:'Opțional: leagă CELEX/articol')
-    +step(s.ready>0||s.reviewed>0,'4. Revizie',s.reviewed?`${s.reviewed} revizuite/rezolvate`:(s.ready?`${s.ready} pregătite`:'Marchează starea umană'))
+    +step('source',!!s.total,'1. Sursă deschisă',s.total?'Constatarea are dosar':'Caută act/proiect/CELEX')
+    +step('note',!!s.total,'2. Notă manuală',s.total?`${s.total} note salvate`:'Lacună, contradicție sau risc UE')
+    +step('evidence',s.evidence>0,'3. Dovezi atașate',s.evidence?`${s.evidence} note au citate/surse`:'Adaugă citat, locator, sursă')
+    +step('draft',s.ready>0||s.reviewed>0,'4. Ciornă propunere',s.reviewed?`${s.reviewed} revizuite/rezolvate`:(s.ready?`${s.ready} pregătite`:'Revizie umană înainte de draft'))
+    +step('export',s.reviewed>0,'5. Export',s.reviewed?'Exportă revizia salvată':'Alege propunerea sau analiza')
     +'</ol><div class="dossier-actions">'
     +'<button type="button" class="ghost mini" data-gap-flow-new-note>Notă nouă</button>'
     +'<button type="button" class="ghost mini" data-gap-flow-eu-note>Notă UE</button>'
