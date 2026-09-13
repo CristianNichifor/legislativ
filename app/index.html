@@ -4791,16 +4791,48 @@ const RULE_QUEUE_BUCKETS={
 const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null,draft:null};
 let ruleDraftsSequence=0;
 
+function manualNoteExportMarkdown(note){
+  if(note.export_markdown)return String(note.export_markdown);
+  const target=[note.act_id,note.locator].filter(Boolean).join(' · ')||'Fără țintă atașată';
+  return [
+    `# ${note.title||'Notă dosar'}`,
+    '',
+    `Tip: ${MANUAL_NOTE_TYPES[note.type]||note.type||''}`,
+    `Stare: ${MANUAL_NOTE_STATUS[note.status]||note.status||''}`,
+    `Țintă: ${target}`,
+    note.source_url?`Sursă: ${note.source_url}`:'',
+    note.source_hash?`SHA-256 sursă: ${note.source_hash}`:'',
+    '',
+    '## Citat dovadă',
+    '',
+    note.evidence_quote||'',
+    '',
+    '## Raționament',
+    '',
+    note.reasoning||'',
+    '',
+    '## Limită',
+    '',
+    '- Notă de lucru revizuibilă, nu verdict juridic.',
+  ].filter(line=>line!==null&&line!==undefined).join('\n').trim()+'\n';
+}
+function manualNoteFilename(note){
+  const stem=String(note.title||note.id||'nota-dosar').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9._-]+/g,'-')
+    .replace(/^-+|-+$/g,'').slice(0,80)||'nota-dosar';
+  return stem+'.md';
+}
 function manualNoteHtml(note,index){
   const source=note.source_url?` · <a href="${esc(note.source_url)}" target="_blank" rel="noopener">sursa</a>`:'';
   const canOpen=note.act_id&&note.locator;
+  const exportLabel=note.export_markdown?'Exportă nota UE':'Exportă nota';
   return `<article class="manual-note" data-note-index="${index}"><h5>${esc(note.title)}</h5>`
     +`<div class="manual-note-meta"><span>${esc(MANUAL_NOTE_TYPES[note.type]||note.type)}</span><span>${esc(MANUAL_NOTE_STATUS[note.status]||note.status)}</span><span>Revizia ${esc(note.revizie)}</span><span>Modificat: ${esc(dossierTime(note.modificat_la))}</span></div>`
     +`<p>${esc([note.act_id,note.locator].filter(Boolean).join(' · ')||'Fără act sau locator atașat')}${source}</p>`
     +(note.source_hash?`<p class="hint">SHA-256 sursă: ${esc(note.source_hash)}</p>`:'')
     +(note.evidence_quote?`<details open><summary>Citat dovadă</summary><pre>${esc(note.evidence_quote)}</pre></details>`:'')
     +(note.reasoning?`<details open><summary>Raționament</summary><pre>${esc(note.reasoning)}</pre></details>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button><button type="button" class="ghost mini" data-note-draft-selected>Draft din dovadă</button>${canOpen?'<button type="button" class="ghost mini" data-open-note-source>Deschide prevederea</button>':''}</div><div data-note-source></div></article>`;
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button><button type="button" class="ghost mini" data-note-draft-selected>Draft din dovadă</button><button type="button" class="ghost mini" data-copy-note-export>Copiază Markdown</button><button type="button" class="ghost mini" data-download-note-export>${esc(exportLabel)}</button>${canOpen?'<button type="button" class="ghost mini" data-open-note-source>Deschide prevederea</button>':''}</div><div data-note-source></div></article>`;
 }
 function manualNoteFormHtml(editing=null){
   const v=(name,fallback='')=>esc(editing?.[name]??fallback);
@@ -5516,6 +5548,19 @@ async function loadManualNotes(dossierId,offset=0){
       const note=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];
       if(!manualNoteDraftReady(note)){host.querySelector('[data-note-list-status]').textContent='Nota are nevoie de citat și URL sau SHA-256 înainte de draft.';return;}
       MANUAL_NOTES_UI.editing=note;MANUAL_NOTES_UI.draft={task:'issue_note'};loadManualNotes(dossierId,offset);
+    });
+    host.querySelectorAll('[data-copy-note-export]').forEach(button=>button.onclick=async()=>{
+      const note=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];
+      try{await navigator.clipboard.writeText(manualNoteExportMarkdown(note));host.querySelector('[data-note-list-status]').textContent='Nota Markdown a fost copiată.';}
+      catch{host.querySelector('[data-note-list-status]').textContent='Copierea notei nu a reușit.';}
+    });
+    host.querySelectorAll('[data-download-note-export]').forEach(button=>button.onclick=()=>{
+      const note=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];
+      try{
+        const url=URL.createObjectURL(new Blob([manualNoteExportMarkdown(note)],{type:'text/markdown;charset=utf-8'}));
+        const link=document.createElement('a');link.href=url;link.download=manualNoteFilename(note);document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+        host.querySelector('[data-note-list-status]').textContent='Descărcarea notei Markdown a fost pornită.';
+      }catch{host.querySelector('[data-note-list-status]').textContent='Descărcarea notei nu a reușit.';}
     });
     host.querySelectorAll('[data-open-note-source]').forEach(button=>button.onclick=()=>openManualNoteSource(button,data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)]));
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
@@ -7694,9 +7739,13 @@ function projectWorkbenchMarkdown(project,pack){
   if(!(pack.events||[]).length)lines.push('- Niciun eveniment tracker.');
   lines.push('', '## Note dosar');
   for(const note of pack.dossier_notes||[]){
-    lines.push(`- ${note.title} · ${note.type} · ${note.status}`);
-    if(note.act_id||note.locator)lines.push(`  Țintă: ${[note.act_id,note.locator].filter(Boolean).join(' · ')}`);
-    if(note.reasoning)lines.push(`  Raționament: ${note.reasoning}`);
+    if(note.export_markdown){
+      lines.push(note.export_markdown.trim());
+    }else{
+      lines.push(`- ${note.title} · ${note.type} · ${note.status}`);
+      if(note.act_id||note.locator)lines.push(`  Țintă: ${[note.act_id,note.locator].filter(Boolean).join(' · ')}`);
+      if(note.reasoning)lines.push(`  Raționament: ${note.reasoning}`);
+    }
   }
   if(!(pack.dossier_notes||[]).length)lines.push('- Nicio notă legată de proiect.');
   lines.push('', '## Limitări');
