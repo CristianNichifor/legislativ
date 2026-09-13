@@ -1435,7 +1435,7 @@
         </section>
         <details class="dossier-library" id="source-coverage">
           <summary>Acoperire surse · Calitatea urmăririi</summary>
-          <div class="dossier-actions"><button type="button" id="source-workbench-refresh" class="ghost mini">Workbench surse</button><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Stadiu finalizare</button><button type="button" id="needs-attention-refresh" class="ghost mini">Ce necesită atenție</button><button type="button" id="monitor-reconciliation-refresh" class="ghost mini">Reconciliere MO</button><button type="button" id="monitor-replay-tracker" class="ghost mini">Trimite MO în tracker</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
+          <div class="dossier-actions"><button type="button" id="source-workbench-refresh" class="ghost mini">Workbench surse</button><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Gate produs</button><button type="button" id="needs-attention-refresh" class="ghost mini">Ce necesită atenție</button><button type="button" id="monitor-reconciliation-refresh" class="ghost mini">Reconciliere MO</button><button type="button" id="monitor-replay-tracker" class="ghost mini">Trimite MO în tracker</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
           <p id="source-coverage-status" class="hint" role="status">Acoperire neîncărcată.</p>
           <div id="source-workbench-result"></div>
           <div id="source-coverage-result"></div>
@@ -6785,6 +6785,18 @@ function sourceCoverageActionHtml(data){
   return actions.length?`<details open><summary>Ce trebuie făcut pentru acoperire utilizabilă</summary><ul>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></details>`:'';
 }
 function acceptanceDashboardHtml(data){
+  if(data.contract==='app-completeness-gate-v1'){
+    const stateLabel={ready:'gata',partial:'parțial',missing:'lipsește'};
+    const cards=(data.capabilities||[]).map(c=>{
+      const status=c.state==='ready'?'ok':'attention';
+      const failed=(c.failed_checks||[]).length?`<p class="hint">Verificări eșuate: ${c.failed_checks.map(esc).join(' · ')}</p>`:'';
+      const blockers=(c.blockers||[]).length?`<p class="hint">Blocaje: ${c.blockers.map(esc).join(' · ')}</p>`:'';
+      return `<article class="coverage-card coverage-${status}"><h4>${esc(c.label)} · ${esc(stateLabel[c.state]||c.state)}</h4><p>${esc(c.evidence||'')}</p>${failed}${blockers}</article>`;
+    }).join('');
+    const blocking=(data.blocking_capabilities||[]).map(item=>`<li><strong>${esc(item.key)}</strong> · ${esc(item.state)}<br><span class="hint">${esc((item.blockers||[]).join(' · ')||'fără dovadă suficientă')}${item.next_action?` ${esc(item.next_action)}`:''}</span></li>`).join('');
+    const failed=(data.failed_checks||[]).map(item=>`<li>${esc(item.capability)}.${esc(item.check)}</li>`).join('');
+    return `<section class="source-inventory"><h4>Gate produs final</h4><p><strong>${esc(data.status)}</strong> · ${data.completion_claim_allowed?'poate fi declarat complet':'nu poate fi declarat complet'} · ${data.summary?.ready||0} gata · ${data.summary?.partial||0} parțial · ${data.summary?.missing||0} lipsă.</p><div class="coverage-grid">${cards}</div>${blocking?`<details open><summary>Blocaje care opresc acceptarea finală</summary><ul>${blocking}</ul></details>`:''}${failed?`<details open><summary>Verificări eșuate</summary><ul>${failed}</ul></details>`:''}<p class="hint">CLI: ${esc(data.visible_in?.cli||'python -m scripts.app_completeness --require-complete')}</p><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
+  }
   const capabilityLabels={ready:'gata',partial:'parțial',missing:'lipsește'};
   const cards=(data.sections||[]).map(s=>{
     const metrics=Object.entries(s.metrics||{}).map(([k,v])=>`${esc(k)}: ${esc(v)}`).join(' · ');
@@ -6818,13 +6830,13 @@ async function loadSourceCoverage(){
 }
 async function loadAcceptanceDashboard(){
   const status=$('#source-coverage-status'),out=$('#acceptance-dashboard-result');
-  status.textContent='Calculez stadiul de finalizare…';out.innerHTML='';
+  status.textContent='Calculez gate-ul de produs…';out.innerHTML='';
   try{
-    const response=await fetch('/api/acceptance-dashboard');
-    const data=await response.json().catch(()=>({error:'Dashboard indisponibil.'}));
-    if(!response.ok||data.error)throw Error(data.error||'Dashboard indisponibil.');
+    const response=await fetch('/api/app-completeness');
+    const data=await response.json().catch(()=>({error:'Gate produs indisponibil.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Gate produs indisponibil.');
     out.innerHTML=acceptanceDashboardHtml(data);
-    status.textContent=data.status==='ok'?'Stadiu finalizare: fără blocaje cunoscute.':'Stadiu finalizare: există zone de atenție.';
+    status.textContent=data.completion_claim_allowed?'Gate produs: complet conform dovezilor curente.':'Gate produs: blocat de capabilități parțiale sau lipsă.';
   }catch(err){status.textContent=err.message;}
 }
 function monitorReconciliationHtml(data){
