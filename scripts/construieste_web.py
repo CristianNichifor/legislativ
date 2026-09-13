@@ -451,6 +451,16 @@ def _raspunde(path, query, body, method='GET'):
             'counts': {},
             'limitari': ['Feed-ul operațional este disponibil în aplicația locală cu registru privat.'],
         }
+    elif path == '/api/source-tracker-workbench':
+        out = {
+            'contract': 'source-tracker-lifecycle-workbench-v1',
+            'summary': {'attention_items': 0, 'sources_attention': 0, 'tracker_unreviewed': 0, 'projects_attention': 0, 'retryable_sources': 0, 'reviewable_sources': 0, 'evidence_links': 0},
+            'counts': {},
+            'rows': [],
+            'next_actions': [],
+            'source_status': {'registry': 'blocked', 'tracker': 'blocked', 'lifecycle': 'blocked'},
+            'limitari': ['Workbench-ul surselor este disponibil în aplicația locală cu registru privat.'],
+        }
     elif path == '/api/monitor-reconciliere':
         out = {
             'contract': 'monitor-publication-reconciliation-v1',

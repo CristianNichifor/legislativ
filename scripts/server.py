@@ -26,6 +26,8 @@ to a separate `initiative.documente.db` beside the initiative database.
   that was debated carries the transcript's locator, `{ids, idm}` — the sitting and the item.
 - `GET /api/lifecycle-proiecte[?q=&limit=&offset=&stale_days=]` — project lifecycle/status feed
   from local parliamentary metadata, including stale, unavailable and unknown-stage states.
+- `GET /api/source-tracker-workbench` — one operational source/lifecycle workbench from local
+  registry, tracker, lifecycle and attention-feed state. No live crawling.
 - `GET /api/stenograma?ids=&idm=` — that debate, speech by speech, each speaker carrying the
   (legislature, chamber, id) their profile is keyed on. `gasit=false` where it has not been read.
 - `POST /api/importa` — an uploaded `.docx`, `.md` or `.txt` into the editor's block tree. Base64
@@ -214,6 +216,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
                     "/api/needs-attention",
+                    "/api/source-tracker-workbench",
                     "/api/surse-proiecte",
                     "/api/ue/surse",
                     "/api/date",
@@ -450,6 +453,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     return
                 try:
                     self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/source-tracker-workbench":
+                from scripts.source_tracker_workbench import build
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(build(stare, parse_qs(ruta.query)))
                 except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/acceptance-dashboard":
