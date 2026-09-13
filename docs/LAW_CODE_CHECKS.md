@@ -14,17 +14,27 @@ Response contract: `law-code-delegated-norms-v1`
 
 Each row uses `law-code-check-delegated-norm-v1` and includes:
 
-- `status`: `candidate_gap_not_verdict`
+- `status`: `candidate_gap_not_verdict` or `implementation_found_review_only`
 - `check`: `delegated_norm_not_found`
 - `act_id`
 - `locator`
 - `provision_id`, when both act and locator are known
 - expected `instrument`
 - `deadline`
+- `deadline_status`: `deadline_found` or `deadline_missing`
 - `days_overdue`
+- `implementation_status`:
+  - `implementing_act_missing`
+  - `near_candidate_only`
+  - `implementing_act_found`
 - evidential `severity`
-- quoted source text and searched relation
-- nearby candidates found in the graph
+- `delegation`: the source provision summary that appears to require an
+  implementing norm
+- `deadline_evidence`: the detected or missing deadline state
+- `implementation_evidence`: the searched relation, found local implementing
+  acts and near candidates
+- `review_candidate`: explicit review-only metadata with `legal_effect:
+  unknown` and `not_legal_verdict: true`
 - provision actions
 - row-level limitations
 
@@ -39,6 +49,11 @@ decide legal truth. A missing implementing act can mean:
 
 The output is suitable for review queues, matrix drilldowns and dossier notes,
 not for automatic legal conclusions.
+
+`implementation_found_review_only` exists for fixture and future graph-backed
+rows where local evidence names an implementing act. The check still does not
+decide that the obligation was legally discharged: the act can be incomplete,
+late, amended, unrelated in substance or outside the loaded source coverage.
 
 ## Draft-rule execution
 
