@@ -223,6 +223,37 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     event_id = review_queue["events"][0]["id"]
     assert review_queue["events"][0]["event_type"] == "public_consultation_opened"
 
+    code, evidence_pack = request(
+        stare,
+        "GET",
+        "/api/project-evidence-pack?"
+        + "project_id="
+        + review_queue["events"][0]["project_id"]
+        + "&dossier_id="
+        + DOSSIER_ID,
+    )
+    assert code == 200
+    assert evidence_pack["contract"] == "project-evidence-pack-v1"
+    assert evidence_pack["summary"]["events"] == 1
+    assert evidence_pack["summary"]["open_events"] == 1
+    assert evidence_pack["evidence"][0]["source_id"] == synced["id"]
+    assert evidence_pack["next_actions"] == [
+        "Revizuiește evenimentele tracker nerevizuite înainte de redactare.",
+        "Creează o notă de dosar cu citat, sursă și raționament.",
+    ]
+
+    code, draft = request(
+        stare,
+        "GET",
+        "/api/project-draft-seed?project_id=" + review_queue["events"][0]["project_id"],
+    )
+    assert code == 200
+    assert draft["contract"] == "project-draft-seed-v1"
+    assert draft["summary"]["events"] == 1
+    assert "Proiect urmărit: " + review_queue["events"][0]["project_id"] in draft["text"]
+    assert "Consultare publică deschisă" in draft["text"]
+    assert "nu verdict juridic" in draft["text"]
+
     code, note = request(
         stare,
         "POST",
@@ -232,6 +263,19 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     assert code == 200
     assert note["note"]["dosar_id"] == DOSSIER_ID
     assert note["note"]["act_id"] == review_queue["events"][0]["project_id"]
+
+    code, evidence_pack_after_note = request(
+        stare,
+        "GET",
+        "/api/project-evidence-pack?"
+        + "project_id="
+        + review_queue["events"][0]["project_id"]
+        + "&dossier_id="
+        + DOSSIER_ID,
+    )
+    assert code == 200
+    assert evidence_pack_after_note["summary"]["notes"] == 1
+    assert evidence_pack_after_note["dossier_notes"][0]["id"] == note["note"]["id"]
 
     code, reviewed = request(
         stare,
@@ -246,6 +290,20 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     )
     assert code == 200
     assert reviewed["event"]["review"]["reviewed"] is True
+
+    code, evidence_pack_after_review = request(
+        stare,
+        "GET",
+        "/api/project-evidence-pack?"
+        + "project_id="
+        + review_queue["events"][0]["project_id"]
+        + "&dossier_id="
+        + DOSSIER_ID,
+    )
+    assert code == 200
+    assert evidence_pack_after_review["summary"]["reviewed_events"] == 1
+    assert evidence_pack_after_review["summary"]["open_events"] == 0
+    assert evidence_pack_after_review["next_actions"] == []
 
     code, empty_queue = request(
         stare,
