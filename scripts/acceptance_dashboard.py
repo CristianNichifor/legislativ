@@ -16,6 +16,14 @@ def _pilot() -> dict:
         return {"status": "unavailable", "acceptance_output": {}, "known_gaps": {}}
 
 
+def _real_pilot_pack() -> dict:
+    path = Path(__file__).resolve().parents[1] / "data" / "real_pilot_pack.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"status": "unavailable", "requirements": []}
+
+
 def raport(stare) -> dict:
     try:
         sources = acoperire_surse.raport(stare)
@@ -25,10 +33,18 @@ def raport(stare) -> dict:
             "blockers": [{"kind": "source_coverage", "message": str(exc)}],
         }
     pilot = _pilot()
+    pack = _real_pilot_pack()
     output = pilot.get("acceptance_output") or {}
     workbench = output.get("workbench") or {}
     eu = workbench.get("eu_availability") or {}
     known_gaps = pilot.get("known_gaps") or pilot.get("conclusion") or {}
+    requirements = pack.get("requirements") or []
+    required = [item for item in requirements if item.get("required")]
+    ready_required = [item for item in required if item.get("status") == "ready"]
+    ready_keys = {item.get("key") for item in ready_required}
+    current_pack_ready = pack.get("status") == "ready" and len(ready_required) == len(required) == 5
+    celex_ready = "celex_text" in ready_keys
+    reviewable_ready = "reviewable_finding" in ready_keys
     capabilities = [
         {
             "key": "manual_gap_workspace",
@@ -51,8 +67,12 @@ def raport(stare) -> dict:
         {
             "key": "eu_checks",
             "label": "Verificare UE",
-            "state": "partial",
-            "evidence": "CELEX la cerere + note risc UE; pilotul încă are 0 texte UE importate",
+            "state": "ready" if celex_ready else "partial",
+            "evidence": (
+                "real pilot pack: official CELEX text fixture ready"
+                if celex_ready
+                else "CELEX la cerere + note risc UE; text UE oficial încă nepregătit"
+            ),
         },
         {
             "key": "law_as_code",
@@ -75,8 +95,12 @@ def raport(stare) -> dict:
         {
             "key": "acceptance_metrics",
             "label": "Metrici acceptanță",
-            "state": "partial",
-            "evidence": "pilot runtime + dashboard; lipsesc precizie/recall și test UX complet",
+            "state": "ready" if current_pack_ready and reviewable_ready else "partial",
+            "evidence": (
+                "real pilot pack: 5/5 ingrediente pregătite pentru gate închis"
+                if current_pack_ready and reviewable_ready
+                else "pilot runtime + dashboard; lipsesc precizie/recall și test UX complet"
+            ),
         },
     ]
     ready = sum(1 for item in capabilities if item["state"] == "ready")
@@ -110,13 +134,32 @@ def raport(stare) -> dict:
         {
             "key": "eu",
             "label": "Drept UE",
-            "status": "ok" if eu.get("text_importat", 0) else "attention",
-            "summary": known_gaps.get("eu_text_availability", "Disponibilitate UE nemăsurată."),
+            "status": "ok" if celex_ready else "attention",
+            "summary": (
+                "Current real pilot pack has an official CELEX text fixture ready."
+                if celex_ready
+                else known_gaps.get("eu_text_availability", "Disponibilitate UE nemăsurată.")
+            ),
             "metrics": {
                 "referenced": eu.get("total", 0),
-                "imported_text": eu.get("text_importat", 0),
-                "romanian_text": eu.get("text_romanian", 0),
-                "english_text": eu.get("text_english", 0),
+                "official_texts_ready": 1 if celex_ready else 0,
+                "romanian_texts_ready": 1 if celex_ready else 0,
+                "english_texts_ready": 0,
+            },
+        },
+        {
+            "key": "real_pilot_pack",
+            "label": "Pachet pilot real",
+            "status": "ok" if current_pack_ready else "attention",
+            "summary": (
+                "All 5 required ingredients are ready for the closed-gate acceptance command."
+                if current_pack_ready
+                else "Pachetul pilot real nu are încă toate ingredientele obligatorii pregătite."
+            ),
+            "metrics": {
+                "required_ready": len(ready_required),
+                "required_total": len(required),
+                "reviewable_findings_ready": 1 if reviewable_ready else 0,
             },
         },
         {
