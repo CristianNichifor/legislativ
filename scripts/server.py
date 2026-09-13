@@ -209,6 +209,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/mcp",
                     "/api/lifecycle-proiecte",
                     "/api/tracker-evenimente",
+                    "/api/lifecycle-watchlist",
                     "/api/project-evidence-pack",
                     "/api/project-cockpit",
                     "/api/project-draft-seed",
@@ -388,6 +389,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     return
                 try:
                     self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/lifecycle-watchlist":
+                from scripts.lifecycle_watchlist import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare))
                 except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/project-evidence-pack":
@@ -584,6 +594,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/rule-drafts",
                 "/api/dosare/rule-drafts/checks",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
                 "/api/dosare/propuneri/surse",
@@ -777,6 +788,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/ue/surse",
                 "/api/registru-surse",
                 "/api/tracker-evenimente",
+                "/api/lifecycle-watchlist",
                 "/api/monitor-reconciliere",
                 "/api/mcp/preview",
                 "/api/dosare",
@@ -794,6 +806,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
                 "/api/dosare/rule-candidates/preview",
@@ -831,6 +844,7 @@ def face_handler(stare: Stare, *, runtime=None):
                         "/api/ue/surse",
                         "/api/registru-surse",
                         "/api/tracker-evenimente",
+                        "/api/lifecycle-watchlist",
                         "/api/mcp",
                     )
                 )
@@ -894,6 +908,18 @@ def face_handler(stare: Stare, *, runtime=None):
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Tracker-ul legislativ nu este disponibil."}, 503)
                 return
+            if ruta == "/api/lifecycle-watchlist":
+                from scripts.lifecycle_watchlist import executa
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(executa(stare, cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Watchlist-ul lifecycle nu este disponibil."}, 503)
+                return
             if ruta == "/api/monitor-reconciliere":
                 from scripts.monitor_tracker import replay_to_tracker
 
@@ -942,6 +968,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
                 "/api/dosare/rule-candidates/preview",
@@ -1017,6 +1044,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.ai_drafting import preview
 
                         out = preview(cerere)
+                    elif ruta == "/api/dosare/ai-workflow":
+                        from scripts.ai_workflow import execute
+
+                        out = execute(path, cerere)
                     elif ruta == "/api/dosare/ai-draft/mcp-preview":
                         from scripts.mcp_ai_draft import preview
 

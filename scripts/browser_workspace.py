@@ -81,6 +81,7 @@ def public_contract(kind, raw, channel, allow_loopback=False):
 def route(stare, route, qs, body, method="GET"):
     from scripts import (
         ai_drafting,
+        ai_workflow,
         analize_propuneri,
         coada_ue,
         dependente_dovezi,
@@ -123,6 +124,7 @@ def route(stare, route, qs, body, method="GET"):
             "/ai-draft": lambda: ai_drafting.preview(body),
             "/ai-draft/mcp-preview": lambda: mcp_ai_draft.preview(body),
             "/ai-draft/mcp-execute": lambda: mcp_executor.execute(path, body),
+            "/ai-workflow": lambda: ai_workflow.execute(path, body),
             "/note-ue": lambda: note_ue.save(stare, body),
             "/note-ue/previzualizare": lambda: note_ue.preview(stare, body),
             "/reguli": lambda: rule_candidate_queue.executa(path, body),

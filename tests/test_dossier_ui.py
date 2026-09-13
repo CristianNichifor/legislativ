@@ -251,7 +251,13 @@ const note={id:'abc',title:'<script>',type:'contradictie',status:'ready_for_revi
 const h=manualNoteHtml(note,0);
 assert.ok(h.includes('Contradicție')&&h.includes('Gata pentru auto-revizie'));
 assert.ok(h.includes('SHA-256 sursă')&&h.includes('Citat dovadă'));
+assert.ok(h.includes('data-copy-note-export')&&h.includes('data-download-note-export'));
 assert.ok(!/<(script|img|svg|b|i)>/.test(h));
+const euNote={...note,type:'risc_ue',
+  export_markdown:'# Conflict posibil\n\n> citat exact\n\nNu este verdict juridic.\n'};
+assert.equal(manualNoteExportMarkdown(euNote),euNote.export_markdown);
+assert.ok(manualNoteHtml(euNote,1).includes('Exportă nota UE'));
+assert.equal(manualNoteFilename({title:'Notă UE / Art. 1'}),'nota-ue-art.-1.md');
 const formHtml=manualNoteFormHtml(note);
 assert.ok(formHtml.includes('Editezi nota')&&!formHtml.includes('<script>'));
 const prefill=manualNoteFromFinding({tip:'contradictie',dovada:{
@@ -569,6 +575,16 @@ def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
         "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
         "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
         "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
+        "const DOSARE_UI={selected:{id:'a'.repeat(32)}};"
+        "const crypto={randomUUID:()=>'dddddddd-dddd-dddd-dddd-dddddddddddd'};"
+        "async function dossierApi(path,payload){assert.equal(path,'/api/dosare/ai-workflow');"
+        "assert.equal(payload.dosar_id,'a'.repeat(32));assert.equal(payload.boundary,'online_byok');"
+        "assert.equal(payload.result_text,'Ciornă limitată la dovezi [1].');"
+        "return {contract:'ai-draft-storage-audit-v1',boundary:'online_byok',"
+        "approved_external_send:true,server_calls_model:false,stores_api_key:false,"
+        "output_status:'draft_unreviewed',insert_allowed:true,"
+        "claim_support:{unsupported_claims:0},draft_text:payload.result_text,"
+        "insert_header:'[Ciornă AI · online_byok · OpenAI · hash]'};}"
         "async function aiComplete(prompt,system,opt){sentPrompt=prompt;sentSystem=system;"
         "sentOpt=opt;"
         "if(opt&&opt.prog)opt.prog({text:'mock send'});"
@@ -580,7 +596,8 @@ def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
         "evidence_sha256:'e'.repeat(64),evidence_count:1,estimated_tokens:100,"
         "cost_estimate:{estimated_total_tokens:1000,server_cost:'none',"
         "cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
-        "external_approval_payload:{contract:'ai-external-send-approval-v1'}};"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'},"
+        "draft_request:{task:'issue_note',type:'lacuna',evidence:[{quote:'q',source_hash:'c'.repeat(64)}]}};"
         "(async()=>{const out=await aiRunEvidenceDraft(plan,'online_byok',()=>{});"
         "assert.equal(confirmed,true);"
         "assert.equal(sentPrompt,'PROMPT EVIDENCE ONLY');"
@@ -594,7 +611,7 @@ def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
         "assert.equal(out.request.stores_api_key,false);"
         "assert.equal(out.request.prompt_scope,'selected_evidence_only');"
         "assert.equal(out.status,'draft_unreviewed');"
-        "assert.equal(out.audit.contract,'ai-draft-execution-audit-v1');"
+        "assert.equal(out.audit.contract,'ai-draft-storage-audit-v1');"
         "assert.equal(out.audit.approved_external_send,true);"
         "assert.equal(out.audit.server_calls_model,false);"
         "assert.equal(out.audit.stores_api_key,false);"
@@ -620,6 +637,9 @@ def test_ai_evidence_draft_execution_failure_states_are_mocked_and_secret_free()
         "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
         "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
         "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
+        "const DOSARE_UI={selected:{id:'a'.repeat(32)}};"
+        "const crypto={randomUUID:()=>'dddddddd-dddd-dddd-dddd-dddddddddddd'};"
+        "async function dossierApi(){throw new Error('store should not run on provider failure');}"
         "let next='';"
         "async function aiComplete(){"
         "if(next==='timeout')throw Object.assign(new Error('timeout SECRET'),{code:'ETIMEDOUT'});"
@@ -637,7 +657,8 @@ def test_ai_evidence_draft_execution_failure_states_are_mocked_and_secret_free()
         "evidence_sha256:'e'.repeat(64),evidence_count:1,estimated_tokens:100,"
         "cost_estimate:{estimated_total_tokens:1000,server_cost:'none',"
         "cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
-        "external_approval_payload:{contract:'ai-external-send-approval-v1'}};"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'},"
+        "draft_request:{task:'issue_note',type:'lacuna',evidence:[{quote:'q',source_hash:'c'.repeat(64)}]}};"
         "(async()=>{"
         "const codes=['timeout','bad_key','quota','refusal','malformed_response',"
         "'provider_unavailable'];for(const code of codes){"
@@ -773,10 +794,17 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         + "const pack={project_id:'PL-x-1',source_status:'current',"
         "summary:{events:2,notes:2},next_actions:['revizuire'],"
         "events:[{occurred_at:'2026-09-12',event_type:'vote',title:'Vot <bad>',"
-        "display_label:'Vot'}],dossier_notes:[{type:'lacuna',title:'Lipsă <script>',"
+        "display_label:'Vot'}],dossier_notes:[{type:'risc_ue',title:'Risc UE',"
+        "status:'ready_for_review',export_markdown:'# Conflict posibil\\n\\n> citat exact UE"
+        "\\n\\nNu este verdict juridic.'},"
+        "{type:'lacuna',title:'Lipsă <script>',"
         "status:'ready_for_review',act_id:'lege',locator:'art1',"
         "reasoning:'Norma lipsește'},{type:'contradictie',title:'Conflict',"
         "status:'draft',reasoning:'Texte incompatibile'}],limitari:['nu verdict']};"
+        "const markdown=projectWorkbenchMarkdown({project_id:'PL-x-1'},pack);"
+        "assert.ok(markdown.includes('# Conflict posibil'));"
+        "assert.ok(markdown.includes('citat exact UE'));"
+        "assert.ok(markdown.includes('Nu este verdict juridic.'));"
         "const context=writingWorkspaceContextHtml(pack);"
         "assert.ok(context.includes('Contexte gap'));"
         "assert.ok(context.includes('Lacună'));"

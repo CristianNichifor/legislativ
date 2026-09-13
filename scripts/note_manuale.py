@@ -1,5 +1,6 @@
 """Manual legislative gap notes stored in the private dossier database."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def _url(value):
 
 
 def _row(row):
-    return {
+    data = {
         "id": row["id"],
         "dosar_id": row["dosar_id"],
         "title": row["titlu"],
@@ -52,6 +53,19 @@ def _row(row):
         "creat_la": row["creat_la"],
         "modificat_la": row["modificat_la"],
     }
+    if data["type"] == "risc_ue":
+        try:
+            payload = json.loads(data["reasoning"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        if payload.get("contract") == "ro-eu-issue-note-v1":
+            export = payload.get("export")
+            if isinstance(export, str) and export.strip():
+                data["export_markdown"] = export
+            context = payload.get("proposal_context")
+            if isinstance(context, dict):
+                data["proposal_context"] = context
+    return data
 
 
 def _normalize(request):
@@ -69,7 +83,7 @@ def _normalize(request):
         "evidence_quote": dosare._text(request["evidence_quote"], 4000),
         "source_url": _url(request["source_url"]),
         "source_hash": _hash(request["source_hash"]),
-        "reasoning": dosare._text(request["reasoning"], 8000),
+        "reasoning": dosare._text(request["reasoning"], 60000),
         "status": constatari_manuale.normalize_stare(request["status"]),
         "revizie": request["revizie"],
     }

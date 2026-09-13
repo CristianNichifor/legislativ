@@ -81,7 +81,8 @@ def test_save_revalidates_base_and_stores_manual_risk_note(source_backed_case):
     assert saved["act_id"] == "lege-98-2016"
     assert saved["locator"] == "art1"
     assert saved["status"] == "ready_for_review"
-    reasoning = json.loads(note_manuale.citeste(dosare.cale(state), ID, "b" * 32)["reasoning"])
+    stored_note = note_manuale.citeste(dosare.cale(state), ID, "b" * 32)
+    reasoning = json.loads(stored_note["reasoning"])
     assert reasoning["issue_state"] == "possible_conflict"
     assert reasoning["human_review_status"] == "ready_for_review"
     assert reasoning["national"]["text_sha256"]
@@ -98,6 +99,7 @@ def test_save_revalidates_base_and_stores_manual_risk_note(source_backed_case):
     assert "Obligație UE păstrată local." in reasoning["export"]
     assert "Efect juridic: `unknown`" in reasoning["export"]
     assert "Nu este verdict juridic." in reasoning["export"]
+    assert stored_note["export_markdown"] == reasoning["export"]
     context = saved["proposal_context"]
     assert context["contract"] == "ro-eu-proposal-context-v1"
     assert context["kind"] == "possible_eu_issue"
@@ -109,6 +111,7 @@ def test_save_revalidates_base_and_stores_manual_risk_note(source_backed_case):
     assert context["eu"]["snapshot_id"] == selection["eu"]["instantanee"]
     assert "verdict de conformitate" in context["limitations"][0]
     assert reasoning["proposal_context"] == context
+    assert stored_note["proposal_context"] == context
 
 
 def test_missing_sources_block_and_hash_tampering_is_rejected(source_backed_case):
