@@ -1,0 +1,24 @@
+{
+  "$schema": "../schema/parliament_project_snapshots.schema.json",
+  "contract": "parliament-project-snapshots-v1",
+  "snapshots": [
+    {
+      "key": "plx-33-2025",
+      "family": "camera",
+      "project_id": "plx-33-2025",
+      "idp": "21949",
+      "chamber": "Camera Deputaților",
+      "senate_id": "L576/2024",
+      "source_url": "https://www.cdep.ro/ords/pls/proiecte/upl_pck2015.proiect?cam=2&idp=21949",
+      "snapshot_path": "tests/fixtures/cdep_fisa.html.gz",
+      "snapshot_sha256": "087a34f5e768cda95cf5b8c58c0b4509291c72f7c6c6b99055edd5f12b621cfb",
+      "procedure_date": "2025-02-03",
+      "stage_contains": "raport",
+      "title_contains": "cumulului de funcții finanțate din bugetul de stat",
+      "notes": [
+        "Recorded CDEP Fișa fixture; validation parses metadata and procedure rows offline.",
+        "This is one bounded project snapshot, not a parliamentary crawl."
+      ]
+    }
+  ]
+}

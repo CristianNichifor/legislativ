@@ -528,6 +528,58 @@ def test_ai_external_approval_packet_has_cost_provider_and_no_key():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_evidence_draft_execution_wrapper_is_mockable_and_secret_free():
+    source = (
+        APP.read_text()
+        .split("function aiDraftBoundaryHtml", 1)[1]
+        .split("function ruleCandidateOptions", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "let confirmed=false, sentPrompt='', sentSystem='', sentOpt=null;"
+        "function confirm(message){confirmed=message.includes('Aprobi trimiterea');return true;}"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiMode(){return 'online';}"
+        "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
+        "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
+        "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
+        "async function aiComplete(prompt,system,opt){sentPrompt=prompt;sentSystem=system;"
+        "sentOpt=opt;"
+        "if(opt&&opt.prog)opt.prog({text:'mock send'});"
+        "return {text:'Ciornă limitată la dovezi [1].',nota:'online BYOK · OpenAI'};}"
+        "function aiDraftBoundaryHtml"
+        + source
+        + "const plan={contract:'ai-evidence-draft-v1',prompt:'PROMPT EVIDENCE ONLY',"
+        "system:'SYSTEM EVIDENCE ONLY',input_sha256:'i'.repeat(64),"
+        "evidence_sha256:'e'.repeat(64),evidence_count:1,estimated_tokens:100,"
+        "cost_estimate:{estimated_total_tokens:1000,server_cost:'none',"
+        "cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'}};"
+        "(async()=>{const out=await aiRunEvidenceDraft(plan,'online_byok',()=>{});"
+        "assert.equal(confirmed,true);"
+        "assert.equal(sentPrompt,'PROMPT EVIDENCE ONLY');"
+        "assert.equal(sentSystem,'SYSTEM EVIDENCE ONLY');"
+        "assert.equal(sentOpt.privat,false);"
+        "assert.equal(out.contract,'ai-byok-execution-result-v1');"
+        "assert.equal(out.request.contract,'ai-byok-execution-request-v1');"
+        "assert.equal(out.request.runtime,'browser_direct_byok');"
+        "assert.equal(out.request.server_calls_model,false);"
+        "assert.equal(out.request.app_paid_provider,false);"
+        "assert.equal(out.request.stores_api_key,false);"
+        "assert.equal(out.request.prompt_scope,'selected_evidence_only');"
+        "assert.equal(out.status,'draft_unreviewed');"
+        "assert.equal(out.audit.contract,'ai-draft-execution-audit-v1');"
+        "assert.equal(out.audit.approved_external_send,true);"
+        "assert.equal(out.audit.server_calls_model,false);"
+        "assert.equal(out.audit.stores_api_key,false);"
+        "assert.ok(out.insert_header.includes('Ciornă AI'));"
+        "assert.ok(!JSON.stringify(out).includes('SECRET'));})().catch(e=>{console.error(e);process.exit(1);});"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_rule_candidate_controls_build_preview_payload():
     source = (
         APP.read_text()

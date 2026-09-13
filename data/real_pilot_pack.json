@@ -31,10 +31,18 @@
     {
       "key": "parliament_project",
       "label": "Real Parliament project/procedure",
-      "status": "blocked",
+      "status": "ready",
       "required": true,
-      "evidence": [],
-      "next_action": "Add one Camera or Senat project snapshot with project id, stage, URL, source hash and procedure date."
+      "evidence": [
+        {
+          "kind": "cdep_fisa_snapshot",
+          "id": "plx-33-2025",
+          "path": "tests/fixtures/cdep_fisa.html.gz",
+          "sha256": "087a34f5e768cda95cf5b8c58c0b4509291c72f7c6c6b99055edd5f12b621cfb",
+          "source_url": "https://www.cdep.ro/ords/pls/proiecte/upl_pck2015.proiect?cam=2&idp=21949"
+        }
+      ],
+      "next_action": ""
     },
     {
       "key": "public_consultation",
