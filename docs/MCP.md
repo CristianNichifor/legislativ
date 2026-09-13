@@ -42,3 +42,40 @@ Executor rules for a later PR:
 - No app-paid AI usage through MCP.
 - Show the same payload the executor will send.
 - Keep the app usable when MCP is unavailable.
+
+## Bounded local tools v1
+
+`scripts.mcp_tools` defines the minimal local tool surface an external AI client
+may wrap as MCP tools. It is a local command/module adapter, not a server and
+not an executor:
+
+```sh
+uv run python -m scripts.mcp_tools list
+uv run python -m scripts.mcp_tools call search_laws '{"q":"achizitii","limit":5}'
+```
+
+Allowed tools:
+
+- `search_laws` — full-text search in the local law corpus, with optional
+  act-type/year filters.
+- `search_projects` — search local parliamentary projects and return bounded
+  lifecycle status.
+- `get_source_status` — report which local data stores are present; no sync,
+  download or freshness verdict.
+- `get_project_timeline` — return local tracker events for one project.
+- `get_evidence_bundle` — assemble selected local tracker/dossier evidence for
+  one project via `project-evidence-pack-v1`.
+- `draft_from_evidence` — build the existing source-grounded AI drafting prompt
+  from selected evidence; no model is called.
+
+Explicitly absent / rejected tool classes:
+
+- legal verdicts;
+- compliance verdicts;
+- constitutionality decisions;
+- automated legal-effect conclusions;
+- any app-paid model call or credential-storing tool.
+
+The adapter preserves the same local-first/BYOK boundary as the browser flow:
+it performs no external calls, stores no credentials, and emits draft prompts
+only as unreviewed work product grounded in selected evidence.
