@@ -50,6 +50,19 @@ STAGES: tuple[LifecycleStage, ...] = (
 )
 
 _BY_KEY = {stage.key: stage for stage in STAGES}
+CANONICAL_PROJECT_STATUSES: tuple[LifecycleStage, ...] = (
+    LifecycleStage("consultation", "consultation", 10),
+    LifecycleStage("drafting", "drafting/approval", 20),
+    LifecycleStage("parliamentary", "parliamentary procedure", 30),
+    LifecycleStage("committee", "committee work", 40),
+    LifecycleStage("plenary", "plenary/vote", 50),
+    LifecycleStage("promulgation", "promulgation", 60),
+    LifecycleStage("published", "published", 70, terminal=True),
+    LifecycleStage("closed", "closed", 80, terminal=True),
+    LifecycleStage("unknown", "unknown", 900, known=False),
+    LifecycleStage("unavailable", "unavailable", 910, available=False, known=False),
+)
+_CANONICAL_BY_KEY = {status.key: status for status in CANONICAL_PROJECT_STATUSES}
 DEFAULT_STALE_DAYS = 30
 MAX_PROJECTS = 100
 REGISTRY_ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
@@ -59,6 +72,26 @@ ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
 )
 TERMINAL_STAGE_KEYS = frozenset(stage.key for stage in STAGES if stage.terminal)
+
+_CANONICAL_STAGE_MAP = {
+    "consultation_announced": "consultation",
+    "consultation_open": "consultation",
+    "consultation_closed": "consultation",
+    "drafting": "drafting",
+    "government_adopted": "drafting",
+    "sent_to_parliament": "parliamentary",
+    "registered": "parliamentary",
+    "committee": "committee",
+    "report": "committee",
+    "plenary_scheduled": "plenary",
+    "adopted": "plenary",
+    "promulgated": "promulgation",
+    "published": "published",
+    "rejected": "closed",
+    "withdrawn_archived": "closed",
+    "unknown": "unknown",
+    "unavailable": "unavailable",
+}
 
 _PHRASES: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
@@ -216,6 +249,16 @@ def stage(key: str) -> LifecycleStage:
     return _BY_KEY.get(key, _BY_KEY["unknown"])
 
 
+def canonical_project_status(stage_data: dict | str | None) -> dict:
+    """Return the compact project status used across trackers and dashboards."""
+    stage_key = stage_data.get("key") if isinstance(stage_data, dict) else stage_data
+    canonical_key = _CANONICAL_STAGE_MAP.get(str(stage_key or ""), "unknown")
+    out = _CANONICAL_BY_KEY[canonical_key].to_dict()
+    out["stage_key"] = stage_key or ""
+    out["contract"] = "canonical-project-status-v1"
+    return out
+
+
 def normalize_stage_label(label: str | None) -> dict:
     """Return the lifecycle stage for a public-source label.
 
@@ -365,6 +408,7 @@ def project_lifecycle_item(
     registry = registry or {}
     registry_state = registry.get("state") or ""
     latest = _latest_event(row, latest_event, lifecycle, source_state)
+    canonical = canonical_project_status(lifecycle)
     uncertainty = _uncertainty(
         lifecycle, stale=stale, source_state=source_state, registry_state=registry_state
     )
@@ -374,6 +418,7 @@ def project_lifecycle_item(
         "title": row.get("titlu") or "",
         "status": row.get("stadiu") or "",
         "stage": lifecycle,
+        "canonical_status": canonical,
         "stage_date": latest["date"],
         "latest_event": latest,
         "uncertainty": uncertainty,
