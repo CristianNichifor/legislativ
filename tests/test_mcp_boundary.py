@@ -47,6 +47,11 @@ def test_capabilities_describe_non_executing_contract():
     assert {item["key"] for item in result["capabilities"]} >= {"ai_draft", "github_issue"}
     assert result["execution"]["implemented"] is False
     assert result["execution"]["cost_owner"] == "user_account_or_user_key"
+    assert result["execution"]["credentials_stored"] is False
+    assert result["execution"]["hidden_external_calls"] is False
+    assert result["limits"]["max_data_chars"] == mcp_boundary.MAX_TEXT
+    assert result["limits"]["max_preview_chars"] == mcp_boundary.MAX_PREVIEW
+    assert any("chei API" in item for item in result["private_data_excluded"])
     assert any("nu execută" in item for item in result["limitari"])
 
 
@@ -59,6 +64,10 @@ def test_preview_requires_explicit_payload_and_never_marks_approved():
     assert result["approval"]["requires_user_approval"] is True
     assert result["approval"]["approved"] is False
     assert result["approval"]["cost_owner"] == "user_account_or_user_key"
+    assert result["approval"]["max_data_chars"] == mcp_boundary.MAX_TEXT
+    assert result["approval"]["credentials_stored"] is False
+    assert result["approval"]["hidden_external_calls"] is False
+    assert any("BYOK" in item for item in result["approval"]["private_data_excluded"])
     assert result["audit_event"]["approved"] is False
     assert result["audit_event"]["contract"] == "mcp-audit-event-v1"
     assert result["cost_estimate"]["server_cost"] == "none"

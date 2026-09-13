@@ -35,6 +35,7 @@ def preview(request: dict) -> dict:
         "input_sha256": plan["input_sha256"],
         "evidence_sha256": plan["evidence_sha256"],
         "evidence_manifest": plan["evidence_manifest"],
+        "export_manifest": plan["export_manifest"],
         "estimated_tokens": plan["estimated_tokens"],
         "cost_estimate": {
             "contract": "mcp-ai-cost-estimate-v1",
@@ -49,6 +50,7 @@ def preview(request: dict) -> dict:
             "server_calls_model": False,
             "mcp_executes_now": False,
             "output_status": "draft_unreviewed",
+            "private_data_excluded": plan["export_manifest"]["private_data_excluded"],
         },
         "audit": {
             "contract": "mcp-ai-draft-audit-v1",
@@ -57,6 +59,7 @@ def preview(request: dict) -> dict:
             "mcp_data_sha256": approval["approval"]["data_sha256"],
             "approved_external_send": False,
             "model_invoked_by_server": False,
+            "source_references": plan["export_manifest"]["source_references"],
         },
         "evidence_count": plan["evidence_count"],
         "mcp": approval,
