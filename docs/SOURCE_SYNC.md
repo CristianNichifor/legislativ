@@ -98,6 +98,11 @@ bounded official attachment links. It does not crawl the whole consultation
 portal, follow ministry pages, translate documents, run AI or decide whether the
 draft is legally compatible with existing law. Pages without a clear title or
 document links are retained as `needs_review`, not treated as empty results.
+The real pilot fixture is narrower: it keeps one official ActionGrid row from
+`https://e-consultare.gov.ro/Consultare-publică`, normalizes it with
+`scripts.real_public_consultation`, and proves URL, institution, open stage,
+deadline and row hash. It does not retain the full 1998-row listing response or
+download attachments.
 
 For `consultare_minister` and `avize`, the first usable slice is metadata-first:
 the caller registers one official URL or public identifier and may pass bounded

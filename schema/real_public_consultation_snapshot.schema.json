@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Real public consultation snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "source_family",
+    "recorded_at",
+    "official_listing_url",
+    "official_endpoint",
+    "row",
+    "expected",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "contract": {"const": "real-public-consultation-snapshot-v1"},
+    "source_family": {"const": "consultare_econsultare"},
+    "recorded_at": {"type": "string", "minLength": 1},
+    "official_listing_url": {"type": "string", "pattern": "^https://e-consultare\\.gov\\.ro/"},
+    "official_endpoint": {"type": "string", "pattern": "^https://e-consultare\\.gov\\.ro/"},
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "datePublished", "fields"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "datePublished": {"type": "string", "minLength": 1},
+        "fields": {
+          "type": "array",
+          "minItems": 5,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["Name", "FormattedValue"],
+            "properties": {
+              "Name": {"type": "string", "minLength": 1},
+              "FormattedValue": {"type": "string"}
+            }
+          }
+        }
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "row_hash",
+        "detail_url",
+        "title_contains",
+        "authority",
+        "stage",
+        "published",
+        "deadline"
+      ],
+      "properties": {
+        "row_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "detail_url": {"type": "string", "pattern": "^https://e-consultare\\.gov\\.ro/"},
+        "title_contains": {"type": "string", "minLength": 1},
+        "authority": {"type": "string", "minLength": 1},
+        "stage": {"enum": ["open", "closed", "unknown"]},
+        "published": {"type": "string", "minLength": 1},
+        "deadline": {"type": "string", "minLength": 1}
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

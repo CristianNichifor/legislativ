@@ -24,10 +24,9 @@ def test_real_pilot_pack_reports_current_blockers_without_crawling():
     assert out["contract"] == "real-pilot-pack-v1"
     assert out["status"] == "blocked"
     assert out["declared_status"] == "blocked"
-    assert out["ready_requirements"] == 1
+    assert out["ready_requirements"] == 2
     assert out["blocked"] == [
         "parliament_project",
-        "public_consultation",
         "celex_text",
         "reviewable_finding",
     ]

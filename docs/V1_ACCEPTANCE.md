@@ -76,10 +76,18 @@ Required ingredients:
   with explicit language state;
 - one reviewer-approved finding with quoted provisions and proposed wording.
 
-The current pack is blocked by the last four ingredients. Once those are added,
-run the recorded command with `--require-reviewable-finding --require-eu-text`
-so the v2 acceptance gates fail closed instead of staying as advisory
-`attention` items.
+The current pack is blocked by the Parliament project, CELEX text and
+reviewer-approved finding ingredients. The public-consultation ingredient is
+backed by `data/real_public_consultation_snapshot.json`, a compact real
+e-consultare ActionGrid row fixture. Validate that slice with:
+
+```bash
+uv run python -m scripts.real_public_consultation
+```
+
+Once the remaining ingredients are added, run the recorded command with
+`--require-reviewable-finding --require-eu-text` so the v2 acceptance gates fail
+closed instead of staying as advisory `attention` items.
 
 The 2026-09-11 pilot record built a valid public release from the two committed
 authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
