@@ -7916,7 +7916,7 @@ async function openProjectWorkbench(project){
     const note=body.querySelector('[data-workbench-note]');
     if(note)note.onclick=()=>{if(DOSARE_UI.selected?.id)startManualNote(lifecycleSourceNote(project));else lifecyclePrefillDossier(project);};
     const copy=body.querySelector('[data-workbench-copy]');
-    if(copy)copy.onclick=async()=>{try{await navigator.clipboard.writeText(projectWorkbenchMarkdown(project,pack));status.textContent='Pachetul Markdown a fost copiat.';}catch{status.textContent='Copierea pachetului nu a reușit.';}};
+    if(copy)copy.onclick=async()=>{const markdown=projectWorkbenchMarkdown(project,pack);if(Object.prototype.hasOwnProperty.call(window,'__workbenchClipboard'))window.__workbenchClipboard=markdown;try{await navigator.clipboard.writeText(markdown);status.textContent='Pachetul Markdown a fost copiat.';}catch{status.textContent='Copierea pachetului nu a reușit.';}};
     const download=body.querySelector('[data-workbench-download]');
     if(download){const rememberDownload=()=>{const filename=projectWorkbenchFilename(pack);if(typeof window!=='undefined')window.__workbenchDownloadFilename=filename;return filename;};download.onpointerdown=rememberDownload;download.onclick=()=>{try{const filename=rememberDownload();const url=URL.createObjectURL(new Blob([projectWorkbenchMarkdown(project,pack)],{type:'text/markdown'}));const link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Descărcarea Markdown a fost pornită.';}catch{status.textContent='Descărcarea nu a reușit.';}};}
     const refresh=body.querySelector('[data-workbench-refresh]');

@@ -69,9 +69,7 @@ def test_lifecycle_watchlist_follow_surfaces_public_path_status_and_missing_evid
         committee="Comisia juridică",
     )
 
-    lifecycle_watchlist.adauga(
-        stare, {"project_id": "PL-x 10/2026", "label": "Lege urmărită"}
-    )
+    lifecycle_watchlist.adauga(stare, {"project_id": "PL-x 10/2026", "label": "Lege urmărită"})
     out = lifecycle_watchlist.lista(stare)
 
     assert out["contract"] == "project-lifecycle-watchlist-v1"
@@ -126,7 +124,9 @@ def test_lifecycle_watchlist_becomes_user_complete_when_path_events_exist(tmp_pa
     assert {row["state"] for row in item["path_coverage"]} == {"present"}
     assert item["latest_stage"]["key"] == "published"
     assert item["latest_stage"]["source_family"] == "monitorul_oficial_pi"
-    assert item["latest_stage"]["source_url"] == "https://legislatie.just.ro/Public/DetaliiDocument/10"
+    assert (
+        item["latest_stage"]["source_url"] == "https://legislatie.just.ro/Public/DetaliiDocument/10"
+    )
 
 
 def test_lifecycle_watchlist_tracks_registry_changes_and_review_marker(tmp_path):

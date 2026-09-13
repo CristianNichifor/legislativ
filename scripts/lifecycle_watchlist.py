@@ -234,9 +234,11 @@ def _watched_item(stare, watched: dict) -> dict:
     events = tracker.get("events") or []
     coverage = _coverage(events)
     state = _status_state(project, tracker, watched)
-    latest = (tracker.get("summary") or {}).get("latest_event") or (project or {}).get(
-        "latest_event"
-    ) or {}
+    latest = (
+        (tracker.get("summary") or {}).get("latest_event")
+        or (project or {}).get("latest_event")
+        or {}
+    )
     missing = _missing_reasons(project, coverage)
     needs_attention = state in {"changed", "stale", "unknown", "unavailable", "missing"} or any(
         item["state"] == "missing" for item in coverage
