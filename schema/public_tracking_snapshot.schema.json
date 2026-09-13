@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Public tracking snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "recorded_at",
+    "project_id",
+    "sources",
+    "required_event_types",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "contract": {"const": "public-tracking-snapshot-v1"},
+    "recorded_at": {"type": "string", "minLength": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "family",
+          "identifier",
+          "url",
+          "label",
+          "parser_version",
+          "snapshots"
+        ],
+        "properties": {
+          "key": {"type": "string", "minLength": 1},
+          "family": {
+            "enum": ["camera", "senat", "consultare_econsultare", "consultare_minister", "avize"]
+          },
+          "identifier": {"type": "string", "minLength": 1},
+          "url": {"type": "string", "pattern": "^https://"},
+          "label": {"type": "string", "minLength": 1},
+          "parser_version": {"type": "string", "minLength": 1},
+          "snapshots": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["content_hash", "summary", "events"],
+              "properties": {
+                "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                "summary": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": ["string", "number", "boolean", "null"]
+                  }
+                },
+                "documents": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "type", "title", "url"],
+                    "properties": {
+                      "id": {"type": "string", "minLength": 1},
+                      "type": {"type": "string", "minLength": 1},
+                      "title": {"type": "string", "minLength": 1},
+                      "url": {"type": "string", "pattern": "^https://"}
+                    }
+                  }
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "event_type", "title", "occurred_at", "payload"],
+                    "properties": {
+                      "id": {"type": "string", "minLength": 1},
+                      "event_type": {
+                        "enum": [
+                          "public_consultation_opened",
+                          "public_consultation_closed",
+                          "committee_assignment",
+                          "opinion_received",
+                          "report_filed",
+                          "plenary_agenda",
+                          "vote_recorded",
+                          "promulgated",
+                          "published_in_monitor"
+                        ]
+                      },
+                      "title": {"type": "string", "minLength": 1},
+                      "occurred_at": {"type": "string", "minLength": 1},
+                      "payload": {"type": "object"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "required_event_types": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "limitations": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  }
+}

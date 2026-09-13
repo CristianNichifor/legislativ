@@ -1,0 +1,208 @@
+{
+  "$schema": "../schema/public_tracking_snapshot.schema.json",
+  "contract": "public-tracking-snapshot-v1",
+  "recorded_at": "2026-09-14T00:00:00+00:00",
+  "project_id": "PL-x 33/2025",
+  "sources": [
+    {
+      "key": "cdep-plx-33-2025",
+      "family": "camera",
+      "identifier": "PL-x 33/2025",
+      "url": "https://www.cdep.ro/ords/pls/proiecte/upl_pck2015.proiect?cam=2&idp=21949",
+      "label": "CDEP Fișă PL-x 33/2025",
+      "parser_version": "public-tracking-fixture.v1",
+      "snapshots": [
+        {
+          "content_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+          "summary": {
+            "stage": "trimis la comisii",
+            "deadline": "2025-03-05"
+          },
+          "events": [
+            {
+              "id": "committee-legal",
+              "event_type": "committee_assignment",
+              "title": "Trimis la Comisia juridică",
+              "occurred_at": "2025-02-10T00:00:00+00:00",
+              "payload": {
+                "committee": "Comisia juridică, de disciplină și imunități",
+                "role": "fond",
+                "deadline": "2025-03-05"
+              }
+            }
+          ]
+        },
+        {
+          "content_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+          "summary": {
+            "stage": "raport depus și vot final înregistrat",
+            "deadline": "2025-03-12"
+          },
+          "documents": [
+            {
+              "id": "raport-legal-2025-03-12",
+              "type": "committee_report",
+              "title": "Raport Comisia juridică",
+              "url": "https://www.cdep.ro/proiecte/2025/000/30/3/raport.pdf"
+            }
+          ],
+          "events": [
+            {
+              "id": "report-legal",
+              "event_type": "report_filed",
+              "title": "Raport depus de Comisia juridică",
+              "occurred_at": "2025-03-12T00:00:00+00:00",
+              "payload": {
+                "committee": "Comisia juridică, de disciplină și imunități",
+                "position": "adoptare",
+                "document_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "filed_at": "2025-03-12",
+                "source_url": "https://www.cdep.ro/proiecte/2025/000/30/3/raport.pdf"
+              }
+            },
+            {
+              "id": "vote-final",
+              "event_type": "vote_recorded",
+              "title": "Vot final Camera Deputaților",
+              "occurred_at": "2025-03-18T00:00:00+00:00",
+              "payload": {
+                "chamber": "Camera Deputaților",
+                "vote_date": "2025-03-18",
+                "result": "adoptat",
+                "for": 210,
+                "against": 20,
+                "abstain": 5,
+                "nominal_url": "https://www.cdep.ro/pls/steno/evot.Nominal?idv=100"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "senat-l576-2024",
+      "family": "senat",
+      "identifier": "L576/2024",
+      "url": "https://www.senat.ro/legis/lista.aspx?cod=25584",
+      "label": "Senat L576/2024",
+      "parser_version": "public-tracking-fixture.v1",
+      "snapshots": [
+        {
+          "content_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+          "summary": {
+            "stage": "înregistrat la Senat"
+          },
+          "events": [
+            {
+              "id": "senat-committee",
+              "event_type": "committee_assignment",
+              "title": "Trimis la comisia sesizată în fond",
+              "occurred_at": "2024-11-18T00:00:00+00:00",
+              "payload": {
+                "committee": "Comisia pentru administrație publică",
+                "role": "fond"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "econsultare-deadline",
+      "family": "consultare_econsultare",
+      "identifier": "econsultare-plx-33-2025",
+      "url": "https://e-consultare.gov.ro/ConsultarePublica/Detalii/999",
+      "label": "Consultare publică proiect",
+      "parser_version": "public-tracking-fixture.v1",
+      "snapshots": [
+        {
+          "content_hash": "4444444444444444444444444444444444444444444444444444444444444444",
+          "summary": {
+            "status": "open",
+            "deadline": "2025-02-20",
+            "authority": "Ministerul Dezvoltării"
+          },
+          "events": [
+            {
+              "id": "consultation-open",
+              "event_type": "public_consultation_opened",
+              "title": "Consultare publică deschisă",
+              "occurred_at": "2025-02-01T00:00:00+00:00",
+              "payload": {
+                "authority": "Ministerul Dezvoltării",
+                "deadline": "2025-02-20",
+                "project_url": "https://e-consultare.gov.ro/ConsultarePublica/Detalii/999"
+              }
+            }
+          ]
+        },
+        {
+          "content_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "summary": {
+            "status": "closed",
+            "deadline": "2025-02-25",
+            "authority": "Ministerul Dezvoltării"
+          },
+          "events": [
+            {
+              "id": "consultation-closed",
+              "event_type": "public_consultation_closed",
+              "title": "Consultare publică închisă",
+              "occurred_at": "2025-02-25T00:00:00+00:00",
+              "payload": {
+                "authority": "Ministerul Dezvoltării",
+                "closed_at": "2025-02-25",
+                "project_url": "https://e-consultare.gov.ro/ConsultarePublica/Detalii/999"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "key": "aviz-consiliul-legislativ",
+      "family": "avize",
+      "identifier": "aviz-cl-plx-33-2025",
+      "url": "https://www.clr.ro/avize/2025/plx-33.pdf",
+      "label": "Aviz Consiliul Legislativ",
+      "parser_version": "public-tracking-fixture.v1",
+      "snapshots": [
+        {
+          "content_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+          "summary": {
+            "issuer": "Consiliul Legislativ",
+            "position": "favorabil cu observații"
+          },
+          "events": [
+            {
+              "id": "opinion-cl",
+              "event_type": "opinion_received",
+              "title": "Aviz Consiliul Legislativ primit",
+              "occurred_at": "2025-02-14T00:00:00+00:00",
+              "payload": {
+                "issuer": "Consiliul Legislativ",
+                "position": "favorabil cu observații",
+                "observations": "Corelare terminologică necesară.",
+                "document_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "source_url": "https://www.clr.ro/avize/2025/plx-33.pdf"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "required_event_types": [
+    "public_consultation_opened",
+    "public_consultation_closed",
+    "committee_assignment",
+    "opinion_received",
+    "report_filed",
+    "vote_recorded"
+  ],
+  "limitations": [
+    "Recorded fixture only; no CDEP, Senat, e-consultare or avize crawl is performed.",
+    "Events are normalized review signals for users, not legal conclusions.",
+    "The fixture proves source tracking shape and attention routing, not source freshness."
+  ]
+}
