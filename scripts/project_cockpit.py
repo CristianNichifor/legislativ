@@ -10,6 +10,24 @@ from scripts.lifecycle import project_lifecycle_summary
 
 CONTRACT = "project-cockpit-summary-v1"
 TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
+SOURCE_FAMILY_LABELS = {
+    "camera": "Camera Deputaților",
+    "senat": "Senat",
+    "consultare_econsultare": "e-consultare",
+    "monitorul_oficial_local": "Monitorul Oficial Local",
+    "monitorul_oficial_pi": "Monitorul Oficial",
+    "ue_cellar": "EU Cellar",
+    "cellar": "EU Cellar",
+}
+SOURCE_ACTION_BY_STATE = {
+    "changed": "Revizuiește schimbarea sursei urmărite.",
+    "failed": "Reîncearcă sincronizarea sau marchează sursa ca indisponibilă.",
+    "needs_review": "Revizuiește sursa înainte de redactare.",
+    "rate_limited": "Reîncearcă sincronizarea după limitarea sursei.",
+    "stale": "Sincronizează sursa înainte de concluzii.",
+    "unknown": "Verifică manual sursa publică.",
+    "unavailable": "Importă sau repară sursa publică lipsă.",
+}
 
 
 def _text(value: object, *, limit: int = 200, required: bool = False) -> str:
@@ -82,13 +100,24 @@ def _tracker_summary(events: list[dict], total: int, summary: dict | None = None
 
 def _source_attention(project: dict) -> dict:
     state = project.get("registry_source_state") or project.get("source_state") or "unknown"
+    registry = project.get("registry_source") or {}
+    family = registry.get("family") or ""
+    source_label = registry.get("label") or project.get("source_name") or ""
+    next_action = SOURCE_ACTION_BY_STATE.get(state, "Continuă redactarea cu sursa locală curentă.")
+    if project.get("registry_can_sync") and state in {"changed", "failed", "stale", "rate_limited"}:
+        next_action = SOURCE_ACTION_BY_STATE[state]
     return {
         "needs_attention": bool(project.get("needs_attention")),
         "source_state": project.get("source_state") or "unknown",
+        "source_name": project.get("source_name") or "",
+        "source_family": family,
+        "source_family_label": SOURCE_FAMILY_LABELS.get(family, family),
+        "source_label": source_label or SOURCE_FAMILY_LABELS.get(family, ""),
         "registry_source_id": project.get("registry_source_id") or "",
         "registry_source_state": project.get("registry_source_state") or "",
         "registry_can_sync": bool(project.get("registry_can_sync")),
         "attention_state": state,
+        "next_action": next_action,
         "uncertainty": project.get("uncertainty") or {},
     }
 
