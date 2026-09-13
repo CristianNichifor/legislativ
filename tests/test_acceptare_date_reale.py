@@ -115,6 +115,97 @@ def test_real_data_acceptance_reports_when_no_act_can_be_selected(monkeypatch):
     }
 
 
+def test_real_data_acceptance_v2_marks_current_pilot_gaps_as_attention():
+    result = {
+        "acte": 2,
+        "search_results": 3,
+        "dossier_survived_rollback": True,
+        "workbench": {
+            "status": "passed",
+            "reviewable_findings": 0,
+            "finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
+            "proposal_candidate_id": None,
+            "eu_availability": {
+                "total": 8,
+                "text_importat": 0,
+                "text_romanian": 0,
+                "text_english": 0,
+                "neimportate": 8,
+            },
+        },
+    }
+
+    out = acceptance.v2_readiness(result)
+
+    assert out["contract"] == "real-data-acceptance-v2"
+    assert out["status"] == "attention"
+    assert out["blocked"] == []
+    assert out["attention"] == ["authentic_finding_to_proposal", "eu_text_available"]
+    gates = {gate["key"]: gate for gate in out["gates"]}
+    assert gates["runtime_path"]["status"] == "passed"
+    assert gates["authentic_finding_to_proposal"]["required"] is False
+    assert gates["eu_text_available"]["evidence"]["missing"] == 8
+
+
+def test_real_data_acceptance_v2_blocks_when_release_gates_are_required():
+    result = {
+        "acte": 2,
+        "search_results": 3,
+        "dossier_survived_rollback": True,
+        "workbench": {
+            "status": "passed",
+            "reviewable_findings": 0,
+            "finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
+            "eu_availability": {"total": 1, "text_importat": 0, "neimportate": 1},
+        },
+    }
+
+    out = acceptance.v2_readiness(
+        result,
+        require_reviewable_finding=True,
+        require_eu_text=True,
+    )
+
+    assert out["status"] == "blocked"
+    assert out["blocked"] == ["authentic_finding_to_proposal", "eu_text_available"]
+    assert all(
+        gate["required"]
+        for gate in out["gates"]
+        if gate["key"] in {"authentic_finding_to_proposal", "eu_text_available"}
+    )
+
+
+def test_real_data_acceptance_v2_passes_when_real_evidence_is_available():
+    result = {
+        "acte": 4,
+        "search_results": 3,
+        "dossier_survived_rollback": True,
+        "workbench": {
+            "status": "passed",
+            "reviewable_findings": 1,
+            "finding_to_proposal": "eligible_real_finding_available",
+            "proposal_candidate_id": "finding-1",
+            "eu_availability": {
+                "total": 1,
+                "text_importat": 1,
+                "text_romanian": 1,
+                "text_english": 0,
+                "neimportate": 0,
+            },
+        },
+    }
+
+    out = acceptance.v2_readiness(
+        result,
+        require_reviewable_finding=True,
+        require_eu_text=True,
+    )
+
+    assert out["status"] == "passed"
+    assert out["blocked"] == []
+    assert out["attention"] == []
+
+
 def test_checked_in_acceptance_record_matches_measurement_row():
     record = json.loads((ROOT / "docs/v1_acceptance_pilot_2026-09-11.json").read_text())
     rows = {

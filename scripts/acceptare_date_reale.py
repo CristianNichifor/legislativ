@@ -25,6 +25,7 @@ from scripts.dosare import LAW_WORKBENCH_ENGINE_VERSION
 from scripts.local_runtime import open_runtime
 
 CHANNEL = "https://datasets.example/channel.json"
+V2_CONTRACT = "real-data-acceptance-v2"
 
 
 class FileResponse:
@@ -279,6 +280,108 @@ def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str
     }
 
 
+def _gate(
+    key: str,
+    label: str,
+    passed: bool,
+    *,
+    required: bool,
+    evidence: dict | None = None,
+    next_action: str = "",
+) -> dict:
+    if passed:
+        status = "passed"
+    elif required:
+        status = "blocked"
+    else:
+        status = "attention"
+    return {
+        "key": key,
+        "label": label,
+        "status": status,
+        "required": required,
+        "evidence": evidence or {},
+        "next_action": next_action,
+    }
+
+
+def v2_readiness(
+    result: dict,
+    *,
+    require_reviewable_finding: bool = False,
+    require_eu_text: bool = False,
+) -> dict:
+    """Classify a real-data acceptance result without inventing legal success."""
+    workbench = result.get("workbench") or {}
+    eu = workbench.get("eu_availability") or {}
+    finding_to_proposal = workbench.get("finding_to_proposal") or ""
+    gates = [
+        _gate(
+            "runtime_path",
+            "Public release activation, search, workbench and rollback",
+            bool(
+                result.get("dossier_survived_rollback")
+                and workbench.get("status") == "passed"
+                and int(result.get("acte") or 0) > 0
+            ),
+            required=True,
+            evidence={
+                "acte": int(result.get("acte") or 0),
+                "search_results": int(result.get("search_results") or 0),
+                "workbench_status": workbench.get("status") or "unknown",
+                "dossier_survived_rollback": bool(result.get("dossier_survived_rollback")),
+            },
+            next_action="Fix activation/search/workbench/rollback before release sign-off.",
+        ),
+        _gate(
+            "authentic_finding_to_proposal",
+            "Authentic reviewable finding can become a proposal",
+            finding_to_proposal == "eligible_real_finding_available",
+            required=require_reviewable_finding,
+            evidence={
+                "finding_to_proposal": finding_to_proposal or "unknown",
+                "reviewable_findings": int(workbench.get("reviewable_findings") or 0),
+                "proposal_candidate_id": workbench.get("proposal_candidate_id"),
+            },
+            next_action=(
+                "Add reviewer-approved real gap/CCR evidence and wording, then rerun acceptance."
+            ),
+        ),
+        _gate(
+            "eu_text_available",
+            "Official EU text available for signaled CELEX references",
+            int(eu.get("text_importat") or 0) > 0
+            and int(eu.get("text_romanian") or 0) + int(eu.get("text_english") or 0) > 0,
+            required=require_eu_text,
+            evidence={
+                "references": int(eu.get("total") or 0),
+                "text_imported": int(eu.get("text_importat") or 0),
+                "romanian": int(eu.get("text_romanian") or 0),
+                "english": int(eu.get("text_english") or 0),
+                "missing": int(eu.get("neimportate") or 0),
+            },
+            next_action=(
+                "Import at least one official CELEX text, preferring Romanian, or narrow EU "
+                "acceptance out of scope."
+            ),
+        ),
+    ]
+    blocked = [gate["key"] for gate in gates if gate["status"] == "blocked"]
+    attention = [gate["key"] for gate in gates if gate["status"] == "attention"]
+    return {
+        "contract": V2_CONTRACT,
+        "status": "blocked" if blocked else "attention" if attention else "passed",
+        "blocked": blocked,
+        "attention": attention,
+        "gates": gates,
+        "limitations": [
+            "V2 readiness classifies measured release output; it does not crawl sources.",
+            "Legal precision/recall remains unclaimed until independently adjudicated.",
+            "AI/MCP outputs remain drafts and cannot satisfy domain acceptance alone.",
+        ],
+    }
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("release_dir", type=Path)
@@ -294,6 +397,16 @@ def main(argv=None):
         "--pilot-act",
         default="",
         help="act id to open in the real-data law workbench; defaults to the first search result",
+    )
+    parser.add_argument(
+        "--require-reviewable-finding",
+        action="store_true",
+        help="fail when no authentic gap/CCR finding can be promoted to proposal review",
+    )
+    parser.add_argument(
+        "--require-eu-text",
+        action="store_true",
+        help="fail when signaled CELEX references have no official imported text",
     )
     args = parser.parse_args(argv)
 
@@ -340,21 +453,23 @@ def main(argv=None):
             after = request(httpd, "/api/dosare?id=" + dossier_id)
             if before["titlu"] != after["titlu"]:
                 raise AssertionError((before, after))
-            print(
-                json.dumps(
-                    {
-                        "release": release,
-                        "acte": summary["acte"],
-                        "search_results": len(results["results"]),
-                        "workbench": workbench,
-                        "dossier_survived_rollback": True,
-                        "seconds": round(time.monotonic() - started, 2),
-                        "data_home": str(home),
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
+            result = {
+                "release": release,
+                "acte": summary["acte"],
+                "search_results": len(results["results"]),
+                "workbench": workbench,
+                "dossier_survived_rollback": True,
+                "seconds": round(time.monotonic() - started, 2),
+                "data_home": str(home),
+            }
+            result["acceptance_v2"] = v2_readiness(
+                result,
+                require_reviewable_finding=args.require_reviewable_finding,
+                require_eu_text=args.require_eu_text,
             )
+            if result["acceptance_v2"]["status"] == "blocked":
+                raise AssertionError(result["acceptance_v2"])
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         if args.keep and args.data_home is None:
             print(f"kept data under {base}", flush=True)
 
