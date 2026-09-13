@@ -26,18 +26,27 @@ def test_acceptance_dashboard_reports_known_finish_gaps(tmp_path):
 
     assert out["contract"] == "acceptance-dashboard-v1"
     assert out["status"] == "attention"
-    assert out["capability_summary"] == {"ready": 1, "partial": 7, "missing": 0, "total": 8}
+    assert out["capability_summary"] == {"ready": 3, "partial": 5, "missing": 0, "total": 8}
     assert {item["key"] for item in out["capabilities"]} >= {"law_as_code", "mcp", "eu_checks"}
     assert {section["key"] for section in out["sections"]} == {
         "local_v1",
         "sources",
         "eu",
+        "real_pilot_pack",
         "ai_mcp",
     }
     eu = next(section for section in out["sections"] if section["key"] == "eu")
+    assert eu["status"] == "ok"
     assert eu["metrics"]["referenced"] == 8
-    assert eu["metrics"]["imported_text"] == 0
-    assert "not_imported" in eu["summary"]
+    assert eu["metrics"]["official_texts_ready"] == 1
+    assert "official CELEX text fixture ready" in eu["summary"]
+    pack = next(section for section in out["sections"] if section["key"] == "real_pilot_pack")
+    assert pack["status"] == "ok"
+    assert pack["metrics"] == {
+        "required_ready": 5,
+        "required_total": 5,
+        "reviewable_findings_ready": 1,
+    }
     assert any("nu reconstruiește" in item for item in out["limitari"])
 
 

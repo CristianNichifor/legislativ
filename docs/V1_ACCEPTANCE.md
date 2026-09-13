@@ -1,8 +1,10 @@
 # V1 acceptance preparation
 
 Status: bounded public-procurement pilot runtime path recorded in
-[`v1_acceptance_pilot_2026-09-11.json`](v1_acceptance_pilot_2026-09-11.json).
-Neither M7 nor M8 is accepted here.
+[`v1_acceptance_pilot_2026-09-11.json`](v1_acceptance_pilot_2026-09-11.json),
+with the current real pilot pack ready in `data/real_pilot_pack.json`.
+Neither M7 nor M8 is accepted here until the closed-gate acceptance command is run
+and approved.
 
 ## Bounded source set
 
@@ -15,9 +17,10 @@ Legea 98's retrieval URL is supported by `tests/test_parsare.py`; Legea 208's
 embedded portal identifier is recorded without inventing its original retrieval URL.
 `sources/README.md` documents their origin and the absent republished-act fixture.
 
-Legea 99/2016, Legea 100/2016, EU obligation texts, historical pre-2022 text,
-republished versions and other domains are outside this corpus. A reference to them
-does not establish their contents or applicability. No crawl is part of this pilot.
+Legea 99/2016, Legea 100/2016, the other signaled EU obligation texts, historical
+pre-2022 text, republished versions and other domains are outside this corpus. A
+reference to them does not establish their contents or applicability. No crawl is
+part of this pilot.
 
 `data/etalon.json` is synthetic extractor ground truth. The rehearsal's finding,
 replacement wording and schema-7 historical records are also synthetic.
@@ -97,8 +100,8 @@ language state. Validate the CELEX text hash and article-boundary metadata with:
 uv run python -m scripts.real_celex_text
 ```
 
-The current real pilot pack has all required ingredients ready for the closed-gate
-acceptance command. The reviewer-approved finding ingredient is backed by
+The current real pilot pack has all five required ingredients ready for the
+closed-gate acceptance command. The reviewer-approved finding ingredient is backed by
 `data/real_reviewable_finding.json`; it records one source-bound pilot finding
 with exact Romanian quotes, source hashes, reviewer status and proposed wording.
 Validate it and exercise the dossier/proposal/export path with:
@@ -120,14 +123,13 @@ With those ingredients present, run the recorded command with
 closed instead of staying as advisory `attention` items.
 
 The 2026-09-11 pilot record built a valid public release from the two committed
-authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
-search, workbench save and private rollback survival. The run measured 2 acts,
-1,635 provisions, 3 search results, 8 EU references signaled, 0 EU texts imported
-locally and 0 reviewable gap/CCR findings. Therefore the real finding-to-proposal
-save remains unexercised; this is a data/review limitation, not an application
-pass/fail threshold. Bounded EU assessment now has one retained CELEX article
-fixture for source-backed citation, but still needs a reviewer-approved issue note
-before it can pass the release-candidate gate.
+authentic snapshots and ran the advisory command for `lege-98-2016`. It passed
+activation, search, workbench save and private rollback survival. That historical
+record predates the current real pilot pack. Current acceptance truth is the ready
+pack: two Romanian law snapshots, one Parliament project/procedure snapshot, one
+public-consultation snapshot, one retained Romanian CELEX article fixture and one
+reviewer-approved finding with proposed wording. The remaining step is to run the
+closed-gate command above and preserve its output.
 
 The authentic etalon counts publisher S_LGI marks matched by normalized text
 containment anywhere in the document. **Those marks are locators, not citations of
@@ -161,12 +163,10 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
 ## Remaining M7 gates
 
 - User confirms domain, document/version boundary and intended research questions.
-- Promote `data/real_reviewable_finding.json` into the full real-data acceptance
-  release so the accepted run, not only the preflight, exercises reviewer-approved
-  proposal wording from source-bound evidence.
-- Import official EU text for the 8 CELEX references signaled by `lege-98-2016`
-  or explicitly narrow the pilot so EU assessment is out of scope. The current
-  pilot records `workbench.eu_availability.neimportate = 8`.
+- Run the full real-data acceptance command with
+  `--require-reviewable-finding --require-eu-text` so the accepted run, not only
+  the preflight, exercises reviewer-approved proposal wording and retained
+  official CELEX text from source-bound evidence.
 - Record missing/extraction/false-positive cases and agreed tolerances; no invented
   passing threshold or accuracy claim. Resolve release-blocking findings and rerun.
 - Integrate and assess M3 source-change, M4 applicability and M6 UX changes, plus
