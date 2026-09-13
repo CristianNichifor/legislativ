@@ -72,6 +72,30 @@ Successful text response:
     "id": "<snapshot id>",
     "text_sha256": "<sha256 of stored extracted text>",
     "source_hash": "<sha256 of stored extracted text>"
+  },
+  "articole": {
+    "contract": "celex-article-boundary-v1",
+    "total": 1,
+    "randuri": [
+      {
+        "locator": "art1",
+        "titlu": "...",
+        "limba": "RON",
+        "ord": 1,
+        "sha256": "<sha256 of article block text>",
+        "boundary": {
+          "contract": "celex-article-boundary-v1",
+          "snapshot_id": "<snapshot id>",
+          "source_text_sha256": "<sha256 of full retained text>",
+          "article_sha256": "<sha256 of article block text>",
+          "body_sha256": "<sha256 of article body text>",
+          "boundary_status": "line_exact",
+          "start_line": 120,
+          "end_line": 155
+        }
+      }
+    ],
+    "trunchiat": false
   }
 }
 ```
@@ -124,6 +148,10 @@ Unavailable response:
 - The import response exposes enough provenance for the UI to show the CELEX reference URL, selected
   official stream URL, Cellar manifestation identity, language/fallback state, extracted-text hash,
   and article/provision boundaries immediately after one import.
+- Article boundaries are best-effort parser boundaries over retained extracted text. `line_exact`
+  means the parsed article block was found back in the retained text by normalized line sequence.
+  `parser_block_only` means the article is still citeable by locator and hash, but exact line
+  positions could not be reconstructed.
 - Failed imports keep the last good local text and record the attempt without exposing local paths or
   private transport errors to the client.
 

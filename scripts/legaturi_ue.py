@@ -3,9 +3,8 @@
 import hashlib
 import re
 import sqlite3
-from dataclasses import asdict
 
-from scripts import achizitii_ue, cellar, dosare, interventii_propuneri, propuneri, revizuiri
+from scripts import achizitii_ue, articole_ue, dosare, interventii_propuneri, propuneri, revizuiri
 from scripts.verificari_ue import _valid as valid_snapshot
 
 CONTRACT = "ro-eu-link-v1"
@@ -79,26 +78,12 @@ def _eu(stare, celex, snapshot_id):
 
 
 def _articles(snapshot):
-    source = snapshot["sursa"]
-    blocks = cellar.provizii_din_text(source["celex"], source["text"], source["limba"])
-    if len(blocks) > MAX_BLOCKS:
-        return [], [_block("eu", "capture_limit")]
-    articles = []
-    for block in blocks:
-        if block.fel != "articol":
-            continue
-        base = re.sub(r"-\d+$", "", block.locator)
-        ambiguous = any(b.locator.startswith(base + "-") for b in blocks)
-        articles.append({**asdict(block), "selectabil": not ambiguous})
-    return articles, []
+    return articole_ue.articles_from_snapshot(snapshot, max_blocks=MAX_BLOCKS)
 
 
 def article_body(article):
     """Exclude the parser's heading/title; presence is not a legal-obligation classifier."""
-    lines = article["text"].splitlines()[1:]
-    if lines and article["titlu"] and lines[0].strip() == article["titlu"].strip():
-        lines = lines[1:]
-    return "\n".join(lines).strip()
+    return articole_ue.body_text(article)
 
 
 def obligatii(stare, celex, snapshot_id, offset=0):
@@ -114,7 +99,8 @@ def obligatii(stare, celex, snapshot_id, offset=0):
         "instantanee": snapshot_id,
         "blockers": blockers,
         "articole": [
-            {k: v for k, v in a.items() if k != "text"} for a in articles[offset : offset + 50]
+            {k: v for k, v in a.items() if k not in {"text", "body"}}
+            for a in articles[offset : offset + 50]
         ],
         "total": len(articles),
         "offset": offset,
