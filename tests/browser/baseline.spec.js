@@ -28,9 +28,38 @@ for (const width of [390, 1440]) {
     await page.locator('#lifecycle-search input[name="q"]').fill('plx-999999-2026');
     await page.locator('#lifecycle-search').evaluate(form => form.requestSubmit());
     await expect(page.locator('#lifecycle-list')).toContainText('plx-999999-2026');
+    await page.evaluate(() => {
+      window.__workbenchClipboard = '';
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async text => { window.__workbenchClipboard = text; } },
+      });
+    });
+    const workbenchResponse = page.waitForResponse(response =>
+      response.url().includes('/api/project-evidence-pack') && response.url().includes('project_id=plx-999999-2026')
+    );
+    await page.locator('[data-lifecycle-workbench]').first().click();
+    expect((await workbenchResponse).ok()).toBe(true);
+    await expect(page.locator('#project-workbench-status')).toContainText('Pachet încărcat');
+    await expect(page.locator('#project-workbench-body')).toContainText('Workbench · plx-999999-2026');
+    await expect(page.locator('#project-workbench-body')).toContainText('Raport depus');
+    await page.locator('[data-workbench-copy]').click();
+    await expect(page.locator('#project-workbench-status')).toContainText('Pachetul Markdown a fost copiat.');
+    expect(await page.evaluate(() => window.__workbenchClipboard)).toContain('# Pachet dovezi proiect: plx-999999-2026');
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('[data-workbench-download]').click();
+    expect((await downloadPromise).suggestedFilename()).toBe('pachet-dovezi-plx-999999-2026.md');
+    const draftResponse = page.waitForResponse(response =>
+      response.url().includes('/api/project-draft-seed') && response.url().includes('project_id=plx-999999-2026')
+    );
+    await page.locator('[data-lifecycle-draft]').first().click();
+    expect((await draftResponse).ok()).toBe(true);
+    await expect(page.locator('#pane-lint')).toBeVisible();
+    await expect(page.locator('#draft')).toHaveValue(/Proiect urmărit: plx-999999-2026/);
     const trackerResponse = page.waitForResponse(response =>
       response.url().includes('/api/tracker-evenimente') && response.url().includes('project_id=plx-999999-2026')
     );
+    await page.locator('#tab-matrice').click();
     await page.locator('[data-lifecycle-timeline]').first().click();
     expect((await trackerResponse).ok()).toBe(true);
     await expect(page.locator('#tracker-timeline-status')).toContainText('2 din 2 evenimente');
