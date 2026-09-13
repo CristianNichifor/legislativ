@@ -7079,7 +7079,6 @@ function projectCockpitActionsHtml(actions=[]){
   }).join('')+'</ol>';
 }
 function projectCockpitHtml(data){
-  const project=data.lifecycle?.project||{project_id:data.project_id};
   return `<section class="source-review"><h4>Cockpit · ${esc(data.project_id||'proiect')}</h4>`
     +`<p class="hint">Sumar local-only pentru urmărire și redactare. Datele pot fi incomplete și nu reprezintă verdict juridic.</p>`
     +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
