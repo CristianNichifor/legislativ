@@ -30,8 +30,11 @@ uv run python -m scripts.evaluari_ai \
 ```
 
 The output includes per-case scores and a provider/model comparison summary.
-Future provider adapters should only write run JSON files into this contract;
-paid calls, keys and MCP approvals stay outside this deterministic evaluator.
+Future provider adapters should only write run JSON files into this contract.
+Paid calls and keys stay outside this deterministic evaluator: the app first
+creates an `ai-external-send-approval-v1` payload with evidence hashes, prompt
+hash, token estimate and server cost `none`; the user then sends the prompt
+through local AI, BYOK or MCP explicitly.
 
 ## Limits
 

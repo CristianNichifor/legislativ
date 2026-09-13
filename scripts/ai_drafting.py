@@ -106,6 +106,29 @@ def _cost_estimate(prompt: str) -> dict:
     }
 
 
+def _approval_payload(prompt: str, evidence: list[dict], task: str) -> dict:
+    input_sha256 = hashlib.sha256(prompt.encode()).hexdigest()
+    evidence_sha256 = hashlib.sha256(
+        dosare._json(_evidence_manifest(evidence)).encode()
+    ).hexdigest()
+    return {
+        "contract": "ai-external-send-approval-v1",
+        "task": task,
+        "input_sha256": input_sha256,
+        "evidence_sha256": evidence_sha256,
+        "evidence_count": len(evidence),
+        "allowed_external_modes": ["online_byok", "mcp_handoff"],
+        "requires_explicit_user_action": True,
+        "server_calls_model": False,
+        "stores_api_key": False,
+        "key_storage": "browser_session_only_for_byok",
+        "output_status": "draft_unreviewed",
+        "may_invent_sources": False,
+        "private_data_excluded": PRIVATE_DATA_EXCLUSIONS,
+        "non_verdict_notice": "Ciornă de lucru; nu verdict juridic.",
+    }
+
+
 def _export_manifest(evidence: list[dict]) -> dict:
     source_references = [
         {
@@ -192,6 +215,7 @@ def preview(data: dict) -> dict:
         raise ValueError("Dovezile selectate depășesc limita pentru ciorna AI.")
     fingerprint = hashlib.sha256(prompt.encode()).hexdigest()
     cost = _cost_estimate(prompt)
+    approval_payload = _approval_payload(prompt, evidence, task)
     return {
         "contract": "ai-evidence-draft-v1",
         "mode": "client_local_or_byok",
@@ -206,6 +230,7 @@ def preview(data: dict) -> dict:
         "estimated_chars": cost["input_chars"],
         "estimated_tokens": cost["estimated_input_tokens"],
         "cost_estimate": cost,
+        "external_approval_payload": approval_payload,
         "approval": {
             "required_for_external_ai": True,
             "server_calls_model": False,

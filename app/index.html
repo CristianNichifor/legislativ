@@ -4791,14 +4791,52 @@ function aiDraftBoundaryHtml(plan,boundary){
   if(!plan)return '';
   const cost=plan.cost_estimate||{};
   const approval=plan.approval||{};
+  const external=plan.external_approval_payload||{};
   const mode={local_ai:'AI local în browser',online_byok:'online BYOK',mcp_handoff:'MCP cu aprobare'}[boundary]||boundary;
   const manifest=(plan.evidence_manifest||[]).map(e=>`<li>${esc(e.index)}. ${esc(e.label)} · ${esc([e.act_id,e.locator].filter(Boolean).join(' / ')||'fără act')} · ${esc(e.source_hash||e.source_url||'sursă')}</li>`).join('');
   return `<details open data-ai-boundary-card><summary>Limită AI pregătită · ${esc(mode)}</summary>`
     +`<p class="hint">Dovezi: ${esc(plan.evidence_count)} · tokeni estimați: ${esc(cost.estimated_total_tokens||plan.estimated_tokens||'necunoscut')} · cost server: ${esc(cost.server_cost||'none')} · cost extern: ${esc(cost.cost_owner||'utilizator')}</p>`
-    +`<p class="hint">Aprobare externă: ${approval.required_for_external_ai?'obligatorie':'nu'} · serverul cheamă model: ${approval.server_calls_model?'da':'nu'} · output: ${esc(approval.output_status||plan.status||'draft_unreviewed')}</p>`
+    +`<p class="hint">Aprobare externă: ${approval.required_for_external_ai?'obligatorie':'nu'} · contract: ${esc(external.contract||'ai-external-send-approval-v1')} · serverul cheamă model: ${approval.server_calls_model?'da':'nu'} · output: ${esc(approval.output_status||plan.status||'draft_unreviewed')}</p>`
     +`<p class="hint">Prompt SHA-256: ${esc(plan.input_sha256||'')} · dovezi SHA-256: ${esc(plan.evidence_sha256||'')}</p>`
     +(manifest?`<ul>${manifest}</ul>`:'')
     +`<details><summary>Prompt complet</summary><pre>${esc(plan.prompt||'')}</pre></details></details>`;
+}
+function aiExternalApproval(plan,boundary){
+  const settings=aiSettings();
+  const base=plan.external_approval_payload||{};
+  return {
+    contract:base.contract||'ai-external-send-approval-v1',
+    boundary,
+    provider:settings.online_byok.provider,
+    provider_label:settings.online_byok.provider_label,
+    model:settings.online_byok.model,
+    endpoint:settings.online_byok.endpoint,
+    input_sha256:plan.input_sha256,
+    evidence_sha256:plan.evidence_sha256,
+    evidence_count:plan.evidence_count,
+    estimated_total_tokens:plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens,
+    server_cost:plan.cost_estimate?.server_cost||'none',
+    external_cost_owner:plan.cost_estimate?.cost_owner||'user_if_byok_or_mcp',
+    key_storage:settings.key_storage,
+    stores_api_key:false,
+    output_status:plan.approval?.output_status||plan.status||'draft_unreviewed',
+    may_invent_sources:false,
+    requires_explicit_user_action:true
+  };
+}
+function confirmAiExternalApproval(packet){
+  if(packet.boundary!=='online_byok')return true;
+  const provider=[packet.provider_label,packet.model].filter(Boolean).join(' / ')||packet.provider;
+  return confirm("Aprobi trimiterea promptului la furnizorul tău BYOK?\n\n"
+    +"Furnizor: "+provider+"\n"
+    +"Endpoint: "+(packet.endpoint||"necompletat")+"\n"
+    +"Dovezi: "+packet.evidence_count+"\n"
+    +"Tokeni estimați: "+(packet.estimated_total_tokens||"necunoscut")+"\n"
+    +"Cost server: "+packet.server_cost+"\n"
+    +"Cost extern: în contul tău, după prețurile furnizorului\n"
+    +"Cheia API: sesiunea browserului, nepăstrată în datele aplicației\n"
+    +"Output: ciornă AI nerevizuită, nu verdict juridic\n\n"
+    +"Prompt SHA-256: "+(packet.input_sha256||""));
 }
 function ruleCandidateOptions(items,current=''){
   return Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
@@ -4911,7 +4949,9 @@ function bindManualNoteAiDraft(form){
     if(boundary==='online_byok'&&mode!=='online'){status.textContent='Limită aleasă: online BYOK. Comută setările AI pe online și introdu cheia în sesiune.';return;}
     send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
     try{
-      const answer=await aiComplete(plan.prompt,plan.system,{privat:true,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
+      const approvalPacket=aiExternalApproval(plan,boundary);
+      if(!confirmAiExternalApproval(approvalPacket))throw new Error('Anulat — promptul nu a fost trimis.');
+      const answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
       draft=`[Ciornă AI · ${answer.nota} · ${plan.contract} · ${plan.input_sha256}]\n\n${answer.text}`;
       result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
     }catch(err){status.textContent=err.message;}
