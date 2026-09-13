@@ -35,6 +35,25 @@ def _source_line(event: dict) -> str:
     return f"- {event.get('source_family') or 'sursă'}: {source} [{digest}]"
 
 
+def _payload_values(events: list[dict], *keys: str) -> list[str]:
+    values = []
+    for event in events:
+        payload = event.get("payload") or {}
+        for key in keys:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip() and value.strip() not in values:
+                values.append(value.strip())
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, str) and item.strip() and item.strip() not in values:
+                        values.append(item.strip())
+    return values
+
+
+def _event_types(events: list[dict]) -> set[str]:
+    return {event.get("event_type", "") for event in events}
+
+
 def build(stare, query: dict | None = None) -> dict:
     query = query or {}
     project_id = _token((query.get("project_id") or query.get("proiect") or [""])[0])
@@ -45,11 +64,51 @@ def build(stare, query: dict | None = None) -> dict:
         f"Proiect urmărit: {project_id}",
         f"Titlu de lucru: {title}",
         "",
-        "Obiectul intervenției:",
-        "- [completează modificarea normativă urmărită]",
-        "",
-        "Evenimente procedurale verificate:",
+        "Bază legală / acte afectate:",
     ]
+    affected = _payload_values(events, "act_id", "affected_act", "target_act", "celex")
+    lines.extend(
+        [f"- {value}" for value in affected] or ["- [completează actele naționale/UE vizate]"]
+    )
+    types = _event_types(events)
+    consultation = (
+        "consultare deschisă"
+        if "public_consultation_opened" in types
+        else "consultare închisă"
+        if "public_consultation_closed" in types
+        else "neconfirmat local"
+    )
+    parliament = next(
+        (
+            event.get("stage_label")
+            for event in events
+            if event.get("source_family") in {"camera", "senat"} and event.get("stage_label")
+        ),
+        "neconfirmat local",
+    )
+    lines.extend(
+        [
+            "",
+            "Stadiu consultare publică:",
+            f"- {consultation}",
+            "",
+            "Stadiu parlamentar:",
+            f"- {parliament}",
+            "",
+            "Risc UE / drept european:",
+        ]
+    )
+    eu_refs = _payload_values(events, "celex", "eu_reference", "eu_refs")
+    lines.extend([f"- {value}" for value in eu_refs] or ["- [verifică CELEX/articol relevant]"])
+    lines.extend(
+        [
+            "",
+            "Obiectul intervenției:",
+            "- [completează modificarea normativă urmărită]",
+            "",
+            "Evenimente procedurale verificate:",
+        ]
+    )
     lines.extend([_event_line(event) for event in events] or ["- Nu există evenimente locale."])
     lines.extend(
         [
@@ -59,8 +118,11 @@ def build(stare, query: dict | None = None) -> dict:
             "",
             "Verificări înainte de redactare:",
             "- Confirmă stadiul procedural în sursa oficială.",
+            "- Completează baza legală și actele afectate.",
+            "- Confirmă consultarea publică și termenul-limită.",
             "- Verifică avizele, rapoartele, voturile și publicarea în Monitorul Oficial.",
             "- Verifică efectul asupra actelor naționale și UE relevante.",
+            "- Notează lacunele, loopholes sau contradicțiile în dosarul local.",
             "",
             "Notă: acest text este un punct de pornire factual, nu verdict juridic.",
         ]
@@ -74,6 +136,8 @@ def build(stare, query: dict | None = None) -> dict:
             "sources": len(
                 {event.get("source_url") for event in events if event.get("source_url")}
             ),
+            "affected_acts": len(affected),
+            "eu_references": len(eu_refs),
         },
         "limitari": [
             "Ciorna include doar evenimente tracker locale.",

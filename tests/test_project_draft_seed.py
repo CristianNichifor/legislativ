@@ -20,7 +20,11 @@ def add_event(stare):
             "source_url": "https://www.cdep.ro/proiect/10",
             "occurred_at": "2026-09-12T10:00:00+00:00",
             "title": "Raport depus",
-            "payload": {"committee": "Comisia juridică"},
+            "payload": {
+                "committee": "Comisia juridică",
+                "affected_act": "Legea nr. 98/2016",
+                "celex": "32014L0024",
+            },
             "content_hash": "a" * 64,
         },
     )["event"]
@@ -34,7 +38,14 @@ def test_project_draft_seed_uses_tracker_events(tmp_path):
 
     assert out["contract"] == "project-draft-seed-v1"
     assert out["summary"]["events"] == 1
+    assert out["summary"]["affected_acts"] == 2
+    assert out["summary"]["eu_references"] == 1
     assert "Proiect urmărit: PL-x 10/2026" in out["text"]
+    assert "Bază legală / acte afectate" in out["text"]
+    assert "Legea nr. 98/2016" in out["text"]
+    assert "Risc UE / drept european" in out["text"]
+    assert "32014L0024" in out["text"]
+    assert "Stadiu parlamentar" in out["text"]
     assert "Raport depus" in out["text"]
     assert "https://www.cdep.ro/proiect/10" in out["text"]
     assert "nu verdict juridic" in out["text"]
@@ -46,7 +57,11 @@ def test_project_draft_seed_reports_empty_local_tracker(tmp_path):
     out = project_draft_seed.build(stare, {"project_id": ["PL-x 10/2026"]})
 
     assert out["summary"]["events"] == 0
+    assert out["summary"]["affected_acts"] == 0
+    assert out["summary"]["eu_references"] == 0
     assert "Nu există evenimente locale" in out["text"]
+    assert "[completează actele naționale/UE vizate]" in out["text"]
+    assert "[verifică CELEX/articol relevant]" in out["text"]
     assert not tracker_events.cale(stare).exists()
 
 
