@@ -89,8 +89,16 @@ Required ingredients:
   with explicit language state;
 - one reviewer-approved finding with quoted provisions and proposed wording.
 
-The current pack is blocked by CELEX text and reviewer-approved finding
-ingredients. The public-consultation ingredient is backed by
+The CELEX ingredient is backed by `data/real_celex_text_32014L0024.json`, a
+bounded retained Article 1 fixture for Directive 2014/24/EU in Romanian official
+language state. Validate the CELEX text hash and article-boundary metadata with:
+
+```bash
+uv run python -m scripts.real_celex_text
+```
+
+The current pack is blocked only by the reviewer-approved finding ingredient.
+The public-consultation ingredient is backed by
 `data/real_public_consultation_snapshot.json`, a compact real e-consultare
 ActionGrid row fixture. Validate that slice with:
 
@@ -108,8 +116,9 @@ search, workbench save and private rollback survival. The run measured 2 acts,
 1,635 provisions, 3 search results, 8 EU references signaled, 0 EU texts imported
 locally and 0 reviewable gap/CCR findings. Therefore the real finding-to-proposal
 save remains unexercised; this is a data/review limitation, not an application
-pass/fail threshold. Bounded EU assessment also remains blocked until the referenced
-CELEX texts are imported from official EU sources.
+pass/fail threshold. Bounded EU assessment now has one retained CELEX article
+fixture for source-backed citation, but still needs a reviewer-approved issue note
+before it can pass the release-candidate gate.
 
 The authentic etalon counts publisher S_LGI marks matched by normalized text
 containment anywhere in the document. **Those marks are locators, not citations of

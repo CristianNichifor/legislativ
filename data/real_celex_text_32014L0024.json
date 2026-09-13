@@ -1,0 +1,24 @@
+{
+  "$schema": "../schema/real_celex_text.schema.json",
+  "contract": "real-celex-text-fixture-v1",
+  "celex": "32014L0024",
+  "title": "Directiva 2014/24/UE privind achizițiile publice",
+  "source_url": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024",
+  "language": "RON",
+  "language_state": "official_ro",
+  "fallback": false,
+  "format": "txt",
+  "document_date": "2014-02-26",
+  "legal_type_uri": "http://publications.europa.eu/resource/authority/resource-type/DIR",
+  "work_uri": "http://publications.europa.eu/resource/celex/32014L0024",
+  "expression_uri": "http://publications.europa.eu/resource/celex/32014L0024.RON",
+  "manifestation_uri": "http://publications.europa.eu/resource/celex/32014L0024.RON.txt",
+  "item_url": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024",
+  "text_sha256": "acff59282b6604f867f332a8539c024202d5da92387e2eb3a824563fb181d195",
+  "article_boundaries": {
+    "contract": "celex-article-boundary-v1",
+    "required_locators": ["art1"],
+    "minimum_articles": 1
+  },
+  "text": "Articolul 1\nObiect și domeniu de aplicare\n(1)\nPrezenta directivă instituie norme aplicabile procedurilor de achiziție utilizate de către autoritățile contractante în legătură cu contractele de achiziții publice și concursurile de proiecte a căror valoare este estimată ca fiind cel puțin egală cu pragurile prevăzute la articolul 4.\n\nArticolul 2\nDefiniții"
+}
