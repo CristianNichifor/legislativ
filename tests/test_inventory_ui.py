@@ -264,6 +264,8 @@ def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
     assert "tracker-event-type" in html
     assert "tracker-source-family" in html
     assert "econsultare-feed" in html
+    assert "needs-attention-refresh" in html
+    assert "monitor-replay-tracker" in html
     assert "monitor-reconciliation-refresh" in html
     source = html.split("function monitorReconciliationHtml", 1)[1].split(
         "$('#source-coverage').ontoggle", 1
@@ -276,8 +278,10 @@ def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
         "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
         "function sourceRegistryConsultationStatus(value){const labels={open:'Deschisă',"
         "closed:'Închisă',unknown:'Necunoscută'};return labels[value]||value||'Necunoscută';}"
+        "function bindTrackerReviewActions(){}function openTrackerTimeline(){}"
+        "function openProjectWorkbench(){}"
         "async function sourceRegistryApi(){return {};}"
-        "function inspectSourceRegistryRow(){}function openTrackerTimeline(){}"
+        "function inspectSourceRegistryRow(){}"
         "function monitorReconciliationHtml"
         + source
         + "let h=monitorReconciliationHtml({needs_review:1,total:2,"
@@ -297,6 +301,17 @@ def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
         "assert.ok(h.includes('Sincronizează sursa'));"
         "assert.ok(h.includes('Timeline'));"
         "assert.ok(!h.includes('href=')&&!h.includes('<b>'));"
+        "h=needsAttentionHtml({total:2,counts:{source:1,tracker_event:1},"
+        "items:[{kind:'tracker_event',id:'ev1',title:'Aviz <b>',subtitle:'Consiliu',"
+        "state:'unreviewed',project_id:'PL-x 1/2026',source_family:'avize',"
+        "source_id:'src1',source_url:'javascript:alert(1)',updated_at:'2026',"
+        "next_action:'Revizuiește <x>'}],limitari:['local <img>']});"
+        "assert.ok(h.includes('Ce necesită atenție'));"
+        "assert.ok(h.includes('Eveniment tracker'));"
+        "assert.ok(h.includes('Aviz &lt;b&gt;'));"
+        "assert.ok(h.includes('data-attention-project=\"PL-x 1/2026\"'));"
+        "assert.ok(h.includes('data-tracker-review-event=\"ev1\"'));"
+        "assert.ok(!h.includes('href=')&&!h.includes('<img>'));"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr.decode()

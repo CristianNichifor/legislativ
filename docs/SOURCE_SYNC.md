@@ -156,11 +156,12 @@ The local acceptance contract for one registered source is intentionally narrow:
   source by URL/hash and let the registry `impact` sample show that note as a
   local dependency.
 
-The current app does not infer tracker events from sync automatically and does
-not create dossier notes from a source change. Tests therefore assert the
-concrete API contracts above: registration/sync writes the source state,
-tracker writes make events visible by project and dossier, and manual notes are
-counted conservatively as direct source references.
+The current app infers bounded tracker events for supported parliamentary and
+e-consultare syncs, then reports the stored event counts in the sync response.
+It still does not create dossier notes from a source change. Tests therefore
+assert the concrete API contracts above: registration/sync writes the source
+state, tracker writes make events visible by project and dossier, and manual
+notes are counted conservatively as direct source references.
 
 ## Acceptance
 
