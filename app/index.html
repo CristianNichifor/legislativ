@@ -5225,6 +5225,16 @@ function ruleChecksHtml(checks){
     +(checks.limitations?.length?`<ul>${checks.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
     +`<div data-rule-check-list>${rows.map(ruleCheckRowHtml).join('')||'<p>Nicio ciornă eligibilă pentru verificarea deterministă curentă.</p>'}</div>`;
 }
+function ruleDraftTextExecutionHtml(result){
+  if(!result)return '<p class="hint">Lipește textul proiectului și rulează ciornele promovate împotriva lui.</p>';
+  const rows=result.rows||[];
+  const labels={
+    actor_found:'actor',action_found:'acțiune',deadline_found:'termen',condition_found:'condiție'
+  };
+  return `<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Potriviri posibile<br><b>${esc(result.possible_matches||0)}</b></button><button type="button" class="ghost mini" disabled>Potriviri parțiale<br><b>${esc(result.partial_matches||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne verificate<br><b>${esc(result.returned||0)}</b></button></div>`
+    +`<p class="hint">${esc(result.status||'verificare draft')} · nu este verdict juridic.</p>`
+    +`<div data-rule-draft-text-results>${rows.map(row=>`<article class="manual-note ${row.status==='possible_match_not_verdict'?'attention':''}"><h5>${esc(row.act_id||'')} ${esc(row.locator||'')} · ${esc(row.status)}</h5><p class="hint">Găsite: ${esc((row.matched_fields||[]).map(k=>labels[k]||k).join(', ')||'nimic')} · Lipsă: ${esc((row.missing_fields||[]).map(k=>labels[k]||k).join(', ')||'nimic')}</p><details><summary>Contract execuție text proiect</summary><pre>${esc(JSON.stringify(row,null,2))}</pre></details></article>`).join('')||'<p>Nicio ciornă eligibilă pentru textul furnizat.</p>'}</div>`;
+}
 function ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters){
   const counts=Object.entries(RULE_QUEUE_BUCKETS).filter(([key])=>key!=='all').map(([key,label])=>`${esc(label)}: ${esc(queue.counts?.[key]||0)}`).join(' · ');
   const bucketOptions=Object.entries(RULE_QUEUE_BUCKETS).map(([key,label])=>`<option value="${key}" ${key===bucket?'selected':''}>${label}</option>`).join('');
@@ -5234,6 +5244,7 @@ function ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters){
     +`<p class="hint">${counts||'Nicio coadă de candidați.'}</p>`
     +`<form data-rule-draft-filters class="dossier-actions"><label>Coada<select name="bucket">${bucketOptions}</select></label><label>Act<input name="act" maxlength="200" value="${esc(filters.act||'')}"></label><label>ID prevedere<input name="provision_id" maxlength="240" value="${esc(filters.provision_id||'')}"></label><button type="submit" class="ghost mini">Filtrează</button><button type="button" class="ghost mini" data-rules-refresh title="Reîncarcă regulile">↻</button></form>`
     +`<section><h4>Verificări deterministe</h4>${ruleChecksHtml(checks)}</section>`
+    +'<section><h4>Execută pe text de proiect</h4><form data-rule-draft-text-form><label>Text proiect / amendament<textarea name="text" rows="5" maxlength="120000" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Rulează pe text</button><button type="button" class="ghost mini" data-rule-draft-text-clear>Curăță</button><p class="hint" role="status" data-rule-draft-text-status></p></div></form><div data-rule-draft-text-output>'+ruleDraftTextExecutionHtml(null)+'</div></section>'
     +`<section><h4>Ciorne promovate</h4><div data-rule-draft-list>${(drafts.items||[]).map(lawRuleDraftHtml).join('')||'<p>Nicio ciornă promovată pentru filtrul ales.</p>'}</div></section>`
     +`<section><h4>Coada de candidați</h4><div data-rule-queue-list>${(queue.items||[]).map(ruleCandidateQueueHtml).join('')||'<p>Niciun candidat în coadă pentru filtrul ales.</p>'}</div></section>`
     +'<p class="hint" role="status" data-rule-draft-status></p></details>';
@@ -5265,6 +5276,19 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
       const data=Object.fromEntries(new FormData(e.currentTarget));
       loadRuleDrafts(dossierId,0,{bucket:data.bucket,act:data.act,provision_id:data.provision_id});
     };
+    const textForm=host.querySelector('[data-rule-draft-text-form]');
+    const textStatus=host.querySelector('[data-rule-draft-text-status]');
+    const textOut=host.querySelector('[data-rule-draft-text-output]');
+    textForm.onsubmit=async e=>{
+      e.preventDefault();if(!textForm.reportValidity())return;
+      textStatus.textContent='Rulez ciornele pe textul furnizat…';
+      try{
+        const result=await dossierApi('/api/dosare/rule-drafts/execute-draft',{id:dossierId,act:filters.act||'',text:textForm.elements.text.value,limit:50});
+        textOut.innerHTML=ruleDraftTextExecutionHtml(result);
+        textStatus.textContent=`Verificare terminată: ${result.possible_matches||0} potriviri posibile, ${result.partial_matches||0} parțiale.`;
+      }catch(err){textStatus.textContent=err.message;}
+    };
+    host.querySelector('[data-rule-draft-text-clear]').onclick=()=>{textForm.reset();textOut.innerHTML=ruleDraftTextExecutionHtml(null);textStatus.textContent='';};
     host.querySelectorAll('[data-rule-promote] form').forEach(form=>{
       form.onsubmit=async e=>{
         e.preventDefault();if(!form.reportValidity())return;
