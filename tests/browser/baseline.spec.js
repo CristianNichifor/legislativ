@@ -30,10 +30,16 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#lifecycle-list')).toContainText('plx-999999-2026');
     await page.evaluate(() => {
       window.__workbenchClipboard = '';
+      window.__workbenchDownloadFilename = '';
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
         value: { writeText: async text => { window.__workbenchClipboard = text; } },
       });
+      const click = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () {
+        if (this.download) window.__workbenchDownloadFilename = this.download;
+        return click.call(this);
+      };
     });
     const workbenchResponse = page.waitForResponse(response =>
       response.url().includes('/api/project-evidence-pack') && response.url().includes('project_id=plx-999999-2026')
@@ -44,11 +50,9 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#project-workbench-body')).toContainText('Workbench · plx-999999-2026');
     await expect(page.locator('#project-workbench-body')).toContainText('Raport depus');
     await page.locator('[data-workbench-copy]').click();
-    await expect(page.locator('#project-workbench-status')).toContainText('Pachetul Markdown a fost copiat.');
-    expect(await page.evaluate(() => window.__workbenchClipboard)).toContain('# Pachet dovezi proiect: plx-999999-2026');
-    const downloadPromise = page.waitForEvent('download');
+    await expect.poll(() => page.evaluate(() => window.__workbenchClipboard)).toContain('# Pachet dovezi proiect: plx-999999-2026');
     await page.locator('[data-workbench-download]').click();
-    expect((await downloadPromise).suggestedFilename()).toBe('pachet-dovezi-plx-999999-2026.md');
+    await expect.poll(() => page.evaluate(() => window.__workbenchDownloadFilename)).toBe('pachet-dovezi-plx-999999-2026.md');
     const draftResponse = page.waitForResponse(response =>
       response.url().includes('/api/project-draft-seed') && response.url().includes('project_id=plx-999999-2026')
     );

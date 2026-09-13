@@ -757,6 +757,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
                 "/api/dosare/rule-drafts",
+                "/api/dosare/rule-drafts/execute-draft",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -881,6 +882,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/watchlist",
                 "/api/dosare/reguli",
                 "/api/dosare/rule-drafts",
+                "/api/dosare/rule-drafts/execute-draft",
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
@@ -950,6 +952,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.law_rule_drafts import executa
 
                         out = executa(path, cerere)
+                    elif ruta == "/api/dosare/rule-drafts/execute-draft":
+                        from scripts import law_rule_execution
+
+                        out = law_rule_execution.draft_text(path, cerere)
                     elif ruta == "/api/dosare/ai-draft":
                         from scripts.ai_drafting import preview
 
