@@ -6948,6 +6948,25 @@ function configureTrackerEventTypes(data){
   select.innerHTML='<option value="">Toate tipurile</option>'+types.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('');
   select.dataset.loaded='1';
 }
+const TRACKER_COVERAGE_STAGES=[
+  {key:'consultation',label:'Consultare',types:['public_consultation_opened','public_consultation_closed']},
+  {key:'committee',label:'Comisie',types:['committee_assignment','opinion_received']},
+  {key:'report',label:'Raport',types:['report_filed']},
+  {key:'vote',label:'Vot',types:['plenary_agenda','vote_recorded']},
+  {key:'publication',label:'Publicare',types:['published_in_monitor']}
+];
+function trackerCoverageFromEvents(events=[],byType={}){
+  const counts={...byType};
+  for(const event of events)counts[event.event_type]=(counts[event.event_type]||0)+1;
+  return TRACKER_COVERAGE_STAGES.map(stage=>{
+    const count=stage.types.reduce((sum,type)=>sum+Number(counts[type]||0),0);
+    return {...stage,count,state:count?'loaded':'missing'};
+  });
+}
+function trackerCoverageHtml(events=[],byType={}){
+  const stages=trackerCoverageFromEvents(events,byType);
+  return `<div class="lifecycle-timeline" data-tracker-coverage>${stages.map(stage=>`<span class="lifecycle-step ${stage.count?'lifecycle-step-done':'lifecycle-step-attention'}" data-coverage-stage="${esc(stage.key)}">${esc(stage.label)}<br><small>${stage.count?`${esc(stage.count)} încărcat${stage.count===1?'':'e'}`:'lipsă local'}</small></span>`).join('')}</div>`;
+}
 function bindTrackerTimelineActions(listSelector='#tracker-timeline-list',statusSelector='#tracker-timeline-status',reload=()=>loadTrackerTimeline(TRACKER_TIMELINE.offset)){
   const out=$(listSelector), status=$(statusSelector);
   out.querySelectorAll('[data-tracker-review-event]').forEach(button=>button.onclick=async()=>{
@@ -6981,7 +7000,7 @@ function trackerTimelineHtml(data){
   }
   return [...groups.values()].map(rows=>{
     const first=rows[0], dossier=first.dossier_id?` · dosar ${first.dossier_id}`:'';
-    return `<article class="tracker-timeline-project"><h4>${esc(first.project_id||'Fără proiect')}${esc(dossier)}</h4><ol class="tracker-timeline-events">${rows.map(trackerEventHtml).join('')}</ol></article>`;
+    return `<article class="tracker-timeline-project"><h4>${esc(first.project_id||'Fără proiect')}${esc(dossier)}</h4>${trackerCoverageHtml(rows)}<ol class="tracker-timeline-events">${rows.map(trackerEventHtml).join('')}</ol></article>`;
   }).join('')+(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
 }
 function trackerReviewQueueHtml(data){
@@ -7074,7 +7093,7 @@ function projectCockpitSourceHtml(info={}){
 function projectCockpitTrackerHtml(tracker={}){
   const latest=tracker.latest_event||{};
   const latestText=latest.event_label||latest.display_label||latest.event_type||'Fără eveniment local';
-  return `<section class="lifecycle-overview-card"><span class="hint">Tracker</span><strong>${esc(tracker.total||0)}</strong><span class="hint">${esc(tracker.unreviewed||0)} nerevizuite din ${esc(tracker.returned||0)} afișate</span><br><span class="hint">Ultimul: ${esc(latestText)}${latest.occurred_at?` · ${esc(dossierTime(latest.occurred_at))}`:''}</span><br>${projectCockpitTypeSummaryHtml(tracker.by_type||{})}</section>`;
+  return `<section class="lifecycle-overview-card"><span class="hint">Tracker</span><strong>${esc(tracker.total||0)}</strong><span class="hint">${esc(tracker.unreviewed||0)} nerevizuite din ${esc(tracker.returned||0)} afișate</span><br><span class="hint">Ultimul: ${esc(latestText)}${latest.occurred_at?` · ${esc(dossierTime(latest.occurred_at))}`:''}</span><br>${projectCockpitTypeSummaryHtml(tracker.by_type||{})}${trackerCoverageHtml([],tracker.by_type||{})}</section>`;
 }
 function projectCockpitEvidenceHtml(evidence={}){
   const ready=evidence.available?'Disponibil':'Indisponibil';
