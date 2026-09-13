@@ -6,6 +6,12 @@ bulk crawler plan.
 
 The checked-in machine contract is `scripts/source_portfolio.py`.
 
+For v1 product acceptance, source breadth is represented by the bounded manifest
+in [`V1_SCOPE_AND_ACCEPTANCE_DATASET.md`](V1_SCOPE_AND_ACCEPTANCE_DATASET.md).
+That baseline uses two existing Romanian law fixtures and placeholders for
+project, consultation and CELEX rows; it is not a storage profile and does not
+require any dataset release.
+
 ## Priority order
 
 | Priority | Source family | Why it matters | First usable slice |
