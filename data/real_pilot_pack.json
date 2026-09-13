@@ -1,0 +1,82 @@
+{
+  "$schema": "../schema/real_pilot_pack.schema.json",
+  "contract": "real-pilot-pack-v1",
+  "status": "blocked",
+  "domain": "bounded public procurement",
+  "acceptance_command": "uv run python -m scripts.acceptare_date_reale /tmp/legislativ-v1-pilot-release --min-acts 2 --pilot-act lege-98-2016 --require-reviewable-finding --require-eu-text",
+  "requirements": [
+    {
+      "key": "romanian_law_text",
+      "label": "Real Romanian law text",
+      "status": "ready",
+      "required": true,
+      "evidence": [
+        {
+          "kind": "portal_snapshot",
+          "id": "lege-98-2016",
+          "path": "sources/lege-98-2016.html.gz",
+          "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762",
+          "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667"
+        },
+        {
+          "kind": "portal_snapshot",
+          "id": "lege-208-2022",
+          "path": "sources/lege-208-2022.html.gz",
+          "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e",
+          "source_url": null
+        }
+      ],
+      "next_action": ""
+    },
+    {
+      "key": "parliament_project",
+      "label": "Real Parliament project/procedure",
+      "status": "blocked",
+      "required": true,
+      "evidence": [],
+      "next_action": "Add one Camera or Senat project snapshot with project id, stage, URL, source hash and procedure date."
+    },
+    {
+      "key": "public_consultation",
+      "label": "Real public consultation",
+      "status": "blocked",
+      "required": true,
+      "evidence": [],
+      "next_action": "Add one e-consultare or ministry consultation snapshot with URL, institution, stage/deadline and source hash."
+    },
+    {
+      "key": "celex_text",
+      "label": "Official CELEX text",
+      "status": "blocked",
+      "required": true,
+      "evidence": [
+        {
+          "kind": "celex_reference",
+          "id": "32014L0024",
+          "path": null,
+          "sha256": null,
+          "source_url": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024"
+        }
+      ],
+      "next_action": "Import at least one official CELEX text, Romanian preferred and English allowed only with explicit language state."
+    },
+    {
+      "key": "reviewable_finding",
+      "label": "Reviewer-approved finding",
+      "status": "blocked",
+      "required": true,
+      "evidence": [],
+      "next_action": "Record one authentic gap/CCR/EU-risk finding with quoted provisions and reviewer-approved proposal wording."
+    }
+  ],
+  "excluded": [
+    "bulk crawling",
+    "multi-GB public release rebuild",
+    "AI-generated legal acceptance",
+    "synthetic bridge findings"
+  ],
+  "notes": [
+    "The pack is intentionally small and names blockers instead of hiding them.",
+    "It is a preflight contract for real-data acceptance, not a source crawler."
+  ]
+}
