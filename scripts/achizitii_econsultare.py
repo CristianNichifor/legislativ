@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import re
 import urllib.request
@@ -19,6 +20,8 @@ MAX_BYTES = 2 * 1024 * 1024
 HOSTS = {"e-consultare.gov.ro", "www.e-consultare.gov.ro"}
 DATE = re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b")
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+HREF = re.compile(r'href=["\']([^"\']+)["\']', re.I)
+TAG = re.compile(r"<[^>]+>")
 
 
 def url_oficial(url: str) -> str:
@@ -159,6 +162,118 @@ def parseaza(data: bytes, baza: str) -> dict:
         "documents": documents,
         "truncated": len(parser.links) > 100,
     }
+
+
+def _plain_html(value: str) -> str:
+    value = re.sub(r"<br\s*/?>", " ", value or "", flags=re.I)
+    value = TAG.sub(" ", value)
+    return " ".join(html.unescape(value).split())
+
+
+def _field(row: dict, name: str) -> str:
+    for item in row.get("fields") or []:
+        if item.get("Name") == name:
+            return str(item.get("FormattedValue") or item.get("Value") or "")
+    return ""
+
+
+def _authority_from_details(value: str) -> str:
+    match = re.search(r"<small>\s*[^<]*-\s*([^<]+)</small>", value or "", re.I)
+    if match:
+        return _plain_html(match.group(1))[:300]
+    text = _plain_html(value)
+    if " - " in text:
+        return text.rsplit(" - ", 1)[-1][:300]
+    return ""
+
+
+def _first_href(value: str, baza: str) -> str:
+    match = HREF.search(value or "")
+    if not match:
+        return ""
+    return url_oficial(urljoin(baza, html.unescape(match.group(1))))
+
+
+def _deadline_from_terms(value: str) -> str:
+    text = _plain_html(value)
+    deadline = _date_after(("termen limită transmitere propuneri",), text)
+    if deadline:
+        return deadline
+    dates = DATE.findall(text)
+    return dates[-1] if dates else ""
+
+
+def _status_from_grid(value: str) -> str:
+    text = _plain_html(value).lower()
+    if "consultare" in text and "public" in text:
+        return "open"
+    if "închis" in text or "inchis" in text or "finalizat" in text:
+        return "closed"
+    return "unknown"
+
+
+def actiongrid_row_hash(row: dict) -> str:
+    return hashlib.sha256(
+        json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def snapshot_din_actiongrid(row: dict, *, listing_url: str) -> dict:
+    """Normalize one official e-consultare ActionGrid row into our source snapshot."""
+    if not isinstance(row, dict):
+        raise ValueError("Rând e-consultare invalid.")
+    official_listing_url = url_oficial(listing_url)
+    details = _field(row, "Detaliiproiect")
+    title_html = _field(row, "Detalii1")
+    terms = _field(row, "Termeneproiectlegislativ")
+    title = _plain_html(re.split(r"<br\s*/?>", title_html, maxsplit=1, flags=re.I)[0])[:300]
+    url = _first_href(details, official_listing_url) or official_listing_url
+    authority = _authority_from_details(title_html)
+    status = _status_from_grid(_field(row, "StatusProiect"))
+    deadline = _deadline_from_terms(terms)
+    source_hash = actiongrid_row_hash(row)
+    return {
+        "contract": "econsultare-source-snapshot-v1",
+        "family": "consultare_econsultare",
+        "url": url,
+        "summary": {
+            "title": title,
+            "authority": authority,
+            "status": status,
+            "deadline": deadline,
+            "documents": 0,
+            "truncated": False,
+        },
+        "title": title,
+        "authority": authority,
+        "status": status,
+        "deadline": deadline,
+        "documents": [],
+        "truncated": False,
+        "source_metadata": {
+            "contract": "econsultare-actiongrid-row-v1",
+            "listing_url": official_listing_url,
+            "row_id": str(row.get("id") or ""),
+            "date_published": str(row.get("datePublished") or ""),
+            "published": _field(row, "StartConsDesc"),
+            "status_label": _plain_html(_field(row, "StatusProiect")),
+            "terms": _plain_html(terms),
+            "source_hash": source_hash,
+            "parser_version": PARSER_VERSION,
+        },
+        "limitations": [
+            "Snapshot dintr-un singur rând ActionGrid e-consultare; nu descarcă atașamente.",
+            "Nu clasifică efecte juridice și nu decide compatibilitatea proiectului.",
+        ],
+    }
+
+
+def parseaza_actiongrid(data: bytes, *, listing_url: str) -> list[dict]:
+    payload = json.loads(data.decode("utf-8"))
+    rows = payload.get("results") if isinstance(payload, dict) else None
+    if not isinstance(rows, list):
+        raise ValueError("Răspuns ActionGrid e-consultare invalid.")
+    return [snapshot_din_actiongrid(row, listing_url=listing_url) for row in rows]
 
 
 def snapshot_hash(snapshot: dict) -> str:

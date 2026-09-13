@@ -1,0 +1,47 @@
+{
+  "$schema": "../schema/real_public_consultation_snapshot.schema.json",
+  "contract": "real-public-consultation-snapshot-v1",
+  "source_family": "consultare_econsultare",
+  "recorded_at": "2026-09-14T00:01:13+03:00",
+  "official_listing_url": "https://e-consultare.gov.ro/Consultare-public%C4%83",
+  "official_endpoint": "https://e-consultare.gov.ro/DesktopModules/DnnSharp/ActionGrid/Api.ashx?TabId=155&language=en-US&_url=https%3a%2f%2fe-consultare.gov.ro%2fDefault.aspx%3fTabId%3d155%26language%3den-US&referrer=&_aliasid=3&_mid=883&_tabid=155&method=GetData",
+  "row": {
+    "id": "3758",
+    "datePublished": "2026-09-14T00:01:13.4750961+03:00",
+    "fields": [
+      {
+        "Name": "StartConsDesc",
+        "FormattedValue": "11/09/2026"
+      },
+      {
+        "Name": "StatusProiect",
+        "FormattedValue": "Consultare Publică"
+      },
+      {
+        "Name": "Detalii1",
+        "FormattedValue": "Proiect de Ordin al ministrului transporturilor și infrastructurii infrastructurii interimar pentru modificarea și completarea Ordinului ministrului transporturilor nr. 1.252.2014 pentru aprobarea criteriilor minime de pregătire și perfecționare a persona <br> <i><small>Ordin de Ministru - MINISTERUL TRANSPORTURILOR SI INFRASTRUCTURII</small></i>"
+      },
+      {
+        "Name": "Detaliiproiect",
+        "FormattedValue": "Astăzi, 11.09.2026, Ministerul Transporturilor și Infrastructurii anunţă deschiderea procedurii de transparenţă decizională a procesului de elaborare a următorului proiect de act normativ:\n\nProiect de Ordin al ministrului transporturilor și infrastructurii infrastructurii interimar pentru modificarea și completarea Ordinului ministrului transporturilor nr. 1.252/2014 pentru aprobarea criteriilor minime de pregătire și perfecționare a personalului navigant maritim român și a sistemului de recunoaștere a brevetelor și a certificatelor de capacitate <a href=\"https://e-consultare.gov.ro/Proiecte-Legislative-Publice/Propunere-Proiecte-Dezbatere-Publica/bf8dcb217ae24dc396662897210dd310/217255653953430ebb1f014282d64291\">...mai multe detalii</a>"
+      },
+      {
+        "Name": "Termeneproiectlegislativ",
+        "FormattedValue": "Interval Consultare Publica:11/09/2026 - 28/09/2026<br>\nTermen limită transmitere propuneri: 28/09/2026<br>\nData desfășurare dezbatere publică: -"
+      }
+    ]
+  },
+  "expected": {
+    "row_hash": "6177ea6b75d92a22b8ab6d24297955ccccce85df4cac3f202c226cc8c9a538d9",
+    "detail_url": "https://e-consultare.gov.ro/Proiecte-Legislative-Publice/Propunere-Proiecte-Dezbatere-Publica/bf8dcb217ae24dc396662897210dd310/217255653953430ebb1f014282d64291",
+    "title_contains": "Proiect de Ordin al ministrului transporturilor",
+    "authority": "MINISTERUL TRANSPORTURILOR SI INFRASTRUCTURII",
+    "stage": "open",
+    "published": "11/09/2026",
+    "deadline": "28/09/2026"
+  },
+  "limitations": [
+    "Fixture compact dintr-un singur rând oficial ActionGrid; nu include răspunsul complet de 1998 rezultate.",
+    "Nu descarcă atașamente și nu decide compatibilitatea juridică a proiectului."
+  ]
+}

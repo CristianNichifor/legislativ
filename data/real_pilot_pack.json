@@ -47,10 +47,18 @@
     {
       "key": "public_consultation",
       "label": "Real public consultation",
-      "status": "blocked",
+      "status": "ready",
       "required": true,
-      "evidence": [],
-      "next_action": "Add one e-consultare or ministry consultation snapshot with URL, institution, stage/deadline and source hash."
+      "evidence": [
+        {
+          "kind": "econsultare_actiongrid_snapshot",
+          "id": "econsultare-3758",
+          "path": "data/real_public_consultation_snapshot.json",
+          "sha256": "12963bd79e7fc11e1bd8332ae43ba7e0618b186914ce56af723fdd648bb4cf89",
+          "source_url": "https://e-consultare.gov.ro/Proiecte-Legislative-Publice/Propunere-Proiecte-Dezbatere-Publica/bf8dcb217ae24dc396662897210dd310/217255653953430ebb1f014282d64291"
+        }
+      ],
+      "next_action": ""
     },
     {
       "key": "celex_text",
