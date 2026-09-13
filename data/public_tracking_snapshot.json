@@ -190,6 +190,48 @@
           ]
         }
       ]
+    },
+    {
+      "key": "monitorul-oficial-plx-33-2025",
+      "family": "monitorul_oficial_pi",
+      "identifier": "lege-plx-33-2025-mo",
+      "url": "https://monitoruloficial.ro/Monitorul-Oficial--PI--227--2025.html",
+      "label": "Monitorul Oficial Partea I nr. 227/2025",
+      "parser_version": "public-tracking-fixture.v1",
+      "snapshots": [
+        {
+          "content_hash": "7777777777777777777777777777777777777777777777777777777777777777",
+          "summary": {
+            "part": "I",
+            "number": 227,
+            "date": "2025-03-24",
+            "act_id": "lege-plx-33-2025"
+          },
+          "documents": [
+            {
+              "id": "mo-pi-227-2025",
+              "type": "monitor_publication",
+              "title": "Monitorul Oficial Partea I nr. 227/2025",
+              "url": "https://monitoruloficial.ro/Monitorul-Oficial--PI--227--2025.html"
+            }
+          ],
+          "events": [
+            {
+              "id": "monitor-publication",
+              "event_type": "published_in_monitor",
+              "title": "Publicat în Monitorul Oficial Partea I nr. 227",
+              "occurred_at": "2025-03-24T00:00:00+00:00",
+              "payload": {
+                "part": "I",
+                "number": 227,
+                "date": "2025-03-24",
+                "act_id": "lege-plx-33-2025",
+                "source_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "required_event_types": [
@@ -198,7 +240,8 @@
     "committee_assignment",
     "opinion_received",
     "report_filed",
-    "vote_recorded"
+    "vote_recorded",
+    "published_in_monitor"
   ],
   "limitations": [
     "Recorded fixture only; no CDEP, Senat, e-consultare or avize crawl is performed.",

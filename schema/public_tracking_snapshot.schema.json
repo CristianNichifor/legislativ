@@ -35,7 +35,14 @@
         "properties": {
           "key": {"type": "string", "minLength": 1},
           "family": {
-            "enum": ["camera", "senat", "consultare_econsultare", "consultare_minister", "avize"]
+            "enum": [
+              "camera",
+              "senat",
+              "consultare_econsultare",
+              "consultare_minister",
+              "avize",
+              "monitorul_oficial_pi"
+            ]
           },
           "identifier": {"type": "string", "minLength": 1},
           "url": {"type": "string", "pattern": "^https://"},
