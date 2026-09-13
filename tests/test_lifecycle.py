@@ -170,6 +170,36 @@ def test_project_lifecycle_item_exposes_stale_unknown_and_unavailable_states():
     assert unavailable["uncertainty"]["level"] == "high"
 
 
+def test_project_lifecycle_item_marks_deadline_soon_and_recent_stage_change():
+    now = datetime(2026, 9, 11, tzinfo=UTC)
+    row = {
+        "plx_id": "PL-x 30/2026",
+        "titlu": "Proiect cu termen",
+        "stadiu": "Raport depus",
+        "citit_la": "2026-09-11T10:00:00+00:00",
+        "data_inreg": "2026-09-01",
+        "sursa_url": "https://www.cdep.ro/proiect30",
+        "consultation_deadline": "2026-09-20",
+    }
+
+    out = project_lifecycle_item(
+        row,
+        latest_event={
+            "data": "2026-09-10",
+            "camera": "Camera Deputaților",
+            "actiune": "Raport depus",
+        },
+        now=now,
+    )
+
+    assert out["needs_attention"] is True
+    assert out["deadline_attention"]["state"] == "deadline_soon"
+    assert out["deadline_attention"]["days_until"] == 9
+    assert out["stage_change_attention"]["state"] == "recent_stage_change"
+    assert out["stage_change_attention"]["days_since"] == 1
+    assert out["attention_reasons"] == ["deadline_soon", "recent_stage_change"]
+
+
 def test_project_lifecycle_summary_reads_local_store_and_bounds_results(tmp_path):
     state = SimpleNamespace(initiative=tmp_path / "initiative.db")
     with depozit.deschide(state.initiative) as con:
@@ -296,6 +326,29 @@ def test_project_lifecycle_summary_exposes_latest_timeline_event(tmp_path):
         "from_timeline": True,
     }
     assert project["uncertainty"]["level"] == "low"
+
+
+def test_project_lifecycle_summary_reads_optional_deadline_column(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute("ALTER TABLE initiative ADD COLUMN consultation_deadline TEXT")
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url,"
+            "consultation_deadline) VALUES ('PL-x 21/2026',2,'21','Lege termen',"
+            "'În consultare publică','2026-09-10T10:00:00+00:00','2026-09-01',"
+            "'https://www.cdep.ro/proiect21','15.09.2026')"
+        )
+        con.commit()
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 21/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    project = out["projects"][0]
+    assert project["consultation_deadline"] == "15.09.2026"
+    assert project["deadline_attention"]["date"] == "2026-09-15"
+    assert project["deadline_attention"]["state"] == "deadline_soon"
+    assert "deadline_soon" in project["attention_reasons"]
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):

@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from scripts import attention_feed, depozit, source_registry, tracker_events
@@ -61,6 +62,85 @@ def test_attention_feed_combines_registry_tracker_and_lifecycle_items(tmp_path):
     assert out["counts"]["tracker_event"] == 1
     assert out["counts"]["project_lifecycle"] == 1
     assert any(item["source_family"] == "avize" for item in out["items"])
+
+
+def test_attention_feed_surfaces_deadline_soon_source_snapshot_without_fetching(tmp_path):
+    stare = state(tmp_path)
+    source = source_registry.descopera(
+        stare,
+        {
+            "family": "consultare_econsultare",
+            "identifier": "consultare-1",
+            "label": "Consultare buget",
+            "url": "https://e-consultare.gov.ro/consultare/1",
+        },
+    )
+    source_registry._store_snapshot(
+        stare,
+        source["id"],
+        "a" * 64,
+        {
+            "contract": "econsultare-snapshot-v1",
+            "summary": {
+                "title": "Consultare buget",
+                "deadline": "2026-09-20",
+                "status": "open",
+            },
+        },
+        "test.v1",
+    )
+
+    original_now = attention_feed.datetime
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 11, tzinfo=tz or UTC)
+
+    attention_feed.datetime = FixedDatetime
+    try:
+        out = attention_feed.lista(stare)
+    finally:
+        attention_feed.datetime = original_now
+
+    item = out["items"][0]
+    assert item["kind"] == "source"
+    assert item["state"] == "deadline_soon"
+    assert item["attention_label"] == "Termen apropiat"
+    assert item["deadline"]["days_until"] == 9
+
+
+def test_attention_feed_surfaces_recent_lifecycle_stage_change(tmp_path):
+    stare = state(tmp_path)
+    with depozit.deschide(stare.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 40/2026',2,'40','Lege stage','Raport depus',"
+            "'2026-09-11T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect40')"
+        )
+        con.execute(
+            "INSERT INTO initiativa_etapa(plx_id,ord,data,camera,actiune) "
+            "VALUES ('PL-x 40/2026',1,'2026-09-10','Camera Deputaților','Raport depus')"
+        )
+        con.commit()
+
+    original_now = attention_feed.lifecycle.datetime
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 11, tzinfo=tz or UTC)
+
+    attention_feed.lifecycle.datetime = FixedDatetime
+    try:
+        out = attention_feed.lista(stare)
+    finally:
+        attention_feed.lifecycle.datetime = original_now
+
+    item = next(item for item in out["items"] if item["kind"] == "project_lifecycle")
+    assert item["state"] == "recent_stage_change"
+    assert item["attention_label"] == "Stadiu schimbat recent"
+    assert item["project_id"] == "PL-x 40/2026"
 
 
 def test_attention_feed_validates_limit(tmp_path):

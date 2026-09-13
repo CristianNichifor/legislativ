@@ -6536,8 +6536,10 @@ function needsAttentionHtml(data){
     const url=urlSigur(item.source_url);
     const project=item.project_id?` · ${esc(item.project_id)}`:'';
     const action=item.next_action?`<p class="hint">${esc(item.next_action)}</p>`:'';
+    const deadline=item.deadline?.raw?` · termen ${esc(item.deadline.raw)}${Number.isFinite(item.deadline.days_until)?` (${esc(item.deadline.days_until)} zile)`:''}`:'';
+    const label=item.attention_label?` · ${esc(item.attention_label)}`:'';
     return `<article class="source-registry-row" data-source-severity="attention"><h4>${esc(needsAttentionKindLabel(item.kind))}${project}</h4>`
-      +`<p>${esc(item.title||'Element fără titlu')}</p><p class="hint">${esc(item.subtitle||'')} · ${esc(item.state||'stare necunoscută')} · ${esc(dossierTime(item.updated_at||''))}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:''}</p>`
+      +`<p>${esc(item.title||'Element fără titlu')}${label}</p><p class="hint">${esc(item.subtitle||'')} · ${esc(item.state||'stare necunoscută')}${deadline} · ${esc(dossierTime(item.updated_at||''))}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:''}</p>`
       +action+`<div class="dossier-actions">${item.source_id?`<button type="button" class="ghost mini" data-attention-source="${esc(item.source_id)}">Sursa</button>`:''}${item.project_id?`<button type="button" class="ghost mini" data-attention-project="${esc(item.project_id)}">Timeline</button><button type="button" class="ghost mini" data-attention-workbench="${esc(item.project_id)}">Pachet dovezi</button>`:''}${item.kind==='tracker_event'?`<button type="button" class="ghost mini" data-tracker-review-event="${esc(item.id)}">Revizuiește</button>`:''}</div></article>`;
   }).join('');
   return `<section class="source-inventory"><h4>Ce necesită atenție</h4><p><strong>${esc(data.total||0)} elemente</strong>${counts?` · ${esc(counts)}`:''}</p>${items?`<div class="coverage-grid">${items}</div>`:'<p class="hint">Nu există elemente locale marcate pentru atenție.</p>'}${data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:''}</section>`;

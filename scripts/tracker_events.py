@@ -23,6 +23,7 @@ EVENT_TYPES = {event.key: event for event in TRACKER_EVENTS}
 TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
 LIFECYCLE_STAGES = (
     ("consultation_open", "Consultare"),
+    ("consultation_closed", "Consultare închisă"),
     ("drafting", "Avizare"),
     ("sent_to_parliament", "Trimis"),
     ("registered", "Înregistrat"),
@@ -37,7 +38,7 @@ STAGE_LABELS = dict(LIFECYCLE_STAGES)
 STAGE_INDEX = {key: index for index, (key, _) in enumerate(LIFECYCLE_STAGES)}
 EVENT_NORMALIZATION = {
     "public_consultation_opened": ("Consultare publică deschisă", "consultation_open"),
-    "public_consultation_closed": ("Consultare publică închisă", "drafting"),
+    "public_consultation_closed": ("Consultare publică închisă", "consultation_closed"),
     "committee_assignment": ("Trimis la comisii", "committee"),
     "opinion_received": ("Aviz primit", "drafting"),
     "report_filed": ("Raport depus", "report"),
