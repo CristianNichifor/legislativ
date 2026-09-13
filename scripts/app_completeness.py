@@ -189,7 +189,7 @@ def report(stare=None) -> dict:
                     "evidence_pack_has_note_and_events", False
                 ),
                 "dossier_ui_mounted": _has_all(
-                    app_html, ("id=\"dossier-writing\"", "bindWritingWorkspace(meta)")
+                    app_html, ('id="dossier-writing"', "bindWritingWorkspace(meta)")
                 ),
             },
             blockers=[vertical_error] if vertical_error else [],
