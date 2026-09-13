@@ -33,13 +33,17 @@ FAMILIES = {
 }
 SCHEMA_VERSION = 1
 PROJECT_PARSER_VERSION = "achizitii_proiecte.v1"
+MANUAL_METADATA_PARSER_VERSION = "manual-source-metadata.v1"
 MAX_TEXT = 1000
 MAX_PAGE = 50
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
-SYNC_FAMILIES = PROJECT_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
+MANUAL_METADATA_FAMILIES = frozenset({"consultare_minister", "avize"})
+SYNC_FAMILIES = (
+    PROJECT_FAMILIES | MANUAL_METADATA_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
+)
 
 
 def cale(stare) -> Path:
@@ -439,7 +443,9 @@ def _impact(stare, row: dict) -> dict:
     try:
         if row["family"] in PROJECT_FAMILIES and row.get("identifier"):
             _project_impact(stare, row, impact, path)
-        if row["family"] in {"ue_cellar", "legislatie_ro"} and row.get("identifier"):
+        if row["family"] in {"ue_cellar", "legislatie_ro", "consultare_minister", "avize"} and (
+            row.get("identifier") or row.get("url")
+        ):
             _direct_reference_impact(row, impact, path)
     except (OSError, ValueError, sqlite3.Error, json.JSONDecodeError):
         return _impact_empty(row, available=False)
@@ -722,6 +728,127 @@ def _sync_state(previous_hash: str, content_hash: str) -> str:
     return "unchanged" if previous_hash and previous_hash == content_hash else "changed"
 
 
+def _list_of_text(value, *, limit: int = 20, item_limit: int = 300) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("Listă metadata invalidă.")
+    out = []
+    for item in value[:limit]:
+        text = _text(item, limit=item_limit)
+        if text:
+            out.append(text)
+    return out
+
+
+def _manual_documents(value) -> list[dict]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("Documente metadata invalide.")
+    documents = []
+    for item in value[:100]:
+        if not isinstance(item, dict):
+            raise ValueError("Document metadata invalid.")
+        documents.append(
+            {
+                "url": _url(item.get("url")),
+                "label": _text(item.get("label", ""), limit=300),
+                "content_hash": _hash(item.get("content_hash", "")),
+            }
+        )
+    return [item for item in documents if item["url"] or item["label"] or item["content_hash"]]
+
+
+def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
+    if not isinstance(metadata, dict):
+        raise ValueError("Metadata sursă invalidă.")
+    family = row["family"]
+    title = _text(metadata.get("title") or row.get("label") or row.get("identifier"), limit=300)
+    authority = _text(metadata.get("authority", ""), limit=300)
+    status = _token(metadata.get("status", ""))
+    deadline = _text(metadata.get("deadline", ""), limit=80)
+    project_id = _text(
+        metadata.get("project_id") or row.get("identifier") or row.get("url"), limit=200
+    )
+    occurred_at = _text(metadata.get("occurred_at", ""), limit=80)
+    documents = _manual_documents(metadata.get("documents"))
+    if family == "consultare_minister":
+        summary = {
+            "title": title,
+            "authority": authority,
+            "status": status or "unknown",
+            "deadline": deadline,
+            "documents": len(documents),
+            "truncated": bool(
+                isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
+            ),
+        }
+    else:
+        issuer = _text(metadata.get("issuer") or authority, limit=300)
+        position = _text(metadata.get("position", ""), limit=120)
+        observations = _text(metadata.get("observations", ""), limit=500)
+        document_hash = _hash(metadata.get("document_hash", ""))
+        summary = {
+            "issuer": issuer,
+            "position": position,
+            "observations": bool(observations),
+            "document_hash": document_hash,
+            "documents": len(documents),
+            "truncated": bool(
+                isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
+            ),
+        }
+    return {
+        "contract": "manual-source-metadata-snapshot-v1",
+        "family": family,
+        "identifier": row.get("identifier", ""),
+        "url": row.get("url", ""),
+        "label": row.get("label", ""),
+        "summary": summary,
+        "title": title,
+        "authority": authority,
+        "issuer": summary.get("issuer", ""),
+        "position": summary.get("position", ""),
+        "observations": _text(metadata.get("observations", ""), limit=500),
+        "status": status or ("received" if family == "avize" else "unknown"),
+        "deadline": deadline,
+        "project_id": project_id,
+        "occurred_at": occurred_at,
+        "documents": documents,
+        "tags": _list_of_text(metadata.get("tags")),
+        "truncated": summary["truncated"],
+        "metadata_only": True,
+        "limitations": [
+            "Sursă sincronizată metadata-first; nu s-a făcut parsing live al paginii oficiale.",
+            "Documentele sunt păstrate ca linkuri/hash-uri declarate, nu ca bytes extrase.",
+        ],
+    }
+
+
+def _manual_metadata_hash(snapshot: dict) -> str:
+    return _stable_hash(
+        {
+            "contract": snapshot["contract"],
+            "family": snapshot["family"],
+            "identifier": snapshot["identifier"],
+            "url": snapshot["url"],
+            "summary": snapshot["summary"],
+            "title": snapshot["title"],
+            "authority": snapshot["authority"],
+            "issuer": snapshot["issuer"],
+            "position": snapshot["position"],
+            "observations": snapshot["observations"],
+            "status": snapshot["status"],
+            "deadline": snapshot["deadline"],
+            "project_id": snapshot["project_id"],
+            "occurred_at": snapshot["occurred_at"],
+            "documents": snapshot["documents"],
+            "tags": snapshot["tags"],
+        }
+    )
+
+
 def _project_local_meta(stare, plx: str) -> dict:
     from scripts import achizitii_proiecte
 
@@ -921,6 +1048,79 @@ def _persist_econsultare_tracker_event(
         ),
     )
     return [saved] if saved else []
+
+
+def _persist_manual_metadata_tracker_event(
+    stare, source_id: str, snapshot: dict, content_hash: str
+) -> list[dict]:
+    family = snapshot.get("family")
+    observed_at = now()
+    if family == "consultare_minister":
+        status = (snapshot.get("status") or "unknown").strip().lower()
+        event_type = (
+            "public_consultation_closed"
+            if status in {"closed", "inchisa", "închisă"}
+            else "public_consultation_opened"
+        )
+        deadline = snapshot.get("deadline") or snapshot.get("occurred_at")
+        payload = {
+            "authority": snapshot.get("authority", ""),
+            "project_url": snapshot.get("url", ""),
+            "status": status,
+        }
+        if event_type == "public_consultation_closed":
+            payload["closed_at"] = _tracker_date(deadline)
+        else:
+            if deadline:
+                payload["deadline"] = _tracker_date(deadline)
+            payload["attachment_hashes"] = [
+                item["content_hash"]
+                for item in snapshot.get("documents", [])
+                if item.get("content_hash")
+            ][:100]
+            payload["documents"] = snapshot.get("documents", [])[:100]
+        saved = _persist_tracker_event(
+            stare,
+            {
+                "event_type": event_type,
+                "project_id": snapshot.get("project_id") or snapshot.get("url") or source_id,
+                "source_family": family,
+                "source_id": source_id,
+                "source_url": snapshot.get("url", ""),
+                "occurred_at": _tracker_date(deadline),
+                "observed_at": observed_at,
+                "title": snapshot.get("title") or "Consultare ministerială",
+                "payload": {key: value for key, value in payload.items() if value not in ("", [])},
+                "content_hash": content_hash,
+            },
+        )
+        return [saved] if saved else []
+    if family == "avize" and snapshot.get("issuer") and snapshot.get("project_id"):
+        payload = {
+            "issuer": snapshot.get("issuer", ""),
+            "position": snapshot.get("position", ""),
+            "observations": snapshot.get("observations", ""),
+            "document_hash": (snapshot.get("summary") or {}).get("document_hash", ""),
+            "source_url": snapshot.get("url", ""),
+            "documents": snapshot.get("documents", [])[:100],
+        }
+        saved = _persist_tracker_event(
+            stare,
+            {
+                "event_type": "opinion_received",
+                "project_id": snapshot["project_id"],
+                "source_family": family,
+                "source_id": source_id,
+                "source_url": snapshot.get("url", ""),
+                "occurred_at": _tracker_date(snapshot.get("occurred_at")),
+                "observed_at": observed_at,
+                "title": snapshot.get("title") or f"Aviz primit: {snapshot['issuer']}",
+                "payload": {key: value for key, value in payload.items() if value not in ("", [])},
+                "content_hash": content_hash,
+            },
+        )
+        return [saved] if saved else []
+    return []
 
 
 def sincronizeaza_proiect(stare, source_id: str) -> dict:
@@ -1137,6 +1337,51 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
     )
 
 
+def sincronizeaza_manual_metadata(stare, source_id: str, metadata: dict | None = None) -> dict:
+    """Retain one metadata-only ministry consultation or avize source snapshot."""
+    row = _source(stare, source_id)
+    if row["family"] not in MANUAL_METADATA_FAMILIES:
+        raise ValueError("Doar sursele metadata-first pot fi sincronizate aici.")
+    if row["state"] != "queued":
+        row = pune_in_coada(stare, source_id)
+    snapshot = _manual_metadata_snapshot(row, metadata or {})
+    content_hash = _manual_metadata_hash(snapshot)
+    _store_snapshot(stare, source_id, content_hash, snapshot, MANUAL_METADATA_PARSER_VERSION)
+    tracker_sync = _persist_manual_metadata_tracker_event(stare, source_id, snapshot, content_hash)
+    inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "fetched",
+            "content_hash": content_hash,
+            "parser_version": MANUAL_METADATA_PARSER_VERSION,
+            "note": "Metadata sursă reținută fără parsing live al paginii oficiale.",
+        },
+    )
+    needs_review = not snapshot.get("project_id") or (
+        row["family"] == "avize" and not snapshot.get("issuer")
+    )
+    final_state = (
+        "needs_review" if needs_review else _sync_state(row.get("last_hash", ""), content_hash)
+    )
+    note = ""
+    if needs_review:
+        note = "Metadata reținută, dar lipsesc câmpuri pentru eveniment tracker complet."
+    return _with_tracker_sync(
+        inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": final_state,
+                "content_hash": content_hash,
+                "parser_version": MANUAL_METADATA_PARSER_VERSION,
+                "note": note,
+            },
+        ),
+        tracker_sync,
+    )
+
+
 def executa(stare, data: dict) -> dict:
     action = _text(data.get("action", "discover"), limit=40) or "discover"
     if action == "discover":
@@ -1157,5 +1402,9 @@ def executa(stare, data: dict) -> dict:
             return _with_impact(stare, sincronizeaza_ue(stare, row["id"]))
         if row["family"] in PROJECT_FAMILIES:
             return _with_impact(stare, sincronizeaza_proiect(stare, row["id"]))
+        if row["family"] in MANUAL_METADATA_FAMILIES:
+            return _with_impact(
+                stare, sincronizeaza_manual_metadata(stare, row["id"], data.get("metadata"))
+            )
         raise ValueError("Familia de surse nu are sincronizare directă.")
     raise ValueError("Acțiune registru necunoscută.")

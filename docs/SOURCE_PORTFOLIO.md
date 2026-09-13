@@ -95,7 +95,8 @@ ingest PDFs; missing issue numbers or dates remain missing.
    agenda, vote and opinion events.
 4. Add Monitorul Oficial Part I publication events and connect them to published
    acts.
-5. Add avize as metadata-first, document-on-demand sources.
+5. Add ministry consultation and avize metadata-first sources, then grow toward
+   document-on-demand retrieval adapter by adapter.
 6. Add local Monitorul Oficial as opt-in packs after the registry/freshness UI is
    useful.
 

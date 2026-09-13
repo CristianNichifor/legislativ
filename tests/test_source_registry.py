@@ -137,11 +137,14 @@ def test_registry_names_precise_public_source_families():
     families = registry.families()
 
     assert families["consultare_econsultare"] == "Consultări publice · e-consultare"
+    assert families["consultare_minister"] == "Consultări ministere"
     assert families["monitorul_oficial_pi"] == "Monitorul Oficial · Partea I"
     assert families["monitorul_oficial_other_parts"] == "Monitorul Oficial · Părțile II-VII"
     assert families["monitorul_oficial_local"] == "Monitorul Oficial Local"
     assert families["avize"] == "Avize și opinii instituționale"
     assert "consultare_econsultare" in registry.SYNC_FAMILIES
+    assert "consultare_minister" in registry.SYNC_FAMILIES
+    assert "avize" in registry.SYNC_FAMILIES
     assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
 
 
@@ -376,6 +379,131 @@ def test_registry_sync_records_project_review_and_failure(monkeypatch, tmp_path)
     failed = registry.executa(stare, {"action": "sync", "id": failure["id"]})
     assert failed["state"] == "failed"
     assert failed["last_error"] == "fetch_failed"
+
+
+def test_registry_syncs_ministry_consultation_metadata_to_tracker(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "consultare_minister",
+            "identifier": "mdlap-consultare-1",
+            "url": "https://www.mdlpa.ro/pages/proiect-hg-consultare",
+            "label": "Consultare ministerială HG servicii publice",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "title": "Proiect HG privind serviciile publice",
+                "authority": "Ministerul Dezvoltării",
+                "deadline": "15.10.2026",
+                "status": "open",
+                "project_id": "mdlap-consultare-1",
+                "documents": [
+                    {
+                        "url": "https://www.mdlpa.ro/uploads/proiect.pdf",
+                        "label": "Proiect act normativ",
+                        "content_hash": "e" * 64,
+                    }
+                ],
+                "tags": ["servicii publice"],
+            },
+        },
+    )
+
+    assert synced["state"] == "changed"
+    assert synced["parser_version"] == registry.MANUAL_METADATA_PARSER_VERSION
+    assert synced["sync_status"]["can_sync"] is True
+    assert synced["tracker_sync"] == {
+        "contract": "source-sync-tracker-events-v1",
+        "stored": 1,
+        "event_types": {"public_consultation_opened": 1},
+    }
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"] == {
+        "title": "Proiect HG privind serviciile publice",
+        "authority": "Ministerul Dezvoltării",
+        "status": "open",
+        "deadline": "15.10.2026",
+        "documents": 1,
+        "truncated": False,
+    }
+    events = tracker_events.lista(stare, {"source_family": ["consultare_minister"]})
+    assert events["total"] == 1
+    assert events["events"][0]["event_type"] == "public_consultation_opened"
+    assert events["events"][0]["project_id"] == "mdlap-consultare-1"
+    assert events["events"][0]["payload"]["attachment_hashes"] == ["e" * 64]
+    assert events["events"][0]["content_hash"] == synced["last_hash"]
+
+    listed = registry.lista(stare)
+    assert listed["counts"]["consultare_minister:changed"] == 1
+
+
+def test_registry_syncs_avize_metadata_to_opinion_tracker_event(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "avize",
+            "identifier": "aviz-cl-8-2026",
+            "url": "https://www.clr.ro/avize/8-2026.pdf",
+            "label": "Aviz Consiliul Legislativ",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "project_id": "PL-x 10/2026",
+                "issuer": "Consiliul Legislativ",
+                "position": "favorabil cu observații",
+                "observations": "Corelare terminologică necesară.",
+                "document_hash": "f" * 64,
+                "occurred_at": "2026-09-12",
+            },
+        },
+    )
+
+    assert synced["state"] == "changed"
+    assert synced["tracker_sync"]["event_types"] == {"opinion_received": 1}
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"] == {
+        "issuer": "Consiliul Legislativ",
+        "position": "favorabil cu observații",
+        "observations": True,
+        "document_hash": "f" * 64,
+        "documents": 0,
+        "truncated": False,
+    }
+    events = tracker_events.lista(stare, {"source_family": ["avize"]})
+    assert events["total"] == 1
+    assert events["events"][0]["event_type"] == "opinion_received"
+    assert events["events"][0]["project_id"] == "PL-x 10/2026"
+    assert events["events"][0]["payload"]["issuer"] == "Consiliul Legislativ"
+    assert events["events"][0]["payload"]["document_hash"] == "f" * 64
+
+
+def test_registry_manual_metadata_needs_review_when_tracker_fields_are_missing(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(stare, {"family": "avize", "url": "https://example.test/aviz.pdf"})
+
+    synced = registry.executa(stare, {"action": "sync", "id": row["id"]})
+
+    assert synced["state"] == "needs_review"
+    assert synced["tracker_sync"] == {
+        "contract": "source-sync-tracker-events-v1",
+        "stored": 0,
+        "event_types": {},
+    }
+    assert synced["last_hash"]
 
 
 def test_registry_attention_filter_and_review_action(monkeypatch, tmp_path):
