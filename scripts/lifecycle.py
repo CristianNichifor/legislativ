@@ -64,6 +64,8 @@ CANONICAL_PROJECT_STATUSES: tuple[LifecycleStage, ...] = (
 )
 _CANONICAL_BY_KEY = {status.key: status for status in CANONICAL_PROJECT_STATUSES}
 DEFAULT_STALE_DAYS = 30
+DEFAULT_DEADLINE_SOON_DAYS = 14
+DEFAULT_STAGE_CHANGE_DAYS = 7
 MAX_PROJECTS = 100
 REGISTRY_ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
 PROJECT_REGISTRY_FAMILIES = frozenset({"parlament", "camera", "senat"})
@@ -318,7 +320,14 @@ def _parse_time(value: str | None) -> datetime | None:
         return None
     if text.endswith("Z"):
         text = text[:-1] + "+00:00"
-    with_timezone = datetime.fromisoformat(text)
+    if "." in text and "T" not in text:
+        try:
+            day, month, year = text.split(".")
+            with_timezone = datetime(int(year), int(month), int(day), tzinfo=UTC)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Dată lifecycle invalidă.") from exc
+    else:
+        with_timezone = datetime.fromisoformat(text)
     if with_timezone.tzinfo is None:
         return with_timezone.replace(tzinfo=UTC)
     return with_timezone.astimezone(UTC)
@@ -330,6 +339,63 @@ def _is_stale(last_seen: str | None, *, now: datetime, stale_days: int) -> bool:
     except ValueError:
         return True
     return parsed is None or parsed < now - timedelta(days=stale_days)
+
+
+def deadline_attention(
+    deadline: str | None,
+    *,
+    now: datetime | None = None,
+    soon_days: int = DEFAULT_DEADLINE_SOON_DAYS,
+) -> dict:
+    """Classify an already-captured deadline without fetching source data."""
+    raw = str(deadline or "").strip()
+    if not raw:
+        return {"raw": "", "state": "none", "days_until": None, "needs_attention": False}
+    now = (now or datetime.now(UTC)).astimezone(UTC)
+    try:
+        parsed = _parse_time(raw)
+    except ValueError:
+        return {"raw": raw, "state": "unknown", "days_until": None, "needs_attention": True}
+    if parsed is None:
+        return {"raw": raw, "state": "none", "days_until": None, "needs_attention": False}
+    days_until = (parsed.date() - now.date()).days
+    if days_until < 0:
+        state = "overdue"
+    elif days_until <= soon_days:
+        state = "deadline_soon"
+    else:
+        state = "future"
+    return {
+        "raw": raw,
+        "date": parsed.date().isoformat(),
+        "state": state,
+        "days_until": days_until,
+        "needs_attention": state in {"deadline_soon", "overdue", "unknown"},
+    }
+
+
+def _recent_stage_change(
+    latest: dict,
+    stage_data: dict,
+    *,
+    now: datetime,
+    stage_change_days: int,
+) -> dict:
+    if not latest.get("from_timeline") or stage_data["key"] not in ACTIVE_STAGE_KEYS:
+        return {"state": "none", "days_since": None, "needs_attention": False}
+    try:
+        parsed = _parse_time(latest.get("date"))
+    except ValueError:
+        return {"state": "unknown", "days_since": None, "needs_attention": True}
+    if parsed is None:
+        return {"state": "none", "days_since": None, "needs_attention": False}
+    days_since = (now.date() - parsed.date()).days
+    state = "recent_stage_change" if 0 <= days_since <= stage_change_days else "old"
+    return {
+        "state": state,
+        "days_since": days_since,
+        "needs_attention": state == "recent_stage_change",
+    }
 
 
 def _project_url(row: dict) -> str:
@@ -383,6 +449,42 @@ def _uncertainty(stage_data: dict, *, stale: bool, source_state: str, registry_s
     }
 
 
+def _attention(
+    *,
+    source_state: str,
+    registry_state: str,
+    deadline: dict,
+    stage_change: dict,
+) -> dict:
+    reasons = []
+    labels = []
+    if source_state in {"stale", "unknown", "unavailable"}:
+        reasons.append(source_state)
+    if registry_state in REGISTRY_ATTENTION_STATES:
+        reasons.append("registry_source")
+        labels.append("Sursă urmărită de revizuit")
+    if deadline.get("state") == "deadline_soon":
+        reasons.append("deadline_soon")
+        labels.append("Termen apropiat")
+    elif deadline.get("state") == "overdue":
+        reasons.append("deadline_overdue")
+        labels.append("Termen depășit")
+    elif deadline.get("state") == "unknown":
+        reasons.append("deadline_unknown")
+        labels.append("Termen nemapat")
+    if stage_change.get("state") == "recent_stage_change":
+        reasons.append("recent_stage_change")
+        labels.append("Stadiu schimbat recent")
+    elif stage_change.get("state") == "unknown":
+        reasons.append("stage_date_unknown")
+        labels.append("Dată stadiu nemapată")
+    return {
+        "needs_attention": bool(reasons),
+        "reasons": sorted(set(reasons)),
+        "labels": labels,
+    }
+
+
 def project_lifecycle_item(
     row: dict,
     *,
@@ -391,6 +493,8 @@ def project_lifecycle_item(
     affected_dossiers: int = 0,
     now: datetime | None = None,
     stale_days: int = DEFAULT_STALE_DAYS,
+    deadline_soon_days: int = DEFAULT_DEADLINE_SOON_DAYS,
+    stage_change_days: int = DEFAULT_STAGE_CHANGE_DAYS,
 ) -> dict:
     """Public lifecycle/status shape for one project row from a source registry."""
     now = (now or datetime.now(UTC)).astimezone(UTC)
@@ -412,6 +516,18 @@ def project_lifecycle_item(
     uncertainty = _uncertainty(
         lifecycle, stale=stale, source_state=source_state, registry_state=registry_state
     )
+    deadline = deadline_attention(
+        row.get("consultation_deadline"), now=now, soon_days=deadline_soon_days
+    )
+    stage_change = _recent_stage_change(
+        latest, lifecycle, now=now, stage_change_days=stage_change_days
+    )
+    attention = _attention(
+        source_state=source_state,
+        registry_state=registry_state,
+        deadline=deadline,
+        stage_change=stage_change,
+    )
     return {
         "source_name": row.get("source_name") or "Camera Deputaților",
         "project_id": row.get("plx_id") or "",
@@ -425,6 +541,10 @@ def project_lifecycle_item(
         "last_seen": last_seen,
         "last_updated": row.get("data_inreg") or last_seen,
         "consultation_deadline": row.get("consultation_deadline"),
+        "deadline_attention": deadline,
+        "stage_change_attention": stage_change,
+        "attention": attention,
+        "attention_reasons": attention["reasons"],
         "url": url,
         "source_state": source_state,
         "registry_source": registry,
@@ -436,8 +556,7 @@ def project_lifecycle_item(
         and registry.get("family") in PROJECT_REGISTRY_FAMILIES,
         "stale": stale,
         "unavailable": source_state == "unavailable",
-        "needs_attention": source_state in {"stale", "unknown", "unavailable"}
-        or registry_state in REGISTRY_ATTENTION_STATES,
+        "needs_attention": attention["needs_attention"],
     }
 
 
@@ -571,10 +690,14 @@ def project_lifecycle_summary(
                 "SELECT count(*) FROM initiative " + where,
                 (needle, needle),
             ).fetchone()[0]
+            columns = {r[1] for r in con.execute("PRAGMA table_info(initiative)")}
+            optional = ", consultation_deadline" if "consultation_deadline" in columns else ""
             rows = [
                 dict(r)
                 for r in con.execute(
-                    "SELECT plx_id, titlu, stadiu, citit_la, data_inreg, sursa_url, cam, idp "
+                    "SELECT plx_id, titlu, stadiu, citit_la, data_inreg, sursa_url, cam, idp"
+                    + optional
+                    + " "
                     "FROM initiative " + where + " ORDER BY citit_la DESC, plx_id LIMIT ? OFFSET ?",
                     (needle, needle, limit + 1, offset),
                 )
