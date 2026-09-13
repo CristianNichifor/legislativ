@@ -29,10 +29,31 @@ default.
 
 ## R2 — what a republish actually costs
 
-Measured 2026-09-10, bucket `legislativ`: **~10 GB across ~256.000 objects**, one dated prefix
-(`2026-09-08`), which is also the only prefix the published page references. Almost all of that
-object count is the search index — a corpus file is one object, a Pagefind slice is thousands of
-fragments.
+Measured 2026-09-13 against the live bucket: **23,93 GB across 256.193 objects**, in three dated
+prefixes. Almost the entire object count sits in one of them — a corpus file is one object, a
+Pagefind slice is thousands of fragments.
+
+| prefix | size | objects | contents | read by |
+|---|---|---|---|---|
+| `2026-09-11` | 7,08 GB | 7 | corpus, graf, initiative, release — **no search index** | `channel.json` → `dataset-release.json` |
+| `2026-09-10` | 6,90 GB | 6 | corpus, graf, release — **no search index** | nothing found; superseded by `2026-09-11` |
+| `2026-09-08` | 9,96 GB | 256.180 | full publish: corpus + `idx/` + `pagefind-0…7` | the published page — `--depozit` in `.github/workflows/pages.yml` |
+
+That table answers a question this file used to get wrong. The page does not read `2026-09-08`
+because someone forgot to move the pin: **it is the only prefix that can serve the page at all.**
+The two newer prefixes carry a corpus and a release manifest and no index, so search would have
+nothing to read there. A corpus can be republished on its own; the page follows only once
+`incarca-felii.sh` has put the slices next to it.
+
+So the split is by consumer, and deliberate: the dataset channel serves corpus and release from
+`2026-09-11`, the page serves corpus and search from `2026-09-08`.
+
+**Storage overage is cheap; do not confuse it with the operations bill.** 23,93 GB against 10 GB
+free is 13,93 GB at $0,015/GB-month — about **$0,21/month**. The $30/month figure below is about
+class A operations under *daily* republishing, not about storage.
+
+An earlier revision of this file, from 2026-09-10, recorded a single prefix and a trap that had
+not yet fired. It fired on the next publish.
 
 A republish writes a **new** dated prefix, so each one costs roughly:
 
@@ -46,10 +67,25 @@ $30/month**, and storage grows by ~10 GB every time because nothing deletes the 
 
 Two things follow, and one thing that looks like a fix is not one:
 
-- **Storage needs a lifecycle rule.** Old dated prefixes are never referenced once the page moves
-  to a new one, and nothing removes them. An expiry rule on the bucket is the fix. It needs an API
-  token with *Account · Workers R2 Storage · Edit*; neither `wrangler login`'s OAuth scope nor a
-  read-only connection can set it.
+- **Storage needs pruning — and a lifecycle rule is the wrong tool for it.** R2 lifecycle rules
+  expire objects by *age*. They cannot tell the prefix the page is serving right now from an
+  abandoned one. A rule saying "delete anything older than 7 days" would today remove
+  `2026-09-08` — the corpus and all eight search slices the live page reads — while leaving the
+  channel's `2026-09-11` untouched. Search would answer from nothing, and the dataset channel
+  would still look healthy. That is the most expensive kind of outage: silent on the surface.
+
+  `infra/curata-prefixe.sh` does the pruning instead. It reads the prefix out of `channel.json`
+  and the `--depozit` pin out of `pages.yml`, keeps both plus the most recent `PASTREAZA` (2 by
+  default), and refuses to run at all if it cannot determine either reference. Without
+  `CONFIRMA=da` it only reports. Run with the defaults today it protects all three prefixes and
+  deletes nothing. The one genuinely redundant prefix is `2026-09-10`: superseded by `2026-09-11`,
+  no index, nothing found referencing it, 6,90 GB in six objects. `PASTREAZA=1 CONFIRMA=da` removes
+  it and reclaims that space for about six DELETE operations — but it also removes a published
+  `dataset-release.json`, which anyone may have pinned. That is a decision, not a cleanup, so the
+  default keeps it.
+
+  The bucket already carries R2's *Default Multipart Abort Rule* (7 days), which is the one
+  lifecycle rule that cannot lose committed data. Leave it; add no object-expiry rule.
 - **The operation count is inherent to the dated-prefix design**, not to a flag. A new prefix is
   empty, so every fragment is a new object no matter how it is uploaded.
 - **`--no-traverse` is not the cause.** It skips listing the destination, and the destination is a
