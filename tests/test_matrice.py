@@ -687,6 +687,12 @@ def test_matrix_exposes_source_quality_filter(tmp_path):
     )
     assert acte["total"] == 1
     assert acte["acte"][0]["source_quality"]["cheie"] == "reviewable"
+    dosar = _matrice_dosar(
+        {"emitent": ["Parlamentul"], "source_quality": ["reviewable"]},
+        stare,
+    )
+    assert dosar["acte"]["total"] == 1
+    assert dosar["acte"]["acte"][0]["source_quality"]["cheie"] == "reviewable"
     assert (
         _matrice_acte(
             {"emitent": ["Parlamentul"], "source_quality": ["missing"]},
@@ -832,6 +838,27 @@ def test_matrix_problem_filter_turns_rows_into_a_work_queue(tmp_path):
 
 def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     stare = _stare(tmp_path, graf=True, initiative=True)
+    from scripts import source_registry
+
+    lege = source_registry.executa(
+        stare,
+        {
+            "family": "legislatie_ro",
+            "identifier": "lege-98-2016",
+            "url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+        },
+    )
+    source_registry.executa(stare, {"action": "queue", "id": lege["id"]})
+    source_registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": lege["id"],
+            "state": "fetched",
+            "content_hash": "a" * 64,
+            "parser_version": "legislatie_ro.v1",
+        },
+    )
     with depozit.deschide(stare.corpus) as con:
         con.execute(
             "INSERT INTO provizii (act_id, locator, ord, text) VALUES (?,?,?,?)",
@@ -880,6 +907,24 @@ def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     assert out["drilldown"]["proiecte"][0]["plx_id"] == "plx-1-2024"
     assert out["drilldown"]["referinte_ue"][0]["celex"] == "32014L0024"
     assert out["drilldown"]["surse"][0]["act_id"] == "lege-98-2016"
+    readiness = out["drilldown"]["readiness"]
+    assert readiness["contract"] == "matrice-readiness-v1"
+    assert readiness["status"] == "reviewable_candidate"
+    assert readiness["not_legal_verdict"] is True
+    assert readiness["axes"]["domain"]["cheie"] == "necunoscut"
+    assert readiness["axes"]["legal_rank"][0]["categorie"] == "primar"
+    assert {i["cheie"] for i in readiness["axes"]["issue_type"]} >= {
+        "lacuna",
+        "constitutionalitate",
+        "initiative",
+        "amendamente",
+    }
+    assert readiness["axes"]["source_quality"]["loaded"] == 1
+    assert readiness["reviewability"]["checks"]["exact_provisions"] is True
+    assert readiness["reviewability"]["checks"]["source_snapshots"] is True
+    assert readiness["drilldown_pointers"]["provisions"][0]["locator"] == "art7"
+    assert readiness["drilldown_pointers"]["sources"][0]["content_hash"] == "a" * 64
+    assert readiness["drilldown_pointers"]["sources"][0]["parser_version"] == "legislatie_ro.v1"
     assert {e["kind"] for e in out["drilldown"]["entry_points"]} >= {
         "manual_note",
         "proposal_drafting",

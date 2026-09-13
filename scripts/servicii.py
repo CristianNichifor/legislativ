@@ -851,7 +851,9 @@ def _source_registry_index(stare: Stare) -> tuple[bool, dict[str, dict], dict[st
         with source_registry._open(path) as con:
             source_registry.init(con)
             for row in con.execute(
-                "SELECT identifier,url,state,last_attempt_at,updated_at FROM source_registry "
+                "SELECT id,identifier,url,state,last_hash,parser_version,"
+                "last_attempt_at,updated_at "
+                "FROM source_registry "
                 "WHERE family='legislatie_ro'"
             ):
                 item = dict(row)
@@ -904,6 +906,9 @@ def _source_quality_for_act(
         **SOURCE_QUALITY_STATES[state],
         "legacy_cheie": legacy,
         "source_state": (source or {}).get("state", ""),
+        "source_id": (source or {}).get("id", ""),
+        "content_hash": (source or {}).get("last_hash", ""),
+        "parser_version": (source or {}).get("parser_version", ""),
         "last_attempt_at": (source or {}).get("last_attempt_at"),
         "updated_at": (source or {}).get("updated_at"),
     }
@@ -2002,11 +2007,131 @@ def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
             "sursa_url": a.get("sursa_url", ""),
             "source_quality": a.get("source_quality") or {},
             "domeniu": a.get("domeniu") or {},
+            "rang": a.get("rang") or {},
         }
         for a in (dosar.get("acte") or {}).get("acte", [])
     ]
+    ranguri = rand.get("ranguri") or []
+    domeniu = rand.get("domeniu") or {}
+    issue_types = []
+    if semnale.get("viduri"):
+        issue_types.append({"cheie": "lacuna", "eticheta": "lacune candidate"})
+    if semnale.get("neconstitutionale"):
+        issue_types.append({"cheie": "constitutionalitate", "eticheta": "CCR nereparat candidat"})
+    if semnale.get("initiative_in_lucru"):
+        issue_types.append({"cheie": "initiative", "eticheta": "inițiative pendinte candidate"})
+    if semnale.get("amendamente_primite"):
+        issue_types.append({"cheie": "amendamente", "eticheta": "presiune de amendare candidată"})
+    contradiction_count = len((dosar.get("contradictii") or {}).get("candidati") or [])
+    if contradiction_count:
+        issue_types.append({"cheie": "contradictii", "eticheta": "contradicții candidate"})
+
+    provision_pointers = [
+        {
+            "kind": row.get("kind", ""),
+            "label": "prevedere exactă",
+            "act_id": row.get("act_id", ""),
+            "locator": row.get("locator", ""),
+            "actions": row.get("actiuni") or [],
+        }
+        for row in prevederi
+        if row.get("act_id") and row.get("locator")
+    ]
+    source_pointers = [
+        {
+            "kind": (
+                "source_snapshot"
+                if (a.get("source_quality") or {}).get("content_hash")
+                else "source_record"
+            ),
+            "act_id": a.get("act_id", ""),
+            "cheie_citare": a.get("cheie_citare", ""),
+            "source_id": (a.get("source_quality") or {}).get("source_id", ""),
+            "source_state": (a.get("source_quality") or {}).get("source_state", ""),
+            "content_hash": (a.get("source_quality") or {}).get("content_hash", ""),
+            "parser_version": (a.get("source_quality") or {}).get("parser_version", ""),
+            "url": a.get("sursa_url", ""),
+        }
+        for a in acte
+        if a.get("act_id")
+    ]
+    ready_checks = {
+        "domain": bool(domeniu.get("cheie") and domeniu.get("cheie") != "necunoscut"),
+        "legal_rank": bool(ranguri),
+        "issue_type": bool(issue_types),
+        "source_quality": bool(acte),
+        "exact_provisions": bool(provision_pointers),
+        "source_snapshots": any(p.get("content_hash") for p in source_pointers),
+    }
+    ready_count = sum(1 for value in ready_checks.values() if value)
+    readiness_status = (
+        "reviewable_candidate"
+        if ready_checks["legal_rank"]
+        and ready_checks["issue_type"]
+        and (ready_checks["exact_provisions"] or ready_checks["source_snapshots"])
+        else "needs_evidence"
+    )
     return {
         "contract": "matrice-drilldown-v1",
+        "readiness": {
+            "contract": "matrice-readiness-v1",
+            "status": readiness_status,
+            "label": "candidați pentru revizie, nu verdict juridic",
+            "not_legal_verdict": True,
+            "reviewability": {
+                "ready_checks": ready_count,
+                "total_checks": len(ready_checks),
+                "checks": ready_checks,
+            },
+            "axes": {
+                "domain": domeniu
+                or {
+                    "cheie": "necunoscut",
+                    "eticheta": "domeniu orientativ necunoscut",
+                },
+                "legal_rank": [
+                    {
+                        "categorie": r.get("categorie", ""),
+                        "eticheta": r.get("eticheta", ""),
+                        "rang": r.get("rang"),
+                        "acte": r.get("acte", 0),
+                    }
+                    for r in ranguri
+                ],
+                "issue_type": issue_types,
+                "source_quality": rand.get("source_quality") or {},
+            },
+            "drilldown_pointers": {
+                "provisions": provision_pointers,
+                "sources": source_pointers,
+                "projects": [
+                    {
+                        "kind": "project",
+                        "plx_id": p.get("plx_id", ""),
+                        "url": p.get("sursa_url", ""),
+                    }
+                    for p in (proiecte or {}).get("initiative") or []
+                ],
+                "eu_references": [
+                    {
+                        "kind": "eu_reference",
+                        "celex": ref.get("celex", ""),
+                        "imported": bool(ref.get("importat")),
+                    }
+                    for ref in dosar.get("referinte_ue") or []
+                ],
+            },
+            "limitari": [
+                (
+                    "Readiness descrie cât de revizuibil este rândul; nu confirmă lacune, "
+                    "contradicții sau conformitate."
+                ),
+                (
+                    "Domeniul este euristic, rangul vine din tipul actului, iar sursele sunt "
+                    "instantanee locale când există hash."
+                ),
+            ],
+        },
         "summary": {
             "acte": rand.get("acte", 0),
             "prevederi": len(prevederi),
@@ -2112,7 +2237,12 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
         }
 
     acte_qs = {"emitent": [emitent], "limita": [str(limita_acte)]}
-    for cheie, valoare in (("tip", tip), ("rang", rang), ("domeniu", domeniu)):
+    for cheie, valoare in (
+        ("tip", tip),
+        ("rang", rang),
+        ("domeniu", domeniu),
+        ("source_quality", source_quality),
+    ):
         if valoare:
             acte_qs[cheie] = [valoare]
     acte = _matrice_acte(acte_qs, stare)

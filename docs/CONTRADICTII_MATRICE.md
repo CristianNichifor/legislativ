@@ -28,6 +28,23 @@ same-act comparisons and equal normalized definitions are excluded.
 The row action displays evidence pairs. The work dossier includes the candidates
 and their limitations in the view and copied Markdown.
 
+## Compact row readiness
+
+`GET /api/matrice-dosar` includes `drilldown.readiness` with contract
+`matrice-readiness-v1`. This is a compact usability layer over the selected row:
+domain hint, legal-rank buckets, issue-type candidates, source-quality counters,
+reviewability checks and drilldown pointers.
+
+The pointers are intentionally operational. Provision pointers carry exact
+`act_id`/`locator` actions when the current reports expose them. Source pointers
+carry the local source-registry record and latest content hash/parser version
+when a source snapshot exists; otherwise they remain source records without a
+hash. Project and CELEX pointers only identify the relevant local queue items.
+
+The status values are review-readiness labels such as `reviewable_candidate` or
+`needs_evidence`. They do not confirm a gap, contradiction, incompatibility,
+hierarchy, applicability, source authenticity or legal effect.
+
 ## Graph/matrix scaffold
 
 `GET /api/matrice-graf?emitent=Parlamentul` exposes the same selected matrix row

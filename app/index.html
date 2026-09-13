@@ -575,6 +575,11 @@
   .matrix-drilldown-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:.45rem;margin:.55rem 0}
   .matrix-drilldown-item{border-top:1px solid var(--rule-soft);padding:.45rem 0;overflow-wrap:anywhere}
   .matrix-drilldown-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0}
+  .matrix-ready{border:1px solid var(--rule-soft);border-radius:var(--r1);padding:.55rem .65rem;margin:.55rem 0;background:var(--sunk)}
+  .matrix-ready-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.35rem;margin:.45rem 0}
+  .matrix-ready-axis{font-size:.75rem;overflow-wrap:anywhere}
+  .matrix-ready-axis b{display:block;font-family:var(--sans);font-size:.64rem;text-transform:uppercase;color:var(--ink-mute)}
+  .matrix-ready-pointers{font-family:var(--sans);font-size:.7rem;color:var(--ink-mute);overflow-wrap:anywhere}
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -8109,12 +8114,41 @@ function mGraphHtml(d){
   h+=(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
   return h;
 }
+function mReadinessHtml(readiness){
+  if(!readiness) return "";
+  const axes=readiness.axes||{}, review=readiness.reviewability||{}, checks=review.checks||{};
+  const pointers=readiness.drilldown_pointers||{};
+  const domain=axes.domain&&axes.domain.eticheta ? axes.domain.eticheta : axes.domain?.cheie||"necunoscut";
+  const ranks=(axes.legal_rank||[]).map(r=>`${r.eticheta||r.categorie} ${nf(r.acte||0)}`).join(" · ")||"rang necunoscut";
+  const issues=(axes.issue_type||[]).map(i=>i.eticheta||i.cheie).join(" · ")||"fără tip candidat";
+  const source=mSourceQualityLabel(axes.source_quality||{});
+  const checkList=Object.entries(checks).filter(([,ok])=>ok).map(([key])=>key.replaceAll("_"," ")).join(" · ")||"dovezi insuficiente";
+  const sourcePointers=(pointers.sources||[]).filter(p=>p.content_hash).slice(0,3)
+    .map(p=>`${p.cheie_citare||p.act_id} · ${String(p.content_hash).slice(0,12)}${p.parser_version?' · '+p.parser_version:''}`).join(" | ");
+  const provisionPointers=(pointers.provisions||[]).slice(0,3)
+    .map(p=>`${p.act_id} / ${locRo(p.locator||"")}`).join(" | ");
+  return `<div class="matrix-ready" data-matrix-readiness>`
+    +`<div class="parc-h">${esc(readiness.label||"candidați pentru revizie")}</div>`
+    +`<p class="hint">${esc(readiness.contract||"matrice-readiness-v1")} · ${esc(readiness.status||"needs_evidence")} · ${nf(review.ready_checks||0)}/${nf(review.total_checks||0)} axe revizuibile.</p>`
+    +`<div class="matrix-ready-grid">`
+    +`<div class="matrix-ready-axis"><b>Domeniu</b>${esc(domain)}</div>`
+    +`<div class="matrix-ready-axis"><b>Rang legal</b>${esc(ranks)}</div>`
+    +`<div class="matrix-ready-axis"><b>Tip problemă</b>${esc(issues)}</div>`
+    +`<div class="matrix-ready-axis"><b>Calitate sursă</b>${esc(source)}</div>`
+    +`<div class="matrix-ready-axis"><b>Revizuire</b>${esc(checkList)}</div>`
+    +`</div>`
+    +`<div class="matrix-ready-pointers">Prevederi: ${esc(provisionPointers||"niciun locator exact")}<br>Instantanee sursă: ${esc(sourcePointers||"niciun hash local")}</div>`
+    +(readiness.not_legal_verdict?`<p class="hint">Etichetă operațională pentru candidați; nu este verdict juridic.</p>`:"")
+    +(readiness.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("")
+    +`</div>`;
+}
 function mDrilldownHtml(d){
   if(!d||!d.gasit) return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.");
   const drill=d.drilldown||{}, summary=drill.summary||{}, ex=(d.rand&&d.rand.exemple)||{};
   const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
   let h=`<div class="matrix-drilldown"><div class="parc-h">Drilldown matrice · ${esc(d.emitent||"")}</div>`
     +`<p class="hint">${esc(drill.contract||"matrice-drilldown-v1")} · dovezi locale și intrări de lucru pentru rândul selectat.</p>`
+    +mReadinessHtml(drill.readiness)
     +`<div class="matrix-stats">`
     +stat("prevederi suport",summary.prevederi)+stat("proiecte pendinte",summary.proiecte)
     +stat("referințe UE",summary.referinte_ue)+stat("surse lipsă",summary.surse_lipsa)
