@@ -5,7 +5,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
-from scripts import depozit, tracker_events
+from scripts import depozit, lifecycle_watchlist, tracker_events
 from scripts.api import Inregistrare
 from scripts.cdep import Initiativa
 from scripts.colector import act_din_inregistrare
@@ -71,6 +71,15 @@ with TemporaryDirectory(prefix="legislativ-browser-") as directory:
         )
     for event in [
         {
+            "event_type": "public_consultation_opened",
+            "project_id": "plx-999999-2026",
+            "source_family": "consultare_econsultare",
+            "source_url": "https://e-consultare.gov.ro/consultare/999999",
+            "occurred_at": "2026-01-01T10:00:00+00:00",
+            "title": "Consultare publică deschisă",
+            "payload": {"authority": "Ministerul Testării"},
+        },
+        {
             "event_type": "committee_assignment",
             "project_id": "plx-999999-2026",
             "source_family": "camera",
@@ -82,6 +91,15 @@ with TemporaryDirectory(prefix="legislativ-browser-") as directory:
                 "role": "fond",
                 "raw_action": "trimis pentru raport",
             },
+        },
+        {
+            "event_type": "opinion_received",
+            "project_id": "plx-999999-2026",
+            "source_family": "avize",
+            "source_url": "https://www.cdep.ro/pls/proiecte/upl_pck.proiect?idp=999999",
+            "occurred_at": "2026-01-04T10:00:00+00:00",
+            "title": "Aviz primit",
+            "payload": {"issuer": "Consiliul Legislativ", "position": "favorabil"},
         },
         {
             "event_type": "report_filed",
@@ -97,8 +115,30 @@ with TemporaryDirectory(prefix="legislativ-browser-") as directory:
                 "filed_at": "2026-01-05",
             },
         },
+        {
+            "event_type": "vote_recorded",
+            "project_id": "plx-999999-2026",
+            "source_family": "senat",
+            "source_url": "https://www.senat.ro/vot/999999",
+            "occurred_at": "2026-01-06T10:00:00+00:00",
+            "title": "Vot înregistrat",
+            "payload": {"result": "adoptat", "question": "vot final"},
+        },
+        {
+            "event_type": "published_in_monitor",
+            "project_id": "plx-999999-2026",
+            "source_family": "monitorul_oficial_pi",
+            "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/999999",
+            "occurred_at": "2026-01-07T10:00:00+00:00",
+            "title": "Publicat în Monitorul Oficial",
+            "payload": {"part": "I", "number": 7, "date": "2026-01-07"},
+        },
     ]:
         tracker_events.adauga(SimpleNamespace(initiative=root / "initiative.db"), event)
+    lifecycle_watchlist.adauga(
+        SimpleNamespace(initiative=root / "initiative.db"),
+        {"project_id": "plx-999999-2026", "label": "Lege urmărită complet"},
+    )
     serveste(
         5190,
         str(root / "corpus.db"),

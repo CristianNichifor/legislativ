@@ -28,6 +28,8 @@ for (const width of [390, 1440]) {
     await page.locator('#lifecycle-search input[name="q"]').fill('plx-999999-2026');
     await page.locator('#lifecycle-search').evaluate(form => form.requestSubmit());
     await expect(page.locator('#lifecycle-list')).toContainText('plx-999999-2026');
+    await expect(page.locator('#lifecycle-list')).toContainText('Contract traseu urmărit');
+    await expect(page.locator('#lifecycle-list')).toContainText('Monitorul Oficial');
     await page.evaluate(() => {
       window.__workbenchClipboard = '';
       window.__workbenchDownloadFilename = '';
@@ -66,10 +68,11 @@ for (const width of [390, 1440]) {
     await page.locator('#tab-matrice').click();
     await page.locator('[data-lifecycle-timeline]').first().click();
     expect((await trackerResponse).ok()).toBe(true);
-    await expect(page.locator('#tracker-timeline-status')).toContainText('2 din 2 evenimente');
+    await expect(page.locator('#tracker-timeline-status')).toContainText('6 din 6 evenimente');
     await expect(page.locator('#tracker-timeline-list')).toContainText('Raport depus');
     await expect(page.locator('#tracker-timeline-list')).toContainText('Comisie sesizată pentru fond');
     await expect(page.locator('#tracker-timeline-list')).toContainText('Comisia juridică');
+    await expect(page.locator('#tracker-timeline-list')).toContainText('Publicat în Monitorul Oficial');
     await page.locator('#tracker-dossier-id').fill('11111111111111111111111111111111');
     await page.locator('#tracker-project-id').fill('');
     await page.locator('#tracker-timeline-search').evaluate(form => form.requestSubmit());
