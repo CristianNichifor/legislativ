@@ -54,7 +54,9 @@ def test_cleared_review_draft_does_not_block_recalculation():
 def test_saved_finding_review_exposes_manual_note_action():
     source = APP.read_text()
     assert "data-note-from-finding" in source
+    assert "data-note-draft-from-finding" in source
     assert "Creează notă" in source
+    assert "Notă + draft" in source
 
 
 def test_provision_detail_panels_expose_identity_metadata():
@@ -200,7 +202,8 @@ assert.equal(matrix.type,'risc_ue');
 assert.equal(matrix.status,'needs_evidence');
 assert.ok(matrix.evidence_quote.includes('frag'));
 const lacuna=manualNoteFromMatrix('lacuna',{
-  act_id:'lege-1',locator:'art. 2',text:'missing',instrument:'hotărâre'});
+  act_id:'lege-1',locator:'art. 2',text:'missing',instrument:'hotărâre',
+  sursa_url:'https://source.test/lege-1',sha256:'c'.repeat(64)});
 assert.equal(lacuna.type,'lacuna');
 assert.ok(lacuna.reasoning.includes('hotărâre'));
 const values={title:'Titlu',type:'lacuna',act_id:'A',locator:'art1',
@@ -211,6 +214,15 @@ assert.deepEqual(manualNotePayload({},'dossier',null),{
   id:'11111111222243338444555555555555',dosar_id:'dossier',revizie:0,title:'Titlu',
   type:'lacuna',act_id:'A',locator:'art1',evidence_quote:'citat',
   source_url:'https://x.test',source_hash:'b'.repeat(64),reasoning:'motiv',status:'draft'});
+assert.deepEqual(manualNoteAiEvidence({}),{
+  task:'issue_note',title:'Titlu',type:'lacuna',context:'motiv',
+  evidence:[{label:'Titlu',act_id:'A',locator:'art1',source_url:'https://x.test',
+    source_hash:'b'.repeat(64),quote:'citat',language:'RON'}]});
+assert.equal(manualNoteDraftReady(manualNotePayload({},'dossier',null)),true);
+const selected=manualNoteAiEvidence({}).evidence[0];
+assert.equal(selected.quote,'citat');
+assert.equal(selected.source_url,'https://x.test');
+assert.equal(selected.source_hash,'b'.repeat(64));
 values.status='reviewed';
 assert.deepEqual(manualNoteSelfReviewMissing({}),[]);
 values.evidence_quote='';
@@ -220,6 +232,7 @@ values.reasoning='';
 assert.deepEqual(
   manualNoteSelfReviewMissing({}),
   ['citat dovadă','sursă sau SHA-256','raționament']);
+assert.equal(manualNoteDraftReady(manualNotePayload({},'dossier',null)),false);
 """
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)

@@ -4670,7 +4670,7 @@ function reviewFindingHtml(f){
   return `<section class="finding-review" data-finding="${esc(f.id)}"><h4>${esc(title)} · ${esc(REVIEW_STATES[f.stare])}</h4>`
     +`<p class="hint">${esc(f.dovada.tip||f.tip)}${f.dovada.locator?' · '+esc(locRo(f.dovada.locator)):''}</p>`
     +reviewEvidenceHtml(f)
-    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+proposalPrefillHtml(f)+'<div class="dossier-actions"><button type="button" class="ghost mini" data-note-from-finding>Creează notă</button></div></div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
+    +'<div class="finding-authoring"><div>'+findingSourcesHtml(f)+proposalPrefillHtml(f)+'<div class="dossier-actions"><button type="button" class="ghost mini" data-note-from-finding>Creează notă</button><button type="button" class="ghost mini" data-note-draft-from-finding>Notă + draft</button></div></div><details data-proposal><summary>Propunere de modificare</summary><div data-proposal-editor></div></details></div>'
     +`<details><summary>Dovada salvată</summary><pre>${esc(JSON.stringify(f.dovada,null,2))}</pre></details>`
     +legalContextHtml(f)
     +`<form><label>Decizie<select name="stare">${Object.entries(REVIEW_STATES).map(([key,label])=>`<option value="${key}" ${key===f.stare?'selected':''}>${label}</option>`).join('')}</select></label>`
@@ -4702,7 +4702,7 @@ const RULE_QUEUE_BUCKETS={
   all:'Toți candidații',needs_more_structure:'Necesită structurare',needs_legal_review:'Necesită revizie juridică',
   not_codeable:'Nepotrivit pentru codificare',reviewable:'Revizuibil',human_reviewed:'Revizuit uman'
 };
-const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null};
+const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null,draft:null};
 let ruleDraftsSequence=0;
 
 function manualNoteHtml(note,index){
@@ -4714,7 +4714,7 @@ function manualNoteHtml(note,index){
     +(note.source_hash?`<p class="hint">SHA-256 sursă: ${esc(note.source_hash)}</p>`:'')
     +(note.evidence_quote?`<details open><summary>Citat dovadă</summary><pre>${esc(note.evidence_quote)}</pre></details>`:'')
     +(note.reasoning?`<details open><summary>Raționament</summary><pre>${esc(note.reasoning)}</pre></details>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button>${canOpen?'<button type="button" class="ghost mini" data-open-note-source>Deschide prevederea</button>':''}</div><div data-note-source></div></article>`;
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-edit-note>Editează nota</button><button type="button" class="ghost mini" data-note-draft-selected>Draft din dovadă</button>${canOpen?'<button type="button" class="ghost mini" data-open-note-source>Deschide prevederea</button>':''}</div><div data-note-source></div></article>`;
 }
 function manualNoteFormHtml(editing=null){
   const v=(name,fallback='')=>esc(editing?.[name]??fallback);
@@ -4774,6 +4774,17 @@ function manualNoteAiEvidence(form){
       language: 'RON'
     }]
   };
+}
+function manualNoteDraftReady(note){
+  return !!(note&&(note.evidence_quote||'').trim()&&((note.source_url||'').trim()||(note.source_hash||'').trim()));
+}
+async function prepareManualNoteDraft(form,task='issue_note'){
+  const section=form.querySelector('[data-ai-note-draft]');
+  if(!section)return;
+  section.open=true;
+  if(form.elements.ai_task)form.elements.ai_task.value=task;
+  section.scrollIntoView({block:'center'});
+  section.querySelector('[data-ai-draft-note]')?.click();
 }
 function aiDraftBoundaryHtml(plan,boundary){
   if(!plan)return '';
@@ -5211,9 +5222,10 @@ function manualNoteFromRuleCheck(row){
     source_url:first.source_url||evidence.source_url||'',source_hash:row.source_hash||first.source_hash||evidence.source_hash||'',
     reasoning,status:quote?'ready_for_review':'needs_evidence',revizie:0};
 }
-async function startManualNote(prefill){
+async function startManualNote(prefill,options={}){
   if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de a salva nota.';return;}
   MANUAL_NOTES_UI.editing=prefill;
+  MANUAL_NOTES_UI.draft=options.draft?{task:options.task||'issue_note'}:null;
   await loadManualNotes(DOSARE_UI.selected.id,0);
   $('#dossier-notes').scrollIntoView({block:'start'});
   $('#dossier-notes input[name="title"]')?.focus();
@@ -5271,10 +5283,19 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelector('[data-notes-prev]').onclick=()=>loadManualNotes(dossierId,Math.max(0,offset-50));
     host.querySelector('[data-notes-next]').onclick=()=>loadManualNotes(dossierId,offset+50);
     host.querySelectorAll('[data-edit-note]').forEach(button=>button.onclick=()=>{MANUAL_NOTES_UI.editing=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];loadManualNotes(dossierId,offset);});
+    host.querySelectorAll('[data-note-draft-selected]').forEach(button=>button.onclick=()=>{
+      const note=data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)];
+      if(!manualNoteDraftReady(note)){host.querySelector('[data-note-list-status]').textContent='Nota are nevoie de citat și URL sau SHA-256 înainte de draft.';return;}
+      MANUAL_NOTES_UI.editing=note;MANUAL_NOTES_UI.draft={task:'issue_note'};loadManualNotes(dossierId,offset);
+    });
     host.querySelectorAll('[data-open-note-source]').forEach(button=>button.onclick=()=>openManualNoteSource(button,data.note[Number(button.closest('[data-note-index]').dataset.noteIndex)]));
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
     bindManualNoteRuleCandidate(form);
     bindManualNoteAiDraft(form);
+    if(MANUAL_NOTES_UI.draft&&manualNoteDraftReady(MANUAL_NOTES_UI.editing)){
+      const draft=MANUAL_NOTES_UI.draft;MANUAL_NOTES_UI.draft=null;
+      prepareManualNoteDraft(form,draft.task);
+    }
     form.onsubmit=async e=>{
       e.preventDefault();if(!form.reportValidity())return;
       const missing=manualNoteSelfReviewMissing(form);
@@ -5805,6 +5826,8 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
         bindFindingProposal(list.querySelector('[data-proposal]'),panel,active,dossierId,runId,valid,render);
         const noteButton=list.querySelector('[data-note-from-finding]');
         if(noteButton)noteButton.onclick=()=>startManualNote(manualNoteFromFinding(active));
+        const draftButton=list.querySelector('[data-note-draft-from-finding]');
+        if(draftButton)draftButton.onclick=()=>startManualNote(manualNoteFromFinding(active),{draft:true});
       }
       const openChecks=list.querySelector('[data-open-checks]');if(openChecks)openChecks.onclick=()=>{checksPanel.open=true;panel.querySelector('[data-evidence-check]').focus();};
       list.querySelectorAll('[data-current-source]').forEach(b=>b.onclick=async()=>{
@@ -7898,10 +7921,10 @@ function mDrilldownHtml(d){
   if(vid.length||nec.length){
     h+=vid.map((v,i)=>`<div class="matrix-drilldown-item"><b>Lacună</b> · <span class="dom-cheie">${esc(v.act_id||"")}</span> ${esc(locRo(v.locator||""))} `
       +(v.instrument?`· ${esc(v.instrument)} `:"")+mActiuni(v.actiuni)
-      +`<br><span class="hint">${esc(v.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}">Creează notă</button></div></div>`).join("")
+      +`<br><span class="hint">${esc(v.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`).join("")
       +nec.map((n,i)=>`<div class="matrix-drilldown-item"><b>CCR</b> · <span class="dom-cheie">${esc(n.act_id||"")}</span> ${esc(locRo(n.locator||""))} `
       +(n.decizie?`· ${esc(n.decizie)} `:"")+mActiuni(n.actiuni)
-      +`<br><span class="hint">${esc(n.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}">Creează notă</button></div></div>`).join("");
+      +`<br><span class="hint">${esc(n.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`).join("");
   }else h+=`<p class="hint">Nu există exemple de lacune sau CCR pentru rândul curent.</p>`;
   h+=`<div class="parc-h">Proiecte care ating rândul</div>`;
   const projects=drill.proiecte||[];
@@ -7917,7 +7940,7 @@ function mDrilldownHtml(d){
   h+=ue.length?ue.map((ref,i)=>`<div class="matrix-drilldown-item"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
     +`${ref.importat?"text local disponibil":"lipsește din eu.db"} · ${nf(ref.mentionari||0)} menționări`
     +(ref.comanda_import&&!ref.importat?`<br><code>${esc(ref.comanda_import)}</code>`:"")
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}">Creează notă</button></div></div>`).join("")
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`).join("")
     :`<p class="hint">Nu există referințe CELEX explicite în actele listate.</p>`;
   h+=`<div class="parc-h">Surse și domeniu</div>`;
   const sources=drill.surse||[];
@@ -8182,7 +8205,7 @@ function mContradictiiHtml(d,group='contradictii'){
       h+=`<br>${esc(p.text||p.definitie||"")}</p>`;
     }
     h+=(c.verificari||[]).map(v=>`<p class="hint">${esc(v)}</p>`).join("");
-    h+=`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="contradictie" data-matrix-group="${esc(group)}" data-matrix-index="${i}">Creează notă</button></div></div>`;
+    h+=`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="contradictie" data-matrix-group="${esc(group)}" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="contradictie" data-matrix-group="${esc(group)}" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`;
   }
   if(!(d.candidati||[]).length) h+=`<p>Niciun candidat detectat în selecția analizată.</p>`;
   if(d.trunchiat) h+=`<p>Rezultate parțiale: limita de analiză sau afișare a fost atinsă.</p>`;
@@ -8230,7 +8253,7 @@ function mDosarHtml(d){
       +(v.locator?`${esc(locRo(v.locator))} `:"")
       +(v.instrument?`· <b>${esc(v.instrument)}</b> `:"")
       +mActiuni(v.actiuni)
-      +`<br><span class="hint">${esc(v.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}">Creează notă</button></div></div>`).join("");
+      +`<br><span class="hint">${esc(v.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`).join("");
   }
   const nec=ex.neconstitutionale||[];
   if(nec.length){
@@ -8239,7 +8262,7 @@ function mDosarHtml(d){
       +(n.locator?`${esc(locRo(n.locator))} `:"")
       +(n.decizie?`· ${esc(n.decizie)} `:"")
       +mActiuni(n.actiuni)
-      +`<br><span class="hint">${esc(n.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}">Creează notă</button></div></div>`).join("");
+      +`<br><span class="hint">${esc(n.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`).join("");
   }
   if(d.contradictii) h+=mContradictiiHtml(d.contradictii,'contradictii');
   if(d.conflicte_proiecte) h+=mContradictiiHtml(d.conflicte_proiecte,'conflicte_proiecte');
@@ -8252,7 +8275,7 @@ function mDosarHtml(d){
       return `<div class="matrix-ex note"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
         +`${esc(stare)} · ${nf(ref.mentionari||0)} menționări`
         +(ref.comanda_import&&!ref.importat?`<br><code>${esc(ref.comanda_import)}</code>`:"")
-        +exemple+`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}">Creează notă</button></div></div>`;
+        +exemple+`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}">Creează notă</button><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}" data-matrix-draft="1">Notă + draft</button></div></div>`;
     }).join("");
   }else{
     h+=`<span class="hint">Nu există referințe CELEX explicite în actele listate pentru acest dosar.</span>`;
@@ -8268,7 +8291,7 @@ function bindMatrixNoteButtons(host,d){
       :kind==='constitutionalitate'?(d.rand?.exemple?.neconstitutionale||d.exemple?.neconstitutionale||[])[index]
       :kind==='ue'?(d.referinte_ue||[])[index]
       :(button.dataset.matrixGroup==='conflicte_proiecte'?d.conflicte_proiecte?.candidati:d.candidati||d.contradictii?.candidati||[])[index];
-    if(row)startManualNote(manualNoteFromMatrix(kind,row));
+    if(row)startManualNote(manualNoteFromMatrix(kind,row),{draft:button.dataset.matrixDraft==='1'});
   });
 }
 async function mArataDosar(buton){
