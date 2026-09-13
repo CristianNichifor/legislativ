@@ -888,35 +888,16 @@ def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) 
 def _persist_econsultare_tracker_event(
     stare, source_id: str, snapshot: dict, content_hash: str
 ) -> None:
-    summary = snapshot.get("summary") or {}
-    project_id = snapshot.get("url") or source_id
-    deadline = summary.get("deadline") or ""
-    event_type = (
-        "public_consultation_closed"
-        if summary.get("status") == "closed"
-        else "public_consultation_opened"
-    )
-    payload = {
-        "authority": summary.get("authority") or snapshot.get("authority", ""),
-        "deadline": deadline,
-        "project_url": snapshot.get("url", ""),
-        "attachment_hashes": [],
-        "documents": snapshot.get("documents", []),
-        "status": summary.get("status") or snapshot.get("status", "unknown"),
-    }
+    from scripts import achizitii_econsultare
+
     _persist_tracker_event(
         stare,
-        {
-            "event_type": event_type,
-            "project_id": project_id,
-            "source_family": "consultare_econsultare",
-            "source_id": source_id,
-            "source_url": snapshot.get("url", ""),
-            "occurred_at": _tracker_date(deadline),
-            "title": summary.get("title") or snapshot.get("title") or "Consultare publică",
-            "payload": payload,
-            "content_hash": content_hash,
-        },
+        achizitii_econsultare.tracker_event_candidate(
+            snapshot,
+            source_id=source_id,
+            content_hash=content_hash,
+            observed_at=now(),
+        ),
     )
 
 

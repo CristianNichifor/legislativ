@@ -7,6 +7,7 @@ import json
 import re
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit, urlunsplit
@@ -17,6 +18,7 @@ PARSER_VERSION = "achizitii_econsultare.v1"
 MAX_BYTES = 2 * 1024 * 1024
 HOSTS = {"e-consultare.gov.ro", "www.e-consultare.gov.ro"}
 DATE = re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b")
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def url_oficial(url: str) -> str:
@@ -170,6 +172,71 @@ def snapshot_hash(snapshot: dict) -> str:
     return hashlib.sha256(
         json.dumps(relevant, ensure_ascii=False, sort_keys=True).encode()
     ).hexdigest()
+
+
+def _tracker_date(value: str | None, *, fallback: str | None = None) -> str:
+    value = (value or "").strip()
+    if not value:
+        return fallback or datetime.now(UTC).isoformat()
+    if DATE.fullmatch(value):
+        day, month, year = re.split(r"[./-]", value)
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}T00:00:00+00:00"
+    if ISO_DATE.fullmatch(value):
+        return value + "T00:00:00+00:00"
+    return value
+
+
+def _attachment_hashes(documents: list[dict]) -> list[str]:
+    hashes: list[str] = []
+    for document in documents:
+        value = document.get("content_hash") or document.get("hash") or document.get("sha256") or ""
+        if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value):
+            hashes.append(value)
+    return hashes[:100]
+
+
+def tracker_event_candidate(
+    snapshot: dict,
+    *,
+    source_id: str = "",
+    content_hash: str = "",
+    observed_at: str | None = None,
+) -> dict:
+    """Return an add-ready tracker event candidate for one e-consultare snapshot."""
+    summary = snapshot.get("summary") or {}
+    status = str(summary.get("status") or snapshot.get("status") or "unknown").strip().lower()
+    documents = snapshot.get("documents") if isinstance(snapshot.get("documents"), list) else []
+    url = snapshot.get("url") or ""
+    title = summary.get("title") or snapshot.get("title") or "Consultare publică"
+    authority = summary.get("authority") or snapshot.get("authority", "")
+    deadline = summary.get("deadline") or snapshot.get("deadline", "")
+    fallback_date = observed_at or datetime.now(UTC).isoformat()
+    event_type = (
+        "public_consultation_closed" if status == "closed" else "public_consultation_opened"
+    )
+    payload = {
+        "authority": authority,
+        "project_url": url,
+        "status": status or "unknown",
+    }
+    if event_type == "public_consultation_closed":
+        payload["closed_at"] = _tracker_date(deadline, fallback=fallback_date)
+    else:
+        payload["deadline"] = _tracker_date(deadline, fallback=fallback_date) if deadline else ""
+        payload["attachment_hashes"] = _attachment_hashes(documents)
+        payload["documents"] = documents[:100]
+    return {
+        "event_type": event_type,
+        "project_id": url or source_id,
+        "source_family": "consultare_econsultare",
+        "source_id": source_id,
+        "source_url": url,
+        "occurred_at": _tracker_date(deadline, fallback=fallback_date),
+        "observed_at": observed_at or "",
+        "title": title,
+        "payload": {key: value for key, value in payload.items() if value not in (None, "")},
+        "content_hash": content_hash,
+    }
 
 
 def sincronizeaza(url: str) -> dict:
