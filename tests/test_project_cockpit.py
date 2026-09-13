@@ -94,6 +94,8 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     assert out["lifecycle"]["project"]["project_id"] == "PL-x 10/2026"
     assert out["tracker"]["total"] == 1
     assert out["tracker"]["unreviewed"] == 1
+    assert out["tracker"]["by_stage"]["report"]["count"] == 1
+    assert out["tracker"]["latest_event"]["event_type"] == "report_filed"
     assert out["source_attention"]["needs_attention"] is True
     assert out["source_attention"]["registry_source_state"] == "changed"
     assert out["evidence_pack"]["notes"] == 1

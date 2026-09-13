@@ -114,6 +114,16 @@ def test_tracker_events_carry_unified_lifecycle_metadata(tmp_path):
     assert by_type["vote_recorded"]["stage_key"] == "adopted"
     assert by_type["promulgated"]["stage_label"] == "Promulgat"
     assert by_type["published_in_monitor"]["stage_order"] > by_type["vote_recorded"]["stage_order"]
+    assert out["summary"]["total"] == 4
+    assert out["summary"]["unreviewed"] == 4
+    assert out["summary"]["by_type"]["vote_recorded"] == 1
+    assert out["summary"]["by_stage"]["adopted"]["count"] == 1
+    assert out["summary"]["by_stage"]["published"]["label"] == "Publicat"
+    assert (
+        out["summary"]["by_stage"]["published"]["order"]
+        > out["summary"]["by_stage"]["adopted"]["order"]
+    )
+    assert out["summary"]["latest_event"]["event_type"] == "published_in_monitor"
 
 
 def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
