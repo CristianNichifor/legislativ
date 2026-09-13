@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Real reviewable finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "id",
+    "domain",
+    "issue_type",
+    "title",
+    "status",
+    "reviewer",
+    "finding",
+    "related_sources",
+    "proposal",
+    "limitations"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "contract": {"const": "real-reviewable-finding-v1"},
+    "id": {"type": "string", "pattern": "^[a-z0-9-]+$"},
+    "domain": {"type": "string", "minLength": 1},
+    "issue_type": {"enum": ["lacuna", "contradictie", "constitutionalitate", "risc_ue"]},
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["draft", "ready_for_review", "reviewed"]},
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "reviewed_at", "note"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "reviewed_at": {"type": "string", "minLength": 1},
+        "note": {"type": "string", "minLength": 1}
+      }
+    },
+    "finding": {"$ref": "#/$defs/evidence"},
+    "related_sources": {"type": "array", "items": {"$ref": "#/$defs/evidence"}},
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "wording", "rationale"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1},
+        "wording": {"type": "string", "minLength": 1},
+        "rationale": {"type": "string", "minLength": 1}
+      }
+    },
+    "limitations": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["act_id", "locator", "quote", "source_url", "source_path", "source_sha256"],
+      "properties": {
+        "kind": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+        "act_id": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "quote": {"type": "string", "minLength": 1},
+        "source_url": {"type": "string", "minLength": 1},
+        "source_path": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "reasoning": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
