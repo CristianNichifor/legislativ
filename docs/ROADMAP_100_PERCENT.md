@@ -21,6 +21,12 @@ The app should always distinguish:
 - what was drafted or summarized by AI;
 - what was accepted by a human reviewer.
 
+The concrete v1 acceptance scope is intentionally smaller than the full roadmap:
+[`V1_SCOPE_AND_ACCEPTANCE_DATASET.md`](V1_SCOPE_AND_ACCEPTANCE_DATASET.md)
+defines a tiny checked-in manifest with Romanian law fixtures plus project,
+consultation and CELEX placeholders. It proves the app can run against curated
+sample data without requiring a multi-GB public release.
+
 ## Current baseline
 
 The current v1 foundation already has local-first dossiers, structured proposals,

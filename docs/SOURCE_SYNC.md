@@ -5,6 +5,12 @@ not introduce a backend scheduler, bulk imports, public data releases or AI
 analysis. The first product goal is smaller: add or select one public source,
 sync only that source, and show exactly what happened.
 
+The v1 acceptance dataset baseline is even narrower: it is a checked-in manifest
+of local fixtures and placeholders, documented in
+[`V1_SCOPE_AND_ACCEPTANCE_DATASET.md`](V1_SCOPE_AND_ACCEPTANCE_DATASET.md). It
+validates sample coverage and missing-source visibility without invoking source
+sync, a crawler or release packaging.
+
 The broader source portfolio, Monitorul Oficial ingestion policy, R2 storage
 bands and legislative tracker event vocabulary are defined in
 [`SOURCE_PORTFOLIO.md`](SOURCE_PORTFOLIO.md).

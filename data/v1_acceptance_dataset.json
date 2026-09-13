@@ -1,0 +1,135 @@
+{
+  "$schema": "../schema/v1_acceptance_dataset.schema.json",
+  "contract": "v1-acceptance-dataset-manifest-v1",
+  "status": "baseline",
+  "version": "2026-09-13",
+  "scope": {
+    "label": "Curated Romanian/EU legislative drafting smoke dataset",
+    "includes": [
+      "two checked-in Romanian law snapshots already used by the v1 pilot",
+      "bounded Parliament project placeholders for Camera and Senat lifecycle screens",
+      "bounded consultation placeholders for E-Consultare and one ministry page",
+      "CELEX identifiers cited by the procurement fixture, with text intentionally absent"
+    ],
+    "excludes": [
+      "multi-GB public dataset releases",
+      "portal-wide crawls or full Monitorul Oficial mirrors",
+      "legal accuracy, recall or precision adjudication",
+      "automatic AI legal conclusions"
+    ],
+    "max_checked_in_payload_bytes": 1048576,
+    "large_release_required": false
+  },
+  "items": [
+    {
+      "id": "v1-law-lege-98-2016",
+      "source_family": "portal_legislativ",
+      "record_type": "law",
+      "mode": "local_fixture",
+      "identifier": "lege-98-2016",
+      "title": "Legea nr. 98/2016 privind achizitiile publice",
+      "official_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+      "local_path": "sources/lege-98-2016.html.gz",
+      "sha256": "9e96ff1c5b0d427376e352d5149174b6e7b51072edc4708343d6fc5713703762",
+      "v1_role": "primary_law_text",
+      "acceptance_status": "available"
+    },
+    {
+      "id": "v1-law-lege-208-2022",
+      "source_family": "portal_legislativ",
+      "record_type": "law",
+      "mode": "local_fixture",
+      "identifier": "lege-208-2022",
+      "title": "Legea nr. 208/2022 fixture snapshot",
+      "official_url": null,
+      "local_path": "sources/lege-208-2022.html.gz",
+      "sha256": "ff7c9e953e5a0eae09c7321bc51ed5e8e762372e4cff230717f0c6179767793e",
+      "v1_role": "secondary_law_text",
+      "acceptance_status": "available"
+    },
+    {
+      "id": "v1-project-camera-procurement",
+      "source_family": "camera",
+      "record_type": "project",
+      "mode": "placeholder",
+      "identifier": "PL-x acceptance-procurement-001",
+      "title": "Camera Deputatilor project lifecycle placeholder for procurement amendments",
+      "official_url": null,
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "project_lifecycle",
+      "acceptance_status": "placeholder"
+    },
+    {
+      "id": "v1-project-senat-procurement",
+      "source_family": "senat",
+      "record_type": "project",
+      "mode": "placeholder",
+      "identifier": "L acceptance-procurement-001",
+      "title": "Senat project lifecycle placeholder for procurement amendments",
+      "official_url": null,
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "project_lifecycle",
+      "acceptance_status": "placeholder"
+    },
+    {
+      "id": "v1-consultare-econsultare-procurement",
+      "source_family": "econsultare",
+      "record_type": "consultation",
+      "mode": "placeholder",
+      "identifier": "econsultare acceptance-procurement-001",
+      "title": "E-Consultare public consultation placeholder for procurement draft",
+      "official_url": null,
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "public_consultation",
+      "acceptance_status": "placeholder"
+    },
+    {
+      "id": "v1-consultare-minister-procurement",
+      "source_family": "ministry_consultation",
+      "record_type": "consultation",
+      "mode": "placeholder",
+      "identifier": "minister acceptance-procurement-001",
+      "title": "Ministry consultation placeholder for a draft normative act",
+      "official_url": null,
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "public_consultation",
+      "acceptance_status": "placeholder"
+    },
+    {
+      "id": "v1-celex-32014l0024",
+      "source_family": "eu_cellar",
+      "record_type": "celex",
+      "mode": "placeholder",
+      "identifier": "32014L0024",
+      "title": "Directive 2014/24/EU CELEX placeholder cited by the procurement fixture",
+      "official_url": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32014L0024",
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "eu_reference",
+      "acceptance_status": "text_missing"
+    },
+    {
+      "id": "v1-celex-32004l0018",
+      "source_family": "eu_cellar",
+      "record_type": "celex",
+      "mode": "placeholder",
+      "identifier": "32004L0018",
+      "title": "Directive 2004/18/EC CELEX placeholder cited by the procurement fixture",
+      "official_url": "https://eur-lex.europa.eu/legal-content/RO/TXT/?uri=CELEX:32004L0018",
+      "local_path": null,
+      "sha256": null,
+      "v1_role": "eu_reference",
+      "acceptance_status": "text_missing"
+    }
+  ],
+  "acceptance_checks": [
+    "validate manifest schema and duplicate identifiers",
+    "verify local fixture paths, hashes and checked-in byte cap",
+    "prove Romanian law, project, consultation and CELEX rows are represented",
+    "prove large release artifacts are explicitly out of scope"
+  ]
+}
