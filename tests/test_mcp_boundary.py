@@ -40,19 +40,22 @@ def valid_request(**patch):
     return request
 
 
-def test_capabilities_describe_non_executing_contract():
+def test_capabilities_describe_local_mock_executor_contract():
     result = mcp_boundary.capabilities()
 
     assert result["contract"] == "mcp-boundary-v1"
     assert {item["key"] for item in result["capabilities"]} >= {"ai_draft", "github_issue"}
-    assert result["execution"]["implemented"] is False
+    assert result["execution"]["implemented"] is True
+    assert result["execution"]["executor_contract"] == "mcp-executor-boundary-v1"
+    assert result["execution"]["supported_executor"] == "local-mock/ai.draft"
+    assert result["execution"]["external_calls"] is False
     assert result["execution"]["cost_owner"] == "user_account_or_user_key"
     assert result["execution"]["credentials_stored"] is False
     assert result["execution"]["hidden_external_calls"] is False
     assert result["limits"]["max_data_chars"] == mcp_boundary.MAX_TEXT
     assert result["limits"]["max_preview_chars"] == mcp_boundary.MAX_PREVIEW
     assert any("chei API" in item for item in result["private_data_excluded"])
-    assert any("nu execută" in item for item in result["limitari"])
+    assert any("local-mock" in item for item in result["limitari"])
 
 
 def test_preview_requires_explicit_payload_and_never_marks_approved():
