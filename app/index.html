@@ -6696,7 +6696,7 @@ function lifecycleRowHtml(project,index=0){
   const affectedText=affected?`<p class="hint">${affected} dosar${affected===1?'':'e'} afectat${affected===1?'':'e'} de această sursă.</p>`:'';
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-cockpit="${index}">Cockpit</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-draft="${index}">Draft</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button><button type="button" class="ghost mini" data-lifecycle-watch-dossier="${index}">Urmărește în dosar</button><button type="button" class="ghost mini" data-lifecycle-cockpit="${index}">Cockpit</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-draft="${index}">Draft</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -6730,6 +6730,34 @@ function lifecyclePrefillDossier(project){
   if(!form.elements.domeniu.value)form.elements.domeniu.value='legislație urmărită';
   $('#dossier-status').textContent='Creează sau alege un dosar, apoi revino la alertă pentru a salva nota.';
   form.elements.titlu.focus();
+}
+function projectDossierWatchPayload(project={}){
+  const projectId=String(project.project_id||'').trim();
+  return {
+    tip:'project',
+    valoare:projectId,
+    eticheta:[projectId,project.title||project.status||''].filter(Boolean).join(' · ').slice(0,300)
+  };
+}
+async function addProjectToDossierWatchlist(project={},statusEl=null){
+  const projectId=String(project.project_id||'').trim();
+  const dossierId=String(project.dossier_id||DOSARE_UI.selected?.id||'').trim();
+  if(!projectId){if(statusEl)statusEl.textContent='Proiect fără identificator pentru watchlist.';return false;}
+  if(!dossierId){
+    lifecyclePrefillDossier(project);
+    if(statusEl)statusEl.textContent='Alege sau creează un dosar înainte de a urmări proiectul în watchlist.';
+    return false;
+  }
+  if(statusEl)statusEl.textContent='Adaug proiectul în watchlist-ul dosarului…';
+  await dossierApi('/api/dosare/watchlist',{
+    action:'add',
+    id:crypto.randomUUID().replaceAll('-',''),
+    dosar_id:dossierId,
+    ...projectDossierWatchPayload(project)
+  });
+  if(DOSARE_UI.selected?.id===dossierId)await loadDossierWatchlist(dossierId,0);
+  if(statusEl)statusEl.textContent=`Proiectul ${projectId} este urmărit în dosarul curent.`;
+  return true;
 }
 function lifecycleSourceReviewHtml(project){
   if(!project)return '';
@@ -6842,6 +6870,13 @@ function renderLifecycleList(){
       projectWatchToggle(projects[Number(button.dataset.lifecycleWatch)]?.project_id);
       renderLifecycleList();updateLifecycleStatus();
     };
+  });
+  list.querySelectorAll('[data-lifecycle-watch-dossier]').forEach(button=>button.onclick=async()=>{
+    const project=projects[Number(button.dataset.lifecycleWatchDossier)];
+    button.disabled=true;
+    try{await addProjectToDossierWatchlist(project,$('#lifecycle-status'));}
+    catch(err){$('#lifecycle-status').textContent=err.message;}
+    finally{button.disabled=false;}
   });
   list.querySelectorAll('[data-lifecycle-open]').forEach(button=>{
     button.onclick=()=>openAcquisitionProject(projects[Number(button.dataset.lifecycleOpen)]?.project_id);
@@ -7103,7 +7138,7 @@ function projectCockpitHtml(data){
     +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
     +`<h5>Următoarele acțiuni</h5>${projectCockpitActionsHtml(data.next_actions||[])}`
     +(data.limitari?.length?`<h5>Limitări</h5><ul>${data.limitari.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-writing>Redactare</button><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-writing>Redactare</button><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-watch-dossier>Urmărește în dosar</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;
 }
 async function openProjectCockpit(project={}){
   const panel=$('#project-cockpit'), form=$('#project-cockpit-search'), status=$('#project-cockpit-status'), body=$('#project-cockpit-body');
@@ -7128,6 +7163,13 @@ async function openProjectCockpit(project={}){
     if(workbench)workbench.onclick=()=>openProjectWorkbench(projectData);
     const timeline=body.querySelector('[data-cockpit-open-timeline]');
     if(timeline)timeline.onclick=()=>openTrackerTimeline({project_id:projectId,dossier_id:dossierId});
+    const watchDossier=body.querySelector('[data-cockpit-watch-dossier]');
+    if(watchDossier)watchDossier.onclick=async()=>{
+      watchDossier.disabled=true;
+      try{await addProjectToDossierWatchlist({...projectData,project_id:projectId,dossier_id:dossierId},status);}
+      catch(err){status.textContent=err.message;}
+      finally{watchDossier.disabled=false;}
+    };
     const dossier=body.querySelector('[data-cockpit-create-dossier]');
     if(dossier)dossier.onclick=()=>lifecyclePrefillDossier(projectData);
     const refresh=body.querySelector('[data-cockpit-refresh]');
