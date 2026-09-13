@@ -251,7 +251,13 @@ const note={id:'abc',title:'<script>',type:'contradictie',status:'ready_for_revi
 const h=manualNoteHtml(note,0);
 assert.ok(h.includes('Contradicție')&&h.includes('Gata pentru auto-revizie'));
 assert.ok(h.includes('SHA-256 sursă')&&h.includes('Citat dovadă'));
+assert.ok(h.includes('data-copy-note-export')&&h.includes('data-download-note-export'));
 assert.ok(!/<(script|img|svg|b|i)>/.test(h));
+const euNote={...note,type:'risc_ue',
+  export_markdown:'# Conflict posibil\n\n> citat exact\n\nNu este verdict juridic.\n'};
+assert.equal(manualNoteExportMarkdown(euNote),euNote.export_markdown);
+assert.ok(manualNoteHtml(euNote,1).includes('Exportă nota UE'));
+assert.equal(manualNoteFilename({title:'Notă UE / Art. 1'}),'nota-ue-art.-1.md');
 const formHtml=manualNoteFormHtml(note);
 assert.ok(formHtml.includes('Editezi nota')&&!formHtml.includes('<script>'));
 const prefill=manualNoteFromFinding({tip:'contradictie',dovada:{
@@ -773,10 +779,17 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         + "const pack={project_id:'PL-x-1',source_status:'current',"
         "summary:{events:2,notes:2},next_actions:['revizuire'],"
         "events:[{occurred_at:'2026-09-12',event_type:'vote',title:'Vot <bad>',"
-        "display_label:'Vot'}],dossier_notes:[{type:'lacuna',title:'Lipsă <script>',"
+        "display_label:'Vot'}],dossier_notes:[{type:'risc_ue',title:'Risc UE',"
+        "status:'ready_for_review',export_markdown:'# Conflict posibil\\n\\n> citat exact UE"
+        "\\n\\nNu este verdict juridic.'},"
+        "{type:'lacuna',title:'Lipsă <script>',"
         "status:'ready_for_review',act_id:'lege',locator:'art1',"
         "reasoning:'Norma lipsește'},{type:'contradictie',title:'Conflict',"
         "status:'draft',reasoning:'Texte incompatibile'}],limitari:['nu verdict']};"
+        "const markdown=projectWorkbenchMarkdown({project_id:'PL-x-1'},pack);"
+        "assert.ok(markdown.includes('# Conflict posibil'));"
+        "assert.ok(markdown.includes('citat exact UE'));"
+        "assert.ok(markdown.includes('Nu este verdict juridic.'));"
         "const context=writingWorkspaceContextHtml(pack);"
         "assert.ok(context.includes('Contexte gap'));"
         "assert.ok(context.includes('Lacună'));"
