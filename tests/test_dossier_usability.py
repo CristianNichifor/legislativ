@@ -177,6 +177,15 @@ def test_archived_dossier_rejects_new_runs_until_restored(state, monkeypatch):
     assert dosare.rulari(path, ID)["total"] == 1
 
 
+def test_dossier_selection_mounts_legislative_writing_workspace():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert 'id="dossier-writing"' in html
+    assert "bindWritingWorkspace(meta)" in html
+    assert "$('#dossier-writing').innerHTML=''" in html
+    assert "projectEvidencePackApi(projectId,dossier.id)" in html
+    assert "'/api/dosare/rule-drafts/execute-draft'" in html
+
+
 def test_recovery_library_paginates_without_loading_private_content(state):
     path = dosare.cale(state)
     create(state)

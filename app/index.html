@@ -366,6 +366,12 @@
   [data-check-history] .dossier-actions{display:grid;grid-template-columns:40px 40px minmax(0,1fr);max-width:420px}
   [data-check-history] label{grid-column:1/-1}
   #dossier-run-select{font-family:var(--sans);font-size:.8rem}
+  .leg-writing{border-top:1px solid var(--rule);padding:.7rem 0;margin:.6rem 0;overflow-wrap:anywhere}
+  .leg-writing-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(220px,.8fr);gap:.8rem;align-items:start}
+  .leg-writing textarea{min-height:10rem;resize:vertical}
+  .leg-writing-context{border-left:3px solid var(--note);padding-left:.65rem;min-width:0}
+  .leg-writing-context pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:18rem;overflow:auto}
+  @media(max-width:820px){.leg-writing-grid{grid-template-columns:minmax(0,1fr)}}
   .finding-review{border-top:1px solid var(--rule);padding:.7rem 0}
   .finding-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.75rem}
   .eu-snapshots{border-top:1px solid var(--rule);padding:.7rem 0;overflow-wrap:anywhere}
@@ -1473,7 +1479,7 @@
               <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
               <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
-            <div id="dossier-meta"></div><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-rules"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
+            <div id="dossier-meta"></div><section id="dossier-writing"></section><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-rules"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
         </details>
         <p class="hint" style="margin:.2rem 0 .8rem">
@@ -5876,7 +5882,7 @@ async function loadFindingReviews(panel,dossierId,runId,token,checkId=null){
 async function selectDossier(id,runId,checkId=null,findingId=null){
   if(!dossierMayNavigate()) return;
   const token=++DOSARE_UI.sequence;
-  DOSARE_UI.selected=null;DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;$('#dossier-meta').innerHTML='';$('#dossier-watchlist').innerHTML='';$('#dossier-rules').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
+  DOSARE_UI.selected=null;DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;$('#dossier-meta').innerHTML='';$('#dossier-writing').innerHTML='';$('#dossier-watchlist').innerHTML='';$('#dossier-rules').innerHTML='';$('#dossier-runs').innerHTML='';$('#dossier-saved').innerHTML='';
   $('#dossier-notes').textContent='';++MANUAL_NOTES_UI.sequence;MANUAL_NOTES_UI.editing=null;
   $('#dossier-proposals').textContent='';++proposalListSequence;++ruleDraftsSequence;
   if(!id){$('#dossier-status').textContent='Niciun dosar selectat.';return;}
@@ -5884,6 +5890,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     const meta=await dossierApi('/api/dosare/metadate?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
+    bindWritingWorkspace(meta);
     loadDossierWatchlist(id);
     loadManualNotes(id);
     loadRuleDrafts(id);
@@ -7083,6 +7090,61 @@ function projectWorkbenchMarkdown(project,pack){
   lines.push('', '## Limitări');
   lines.push(...((pack.limitari||[]).map(item=>`- ${item}`) || []));
   return lines.join('\n').trim()+'\n';
+}
+function writingWorkspaceContextHtml(pack=null){
+  if(!pack)return '<p class="hint">Încarcă un proiect ca să vezi pachetul de dovezi, notele și evenimentele lângă text.</p>';
+  const notes=pack.dossier_notes||[];
+  const gaps=notes.filter(note=>['lacuna','contradictie','necorelare','risc_ue','constitutionalitate'].includes(note.type));
+  const events=pack.events||[];
+  return `<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Evenimente<br><b>${esc(pack.summary?.events||0)}</b></button><button type="button" class="ghost mini" disabled>Note<br><b>${esc(pack.summary?.notes||0)}</b></button><button type="button" class="ghost mini" disabled>Contexte gap<br><b>${esc(gaps.length)}</b></button></div>`
+    +`<p class="hint">${esc(pack.source_status||'stare sursă necunoscută')} · context de lucru, nu este verdict juridic.</p>`
+    +(gaps.length?`<h5>Lacune / contradicții / riscuri</h5>${gaps.slice(0,8).map(note=>`<article class="manual-note"><h5>${esc(MANUAL_NOTE_TYPES[note.type]||note.type)} · ${esc(note.title||'notă')}</h5><p class="hint">${esc(note.status||'')} · ${esc(note.act_id||'')} ${esc(note.locator||'')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('')}`:'<p>Nicio notă de lacună/contradicție legată de acest proiect.</p>')
+    +(events.length?`<details><summary>Evenimente tracker</summary>${projectWorkbenchEventsHtml(events.slice(0,8))}</details>`:'');
+}
+function writingWorkspaceHtml(dossier){
+  return `<details class="leg-writing" open><summary>Spațiu de redactare legislativă</summary>`
+    +'<p class="hint">Lucrează cu textul proiectului, pachetul de dovezi și verificări deterministe în același loc. Rezultatele sunt semnale de lucru, nu verdict juridic.</p>'
+    +`<form data-writing-project-form class="dossier-actions"><label>Project ID<input name="project_id" maxlength="200" value="${esc(dossier.project_id||'')}"></label><button type="submit" class="ghost mini">Încarcă context proiect</button><button type="button" class="ghost mini" data-writing-open-workbench>Workbench</button><p class="hint" role="status" data-writing-status></p></form>`
+    +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
+}
+function bindWritingWorkspace(dossier){
+  const host=$('#dossier-writing');
+  if(!host)return;
+  host.innerHTML=writingWorkspaceHtml(dossier);
+  const form=host.querySelector('[data-writing-project-form]'),status=host.querySelector('[data-writing-status]');
+  const draftBox=host.querySelector('[data-writing-draft]'),notesBox=host.querySelector('[data-writing-notes]');
+  const context=host.querySelector('[data-writing-context]'),ruleOut=host.querySelector('[data-writing-rule-output]');
+  const insert=host.querySelector('[data-writing-insert-evidence]'),copy=host.querySelector('[data-writing-copy-evidence]');
+  let project={project_id:form.elements.project_id.value,title:dossier.titlu||''},pack=null,markdown='';
+  const setPack=next=>{
+    pack=next;markdown=pack?projectWorkbenchMarkdown(project,pack):'';
+    context.innerHTML=writingWorkspaceContextHtml(pack);
+    insert.disabled=copy.disabled=!pack;
+  };
+  const loadPack=async()=>{
+    const projectId=form.elements.project_id.value.trim();
+    if(!projectId){status.textContent='Completează Project ID pentru pachetul de dovezi.';return;}
+    project={project_id:projectId,title:dossier.titlu||''};
+    status.textContent='Încarc pachetul de dovezi…';
+    try{setPack(await projectEvidencePackApi(projectId,dossier.id));status.textContent=`Context încărcat: ${pack.summary?.events||0} evenimente, ${pack.summary?.notes||0} note.`;}
+    catch(err){setPack(null);status.textContent=err.message;}
+  };
+  form.onsubmit=e=>{e.preventDefault();loadPack();};
+  host.querySelector('[data-writing-open-workbench]').onclick=()=>openProjectWorkbench(project);
+  host.querySelector('[data-writing-from-draft]').onclick=()=>{draftBox.value=$('#draft')?.value||'';status.textContent='Textul din fila Verifică a fost adus în spațiul de redactare.';};
+  host.querySelector('[data-writing-to-draft]').onclick=()=>{const draft=$('#draft');if(draft){draft.value=draftBox.value;draft.dispatchEvent(new Event('input',{bubbles:true}));selectTab('lint');status.textContent='Textul a fost trimis în Verifică.';}};
+  insert.onclick=()=>{notesBox.value=(notesBox.value?notesBox.value.trim()+'\n\n':'')+markdown;status.textContent='Pachetul Markdown a fost adăugat în notele de lucru.';};
+  copy.onclick=async()=>{try{await navigator.clipboard.writeText(markdown);status.textContent='Pachetul Markdown a fost copiat.';}catch{status.textContent='Copierea pachetului nu a reușit.';}};
+  host.querySelector('[data-writing-run-rules]').onclick=async()=>{
+    if(!draftBox.value.trim()){status.textContent='Adaugă text de proiect înainte de verificare.';return;}
+    status.textContent='Rulez regulile deterministe pe text…';
+    try{
+      const result=await dossierApi('/api/dosare/rule-drafts/execute-draft',{id:dossier.id,act:'',text:draftBox.value,limit:50});
+      ruleOut.innerHTML=ruleDraftTextExecutionHtml(result);
+      status.textContent=`Verificare terminată: ${result.possible_matches||0} potriviri posibile, ${result.partial_matches||0} parțiale.`;
+    }catch(err){status.textContent=err.message;}
+  };
+  if(form.elements.project_id.value)loadPack();
 }
 function projectWorkbenchFilename(pack){
   return 'pachet-dovezi-'+String(pack.project_id||'proiect').toLowerCase()

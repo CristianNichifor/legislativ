@@ -504,6 +504,51 @@ def test_rule_drafts_panel_renders_queue_and_promoted_rules():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_legislative_writing_workspace_renders_context_and_actions():
+    source = (
+        APP.read_text()
+        .split("function projectWorkbenchMarkdown", 1)[1]
+        .split("function projectWorkbenchFilename", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;')"
+        ".replaceAll('\"','&quot;');"
+        "const dossierTime=s=>s||'';"
+        "const MANUAL_NOTE_TYPES={lacuna:'Lacună',contradictie:'Contradicție',"
+        "necorelare:'Necorelare',risc_ue:'Risc UE',constitutionalitate:'CCR'};"
+        "const projectWorkbenchEventsHtml=events=>events.map(e=>"
+        "'<p>'+esc(e.title)+'</p>').join('');"
+        "const ruleDraftTextExecutionHtml=()=>'<p>rule draft placeholder</p>';"
+        "function projectWorkbenchMarkdown"
+        + source
+        + "const pack={project_id:'PL-x-1',source_status:'current',"
+        "summary:{events:2,notes:2},next_actions:['revizuire'],"
+        "events:[{occurred_at:'2026-09-12',event_type:'vote',title:'Vot <bad>',"
+        "display_label:'Vot'}],dossier_notes:[{type:'lacuna',title:'Lipsă <script>',"
+        "status:'ready_for_review',act_id:'lege',locator:'art1',"
+        "reasoning:'Norma lipsește'},{type:'contradictie',title:'Conflict',"
+        "status:'draft',reasoning:'Texte incompatibile'}],limitari:['nu verdict']};"
+        "const context=writingWorkspaceContextHtml(pack);"
+        "assert.ok(context.includes('Contexte gap'));"
+        "assert.ok(context.includes('Lacună'));"
+        "assert.ok(context.includes('Contradicție'));"
+        "assert.ok(context.includes('nu este verdict juridic'));"
+        "assert.ok(!context.includes('<script>')&&!context.includes('<bad>'));"
+        "const html=writingWorkspaceHtml({id:'d1',titlu:'Dosar <x>',project_id:'PL-x-1'});"
+        "assert.ok(html.includes('data-writing-project-form'));"
+        "assert.ok(html.includes('data-writing-draft'));"
+        "assert.ok(html.includes('data-writing-notes'));"
+        "assert.ok(html.includes('data-writing-insert-evidence'));"
+        "assert.ok(html.includes('data-writing-run-rules'));"
+        "assert.ok(html.includes('Trimite în Verifică'));"
+        "assert.ok(!html.includes('<x>'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_rule_check_candidate_prefills_manual_note():
     source = (
         APP.read_text()
