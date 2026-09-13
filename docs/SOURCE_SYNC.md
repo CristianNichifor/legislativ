@@ -104,6 +104,16 @@ text. If the metadata is enough to identify a consultation or received opinion,
 the sync stores a tracker event candidate and returns `tracker_sync.stored` plus
 `tracker_sync.event_types`; otherwise the row remains visible as `needs_review`.
 
+For `ue_cellar`, one-source CELEX import prefers official Romanian text (`RON`)
+and falls back to official English text (`ENG`) only as an explicit fallback
+state. Import responses expose `language_state` and `language_note` so callers
+can distinguish `official_ro`, `official_en_fallback`, `text_unavailable` and
+`language_unavailable`. Metadata-only or language-unavailable outcomes stay
+visible as source states (`needs_review` or `unavailable`); they are not legal
+conclusions about applicability, transposition, current force or compatibility.
+The retained text is also split into bounded provision summaries (recitals,
+articles and annexes) for citation selection without classifying legal duties.
+
 The registry hash for a project ficha is computed from the official ficha URL,
 document links and truncation flag. Local retained-version history is exposed in
 snapshot summaries but is excluded from that hash, so importing a document does

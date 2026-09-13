@@ -15,6 +15,7 @@ IMPORT_LOCK = threading.Lock()
 MAX_PARTS = 10
 PAGE_SIZE = 20
 ARTICLE_PAGE_SIZE = 80
+PROVISION_PAGE_SIZE = 120
 LANGUAGE_LABELS = {
     "RON": "romana oficiala",
     "ENG": "engleza oficiala, fallback explicit cand textul romanesc compatibil lipseste",
@@ -26,6 +27,22 @@ CREATE TABLE IF NOT EXISTS eu_achizitii (
  stare TEXT NOT NULL, eroare TEXT
 )
 """
+
+LANGUAGE_NOTES = {
+    "official_ro": "Text oficial romanesc selectat din Cellar.",
+    "official_en_fallback": (
+        "Text oficial englez selectat doar ca fallback explicit; lipsa textului romanesc "
+        "compatibil nu este concluzie juridica."
+    ),
+    "text_unavailable": (
+        "Metadate Cellar disponibile, dar fara stream text RON/ENG compatibil; nu este "
+        "concluzie juridica."
+    ),
+    "language_unavailable": (
+        "Cellar nu a returnat manifestari pentru limbile cerute; sursa ramane indisponibila "
+        "pentru aceasta incercare si nu este concluzie juridica."
+    ),
+}
 
 
 def celex_valid(value):
@@ -71,12 +88,52 @@ def _article_summary(snapshot):
     }
 
 
+def _provision_summary(snapshot):
+    if snapshot.get("stare") != "capturat":
+        return {"total": 0, "randuri": [], "trunchiat": False}
+    source = snapshot.get("sursa") or {}
+    try:
+        blocks = cellar.provizii_din_text(source["celex"], source["text"], source["limba"])
+    except (KeyError, TypeError, ValueError):
+        return {"total": 0, "randuri": [], "trunchiat": False, "stare": "indisponibil"}
+    return {
+        "total": len(blocks),
+        "randuri": [
+            {
+                "locator": b.locator,
+                "fel": b.fel,
+                "titlu": b.titlu,
+                "limba": b.limba,
+                "ord": b.ord,
+                "sha256": hashlib.sha256(b.text.encode()).hexdigest(),
+            }
+            for b in blocks[:PROVISION_PAGE_SIZE]
+        ],
+        "trunchiat": len(blocks) > PROVISION_PAGE_SIZE,
+    }
+
+
 def _language_contract(language, preference=cellar.LIMBI_IMPLICITE):
+    fallback = bool(language and preference and language != preference[0])
+    state = "official_en_fallback" if fallback else "official_ro" if language == "RON" else ""
     return {
         "preferinta": list(preference),
         "aleasa": language or None,
         "eticheta": LANGUAGE_LABELS.get(language or "", "limba necunoscuta"),
-        "fallback": bool(language and preference and language != preference[0]),
+        "fallback": fallback,
+        "stare": state,
+        "nota": LANGUAGE_NOTES.get(state, ""),
+    }
+
+
+def _missing_language_contract(state, preference=cellar.LIMBI_IMPLICITE):
+    return {
+        "preferinta": list(preference),
+        "aleasa": None,
+        "eticheta": "limba indisponibila",
+        "fallback": False,
+        "stare": state,
+        "nota": LANGUAGE_NOTES[state],
     }
 
 
@@ -85,6 +142,7 @@ def _summary(snapshot):
         **snapshot,
         "sursa": {k: v for k, v in snapshot.get("sursa", {}).items() if k != "text"},
         "articole": _article_summary(snapshot),
+        "provizii": _provision_summary(snapshot),
     }
     source = snapshot.get("sursa") or {}
     out["limba_import"] = _language_contract(source.get("limba"))
@@ -171,6 +229,8 @@ def detaliu(stare, celex, *, offset=0, snapshot_id=None):
         if "eu_achizitii" in tables:
             attempt = con.execute("SELECT * FROM eu_achizitii WHERE celex=?", (celex,)).fetchone()
             out["incercare"] = dict(attempt) if attempt else None
+            if attempt and out["stare"] == "neimportat" and attempt["stare"] == "indisponibil":
+                out["stare"] = "indisponibil"
         if "eu_instantanee" in tables:
             rows = con.execute(
                 "SELECT id,json_extract(snapshot_json,'$.sursa.limba') AS limba, "
@@ -213,6 +273,8 @@ def _contract_payload(result, *, identifier, limbi):
         "selected_language": result.get("limba"),
         "selected_language_label": result.get("limba_import", {}).get("eticheta", ""),
         "language_fallback": result.get("limba_import", {}).get("fallback", False),
+        "language_state": result.get("limba_import", {}).get("stare", ""),
+        "language_note": result.get("limba_import", {}).get("nota", ""),
         "source_hash": source_hash,
         "snapshot": {
             "id": snapshot_id,
@@ -237,7 +299,20 @@ def importa(stare, request):
 def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
     try:
         transport = TransportCellar()
-        manifestations = cellar.manifestari_celex(celex, limbi=limbi, opener=transport, timeout=15)
+        try:
+            manifestations = cellar.manifestari_celex(
+                celex, limbi=limbi, opener=transport, timeout=15
+            )
+        except cellar.CelexNegasit:
+            with cellar.deschide(stare.eu) as con:
+                _attempt(con, celex, "indisponibil", LANGUAGE_NOTES["language_unavailable"])
+            return {
+                "celex": celex,
+                "stare": "indisponibil",
+                "schimbat": False,
+                "limba_import": _missing_language_contract("language_unavailable", limbi),
+                "nota": LANGUAGE_NOTES["language_unavailable"],
+            }
         if len(manifestations) > 500:
             raise ValueError("Prea multe manifestari.")
         for m in manifestations:
@@ -255,7 +330,8 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
                 "celex": celex,
                 "stare": "metadate",
                 "schimbat": False,
-                "limba_import": _language_contract(None, limbi),
+                "limba_import": _missing_language_contract("text_unavailable", limbi),
+                "nota": LANGUAGE_NOTES["text_unavailable"],
             }
         parts = cellar._parti_manifestare(chosen, manifestations)
         if len(parts) > MAX_PARTS or any(p.limba != chosen.limba for p in parts):
@@ -305,6 +381,8 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
             "instantanee": current.get("id"),
             "text_sha256": current.get("sursa", {}).get("text_sha256"),
             "articole": _article_summary(current),
+            "provizii": _provision_summary(current),
+            "nota": _language_contract(chosen.limba, limbi).get("nota", ""),
             "schimbat": changed,
         }
     except (

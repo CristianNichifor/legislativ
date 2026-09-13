@@ -85,6 +85,8 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
         "aleasa": "RON",
         "eticheta": "romana oficiala",
         "fallback": False,
+        "stare": "official_ro",
+        "nota": "Text oficial romanesc selectat din Cellar.",
     }
     assert first["contract"] == "celex-on-demand-source-v1"
     assert first["source_identifier"] == CELEX
@@ -92,6 +94,8 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     assert first["selected_language"] == "RON"
     assert first["selected_language_label"] == "romana oficiala"
     assert first["language_fallback"] is False
+    assert first["language_state"] == "official_ro"
+    assert first["language_note"] == "Text oficial romanesc selectat din Cellar."
     assert first["instantanee"] and len(first["text_sha256"]) == 64
     assert first["source_hash"] == first["text_sha256"]
     assert first["snapshot"] == {
@@ -102,12 +106,15 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     assert first["articole"]["total"] == 1
     assert first["articole"]["randuri"][0]["locator"] == "art1"
     assert len(first["articole"]["randuri"][0]["sha256"]) == 64
+    assert first["provizii"]["total"] == 1
+    assert first["provizii"]["randuri"][0]["fel"] == "articol"
     detail = au.detaliu(state, CELEX)
     snapshot_id = detail["curenta"]["id"]
     assert detail["incercare"]["stare"] == "ok"
     assert "text" not in detail["curenta"]["sursa"]
     assert detail["curenta"]["limba_import"]["aleasa"] == "RON"
     assert detail["curenta"]["articole"]["total"] == 1
+    assert detail["curenta"]["provizii"]["randuri"][0]["locator"] == "art1"
     assert "achizitii" in au.detaliu(state, CELEX, snapshot_id=snapshot_id)["sursa"]["text"]
     second = au.importa(state, {"celex": CELEX})
     assert not second["schimbat"]
@@ -124,6 +131,8 @@ def test_english_fallback_and_later_romanian_preserve_history(fixture):
     assert first["limba_import"]["fallback"] is True
     assert first["selected_language"] == "ENG"
     assert first["language_fallback"] is True
+    assert first["language_state"] == "official_en_fallback"
+    assert "nu este concluzie juridica" in first["language_note"]
     assert "fallback explicit" in first["selected_language_label"]
     old = au.detaliu(state, CELEX)["curenta"]["id"]
     source["manifestations"] = [binding()]
@@ -163,6 +172,8 @@ def test_metadata_only_import_has_contract_without_snapshot(fixture):
 
     assert result["contract"] == "celex-on-demand-source-v1"
     assert result["stare"] == "metadate"
+    assert result["language_state"] == "text_unavailable"
+    assert "nu este concluzie juridica" in result["language_note"]
     assert result["source_hash"] == ""
     assert result["snapshot"] is None
 
@@ -401,6 +412,50 @@ def test_part_limit_malformed_response_and_unknown_charset(fixture, monkeypatch)
     with pytest.raises(ValueError):
         au.importa(state, {"celex": CELEX})
     assert au.detaliu(state, CELEX)["incercare"]["stare"] == "eroare"
+
+
+def test_missing_requested_celex_languages_are_unavailable_not_verdict(fixture):
+    state, source = fixture
+    source["manifestations"] = [binding("FRA")]
+
+    result = au.importa(state, {"celex": CELEX})
+
+    assert result["contract"] == "celex-on-demand-source-v1"
+    assert result["stare"] == "indisponibil"
+    assert result["language_state"] == "language_unavailable"
+    assert result["language_fallback"] is False
+    assert "nu este concluzie juridica" in result["language_note"]
+    detail = au.detaliu(state, CELEX)
+    assert detail["stare"] == "indisponibil"
+    assert detail["incercare"]["stare"] == "indisponibil"
+    assert detail["curenta"]["articole"]["total"] == 0
+    assert detail["curenta"]["provizii"]["total"] == 0
+
+
+def test_detail_exposes_provision_boundaries_beyond_articles(fixture):
+    state, source = fixture
+    source["text"] = (
+        b"<html><body>"
+        b"<p>(1)</p><p>Considerent oficial de test.</p>"
+        b"<p>Articolul 1</p><p>Obligatii</p><p>Text oficial de test pentru achizitii.</p>"
+        b"<p>ANEXA I</p><p>Model oficial.</p>"
+        b"</body></html>"
+    )
+
+    au.importa(state, {"celex": CELEX})
+    detail = au.detaliu(state, CELEX)["curenta"]
+
+    assert [p["fel"] for p in detail["provizii"]["randuri"]] == [
+        "considerent",
+        "articol",
+        "anexa",
+    ]
+    assert [p["locator"] for p in detail["provizii"]["randuri"]] == [
+        "considerent-1",
+        "art1",
+        "anexa-i",
+    ]
+    assert detail["articole"]["total"] == 1
 
 
 def test_nonidentity_encoding_rejected(fixture, monkeypatch):

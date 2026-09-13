@@ -203,9 +203,11 @@ def test_registry_sync_records_unchanged_metadata_and_failures(monkeypatch, tmp_
     unchanged = registry.executa(stare, {"family": "ue_cellar", "identifier": "32014L0024"})
     metadata = registry.executa(stare, {"family": "ue_cellar", "identifier": "32018R1805"})
     failure = registry.executa(stare, {"family": "ue_cellar", "identifier": "32016R0679"})
+    unavailable = registry.executa(stare, {"family": "ue_cellar", "identifier": "32019R0001"})
     registry.executa(stare, {"action": "queue", "id": unchanged["id"]})
     registry.executa(stare, {"action": "queue", "id": metadata["id"]})
     registry.executa(stare, {"action": "queue", "id": failure["id"]})
+    registry.executa(stare, {"action": "queue", "id": unavailable["id"]})
 
     def import_celex(state, request):
         if request["celex"] == "32014L0024":
@@ -213,6 +215,13 @@ def test_registry_sync_records_unchanged_metadata_and_failures(monkeypatch, tmp_
             return {"celex": request["celex"], "stare": "ok", "limba": "RON", "schimbat": False}
         if request["celex"] == "32018R1805":
             return {"celex": request["celex"], "stare": "metadate", "schimbat": False}
+        if request["celex"] == "32019R0001":
+            return {
+                "celex": request["celex"],
+                "stare": "indisponibil",
+                "schimbat": False,
+                "nota": "Cellar nu a returnat manifestari pentru limbile cerute.",
+            }
         raise ValueError("Preluarea UE a esuat sau sursa depaseste limitele disponibile.")
 
     monkeypatch.setattr("scripts.achizitii_ue.importa", import_celex)
@@ -221,6 +230,15 @@ def test_registry_sync_records_unchanged_metadata_and_failures(monkeypatch, tmp_
     metadata_result = registry.executa(stare, {"action": "sync", "id": metadata["id"]})
     assert unchanged_result["state"] == "unchanged"
     assert metadata_result["state"] == "needs_review"
+    unavailable_result = registry.executa(stare, {"action": "sync", "id": unavailable["id"]})
+    assert unavailable_result["state"] == "unavailable"
+    assert unavailable_result["last_error"] == "language_unavailable"
+    with registry._open(registry.cale(stare)) as con:
+        note = con.execute(
+            "SELECT note FROM source_attempts WHERE source_id=? AND state='unavailable'",
+            (unavailable["id"],),
+        ).fetchone()["note"]
+    assert "limbile cerute" in note
     failed = registry.executa(stare, {"action": "sync", "id": failure["id"]})
     assert failed["state"] == "failed"
     assert failed["last_error"] == "fetch_failed"
