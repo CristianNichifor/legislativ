@@ -385,6 +385,8 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         "assert.ok(h.includes('Urmărește'));"
         "assert.ok(h.includes('Workbench'));"
         "assert.ok(h.includes('data-lifecycle-workbench=\"0\"'));"
+        "assert.ok(h.includes('Draft'));"
+        "assert.ok(h.includes('data-lifecycle-draft=\"0\"'));"
         "assert.ok(h.includes('Pregătește dosar'));"
         "assert.ok(h.includes('data-lifecycle-dossier=\"0\"'));"
         "assert.ok(h.includes('data-lifecycle-open=\"0\"'));"
