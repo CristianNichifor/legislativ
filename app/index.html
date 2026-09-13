@@ -4980,6 +4980,24 @@ function aiDraftExecutionRequest(plan,boundary){
     non_verdict_notice:'Ciornă de lucru; nu verdict juridic.'
   };
 }
+async function aiStoreEvidenceDraft(plan,boundary,resultText=''){
+  if(!DOSARE_UI.selected?.id)throw new Error('Alege un dosar înainte de rularea asistentului AI.');
+  const draft=plan.draft_request;
+  if(!draft)throw new Error('Cererea de ciornă nu mai este disponibilă. Pregătește promptul din nou.');
+  const settings=aiSettings();
+  const provider=boundary==='online_byok'
+    ?[settings.online_byok?.provider_label,settings.online_byok?.model].filter(Boolean).join(' / ')
+    :'deterministic-local-mock';
+  return dossierApi('/api/dosare/ai-workflow',{
+    id:crypto.randomUUID().replaceAll('-',''),
+    dosar_id:DOSARE_UI.selected.id,
+    boundary,
+    draft,
+    provider,
+    approved:true,
+    result_text:resultText
+  });
+}
 const AI_BYOK_FAILURES={timeout:['timeout',1,'Furnizorul nu a răspuns la timp.'],bad_key:['cheie invalidă',0,'Cheia BYOK a fost respinsă.'],quota:['cotă/rate limit',1,'Cotă sau rate limit.'],refusal:['refuz/siguranță',0,'Furnizorul a refuzat generarea.'],malformed_response:['răspuns invalid',0,'Răspuns fără text utilizabil.'],provider_unavailable:['indisponibil',1,'Furnizor sau rețea indisponibilă.']};
 function aiByokFailureCode(error,response){
   if(response?.refusal||response?.safety_refusal)return 'refusal';
@@ -5028,11 +5046,25 @@ async function aiRunEvidenceDraft(plan,boundary,prog){
   if(!plan)throw new Error('Pregătește promptul înainte de rulare.');
   const mode=aiMode();
   if(boundary==='mcp_handoff')throw new Error('Pentru MCP folosește previzualizarea și copierea payloadului MCP.');
-  if(boundary==='local_ai'&&mode!=='local')throw new Error('Limită aleasă: AI local. Comută setările AI pe local înainte de rulare.');
   if(boundary==='online_byok'&&mode!=='online')throw new Error('Limită aleasă: online BYOK. Comută setările AI pe online și introdu cheia în sesiune.');
   const approvalPacket=aiExternalApproval(plan,boundary);
   if(!confirmAiExternalApproval(approvalPacket))throw new Error('Anulat — promptul nu a fost trimis.');
   const request=aiDraftExecutionRequest(plan,boundary);
+  if(boundary==='local_ai'){
+    if(prog)prog({text:'generez ciorna locală deterministă…'});
+    const stored=await aiStoreEvidenceDraft(plan,boundary,'');
+    return {
+      contract:'ai-byok-execution-result-v1',
+      request,
+      text:stored.draft_text,
+      nota:'local deterministic mock',
+      status:stored.output_status,
+      insert_allowed:stored.insert_allowed,
+      claim_support:stored.claim_support,
+      insert_header:stored.insert_header,
+      audit:stored
+    };
+  }
   let answer;
   try{answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog});}
   catch(err){return aiByokFailureResult(plan,boundary,request,err,null);}
@@ -5041,24 +5073,17 @@ async function aiRunEvidenceDraft(plan,boundary,prog){
   }
   const text=String(answer?.text||'').trim();
   if(!text)return aiByokFailureResult(plan,boundary,request,null,answer||{});
+  const stored=await aiStoreEvidenceDraft(plan,boundary,text);
   return {
     contract:'ai-byok-execution-result-v1',
     request,
-    text,
+    text:stored.draft_text,
     nota:answer?.nota||request.provider_label,
-    status:'draft_unreviewed',
-    insert_header:`[Ciornă AI · ${answer?.nota||request.provider_label} · ${plan.contract} · ${plan.input_sha256}]`,
-    audit:{
-      contract:'ai-draft-execution-audit-v1',
-      event:'ai_draft_executed_in_browser',
-      boundary,
-      input_sha256:plan.input_sha256,
-      evidence_sha256:plan.evidence_sha256,
-      approved_external_send:boundary==='online_byok',
-      server_calls_model:false,
-      stores_api_key:false,
-      output_status:'draft_unreviewed'
-    }
+    status:stored.output_status,
+    insert_allowed:stored.insert_allowed,
+    claim_support:stored.claim_support,
+    insert_header:stored.insert_header,
+    audit:stored
   };
 }
 function ruleCandidateOptions(items,current=''){
@@ -5154,7 +5179,9 @@ function bindManualNoteAiDraft(form){
   run.onclick=async()=>{
     draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';summary.innerHTML='';
     try{
-      plan=await dossierApi('/api/dosare/ai-draft',manualNoteAiEvidence(form));
+      const draftPayload=manualNoteAiEvidence(form);
+      plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
+      plan.draft_request=draftPayload;
       const boundary=form.elements.ai_boundary.value;
       const total=plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens;
       summary.innerHTML=aiDraftBoundaryHtml(plan,boundary);
@@ -5171,7 +5198,10 @@ function bindManualNoteAiDraft(form){
     try{
       const executed=await aiRunEvidenceDraft(plan,boundary,p=>{status.textContent=p?.text||'Rulează AI…';});
       draft=`${executed.insert_header}\nAudit: ${executed.audit.contract} · ${executed.audit.boundary} · server_calls_model=false · status=${executed.status}\n\n${executed.text}`;
-      result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
+      const unsupported=executed.claim_support?.unsupported_claims||0;
+      result.textContent=draft+(unsupported?`\n\nAfirmații nesusținute etichetate: ${unsupported}. Inserare permisă: ${executed.insert_allowed?'da':'nu'}.`: '');
+      insert.disabled=executed.insert_allowed===false;
+      status.textContent=executed.insert_allowed===false?'Ciorna este blocată: are citări în afara dovezilor selectate.':'Ciornă generată și audit salvat. Verifică înainte de inserare.';
     }catch(err){status.textContent=err.message;}
     finally{send.disabled=false;}
   };

@@ -80,6 +80,7 @@ def public_contract(kind, raw, channel, allow_loopback=False):
 
 def route(stare, route, qs, body, method="GET"):
     from scripts import (
+        ai_workflow,
         analize_propuneri,
         coada_ue,
         dependente_dovezi,
@@ -117,6 +118,7 @@ def route(stare, route, qs, body, method="GET"):
             "/watchlist": lambda: watchlist_dosare.executa(path, body),
             "/ai-draft/mcp-preview": lambda: mcp_ai_draft.preview(body),
             "/ai-draft/mcp-execute": lambda: mcp_executor.execute(path, body),
+            "/ai-workflow": lambda: ai_workflow.execute(path, body),
             "/rule-candidates/preview": lambda: rule_candidates.validate(body),
             "/propuneri": lambda: propuneri.salveaza(path, body, stare),
             "/propuneri/previzualizare": lambda: propuneri.previzualizeaza(stare, body),
