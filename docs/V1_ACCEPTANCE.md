@@ -62,6 +62,19 @@ next real-data pilot. Validate it with:
 uv run python -m scripts.real_pilot_pack
 ```
 
+The Parliament-project ingredient is backed by
+`data/parliament_project_snapshots.json` and the recorded CDEP Fișa fixture for
+`plx-33-2025`. Validate that one bounded snapshot with:
+
+```bash
+uv run python -m scripts.parliament_project_snapshot
+```
+
+That validator checks the CDEP URL/id, recorded byte hash, procedure date, stage
+text, Senate counterpart id and parsed procedure-row counts offline. It can seed a
+local initiative database through `seed_state()` for registry/tracker tests, but it
+does not crawl Camera/Senat and it does not assert freshness.
+
 The pack deliberately avoids crawling, rebuilding a multi-GB release, or using
 synthetic bridge findings. It answers one narrower question before running
 `acceptare_date_reale`: do we have the minimum real ingredients for a release
@@ -76,7 +89,8 @@ Required ingredients:
   with explicit language state;
 - one reviewer-approved finding with quoted provisions and proposed wording.
 
-The current pack is blocked by the last four ingredients. Once those are added,
+The current pack is blocked by public consultation, official CELEX text and a
+reviewer-approved finding. Once those are added,
 run the recorded command with `--require-reviewable-finding --require-eu-text`
 so the v2 acceptance gates fail closed instead of staying as advisory
 `attention` items.
