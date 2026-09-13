@@ -38,6 +38,7 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
     assert camera["attention"] == 1
     assert out["missing_required"] >= 1
     assert out["attention_sources"] == 1
+    assert out["unsynced_required"] == 0
     assert out["projects"]["total"] == 1
     assert out["projects"]["unknown"] == 1
     assert out["projects"]["stale"] == 1
@@ -55,8 +56,24 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
     assert families["monitorul_oficial_local"]["tier"] == "deferred"
     assert families["camera"]["coverage_status"] == "attention"
     assert families["camera"]["tracked_sources"] == 1
-    assert out["portfolio"]["storage_estimates"]["serious"]["gb_max"] == 630
+    assert out["portfolio"]["storage_estimates"]["serious"]["gb_max"] == 665
     assert out["status"] == "blocked"
+
+
+def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
+    stare = state(tmp_path)
+    boot = source_registry.executa(stare, {"action": "bootstrap"})
+
+    out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
+
+    assert boot["created"] == 12
+    assert out["missing_required"] == 0
+    assert out["unsynced_required"] == len(acoperire_surse.REQUIRED_FAMILIES)
+    assert out["unsynced_sources"] == len(acoperire_surse.REQUIRED_FAMILIES)
+    assert out["attention_sources"] == 0
+    assert out["status"] == "blocked"
+    assert {row["status"] for row in out["families"] if row["required"]} == {"unsynced"}
+    assert {blocker["kind"] for blocker in out["blockers"]} == {"source_unsynced"}
 
 
 def test_source_coverage_handles_missing_stores_and_validates_stale_days(tmp_path):

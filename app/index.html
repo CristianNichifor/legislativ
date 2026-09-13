@@ -1426,7 +1426,7 @@
               <button type="submit" class="ghost mini">Adaugă sursa</button>
             </form>
             <p class="hint">Pentru E-Consultare alege familia „Consultări publice · e-consultare”, lipește URL-ul oficial sau identificatorul public, apoi folosește „Sincronizează sursa” pentru o singură pagină.</p>
-            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
+            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-bootstrap">Adaugă sursele oficiale de bază</button><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
             <div id="source-registry-detail"></div>
@@ -6795,6 +6795,16 @@ async function loadSourceRegistry(offset=0,notice=''){
 $('#source-registry').ontoggle=()=>{if($('#source-registry').open) loadSourceRegistry(0);};
 $('#source-registry-refresh').onclick=()=>loadSourceRegistry(SOURCE_REGISTRY.offset);
 $('#source-registry-state').onchange=()=>loadSourceRegistry(0);
+$('#source-registry-bootstrap').onclick=async()=>{
+  const button=$('#source-registry-bootstrap'),status=$('#source-registry-status');
+  button.disabled=true;status.textContent='Adaug sursele oficiale de bază în registru…';
+  try{
+    const data=await sourceRegistryApi({action:'bootstrap'});
+    await loadSourceRegistry(0,`Surse oficiale de bază: ${data.created||0} adăugate, ${data.updated||0} actualizate. Următorul pas: sync pe surse punctuale.`);
+    await loadSourceCoverage();
+  }catch(err){status.textContent=err.message;}
+  finally{button.disabled=false;}
+};
 $('#source-registry-prev').onclick=()=>loadSourceRegistry(Math.max(0,SOURCE_REGISTRY.offset-50));
 $('#source-registry-next').onclick=()=>loadSourceRegistry(SOURCE_REGISTRY.offset+50);
 $('#source-registry-add').onsubmit=async e=>{
@@ -6806,9 +6816,9 @@ $('#source-registry-add').onsubmit=async e=>{
 };
 function sourceCoverageFamilyHtml(row){
   const states=Object.entries(row.states||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără surse';
-  const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':'Acoperită';
+  const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':row.status==='unsynced'?'Nesincronizată':'Acoperită';
   const duty=row.required?'sursă necesară':'sursă opțională';
-  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${esc(duty)} · ${row.total} surse · ${row.attention} cu atenție</p><p class="hint">${esc(states)}</p></article>`;
+  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${esc(duty)} · ${row.total} surse · ${row.attention} cu atenție · ${row.incomplete||0} fără sync final</p><p class="hint">${esc(states)}</p></article>`;
 }
 const SOURCE_PORTFOLIO_TIERS={required:'Necesar acum',planned:'Planificat',deferred:'Amânat / opt-in'};
 const SOURCE_PORTFOLIO_POLICIES={
@@ -6853,6 +6863,7 @@ function sourcePortfolioHtml(data){
 function sourceCoverageActionHtml(data){
   const actions=[];
   if(data.missing_required) actions.push('Adaugă sau sincronizează sursele necesare lipsă înainte să tratezi analiza ca acoperită.');
+  if(data.unsynced_required) actions.push('Sincronizează sursele oficiale de bază sau înlocuiește ancorele cu surse punctuale verificabile.');
   if(data.attention_sources) actions.push('Deschide registrul surselor și inspectează rândurile schimbate/eșuate/limitate.');
   if(data.projects?.stale) actions.push('Reîncarcă proiectele parlamentare vechi sau notează explicit că sursa nu este disponibilă.');
   if(data.projects?.unknown) actions.push('Mapează etapele necunoscute înainte de rapoarte despre parcurs legislativ.');
@@ -6885,7 +6896,7 @@ function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
   const stages=Object.entries(data.projects?.stages||{}).map(([,v])=>`<li>${esc(v.label)}: ${v.total}</li>`).join('');
   return `<div class="coverage-grid">${(data.families||[]).map(sourceCoverageFamilyHtml).join('')}</div>`
-    +`<p><strong>${esc(data.status==='ok'?'Acoperire operațională':'Acoperire incompletă')}</strong> · ${data.missing_required||0} familii lipsă · ${data.attention_sources||0} surse cu atenție · ${data.projects?.total||0} proiecte urmărite în registrul local.</p>`
+    +`<p><strong>${esc(data.status==='ok'?'Acoperire operațională':'Acoperire incompletă')}</strong> · ${data.missing_required||0} familii lipsă · ${data.unsynced_required||0} familii nesincronizate · ${data.attention_sources||0} surse cu atenție · ${data.projects?.total||0} proiecte urmărite în registrul local.</p>`
     +sourceCoverageActionHtml(data)
     +(blockers?`<details open><summary>Blocaje pentru analiză fiabilă</summary><ul>${blockers}</ul></details>`:'')
     +(stages?`<details><summary>Etape proiecte parlamentare</summary><ul>${stages}</ul><p class="hint">${data.projects.stale||0} vechi · ${data.projects.unknown||0} necunoscute · ${data.projects.unavailable||0} indisponibile</p></details>`:'')

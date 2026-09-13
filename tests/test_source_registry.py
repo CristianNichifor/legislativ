@@ -148,6 +148,28 @@ def test_registry_names_precise_public_source_families():
     assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
 
 
+def test_registry_bootstraps_required_official_source_anchors(tmp_path):
+    stare = state(tmp_path)
+
+    out = registry.executa(stare, {"action": "bootstrap"})
+    again = registry.executa(stare, {"action": "bootstrap"})
+
+    assert out["contract"] == "source-bootstrap-v1"
+    assert out["created"] == 12
+    assert again["created"] == 0
+    assert again["updated"] == 12
+    listed = registry.lista(stare)
+    by_family = {row["family"]: row for row in listed["sources"]}
+    assert len(by_family) == 12
+    assert by_family["legislatie_ro"]["url"] == "https://legislatie.just.ro/"
+    assert by_family["consultare_econsultare"]["url"].startswith("https://e-consultare.gov.ro/")
+    assert by_family["ue_cellar"]["url"].startswith("https://op.europa.eu/")
+    assert by_family["camera"]["sync_status"]["can_sync"] is False
+
+    with pytest.raises(ValueError, match="Ancora de familie"):
+        registry.executa(stare, {"action": "sync", "id": by_family["camera"]["id"]})
+
+
 def test_registry_rejects_invalid_sources_and_transitions(tmp_path):
     stare = state(tmp_path)
     with pytest.raises(ValueError, match="Familie"):

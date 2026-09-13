@@ -44,6 +44,81 @@ MANUAL_METADATA_FAMILIES = frozenset({"consultare_minister", "avize"})
 SYNC_FAMILIES = (
     PROJECT_FAMILIES | MANUAL_METADATA_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
 )
+BOOTSTRAP_ANCHOR_PREFIX = "family:"
+BOOTSTRAP_SOURCES = (
+    {
+        "family": "legislatie_ro",
+        "identifier": "family:legislatie_ro",
+        "url": "https://legislatie.just.ro/",
+        "label": "Portal Legislativ - legislatie consolidata",
+    },
+    {
+        "family": "parlament",
+        "identifier": "family:parlament",
+        "url": "https://www.parlament.ro/",
+        "label": "Parlamentul Romaniei - punct de intrare bicameral",
+    },
+    {
+        "family": "camera",
+        "identifier": "family:camera",
+        "url": "https://www.cdep.ro/pls/proiecte/upl_pck2015.proiect",
+        "label": "Camera Deputatilor - proiecte legislative PL-x",
+    },
+    {
+        "family": "senat",
+        "identifier": "family:senat",
+        "url": "https://www.senat.ro/legis/lista.aspx",
+        "label": "Senat - proiecte legislative",
+    },
+    {
+        "family": "consultare_guvern",
+        "identifier": "family:consultare_guvern",
+        "url": "https://sgg.gov.ro/1/transparenta-decizionala/",
+        "label": "Guvern - transparenta decizionala",
+    },
+    {
+        "family": "consultare_econsultare",
+        "identifier": "family:consultare_econsultare",
+        "url": "https://e-consultare.gov.ro/Consultare-public%C4%83",
+        "label": "e-consultare - consultari publice",
+    },
+    {
+        "family": "consultare_minister",
+        "identifier": "family:consultare_minister",
+        "url": "https://www.gov.ro/ro/transparenta-decizionala",
+        "label": "Ministere - transparenta decizionala",
+    },
+    {
+        "family": "monitorul_oficial",
+        "identifier": "family:monitorul_oficial",
+        "url": "https://monitoruloficial.ro/",
+        "label": "Monitorul Oficial - portal principal",
+    },
+    {
+        "family": "monitorul_oficial_pi",
+        "identifier": "family:monitorul_oficial_pi",
+        "url": "https://monitoruloficial.ro/",
+        "label": "Monitorul Oficial Partea I",
+    },
+    {
+        "family": "ccr",
+        "identifier": "family:ccr",
+        "url": "https://www.ccr.ro/",
+        "label": "Curtea Constitutionala - decizii",
+    },
+    {
+        "family": "avize",
+        "identifier": "family:avize",
+        "url": "https://www.clr.ro/",
+        "label": "Consiliul Legislativ si avize institutionale",
+    },
+    {
+        "family": "ue_cellar",
+        "identifier": "family:ue_cellar",
+        "url": "https://op.europa.eu/en/web/cellar/cellar-data/metadata/knowledge-graph",
+        "label": "EU Cellar knowledge graph / EUR-Lex",
+    },
+)
 
 
 def cale(stare) -> Path:
@@ -168,7 +243,8 @@ def init(con: sqlite3.Connection) -> None:
 
 def _sync_status(row: dict) -> dict:
     state = normalize_state(row["state"])
-    can_sync = row["family"] in SYNC_FAMILIES
+    is_anchor = str(row.get("identifier", "")).startswith(BOOTSTRAP_ANCHOR_PREFIX)
+    can_sync = row["family"] in SYNC_FAMILIES and not is_anchor
     can_queue = state != "queued" and can_sync and can_transition(state, "queued")
     can_review = state in {"changed", "needs_review"}
     severity = {
@@ -603,6 +679,21 @@ def descopera(stare, data: dict) -> dict:
         )
         con.commit()
         return _row(con.execute("SELECT * FROM source_registry WHERE id=?", (ident,)).fetchone())
+
+
+def bootstrap(stare) -> dict:
+    """Register the required official source-family anchors without fetching network data."""
+    before = {row["id"] for row in lista(stare)["sources"]}
+    sources = [descopera(stare, item) for item in BOOTSTRAP_SOURCES]
+    created = sum(1 for row in sources if row["id"] not in before)
+    return {
+        "contract": "source-bootstrap-v1",
+        "created": created,
+        "updated": len(sources) - created,
+        "total": len(sources),
+        "sources": sources,
+        "next_action": "Sincronizeaza sursele punctuale; ancorele doar declara familiile oficiale.",
+    }
 
 
 def pune_in_coada(stare, source_id: str) -> dict:
@@ -1413,6 +1504,10 @@ def executa(stare, data: dict) -> dict:
         )
     if action == "sync":
         row = _source(stare, data.get("id", ""))
+        if str(row.get("identifier", "")).startswith(BOOTSTRAP_ANCHOR_PREFIX):
+            raise ValueError(
+                "Ancora de familie nu se sincronizeaza direct; adauga o sursa punctuala."
+            )
         if row["family"] == "consultare_econsultare":
             return _with_impact(stare, sincronizeaza_econsultare(stare, row["id"]))
         if row["family"] == "ue_cellar":
@@ -1424,4 +1519,6 @@ def executa(stare, data: dict) -> dict:
                 stare, sincronizeaza_manual_metadata(stare, row["id"], data.get("metadata"))
             )
         raise ValueError("Familia de surse nu are sincronizare directă.")
+    if action == "bootstrap":
+        return bootstrap(stare)
     raise ValueError("Acțiune registru necunoscută.")

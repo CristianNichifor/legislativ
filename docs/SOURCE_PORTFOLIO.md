@@ -17,16 +17,19 @@ require any dataset release.
 | Priority | Source family | Why it matters | First usable slice |
 | --- | --- | --- | --- |
 | 1 | Portal Legislativ | Published and consolidated Romanian law text. | Act text, Monitorul Oficial reference and consolidation metadata. |
-| 2 | Camera Deputaților | PL-x lifecycle, committees, reports, agendas and votes. | Project ficha, committee/report links, agenda and vote events. |
-| 3 | Senat | L/B/BP lifecycle, consultation list, committees and opinions. | Project list/detail, consultation deadline and status events. |
-| 4 | E-Consultare | Draft normative acts before or outside Parliament. | Consultation id, authority, deadline, attachments and state. |
-| 5 | Ministry consultation pages | Draft acts that are not reliably mirrored elsewhere. | One ministry adapter at a time, with public-deadline parsing. |
-| 6 | EU Cellar / EUR-Lex | Official EU text and metadata for compatibility and transposition checks. | CELEX referenced by dossiers or Romanian acts; Romanian first, English fallback. |
-| 7 | CCR | Constitutional risk and invalidated provisions. | Decision metadata, operative part, affected provisions. |
-| 8 | Institutional opinions / avize | Required opinions and objections. | Issuer, positive/negative/observations, document hash. |
-| 9 | Monitorul Oficial Partea I | Official publication proof for normative acts. | Part I index, text extraction, law-publication links. |
-| 10 | Monitorul Oficial Parts II-VII | Announcements and non-core material. | Metadata and user-requested/domain-triggered documents only. |
-| 11 | Monitorul Oficial Local | Local acts, HCL, dispositions, local regulations and urbanism. | MDLPA/UAT registry, per-UAT source state, opt-in local packs. |
+| 2 | Parlamentul Romaniei | Bicameral project entrypoint and cross-chamber reconciliation. | Shared project identifiers, chamber handoff and status source URLs. |
+| 3 | Camera Deputaților | PL-x lifecycle, committees, reports, agendas and votes. | Project ficha, committee/report links, agenda and vote events. |
+| 4 | Senat | L/B/BP lifecycle, consultation list, committees and opinions. | Project list/detail, consultation deadline and status events. |
+| 5 | Consultari Guvern | Government transparency notices before formal parliamentary filing. | Draft title, initiating authority, publication date, deadline and attachments. |
+| 6 | E-Consultare | Draft normative acts before or outside Parliament. | Consultation id, authority, deadline, attachments and state. |
+| 7 | Ministry consultation pages | Draft acts that are not reliably mirrored elsewhere. | One ministry adapter at a time, with public-deadline parsing. |
+| 8 | EU Cellar / EUR-Lex | Official EU text and metadata for compatibility and transposition checks. | CELEX referenced by dossiers or Romanian acts; Romanian first, English fallback. |
+| 9 | CCR | Constitutional risk and invalidated provisions. | Decision metadata, operative part, affected provisions. |
+| 10 | Institutional opinions / avize | Required opinions and objections. | Issuer, positive/negative/observations, document hash. |
+| 11 | Monitorul Oficial | Official publication portal and part-level routing. | Issue metadata, part routing and publication URLs. |
+| 12 | Monitorul Oficial Partea I | Official publication proof for normative acts. | Part I index, text extraction, law-publication links. |
+| 13 | Monitorul Oficial Parts II-VII | Announcements and non-core material. | Metadata and user-requested/domain-triggered documents only. |
+| 14 | Monitorul Oficial Local | Local acts, HCL, dispositions, local regulations and urbanism. | MDLPA/UAT registry, per-UAT source state, opt-in local packs. |
 
 ## Monitorul Oficial policy
 
@@ -56,9 +59,9 @@ patterns.
 
 | Profile | Included sources | Rough storage | R2 storage/month |
 | --- | --- | ---: | ---: |
-| `v1` | Portal Legislativ, Camera, Senat, E-Consultare, EU Cellar, CCR | 55-310 GB | 0.68-4.50 USD |
-| `serious` | `v1` plus ministry consultations, avize and Monitorul Oficial Part I | 120-630 GB | 1.65-9.30 USD |
-| `everything` | All listed sources, including MO Parts II-VII and MO Local | 320-3630 GB | 4.65-54.30 USD |
+| `v1` | Portal Legislativ, Parliament, Camera, Senat, government consultations, E-Consultare, EU Cellar, CCR | 58-335 GB | 0.72-4.88 USD |
+| `serious` | `v1` plus ministry consultations, avize and Monitorul Oficial/Part I | 124-665 GB | 1.71-9.83 USD |
+| `everything` | All listed sources, including MO Parts II-VII and MO Local | 324-3665 GB | 4.71-54.83 USD |
 
 The practical cost risk is not only GB stored. The expensive parts are object
 counts, PDF parsing, OCR fallback, retries, change detection and UI latency when
@@ -94,16 +97,20 @@ ingest PDFs; missing issue numbers or dates remain missing.
 
 ## Execution order
 
-1. Keep one-source sync as the operational boundary.
-2. Add E-Consultare as the next real adapter because it captures drafts before
+1. Bootstrap the official source-family anchors from the UI button **Adaugă
+   sursele oficiale de bază** or through `POST /api/source-registry` with
+   `{"action":"bootstrap"}`.
+2. Keep one-source sync as the operational boundary. Bootstrap only registers
+   official entrypoints; it does not fetch, parse or mark coverage complete.
+3. Add E-Consultare as the next real adapter because it captures drafts before
    Parliament.
-3. Expand Camera/Senat tracking from project metadata to committee, report,
+4. Expand Camera/Senat tracking from project metadata to committee, report,
    agenda, vote and opinion events.
-4. Add Monitorul Oficial Part I publication events and connect them to published
+5. Add Monitorul Oficial Part I publication events and connect them to published
    acts.
-5. Add ministry consultation and avize metadata-first sources, then grow toward
+6. Add ministry consultation and avize metadata-first sources, then grow toward
    document-on-demand retrieval adapter by adapter.
-6. Add local Monitorul Oficial as opt-in packs after the registry/freshness UI is
+7. Add local Monitorul Oficial as opt-in packs after the registry/freshness UI is
    useful.
 
 ## UI coverage rule
@@ -116,7 +123,7 @@ panel groups sources as:
 - deferred or opt-in: broad Monitorul Oficial/local mirrors that should not be
   full-ingested by default.
 
-Missing, stale, changed, failed, rate-limited and unavailable sources remain
-visible. They are user actions, not empty results. A changed source means “review
-affected dossiers and proposals”; it does not automatically update saved legal
-findings.
+Missing, unsynced, stale, changed, failed, rate-limited and unavailable sources
+remain visible. They are user actions, not empty results. A changed source means
+“review affected dossiers and proposals”; it does not automatically update saved
+legal findings.

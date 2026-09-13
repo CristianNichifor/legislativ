@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import app_completeness
+from scripts import app_completeness, source_registry
 from scripts.server import face_handler
 
 
@@ -89,6 +89,23 @@ def test_app_completeness_http_endpoint(state):
     assert out["completion_claim_allowed"] is False
 
 
+def test_app_completeness_reports_unsynced_bootstrapped_sources(state):
+    source_registry.executa(state, {"action": "bootstrap"})
+
+    out = app_completeness.report(state)
+
+    source_status = out["source_status"]
+    assert source_status["missing_required"] == 0
+    assert source_status["unsynced_required"] == 12
+    assert source_status["attention_sources"] == 0
+    source_capability = next(
+        item for item in out["capabilities"] if item["key"] == "public_source_data_availability"
+    )
+    assert source_capability["state"] == "partial"
+    assert "no_required_family_unsynced" in source_capability["failed_checks"]
+    assert out["completion_claim_allowed"] is False
+
+
 def test_app_completeness_is_visible_in_ui():
     html = (Path(__file__).parents[1] / "app/index.html").read_text(encoding="utf-8")
 
@@ -96,3 +113,4 @@ def test_app_completeness_is_visible_in_ui():
     assert "app-completeness-gate-v1" in html
     assert "fetch('/api/app-completeness')" in html
     assert "completion_claim_allowed" in html
+    assert "source-registry-bootstrap" in html
