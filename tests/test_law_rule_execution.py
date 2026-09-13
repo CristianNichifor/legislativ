@@ -133,3 +133,66 @@ def test_rule_draft_execution_http_endpoint(tmp_path):
     assert code == 200
     assert result["contract"] == "law-rule-execution-v1"
     assert result["rows"][0]["rule_draft_id"] == DRAFT_ID
+
+
+def test_rule_draft_text_execution_matches_supplied_project_text(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    save_draft(path)
+
+    result = law_rule_execution.draft_text(
+        path,
+        {
+            "id": DOSAR_ID,
+            "act": "lege-98-2016",
+            "text": "Art. 3. Guvernul aprobă normele metodologice în termen de 30 zile.",
+        },
+    )
+
+    assert result["contract"] == "law-rule-draft-text-execution-v1"
+    assert result["status"] == "deterministic_draft_text_rule_check"
+    assert result["possible_matches"] == 1
+    row = result["rows"][0]
+    assert row["contract"] == "law-rule-draft-text-execution-v1-row"
+    assert row["status"] == "possible_match_not_verdict"
+    assert row["checks"]["actor_found"] is True
+    assert row["checks"]["action_found"] is True
+    assert row["checks"]["deadline_found"] is True
+    assert "nu verdict juridic" in row["limitations"][0]
+
+
+def test_rule_draft_text_execution_keeps_partial_match_distinct(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    save_draft(path)
+
+    result = law_rule_execution.draft_text(path, {"id": DOSAR_ID, "text": "Guvernul decide."})
+
+    assert result["possible_matches"] == 0
+    assert result["partial_matches"] == 1
+    assert result["rows"][0]["status"] == "partial_match_needs_review"
+    assert result["rows"][0]["missing_fields"] == [
+        "action_found",
+        "deadline_found",
+        "condition_found",
+    ]
+
+
+def test_rule_draft_text_execution_http_endpoint(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    save_draft(path)
+
+    code, result = request(
+        state,
+        "POST",
+        "/api/dosare/rule-drafts/execute-draft",
+        {"id": DOSAR_ID, "text": "Guvernul aprobă normele metodologice."},
+    )
+
+    assert code == 200
+    assert result["contract"] == "law-rule-draft-text-execution-v1"
+    assert result["rows"][0]["rule_draft_id"] == DRAFT_ID
