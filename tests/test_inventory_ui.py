@@ -324,6 +324,8 @@ def test_tracker_timeline_renderer_exposes_review_and_note_actions():
         "total:1,limitari:['local <img>']});"
         "assert.ok(h.includes('data-tracker-note-event=\"ev1\"'));"
         "assert.ok(h.includes('data-tracker-review-event=\"ev1\"'));"
+        "assert.ok(h.includes('data-tracker-workbench-project=\"PL-x 1/2026\"'));"
+        "assert.ok(h.includes('Pachet dovezi'));"
         "assert.ok(h.includes('Trimis la comisii'));"
         "assert.ok(h.includes('etapa Comisii'));"
         "assert.ok(h.includes('Dovezi eveniment'));"
@@ -339,6 +341,7 @@ def test_tracker_timeline_renderer_exposes_review_and_note_actions():
         "total:1,limitari:[]});"
         "assert.ok(q.includes('Evenimente nerevizuite'));"
         "assert.ok(q.includes('data-tracker-review-event=\"ev2\"'));"
+        "assert.ok(q.includes('data-tracker-workbench-project=\"lege-1\"'));"
         "assert.ok(!q.includes('<x>'));"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
@@ -572,6 +575,7 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "assert.ok(h.includes('data-source-sync=\"src_1\"'));"
         "assert.ok(h.includes('data-source-inspect=\"src_1\"'));"
         "assert.ok(h.includes('data-source-open-eu=\"32014L0024\"'));"
+        "assert.ok(!h.includes('data-source-workbench-project'));"
         "assert.ok(h.includes('data-source-review=\"src_1\"'));"
         "assert.ok(h.includes('Revizuiește impactul'));"
         "assert.ok(h.includes('Impact local: 1 dosare'));"
@@ -618,6 +622,8 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "url:'',label:'Proiect',state:'queued'},{});"
         "assert.ok(p.includes('data-source-sync=\"src_3\"'));"
         "assert.ok(p.includes('data-source-open-project=\"PL-x 1/2024\"'));"
+        "assert.ok(p.includes('data-source-workbench-project=\"PL-x 1/2024\"'));"
+        "assert.ok(p.includes('Pachet dovezi'));"
         "assert.ok(p.includes('Sincronizează sursa'));"
         "sourceRegistryConfigure({families:{parlament:'Proiecte'},states:['changed']});"
         "assert.ok(node.innerHTML.includes('value=\"_attention\"'));"
