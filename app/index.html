@@ -1321,6 +1321,7 @@
               aria-label="Endpointul furnizorului online" style="display:none">
             <span class="hint" id="ai-sug" style="display:none"></span>
             <span class="hint" id="ai-nota"></span>
+            <span class="hint" id="ai-contract"></span>
           </span></div>
         <div id="cons-out"></div>
       </div>
@@ -2934,17 +2935,93 @@ function aiModelOnline(p){ const cfg=aiProv(p); try{
 }catch(e){ return cfg.model||""; } }
 function aiKey(p){ try{ return (sessionStorage.getItem(aiStore("key",p))||"").trim(); }
   catch(e){ return ""; } }
+const AI_SETTINGS_KEY='ai_byok_settings_v1';
+function aiLocalModel(){ try{ return localStorage.getItem("ai_model")||MODELE[0].id; }catch(e){ return MODELE[0].id; } }
+function aiSettings(){
+  const mode=aiMode(), provider=aiProvider(), cfg=aiProv(provider), endpoint=aiEndpoint(provider),
+        onlineModel=aiModelOnline(provider), keyPresent=!!aiKey(provider);
+  return {
+    contract:'ai-byok-settings-v1',
+    mode,
+    enabled:mode!=='oprit',
+    default_ai:'off',
+    platform_paid_default:false,
+    app_paid_provider:false,
+    stores_api_key:false,
+    key_storage:'sessionStorage_only',
+    durable_storage:'localStorage_without_key',
+    local_provider:{
+      provider:'browser_webllm',
+      model:aiLocalModel(),
+      available:!!(globalThis.navigator&&navigator.gpu),
+      external_send:false
+    },
+    online_byok:{
+      provider,
+      provider_label:cfg.et,
+      model:onlineModel,
+      endpoint,
+      requires_api_key:!!cfg.cheie,
+      api_key_present:keyPresent,
+      external_send:mode==='online',
+      cost_owner:'user_provider_account'
+    },
+    cost_warning:{
+      server_cost:'none',
+      external_cost_owner:'user_if_online_byok_or_mcp',
+      token_estimate_required_before_send:true,
+      provider_price_not_bundled:true
+    },
+    drafting_guardrail:{
+      state:'evidence_only_draft_unreviewed',
+      evidence_required:true,
+      may_mark_reviewed:false,
+      may_invent_sources:false,
+      output_notice:'Ciornă AI nerevizuită, numai din dovezile selectate.'
+    }
+  };
+}
+function aiSettingsPersist(){
+  const s=aiSettings();
+  const safe={
+    contract:s.contract,
+    mode:s.mode,
+    provider:s.online_byok.provider,
+    online_model:s.online_byok.model,
+    endpoint:s.online_byok.endpoint,
+    local_model:s.local_provider.model,
+    platform_paid_default:false,
+    app_paid_provider:false,
+    stores_api_key:false,
+    key_storage:s.key_storage,
+    cost_warning:s.cost_warning,
+    drafting_guardrail:s.drafting_guardrail
+  };
+  try{localStorage.setItem(AI_SETTINGS_KEY,JSON.stringify(safe));}catch(e){}
+  return safe;
+}
+function aiSettingsStatusHtml(s){
+  const mode={oprit:'AI oprită',local:'AI locală',online:'online BYOK'}[s.mode]||s.mode;
+  const key=s.online_byok.requires_api_key?(s.online_byok.api_key_present?'cheie în sesiune':'cheie lipsă'):'fără cheie';
+  return `${esc(mode)} · fără furnizor plătit al platformei · ${esc(s.online_byok.provider_label)} ${esc(s.online_byok.model||'model necompletat')} · ${esc(key)}`;
+}
 const AI_NOTE_SETTINGS_KEY='ai_note_settings_v1';
 function aiNoteSettings(){
   let saved={};try{saved=JSON.parse(localStorage.getItem(AI_NOTE_SETTINGS_KEY)||'{}')||{};}catch(e){saved={};}
   const boundary=['local_ai','online_byok','mcp_handoff'].includes(saved.boundary)?saved.boundary:'local_ai';
+  const settings=aiSettings();
   return {
     contract:'ai-note-settings-v1',
     boundary,
     task:['explain_issue','issue_note','draft_amendment','review_checklist'].includes(saved.task)?saved.task:'issue_note',
-    provider:aiProvider(),
-    online_model:aiModelOnline(),
-    endpoint:aiEndpoint(),
+    provider:settings.online_byok.provider,
+    online_model:settings.online_byok.model,
+    endpoint:settings.online_byok.endpoint,
+    platform_paid_default:settings.platform_paid_default,
+    app_paid_provider:settings.app_paid_provider,
+    key_storage:settings.key_storage,
+    cost_warning:settings.cost_warning,
+    drafting_guardrail:settings.drafting_guardrail,
     mcp_server:String(saved.mcp_server||'').slice(0,120),
     mcp_tool:String(saved.mcp_tool||'').slice(0,160),
     stores_api_key:false
@@ -2971,6 +3048,7 @@ function aiNoteSettingsApply(form){
 function aiNoteSettingsSummaryHtml(s){
   const modes={local_ai:'AI local',online_byok:'online BYOK',mcp_handoff:'MCP aprobat'};
   return `<p class="hint">Setări implicite: ${esc(modes[s.boundary]||s.boundary)} · sarcină: ${esc(s.task)} · furnizor: ${esc(s.provider)} · cheia API: nepăstrată.</p>`
+    +`<p class="hint">Cost: server zero, fără furnizor plătit implicit al platformei; online BYOK/MCP se plătește în contul utilizatorului. Guardrail: ${esc(s.drafting_guardrail?.output_notice||'ciornă nerevizuită numai din dovezi selectate')}.</p>`
     +(s.boundary==='online_byok'?`<p class="hint">Model: ${esc(s.online_model||'necompletat')} · endpoint: ${esc(s.endpoint||'necompletat')}</p>`:'')
     +(s.boundary==='mcp_handoff'?`<p class="hint">MCP: ${esc([s.mcp_server,s.mcp_tool].filter(Boolean).join(' / ')||'necompletat')}</p>`:'');
 }
@@ -3077,25 +3155,25 @@ async function sugereazaModel(){
 }
 (function(){
   const mode=$("#ai-mode"), prov=$("#ai-provider"), sel=$("#ai-model"), selO=$("#ai-model-online"),
-        key=$("#ai-key"), ep=$("#ai-endpoint"), sug=$("#ai-sug"), nota=$("#ai-nota");
+        key=$("#ai-key"), ep=$("#ai-endpoint"), sug=$("#ai-sug"), nota=$("#ai-nota"), contract=$("#ai-contract");
   if(!mode) return;
   if(sel){
     sel.innerHTML=MODELE.map(m=>`<option value="${m.id}">${m.et}</option>`).join("");
     let salvat; try{ salvat=localStorage.getItem("ai_model"); }catch(e){}
     sel.value=salvat||MODELE[0].id;
-    sel.onchange=()=>{ try{ localStorage.setItem("ai_model",sel.value); }catch(e){} LLM.engine=null; };
+    sel.onchange=()=>{ try{ localStorage.setItem("ai_model",sel.value); }catch(e){} LLM.engine=null; aiSettingsPersist(); arata(); };
     sugereazaModel().then(id=>{ const m=MODELE.find(x=>x.id===id);
       if(m&&sug) sug.textContent="↳ sugerat pentru dispozitiv: "+m.et;
-      if(!salvat){ sel.value=id; try{ localStorage.setItem("ai_model",id); }catch(e){} } });
+      if(!salvat){ sel.value=id; try{ localStorage.setItem("ai_model",id); }catch(e){} aiSettingsPersist(); } });
   }
   if(prov){
     prov.value=aiProvider();
     prov.onchange=()=>{ try{ localStorage.setItem("ai_provider",prov.value); }catch(e){}
-      arataOnline(); arata(); };
+      arataOnline(); aiSettingsPersist(); arata(); };
   }
-  if(selO){ selO.oninput=()=>{ try{ localStorage.setItem(aiStore("model_online"),selO.value.trim()); }catch(e){} }; }
-  if(ep){ ep.oninput=()=>{ try{ localStorage.setItem(aiStore("endpoint"),ep.value.trim()); }catch(e){} }; }
-  if(key){ key.oninput=()=>{ try{ sessionStorage.setItem(aiStore("key"),key.value.trim()); }catch(e){} }; }
+  if(selO){ selO.oninput=()=>{ try{ localStorage.setItem(aiStore("model_online"),selO.value.trim()); }catch(e){} aiSettingsPersist(); arata(); }; }
+  if(ep){ ep.oninput=()=>{ try{ localStorage.setItem(aiStore("endpoint"),ep.value.trim()); }catch(e){} aiSettingsPersist(); arata(); }; }
+  if(key){ key.oninput=()=>{ try{ sessionStorage.setItem(aiStore("key"),key.value.trim()); }catch(e){} aiSettingsPersist(); arata(); }; }
   mode.value=aiMode();
   function arataOnline(){
     const p=aiProvider(), cfg=aiProv(p);
@@ -3113,12 +3191,14 @@ async function sugereazaModel(){
     if(key){ key.style.display=(m==="online"&&aiProv().cheie)?"":"none"; }
     if(nota){ nota.textContent=m==="local"
       ?"rulează în browser · textul nu pleacă nicăieri"
-      :(m==="online"?"BYOK: cererile merg direct la furnizorul ales; cheia stă în sesiunea browserului":""); } };
+      :(m==="online"?"BYOK: cererile merg direct la furnizorul ales; cheia stă în sesiunea browserului":""); }
+    if(contract){ contract.textContent=aiSettingsStatusHtml(aiSettings()); } };
   mode.onchange=()=>{
     if(mode.value==="local" && !LLM.disponibil()){
       alert("Modul local are nevoie de WebGPU (Chrome/Edge recent). Alege «online» sau actualizează browserul.");
       mode.value="oprit"; }
     try{ localStorage.setItem("ai_mode",mode.value); }catch(e){}
+    aiSettingsPersist();
     arata();
     if(ultimaCons) renderCons(ultimaCons);   // refresh the Limbaj-clar buttons in place, no refetch
   };

@@ -363,6 +363,10 @@ def test_ai_note_settings_persist_only_safe_defaults():
         "function aiProvider(){return 'openai';}"
         "function aiModelOnline(){return 'gpt-test';}"
         "function aiEndpoint(){return 'https://api.test';}"
+        "function aiSettings(){return {online_byok:{provider:'openai',model:'gpt-test',"
+        "endpoint:'https://api.test'},platform_paid_default:false,app_paid_provider:false,"
+        "key_storage:'sessionStorage_only',cost_warning:{server_cost:'none'},"
+        "drafting_guardrail:{output_notice:'ciornă nerevizuită'},stores_api_key:false};}"
         "const AI_NOTE_SETTINGS_KEY="
         + source
         + "const form={elements:{ai_boundary:{value:'mcp_handoff'},"
