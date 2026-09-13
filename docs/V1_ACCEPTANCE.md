@@ -37,6 +37,22 @@ signal/finding counts, verifies private dossier data survives rollback, and emit
 JSON. It does not synthesize a finding or proposal. Preserve output with the tested
 commit, Python/SQLite versions and manifest hash in the acceptance record.
 
+The emitted JSON now includes `acceptance_v2` with contract
+`real-data-acceptance-v2`. The v2 section classifies the measured run into:
+
+- `runtime_path`: release activation, search, law workbench save and private
+  rollback survival;
+- `authentic_finding_to_proposal`: whether a real gap/CCR finding is available
+  for proposal review;
+- `eu_text_available`: whether signaled CELEX references have imported official
+  Romanian or English text.
+
+By default missing authentic findings and missing EU text are reported as
+`attention`, not as invented failures. For a release-candidate gate, rerun with
+`--require-reviewable-finding --require-eu-text`; those same gaps then become
+blocking until the dataset contains reviewer-approved evidence and official EU
+text, or until the pilot scope explicitly excludes them.
+
 The 2026-09-11 pilot record built a valid public release from the two committed
 authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
 search, workbench save and private rollback survival. The run measured 2 acts,
