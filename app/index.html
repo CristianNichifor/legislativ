@@ -6173,6 +6173,35 @@ function sourceRegistryImpactHtml(row,compact=false){
     +(watch?`<details open><summary>Watchlist afectat</summary><ul class="hint">${watch}</ul></details>`:'')
     +`<p class="hint">${(impact.limitari||[]).map(esc).join(' ')}</p></section>`;
 }
+const SOURCE_CHANGE_TYPES={
+  new_document:'Document nou',
+  new_committee_report:'Raport/comisie nouă',
+  new_vote:'Vot nou',
+  deadline_changed:'Termen schimbat',
+  consultation_closed:'Consultare închisă',
+  published_in_monitor:'Publicare Monitor',
+  content_hash_changed:'Conținut schimbat'
+};
+function sourceRegistryChangeSummary(change){
+  const items=change?.changes||[];
+  if(!change)return 'Schimbări necalculate.';
+  if(!items.length)return 'Nicio schimbare clasificată în ultimele instantanee.';
+  return items.map(item=>SOURCE_CHANGE_TYPES[item.type]||item.type).join(' · ');
+}
+function sourceRegistryChangeHtml(row,compact=false){
+  const change=row.latest_change;
+  if(!change)return '';
+  const summary=sourceRegistryChangeSummary(change);
+  if(compact)return `<p class="hint">Schimbare detectată: ${esc(summary)}</p>`;
+  const rows=(change.changes||[]).map(item=>{
+    const before=item.before?`<br>Înainte: ${esc(typeof item.before==='string'?item.before:JSON.stringify(item.before))}`:'';
+    const after=item.after?`<br>După: ${esc(typeof item.after==='string'?item.after:JSON.stringify(item.after))}`:'';
+    return `<li><b>${esc(SOURCE_CHANGE_TYPES[item.type]||item.type)}</b> · ${esc(item.label||'schimbare')}${before}${after}</li>`;
+  }).join('');
+  return `<details open data-source-change><summary>Ce s-a schimbat · ${esc(summary)}</summary>`
+    +(rows?`<ul class="hint">${rows}</ul>`:'<p class="hint">Ultimele instantanee nu au diferențe clasificate.</p>')
+    +`<p class="hint">${(change.limitations||[]).map(esc).join(' ')}</p></details>`;
+}
 function sourceRegistryConsultationStatus(value){
   const labels={open:'Deschisă',closed:'Închisă',unknown:'Necunoscută'};
   return labels[value]||value||'Necunoscută';
@@ -6213,7 +6242,7 @@ function sourceRegistryTrackerProject(row){
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryImpactHtml(row)}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryChangeHtml(row)}${sourceRegistryImpactHtml(row)}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
 }
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
@@ -6244,7 +6273,7 @@ function sourceRegistryRowHtml(row,families,index=0){
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const tracker=`<button type="button" class="ghost mini" data-source-tracker="${esc(index)}">Evenimente tracker</button>`;
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryChangeHtml(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
