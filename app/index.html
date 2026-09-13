@@ -4903,6 +4903,63 @@ function confirmAiExternalApproval(packet){
     +"Output: ciornă AI nerevizuită, nu verdict juridic\n\n"
     +"Prompt SHA-256: "+(packet.input_sha256||""));
 }
+function aiDraftExecutionRequest(plan,boundary){
+  const settings=aiSettings();
+  const provider=settings.online_byok||{};
+  return {
+    contract:'ai-byok-execution-request-v1',
+    boundary,
+    runtime:boundary==='local_ai'?'browser_webgpu':'browser_direct_byok',
+    provider:boundary==='online_byok'?provider.provider:'browser_webllm',
+    provider_label:boundary==='online_byok'?provider.provider_label:'Browser WebLLM',
+    model:boundary==='online_byok'?provider.model:settings.local_provider?.model,
+    endpoint:boundary==='online_byok'?provider.endpoint:'',
+    input_sha256:plan.input_sha256,
+    evidence_sha256:plan.evidence_sha256,
+    evidence_count:plan.evidence_count,
+    estimated_total_tokens:plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens,
+    server_calls_model:false,
+    app_paid_provider:false,
+    stores_api_key:false,
+    key_storage:settings.key_storage,
+    prompt_scope:'selected_evidence_only',
+    requires_explicit_user_action:true,
+    output_status:'draft_unreviewed',
+    non_verdict_notice:'Ciornă de lucru; nu verdict juridic.'
+  };
+}
+async function aiRunEvidenceDraft(plan,boundary,prog){
+  if(!plan)throw new Error('Pregătește promptul înainte de rulare.');
+  const mode=aiMode();
+  if(boundary==='mcp_handoff')throw new Error('Pentru MCP folosește previzualizarea și copierea payloadului MCP.');
+  if(boundary==='local_ai'&&mode!=='local')throw new Error('Limită aleasă: AI local. Comută setările AI pe local înainte de rulare.');
+  if(boundary==='online_byok'&&mode!=='online')throw new Error('Limită aleasă: online BYOK. Comută setările AI pe online și introdu cheia în sesiune.');
+  const approvalPacket=aiExternalApproval(plan,boundary);
+  if(!confirmAiExternalApproval(approvalPacket))throw new Error('Anulat — promptul nu a fost trimis.');
+  const request=aiDraftExecutionRequest(plan,boundary);
+  const answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog});
+  const text=String(answer?.text||'').trim();
+  if(!text)throw new Error('Modelul nu a întors text.');
+  return {
+    contract:'ai-byok-execution-result-v1',
+    request,
+    text,
+    nota:answer?.nota||request.provider_label,
+    status:'draft_unreviewed',
+    insert_header:`[Ciornă AI · ${answer?.nota||request.provider_label} · ${plan.contract} · ${plan.input_sha256}]`,
+    audit:{
+      contract:'ai-draft-execution-audit-v1',
+      event:'ai_draft_executed_in_browser',
+      boundary,
+      input_sha256:plan.input_sha256,
+      evidence_sha256:plan.evidence_sha256,
+      approved_external_send:boundary==='online_byok',
+      server_calls_model:false,
+      stores_api_key:false,
+      output_status:'draft_unreviewed'
+    }
+  };
+}
 function ruleCandidateOptions(items,current=''){
   return Object.entries(items).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
 }
@@ -5008,16 +5065,11 @@ function bindManualNoteAiDraft(form){
   copy.onclick=async()=>{if(!plan)return;try{await navigator.clipboard.writeText(plan.prompt);status.textContent='Prompt copiat. Trimite-l extern numai după aprobare explicită.';}catch{status.textContent='Copierea nu a reușit.';}};
   send.onclick=async()=>{
     if(!plan){status.textContent='Pregătește promptul înainte de rulare.';return;}
-    const boundary=form.elements.ai_boundary.value, mode=aiMode();
-    if(boundary==='mcp_handoff'){status.textContent='Pentru MCP folosește previzualizarea și copierea payloadului MCP.';return;}
-    if(boundary==='local_ai'&&mode!=='local'){status.textContent='Limită aleasă: AI local. Comută setările AI pe local înainte de rulare.';return;}
-    if(boundary==='online_byok'&&mode!=='online'){status.textContent='Limită aleasă: online BYOK. Comută setările AI pe online și introdu cheia în sesiune.';return;}
+    const boundary=form.elements.ai_boundary.value;
     send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
     try{
-      const approvalPacket=aiExternalApproval(plan,boundary);
-      if(!confirmAiExternalApproval(approvalPacket))throw new Error('Anulat — promptul nu a fost trimis.');
-      const answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog:p=>{status.textContent=p?.text||'Rulează AI…';}});
-      draft=`[Ciornă AI · ${answer.nota} · ${plan.contract} · ${plan.input_sha256}]\n\n${answer.text}`;
+      const executed=await aiRunEvidenceDraft(plan,boundary,p=>{status.textContent=p?.text||'Rulează AI…';});
+      draft=`${executed.insert_header}\nAudit: ${executed.audit.contract} · ${executed.audit.boundary} · server_calls_model=false · status=${executed.status}\n\n${executed.text}`;
       result.textContent=draft;insert.disabled=false;status.textContent='Ciornă generată. Verifică înainte de inserare.';
     }catch(err){status.textContent=err.message;}
     finally{send.disabled=false;}

@@ -236,8 +236,11 @@ store output. Each evidence item must include a quote plus either a source URL o
 source hash, so the prompt cannot be built from unsupported memory.
 The response also carries an evidence manifest, prompt hash, evidence hash,
 cost estimate, `ai-external-send-approval-v1` payload and approval/audit
-metadata. The server-side cost is always `none`; online BYOK or MCP usage is
-paid only through the user's provider, after explicit user action.
+metadata. The response also includes `ai-byok-execution-boundary-v1`: execution
+is browser-side only, either local WebGPU or direct BYOK provider call, with no
+server-paid AI and no API key stored in app data. The server-side cost is always
+`none`; online BYOK or MCP usage is paid only through the user's provider, after
+explicit user action.
 
 The manual-note editor exposes four bounded tasks from the selected evidence:
 explain the issue, draft a finding note, draft amendment text/rationale, or
@@ -245,11 +248,13 @@ prepare a reviewer checklist. The user first prepares the prompt and sees the
 evidence manifest, prompt hash, token estimate, server cost (`none`), external
 cost owner and approval rule. For online BYOK, the run button builds a browser
 approval packet with provider, endpoint, model, hashes, evidence count and token
-estimate before any external send. Only after that can the user run local
-WebGPU, run online BYOK, copy the prompt, or move to MCP. The generated text is
-inserted only by explicit user action, labelled as an unreviewed AI draft, and
-remains ordinary note text until the user saves it. It cannot mark a note
-reviewed, accepted or legally final.
+estimate before any external send. Running creates an
+`ai-byok-execution-result-v1` wrapper around the provider output with request
+metadata and an audit record; tests mock this call and never hit a live provider.
+Only after that can the user run local WebGPU, run online BYOK, copy the prompt,
+or move to MCP. The generated text is inserted only by explicit user action,
+labelled as an unreviewed AI draft, and remains ordinary note text until the user
+saves it. It cannot mark a note reviewed, accepted or legally final.
 
 The same editor also exposes an MCP handoff for the prompt. `POST
 /api/dosare/ai-draft/mcp-preview` returns the AI prompt plus the MCP approval

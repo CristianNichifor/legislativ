@@ -129,6 +129,24 @@ def _approval_payload(prompt: str, evidence: list[dict], task: str) -> dict:
     }
 
 
+def _execution_boundary() -> dict:
+    return {
+        "contract": "ai-byok-execution-boundary-v1",
+        "runtime": "browser_direct_provider_or_local_webgpu",
+        "server_calls_model": False,
+        "app_paid_provider": False,
+        "stores_api_key": False,
+        "key_storage": "browser_session_only_for_byok",
+        "requires_explicit_user_action": True,
+        "allowed_modes": ["local_ai", "online_byok"],
+        "forbidden_modes": ["server_paid_ai"],
+        "prompt_scope": "selected_evidence_only",
+        "output_status": "draft_unreviewed",
+        "audit_event": "ai_draft_execution_requested",
+        "non_verdict_notice": "Ciornă de lucru; nu verdict juridic.",
+    }
+
+
 def _export_manifest(evidence: list[dict]) -> dict:
     source_references = [
         {
@@ -231,6 +249,7 @@ def preview(data: dict) -> dict:
         "estimated_tokens": cost["estimated_input_tokens"],
         "cost_estimate": cost,
         "external_approval_payload": approval_payload,
+        "execution_boundary": _execution_boundary(),
         "approval": {
             "required_for_external_ai": True,
             "server_calls_model": False,

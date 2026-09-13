@@ -36,6 +36,13 @@ creates an `ai-external-send-approval-v1` payload with evidence hashes, prompt
 hash, token estimate and server cost `none`; the user then sends the prompt
 through local AI, BYOK or MCP explicitly.
 
+The selected-evidence draft flow also exposes
+`ai-byok-execution-boundary-v1`. Execution happens in the browser through local
+WebGPU or the user's configured BYOK provider. The localhost/Python server still
+does not call OpenAI, Anthropic or compatible endpoints, and API keys are not
+part of saved app data or approval payloads. Provider calls are tested with
+mocks only; live calls remain a user action in the browser.
+
 ## Limits
 
 - Lexical source overlap is a conservative proxy for support.

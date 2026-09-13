@@ -60,6 +60,14 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert out["external_approval_payload"]["stores_api_key"] is False
     assert out["external_approval_payload"]["output_status"] == "draft_unreviewed"
     assert out["external_approval_payload"]["may_invent_sources"] is False
+    assert out["execution_boundary"]["contract"] == "ai-byok-execution-boundary-v1"
+    assert out["execution_boundary"]["runtime"] == "browser_direct_provider_or_local_webgpu"
+    assert out["execution_boundary"]["server_calls_model"] is False
+    assert out["execution_boundary"]["app_paid_provider"] is False
+    assert out["execution_boundary"]["stores_api_key"] is False
+    assert out["execution_boundary"]["allowed_modes"] == ["local_ai", "online_byok"]
+    assert out["execution_boundary"]["prompt_scope"] == "selected_evidence_only"
+    assert out["execution_boundary"]["output_status"] == "draft_unreviewed"
     assert out["audit"]["approved_external_send"] is False
     assert out["audit"]["model_invoked_by_server"] is False
     assert "Nu inventa surse" in out["system"]
