@@ -37,9 +37,10 @@ def test_public_tracking_validation_names_coverage_without_fetching():
         "opinions": True,
         "reports": True,
         "votes": True,
+        "monitor_publication": True,
         "changed_source_alerts": True,
     }
-    assert {"camera", "senat", "consultare_econsultare", "avize"}.issubset(
+    assert {"camera", "senat", "consultare_econsultare", "avize", "monitorul_oficial_pi"}.issubset(
         set(out["source_families"])
     )
 
@@ -50,12 +51,13 @@ def test_public_tracking_replays_sources_events_and_attention_feed(tmp_path):
     replayed = public_tracking.replay(stare)
 
     assert replayed["contract"] == "public-tracking-replay-v1"
-    assert replayed["sources"] == 4
-    assert replayed["events"] == 7
+    assert replayed["sources"] == 5
+    assert replayed["events"] == 8
     assert replayed["attention_sources"] == 2
     assert replayed["event_types"] == {
         "committee_assignment": 2,
         "opinion_received": 1,
+        "published_in_monitor": 1,
         "public_consultation_closed": 1,
         "public_consultation_opened": 1,
         "report_filed": 1,
@@ -63,10 +65,11 @@ def test_public_tracking_replays_sources_events_and_attention_feed(tmp_path):
     }
 
     timeline = tracker_events.lista(stare, {"project_id": ["PL-x 33/2025"], "limit": ["20"]})
-    assert timeline["total"] == 7
+    assert timeline["total"] == 8
     assert timeline["summary"]["by_stage"]["committee"]["count"] == 2
     assert timeline["summary"]["by_stage"]["report"]["count"] == 1
     assert timeline["summary"]["by_stage"]["adopted"]["count"] == 1
+    assert timeline["summary"]["by_stage"]["published"]["count"] == 1
 
     registry = source_registry.lista(stare)
     cdep = next(row for row in registry["sources"] if row["family"] == "camera")
@@ -84,6 +87,15 @@ def test_public_tracking_replays_sources_events_and_attention_feed(tmp_path):
         for item in feed["items"]
     )
     assert any(item["source_family"] == "consultare_econsultare" for item in feed["items"])
+
+    monitor = next(row for row in registry["sources"] if row["family"] == "monitorul_oficial_pi")
+    assert monitor["state"] == "fetched"
+    assert monitor["snapshots"][0]["summary"] == {
+        "act_id": "lege-plx-33-2025",
+        "date": "2025-03-24",
+        "number": 227,
+        "part": "I",
+    }
 
 
 def test_public_tracking_validation_blocks_missing_required_event(tmp_path):

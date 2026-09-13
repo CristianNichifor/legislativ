@@ -90,6 +90,7 @@ def validate(path: Path = FIXTURE) -> dict[str, Any]:
             "opinions": "opinion_received" in event_types,
             "reports": "report_filed" in event_types,
             "votes": "vote_recorded" in event_types,
+            "monitor_publication": "published_in_monitor" in event_types,
             "changed_source_alerts": any(
                 len(source.get("snapshots") or []) > 1 for source in data.get("sources") or []
             ),
