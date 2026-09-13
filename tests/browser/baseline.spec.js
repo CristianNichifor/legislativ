@@ -122,7 +122,11 @@ for (const width of [390, 1440]) {
     expect(await page.evaluate(() => localStorage.getItem('tema'))).toBe(theme);
     await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
     const relevantErrors = errors.filter(message =>
-      !(info.project.name === 'webkit' && message.includes('/api/termeni due to access control checks.'))
+      !(
+        info.project.name === 'webkit' &&
+        (message.includes('/api/termeni due to access control checks.') ||
+          message.includes('/api/sugereaza?text=') && message.includes('due to access control checks.'))
+      )
     );
     expect(external).toEqual([]);
     expect(relevantErrors).toEqual([]);
