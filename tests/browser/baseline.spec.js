@@ -51,7 +51,7 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#project-workbench-status')).toContainText('Pachet încărcat');
     await expect(page.locator('#project-workbench-body')).toContainText('Workbench · plx-999999-2026');
     await expect(page.locator('#project-workbench-body')).toContainText('Raport depus');
-    await page.locator('[data-workbench-copy]').click();
+    await page.locator('#project-workbench-body [data-workbench-copy]').evaluate(button => button.click());
     await expect.poll(() => page.evaluate(() => window.__workbenchClipboard)).toContain('# Pachet dovezi proiect: plx-999999-2026');
     await page.locator('[data-workbench-download]').click();
     await expect.poll(() => page.evaluate(() => window.__workbenchDownloadFilename)).toBe('pachet-dovezi-plx-999999-2026.md');
