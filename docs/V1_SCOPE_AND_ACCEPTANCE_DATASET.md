@@ -57,3 +57,19 @@ The focused tests assert:
 - local fixture paths and hashes are real and bounded;
 - placeholders cannot silently become fake payloads;
 - large release work remains outside this v1 acceptance baseline.
+
+## Executable vertical flow
+
+[`scripts/final_v1_acceptance.py`](../scripts/final_v1_acceptance.py) turns the
+manifest into one deterministic local workflow:
+
+- seed the tiny local corpus, project source, tracker events and dossier note;
+- search the seeded law text;
+- open the source/lifecycle workbench for the same project;
+- build a matrix drilldown with the same law and CELEX identifier;
+- assemble an evidence pack with tracker events and the selected dossier note;
+- create an AI/MCP draft preview from selected evidence only.
+
+The runner intentionally performs no network fetch, source crawling, release
+rebuild or model call. It is a smoke acceptance bridge between the checked-in v1
+manifest and the app surfaces that must work together before a release candidate.
