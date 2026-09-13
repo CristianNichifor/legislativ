@@ -286,6 +286,22 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
             "VALUES ('plx-10-2026',0,'2026-01-10','Camera Deputaților',"
             "'raport favorabil depus','Comisia juridică',NULL,NULL)"
         )
+        con.execute(
+            "INSERT INTO initiativa_etapa"
+            "(plx_id,ord,data,camera,actiune,comisii,steno_ids,steno_idm) "
+            "VALUES ('plx-10-2026',1,'2026-01-15','Camera Deputaților',"
+            "'înscris pe ordinea de zi a plenului',NULL,'1234','6')"
+        )
+        con.execute(
+            "INSERT INTO initiativa_aviz(plx_id,de_la,data,sens,numar,primit) "
+            "VALUES ('plx-10-2026','Consiliul Legislativ','2026-01-12','favorabil','8',1)"
+        )
+        con.execute(
+            "INSERT INTO initiativa_vot"
+            "(plx_id,data,camera,intrebare,pentru,contra,abtineri,rezultat,absenti,idv) "
+            "VALUES ('plx-10-2026','2026-01-20','Camera Deputaților','adoptare',200,30,4,"
+            "'adoptat',1,'99')"
+        )
         con.commit()
 
     monkeypatch.setattr(
@@ -300,9 +316,17 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
     events = tracker_events.lista(stare, {"project_id": ["plx-10-2026"]})
     assert {event["event_type"] for event in events["events"]} == {
         "committee_assignment",
+        "opinion_received",
         "report_filed",
+        "plenary_agenda",
+        "vote_recorded",
     }
     assert events["events"][0]["source_id"] == row["id"]
+    assert any(
+        event["event_type"] == "vote_recorded"
+        and event["payload"]["nominal_url"].endswith("Nominal?idv=99")
+        for event in events["events"]
+    )
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
     assert selected["snapshots"][0]["content_hash"] == changed["last_hash"]
     assert selected["snapshots"][0]["parser_version"] == "achizitii_proiecte.v1"

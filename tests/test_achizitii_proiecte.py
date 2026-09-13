@@ -158,6 +158,62 @@ def test_tracker_events_normalize_senat_and_requested_opinions(state):
     assert events[1]["received"] is False
 
 
+def test_tracker_events_read_partial_local_parcurs_tables(tmp_path):
+    initiative = tmp_path / "partial.db"
+    with sqlite3.connect(initiative) as con:
+        con.execute(
+            "CREATE TABLE initiative (plx_id TEXT PRIMARY KEY, cam INTEGER NOT NULL, "
+            "idp TEXT NOT NULL, titlu TEXT NOT NULL, stadiu TEXT, citit_la TEXT NOT NULL)"
+        )
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la) "
+            "VALUES ('plx-partial',2,'123','Proiect parțial','la plen','2026-01-01')"
+        )
+        con.execute(
+            "CREATE TABLE initiativa_etapa (plx_id TEXT NOT NULL, ord INTEGER NOT NULL, "
+            "data TEXT, camera TEXT, actiune TEXT NOT NULL, comisii TEXT, "
+            "steno_ids TEXT, steno_idm TEXT)"
+        )
+        con.executemany(
+            "INSERT INTO initiativa_etapa"
+            "(plx_id,ord,data,camera,actiune,comisii,steno_ids,steno_idm) "
+            "VALUES (?,?,?,?,?,?,?,?)",
+            [
+                (
+                    "plx-partial",
+                    0,
+                    "2026-03-01",
+                    "Senat",
+                    "depunerea raportului de admitere",
+                    "Comisia pentru administrație",
+                    None,
+                    None,
+                ),
+                (
+                    "plx-partial",
+                    1,
+                    "2026-03-05",
+                    "Senat",
+                    "înscrisă pe ordinea de zi și în programul de lucru",
+                    None,
+                    None,
+                    None,
+                ),
+            ],
+        )
+        con.commit()
+
+    events = ap.tracker_events(SimpleNamespace(initiative=initiative), "plx-partial")
+
+    assert [event["key"] for event in events] == [
+        "committee_assignment",
+        "report_filed",
+        "plenary_agenda",
+    ]
+    assert events[1]["position"] == "adoptare"
+    assert events[2]["agenda_date"] == "2026-03-05"
+
+
 def test_discovery_only_store_remains_compatible_with_existing_importer(state):
     action(state, "descopera")
     assert dp.versiuni(state, "plx-000") == []

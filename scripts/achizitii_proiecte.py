@@ -96,9 +96,37 @@ def _report_position(action):
     folded = _fold(action)
     if "resping" in folded or "negativ" in folded:
         return "respingere"
-    if "adopt" in folded or "favorabil" in folded:
+    if "adopt" in folded or "favorabil" in folded or "admit" in folded:
         return "adoptare"
     return None
+
+
+def _is_report_filed(action):
+    folded = _fold(action)
+    return "raport" in folded and any(
+        term in folded
+        for term in (
+            "depus",
+            "depun",
+            "primit",
+            "primire",
+            "prezentat",
+            "inaintat",
+        )
+    )
+
+
+def _is_plenary_agenda(action, row):
+    folded = _fold(action)
+    return bool(row.get("steno_ids")) or any(
+        term in folded
+        for term in (
+            "ordine de zi",
+            "ordinea de zi",
+            "plen",
+            "programul de lucru",
+        )
+    )
 
 
 def _nominal_url(idv):
@@ -137,9 +165,7 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                     "deadline": None,
                 }
             )
-        if "raport" in folded and (
-            "depus" in folded or "primit" in folded or "primire" in folded or "prezentat" in folded
-        ):
+        if _is_report_filed(action):
             events.append(
                 {
                     **base,
@@ -151,7 +177,7 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                     "filed_at": row.get("data"),
                 }
             )
-        if "ordine de zi" in folded or "plen" in folded or row.get("steno_ids"):
+        if _is_plenary_agenda(action, row):
             events.append(
                 {
                     **base,
@@ -219,32 +245,38 @@ def tracker_events(stare, plx, *, limit=MAX_TRACKER_EVENTS):
     meta = _metadata(_initiative(stare, plx))
     with closing(_readonly(stare.initiative)) as con:
         tables = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        if not {"initiativa_etapa", "initiativa_aviz", "initiativa_vot"} <= tables:
+        if not {"initiativa_etapa", "initiativa_aviz", "initiativa_vot"} & tables:
             return []
-        stages = [
-            dict(r)
-            for r in con.execute(
-                "SELECT data,camera,actiune,comisii,steno_ids,steno_idm FROM initiativa_etapa "
-                "WHERE plx_id=? ORDER BY ord LIMIT ?",
-                (plx, limit),
-            )
-        ]
-        opinions = [
-            dict(r)
-            for r in con.execute(
-                "SELECT de_la,data,sens,numar,primit FROM initiativa_aviz "
-                "WHERE plx_id=? ORDER BY COALESCE(data,''), de_la LIMIT ?",
-                (plx, limit),
-            )
-        ]
-        votes = [
-            dict(r)
-            for r in con.execute(
-                "SELECT data,camera,intrebare,pentru,contra,abtineri,rezultat,absenti,idv "
-                "FROM initiativa_vot WHERE plx_id=? ORDER BY COALESCE(data,''), camera LIMIT ?",
-                (plx, limit),
-            )
-        ]
+        stages = []
+        if "initiativa_etapa" in tables:
+            stages = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT data,camera,actiune,comisii,steno_ids,steno_idm "
+                    "FROM initiativa_etapa WHERE plx_id=? ORDER BY ord LIMIT ?",
+                    (plx, limit),
+                )
+            ]
+        opinions = []
+        if "initiativa_aviz" in tables:
+            opinions = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT de_la,data,sens,numar,primit FROM initiativa_aviz "
+                    "WHERE plx_id=? ORDER BY COALESCE(data,''), de_la LIMIT ?",
+                    (plx, limit),
+                )
+            ]
+        votes = []
+        if "initiativa_vot" in tables:
+            votes = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT data,camera,intrebare,pentru,contra,abtineri,rezultat,absenti,idv "
+                    "FROM initiativa_vot WHERE plx_id=? ORDER BY COALESCE(data,''), camera LIMIT ?",
+                    (plx, limit),
+                )
+            ]
     return _tracker_events_from_rows(meta, stages, opinions, votes)[:limit]
 
 
