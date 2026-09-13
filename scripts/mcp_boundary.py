@@ -73,12 +73,15 @@ def capabilities() -> dict:
         "contract": "mcp-boundary-v1",
         "capabilities": [{"key": key, **value} for key, value in CAPABILITIES.items()],
         "execution": {
-            "implemented": False,
+            "implemented": True,
+            "executor_contract": "mcp-executor-boundary-v1",
+            "supported_executor": "local-mock/ai.draft",
             "requires_user_approval": True,
             "approval_event_contract": "mcp-audit-event-v1",
             "cost_owner": "user_account_or_user_key",
             "credentials_stored": False,
             "hidden_external_calls": False,
+            "external_calls": False,
         },
         "limits": {
             "contract": "mcp-boundary-limits-v1",
@@ -95,6 +98,7 @@ def capabilities() -> dict:
         ],
         "limitari": [
             "Acest contract nu execută apeluri MCP.",
+            "Executorul v1 rulează doar adaptorul local-mock/ai.draft și păstrează audit local.",
             "Textul juridic poate fi trimis extern numai după aprobare explicită.",
             "Aplicația rămâne utilizabilă fără MCP.",
             "Nu se stochează credentiale și nu există apeluri externe ascunse.",

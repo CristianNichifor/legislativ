@@ -10,16 +10,20 @@ The first contract is `mcp-boundary-v1`:
   event.
 - `POST /api/dosare/ai-draft/mcp-preview` builds the existing evidence-grounded AI draft prompt,
   wraps it in the MCP approval contract, and returns a copyable handoff packet.
+- `POST /api/dosare/ai-draft/mcp-execute` accepts only an explicitly approved payload hash and
+  runs the v1 local mock executor for the AI draft workflow.
 - The preview includes server, tool, purpose, capability, visible data preview, truncation state, and
   SHA-256 of the full text.
 - The preview includes cost ownership and token estimate metadata. Server cost is `none`; a real
   executor must disclose provider-side pricing/retention before approval.
-- The audit event is always `approved: false`; a later executor must persist a user-approved event
-  before calling any MCP server.
+- Preview audit events are `approved: false`. Executor audit events are persisted only after the
+  request supplies `approved: true` plus the exact preview `data_sha256`.
 
-This PR does not add an MCP executor and does not connect to Claude, ChatGPT, GitHub, calendar, or
-document tools. GitHub Pages can show the capability list, but rejects MCP previews because the
-public static worker has no approved local executor.
+The v1 executor does not connect to Claude, ChatGPT, GitHub, calendar or document tools. It supports
+only `local-mock/ai.draft`, which is a deterministic local adapter used to prove configure, test,
+approve, run and audit behavior without network access or credential storage. GitHub Pages can show
+the capability list, but rejects MCP previews/execution because the public static worker has no
+approved local executor.
 
 The first user workflow is an explicit AI-draft handoff from a manual note. The
 browser prepares the source-backed prompt, shows the MCP approval packet, lets the
@@ -35,13 +39,39 @@ Allowed v1 capability classes:
 - `source_ingest`: inspect local or connected folders for source candidates.
 - `github_issue`: draft an issue from a reviewed finding.
 
-Executor rules for a later PR:
+Executor rules:
 
 - No background calls.
 - No hidden legal-text export.
 - No app-paid AI usage through MCP.
 - Show the same payload the executor will send.
 - Keep the app usable when MCP is unavailable.
+- Reject credentials and unknown server/tool pairs.
+- Store an append-only dossier audit event with request, data and result hashes.
+
+## Executor boundary v1
+
+`scripts.mcp_executor` implements `mcp-executor-boundary-v1`:
+
+- `test_config({"server":"local-mock","tool":"ai.draft"})` reports whether the selected executor is
+  available.
+- `execute(path, request)` recomputes the MCP preview from selected evidence, compares the approved
+  payload hash, runs the deterministic local mock adapter and stores an audit event in the private
+  dossier database.
+
+The execute request must include only:
+
+- `id` — caller-generated audit id;
+- `dosar_id` — private dossier id;
+- `server` — currently `local-mock`;
+- `tool` — currently `ai.draft`;
+- `draft` — the same selected-evidence AI draft request used for preview;
+- `approved` — must be `true`;
+- `approved_data_sha256` — must match the preview payload hash.
+
+The returned draft is labeled `draft_unreviewed`, includes a non-verdict notice and may be inserted
+into a note through the ordinary note workflow. The executor never accepts API keys, never stores
+credentials and never sends legal text to an external MCP server in v1.
 
 ## Bounded local tools v1
 
