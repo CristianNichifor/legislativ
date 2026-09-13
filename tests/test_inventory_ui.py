@@ -489,6 +489,7 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         "assert.ok(cockpit.includes('project-evidence-pack-v1'));"
         "assert.ok(cockpit.includes('Următoarele acțiuni'));"
         "assert.ok(cockpit.includes('Revizuiește &lt;x&gt;'));"
+        "assert.ok(cockpit.includes('data-cockpit-open-writing'));"
         "assert.ok(cockpit.includes('data-cockpit-open-workbench'));"
         "assert.ok(cockpit.includes('data-cockpit-open-timeline'));"
         "assert.ok(cockpit.includes('data-cockpit-create-dossier'));"

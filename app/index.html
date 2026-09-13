@@ -6705,14 +6705,18 @@ function lifecycleSourceNote(project){
     source_hash:source.last_hash||'',evidence_quote:[project.title,project.status].filter(Boolean).join('\n'),
     reasoning:lifecycleSourceReason(project),status:'needs_evidence',revizie:0};
 }
+async function projectDraftSeed(projectId){
+  const response=await fetch('/api/project-draft-seed?'+new URLSearchParams({project_id:projectId}));
+  const data=await response.json().catch(()=>({error:'Draftul proiectului nu este disponibil.'}));
+  if(!response.ok||data.error)throw new Error(data.error||'Draftul proiectului nu este disponibil.');
+  return data;
+}
 async function draftFromProject(project){
   const status=$('#lifecycle-status'), projectId=project.project_id||'';
   if(!projectId){status.textContent='Proiect fără identificator pentru draft.';return;}
   status.textContent='Pregătesc draftul factual din evenimentele tracker…';
   try{
-    const response=await fetch('/api/project-draft-seed?'+new URLSearchParams({project_id:projectId}));
-    const data=await response.json().catch(()=>({error:'Draftul proiectului nu este disponibil.'}));
-    if(!response.ok||data.error)throw new Error(data.error||'Draftul proiectului nu este disponibil.');
+    const data=await projectDraftSeed(projectId);
     $('#draft').value=data.text||'';$('#draft').dispatchEvent(new Event('input',{bubbles:true}));
     selectTab('lint');status.textContent=`Draft pregătit pentru ${projectId}: ${data.summary?.events||0} evenimente locale.`;
   }catch(err){status.textContent=err.message;}
@@ -7091,7 +7095,7 @@ function projectCockpitHtml(data){
     +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
     +`<h5>Următoarele acțiuni</h5>${projectCockpitActionsHtml(data.next_actions||[])}`
     +(data.limitari?.length?`<h5>Limitări</h5><ul>${data.limitari.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-writing>Redactare</button><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;
 }
 async function openProjectCockpit(project={}){
   const panel=$('#project-cockpit'), form=$('#project-cockpit-search'), status=$('#project-cockpit-status'), body=$('#project-cockpit-body');
@@ -7110,6 +7114,8 @@ async function openProjectCockpit(project={}){
     if(token!==PROJECT_COCKPIT.sequence)return;
     PROJECT_COCKPIT.data=data;body.innerHTML=projectCockpitHtml(data);
     const projectData=data.lifecycle?.project||{project_id:projectId};
+    const writing=body.querySelector('[data-cockpit-open-writing]');
+    if(writing)writing.onclick=()=>openProjectWritingWorkspace({...projectData,project_id:projectId,dossier_id:dossierId},data);
     const workbench=body.querySelector('[data-cockpit-open-workbench]');
     if(workbench)workbench.onclick=()=>openProjectWorkbench(projectData);
     const timeline=body.querySelector('[data-cockpit-open-timeline]');
@@ -7250,6 +7256,51 @@ function bindWritingWorkspace(dossier){
     }catch(err){status.textContent=err.message;}
   };
   if(form.elements.project_id.value)loadPack();
+}
+function projectWritingSourceContext(project={},cockpit=null,seed=null){
+  const source=cockpit?.source_attention||project.registry_source||{};
+  const tracker=cockpit?.tracker||{};
+  const latest=tracker.latest_event||{};
+  return [
+    `# Context proiect: ${project.project_id||cockpit?.project_id||'proiect'}`,
+    '',
+    project.title||cockpit?.lifecycle?.project?.title||'Fără titlu local',
+    '',
+    `- Stadiu: ${project.stage?.label||project.status||cockpit?.lifecycle?.project?.status||'necunoscut'}`,
+    `- Evenimente tracker: ${tracker.total||seed?.summary?.events||0}`,
+    `- Ultimul eveniment: ${latest.event_label||latest.display_label||latest.event_type||'necunoscut'}`,
+    `- Sursă: ${source.registry_source_state||source.source_state||cockpit?.source_status||'necunoscută'}`,
+    '',
+    'Context local pentru redactare; nu este verdict juridic.',
+  ].join('\n');
+}
+async function openProjectWritingWorkspace(project={},cockpit=null){
+  const projectId=project.project_id||cockpit?.project_id||'';
+  const dossierId=project.dossier_id||cockpit?.dossier_id||DOSARE_UI.selected?.id||'';
+  const status=$('#project-cockpit-status')||$('#dossier-status');
+  if(!projectId){if(status)status.textContent='Proiect fără identificator pentru redactare.';return;}
+  if(!dossierId){
+    lifecyclePrefillDossier(project);
+    try{
+      const seed=await projectDraftSeed(projectId);
+      $('#draft').value=seed.text||'';$('#draft').dispatchEvent(new Event('input',{bubbles:true}));
+      $('#dossier-status').textContent=`Dosarul este pregătit pentru ${projectId}. Draftul factual este în fila Verifică; creează sau alege dosarul pentru spațiul de redactare.`;
+    }catch(err){$('#dossier-status').textContent=`Dosarul este pregătit pentru ${projectId}. ${err.message}`;}
+    selectTab('dosare');
+    return;
+  }
+  if(status)status.textContent='Deschid spațiul de redactare legislativă…';
+  await selectDossier(dossierId);
+  const host=$('#dossier-writing'), form=host?.querySelector('[data-writing-project-form]');
+  if(form){form.elements.project_id.value=projectId;form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));}
+  const draftBox=host?.querySelector('[data-writing-draft]'), notesBox=host?.querySelector('[data-writing-notes]');
+  let seed=null;
+  try{seed=await projectDraftSeed(projectId);if(draftBox&&!draftBox.value.trim())draftBox.value=seed.text||'';}
+  catch(err){if(status)status.textContent=err.message;}
+  if(notesBox&&!notesBox.value.trim())notesBox.value=projectWritingSourceContext(project,cockpit,seed);
+  $('#dossier-library').open=true;host?.closest('details')?.setAttribute('open','');
+  host?.scrollIntoView({block:'start'});
+  $('#dossier-status').textContent=`Spațiu de redactare pregătit pentru ${projectId}. Contextul este local și nu este verdict juridic.`;
 }
 function projectWorkbenchFilename(pack){
   return 'pachet-dovezi-'+String(pack.project_id||'proiect').toLowerCase()
