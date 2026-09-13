@@ -1555,10 +1555,11 @@
           </select>
           <select id="m-source-quality" title="Filtrează după calitatea surselor locale">
             <option value="">toate sursele</option>
+            <option value="loaded">surse încărcate</option>
             <option value="missing">surse lipsă</option>
-            <option value="attention">surse cu atenție</option>
-            <option value="queued">surse în coadă</option>
-            <option value="current">surse încărcate</option>
+            <option value="stale">surse schimbate/stale</option>
+            <option value="partial">surse parțiale</option>
+            <option value="reviewable">revizuibile</option>
             <option value="unknown">registru indisponibil</option>
           </select>
           <select id="m-sort" title="Ordonează matricea">
@@ -7798,15 +7799,16 @@ function mSourceQualityLabel(q){
   q=q||{};
   if(q.unknown) return `${nf(q.unknown)} necun.`;
   const parts=[];
+  if(q.loaded) parts.push(`${nf(q.loaded)} încărcate`);
   if(q.missing) parts.push(`${nf(q.missing)} lipsă`);
-  if(q.attention) parts.push(`${nf(q.attention)} atenție`);
-  if(q.queued) parts.push(`${nf(q.queued)} coadă`);
-  if(q.current) parts.push(`${nf(q.current)} ok`);
+  if(q.stale) parts.push(`${nf(q.stale)} stale`);
+  if(q.partial) parts.push(`${nf(q.partial)} parțiale`);
+  if(q.reviewable) parts.push(`${nf(q.reviewable)} reviz.`);
   return parts.join(" · ")||"0";
 }
 function mSourceQualityHint(q){
   q=q||{};
-  return `Surse: ${nf(q.current||0)} încărcate · ${nf(q.missing||0)} lipsă · ${nf(q.attention||0)} cu atenție · ${nf(q.queued||0)} în coadă · ${nf(q.unknown||0)} necunoscute`;
+  return `Surse: ${nf(q.loaded||q.current||0)} încărcate · ${nf(q.missing||0)} lipsă · ${nf(q.stale||0)} schimbate/stale · ${nf(q.partial||q.queued||0)} parțiale · ${nf(q.reviewable||0)} revizuibile · ${nf(q.unknown||0)} necunoscute`;
 }
 function mActiuni(lista){
   const acts=(lista||[]).filter(a=>a.fel==="prevedere"&&a.act_id&&a.locator);
@@ -7910,7 +7912,8 @@ function mDrilldownHtml(d){
     +`<div class="matrix-stats">`
     +stat("prevederi suport",summary.prevederi)+stat("proiecte pendinte",summary.proiecte)
     +stat("referințe UE",summary.referinte_ue)+stat("surse lipsă",summary.surse_lipsa)
-    +stat("surse cu atenție",summary.surse_atentie)+`</div>`;
+    +stat("surse stale",summary.surse_stale)+stat("surse parțiale",summary.surse_partiale)
+    +stat("revizuibile",summary.surse_revizuibile)+`</div>`;
   h+=`<div class="parc-h">Intrări de lucru</div><div class="matrix-drilldown-actions">`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar și propuneri</button>`
     +`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(d.emitent||"")}">compară proiecte</button>`
@@ -8384,8 +8387,11 @@ function renderMatrice(){
     +`<div class="matrix-stat"><b>${nf(rr.viduri)}</b><span>lacune legislative</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.neconstitutionale)}</b><span>nereparate după Curte</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.initiative_in_lucru)}</b><span>inițiative pendinte</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_incarcate||rr.surse_curente)}</b><span>surse încărcate</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.surse_lipsa)}</b><span>surse lipsă</span></div>`
-    +`<div class="matrix-stat"><b>${nf(rr.surse_atentie)}</b><span>surse cu atenție</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_stale)}</b><span>surse stale</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_partiale)}</b><span>surse parțiale</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_revizuibile)}</b><span>revizuibile</span></div>`
     +`</div>`;
   const q=fold($("#m-q")?.value||"").trim();
   MATRIX_ROWS=(d.randuri||[]).filter(r=>!q||mTextCautare(r).includes(q));

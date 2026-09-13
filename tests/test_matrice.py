@@ -622,7 +622,8 @@ def test_matrix_graph_scaffold_exposes_candidate_edges_and_source_state(tmp_path
     assert out["graph_state"] == "ok"
     assert out["acte_selectate"] == 1
     assert out["nodes"][0]["act_id"] == "lege-98-2016"
-    assert out["nodes"][0]["source_quality"]["cheie"] == "attention"
+    assert out["nodes"][0]["source_quality"]["cheie"] == "reviewable"
+    assert out["nodes"][0]["source_quality"]["legacy_cheie"] == "attention"
     assert out["nodes"][0]["source_quality"]["source_state"] == "unavailable"
     assert {e["fel"] for e in out["edges"]} == {"modifica", "abroga", "refera"}
     assert all(e["status"] == "relatie_candidata_neconfirmata" for e in out["edges"])
@@ -667,26 +668,116 @@ def test_matrix_exposes_source_quality_filter(tmp_path):
     parlament = next(r for r in out["randuri"] if r["emitent"] == "Parlamentul")
     guvern = next(r for r in out["randuri"] if r["emitent"] == "Guvernul")
 
+    assert parlament["source_quality"]["reviewable"] == 1
     assert parlament["source_quality"]["attention"] == 1
     assert guvern["source_quality"]["missing"] == 1
+    assert out["rezumat"]["surse_revizuibile"] == 1
     assert out["rezumat"]["surse_atentie"] == 1
     assert out["rezumat"]["surse_lipsa"] == 1
 
     assert [
+        r["emitent"] for r in _matrice({"source_quality": ["reviewable"]}, stare)["randuri"]
+    ] == ["Parlamentul"]
+    assert [
         r["emitent"] for r in _matrice({"source_quality": ["attention"]}, stare)["randuri"]
     ] == ["Parlamentul"]
     acte = _matrice_acte(
-        {"emitent": ["Parlamentul"], "source_quality": ["attention"]},
+        {"emitent": ["Parlamentul"], "source_quality": ["reviewable"]},
         stare,
     )
     assert acte["total"] == 1
-    assert acte["acte"][0]["source_quality"]["cheie"] == "attention"
+    assert acte["acte"][0]["source_quality"]["cheie"] == "reviewable"
     assert (
         _matrice_acte(
             {"emitent": ["Parlamentul"], "source_quality": ["missing"]},
             stare,
         )["acte"]
         == []
+    )
+
+
+def test_matrix_distinguishes_loaded_stale_partial_and_reviewable_sources(tmp_path):
+    stare = _stare(tmp_path)
+    from scripts import source_registry
+
+    with depozit.deschide(stare.corpus) as con:
+        _act(con, "lege-2-2020", "lege", "2", 2020, "Parlamentul", "Achiziții publice")
+        _act(con, "lege-3-2020", "lege", "3", 2020, "Parlamentul", "Achiziții publice")
+        _act(con, "lege-4-2020", "lege", "4", 2020, "Parlamentul", "Achiziții publice")
+        con.commit()
+
+    states = {
+        "lege-98-2016": "fetched",
+        "lege-2-2020": "changed",
+        "lege-3-2020": "queued",
+        "lege-4-2020": "needs_review",
+    }
+    for act_id, state in states.items():
+        row = source_registry.executa(
+            stare,
+            {
+                "family": "legislatie_ro",
+                "identifier": act_id,
+                "url": f"https://legislatie.just.ro/Public/DetaliiDocument/{act_id}",
+            },
+        )
+        if state == "queued":
+            source_registry.executa(stare, {"action": "queue", "id": row["id"]})
+        elif state == "changed":
+            source_registry.executa(stare, {"action": "queue", "id": row["id"]})
+            source_registry.executa(
+                stare,
+                {
+                    "action": "record",
+                    "id": row["id"],
+                    "state": "fetched",
+                    "content_hash": "a" * 64,
+                },
+            )
+            source_registry.executa(
+                stare,
+                {
+                    "action": "record",
+                    "id": row["id"],
+                    "state": "changed",
+                    "content_hash": "b" * 64,
+                },
+            )
+        else:
+            source_registry.executa(stare, {"action": "queue", "id": row["id"]})
+            source_registry.executa(
+                stare,
+                {
+                    "action": "record",
+                    "id": row["id"],
+                    "state": state,
+                    "content_hash": "a" * 64,
+                },
+            )
+
+    out = _matrice({"emitent": ["Parlamentul"]}, stare)
+    rand = next(r for r in out["randuri"] if r["emitent"] == "Parlamentul")
+
+    assert rand["source_quality"]["loaded"] == 1
+    assert rand["source_quality"]["stale"] == 1
+    assert rand["source_quality"]["partial"] == 1
+    assert rand["source_quality"]["reviewable"] == 1
+    assert rand["source_quality"]["current"] == 1
+    assert rand["source_quality"]["queued"] == 1
+    assert rand["source_quality"]["attention"] == 2
+    assert out["rezumat"]["surse_incarcate"] == 1
+    assert out["rezumat"]["surse_stale"] == 1
+    assert out["rezumat"]["surse_partiale"] == 1
+    assert out["rezumat"]["surse_revizuibile"] == 1
+
+    assert _matrice({"source_quality": ["loaded"]}, stare)["randuri"][0]["emitent"] == "Parlamentul"
+    assert _matrice({"source_quality": ["stale"]}, stare)["randuri"][0]["emitent"] == "Parlamentul"
+    assert (
+        _matrice({"source_quality": ["partial"]}, stare)["randuri"][0]["emitent"] == "Parlamentul"
+    )
+    assert (
+        _matrice({"source_quality": ["reviewable"]}, stare)["randuri"][0]["emitent"]
+        == "Parlamentul"
     )
 
 

@@ -809,11 +809,18 @@ def _initiative_matrice(stare: Stare) -> dict[str, int]:
 
 
 SOURCE_QUALITY_STATES = {
-    "current": {"cheie": "current", "eticheta": "surse încărcate"},
-    "attention": {"cheie": "attention", "eticheta": "surse cu atenție"},
-    "queued": {"cheie": "queued", "eticheta": "surse în coadă"},
+    "loaded": {"cheie": "loaded", "eticheta": "surse încărcate"},
     "missing": {"cheie": "missing", "eticheta": "surse lipsă"},
+    "stale": {"cheie": "stale", "eticheta": "surse schimbate/stale"},
+    "partial": {"cheie": "partial", "eticheta": "surse parțiale"},
+    "reviewable": {"cheie": "reviewable", "eticheta": "revizuibile"},
     "unknown": {"cheie": "unknown", "eticheta": "registru indisponibil"},
+}
+
+SOURCE_QUALITY_ALIASES = {
+    "current": "loaded",
+    "attention": "reviewable",
+    "queued": "partial",
 }
 
 
@@ -824,10 +831,12 @@ def _quality_state_from_source(row: dict | None, registry_available: bool) -> st
         return "missing"
     state = row.get("state") or ""
     if state in {"fetched", "unchanged"}:
-        return "current"
-    if state in {"changed", "failed", "needs_review", "rate_limited", "unavailable"}:
-        return "attention"
-    return "queued"
+        return "loaded"
+    if state == "changed":
+        return "stale"
+    if state in {"failed", "needs_review", "rate_limited", "unavailable"}:
+        return "reviewable"
+    return "partial"
 
 
 def _source_registry_index(stare: Stare) -> tuple[bool, dict[str, dict], dict[str, dict]]:
@@ -857,11 +866,15 @@ def _source_registry_index(stare: Stare) -> tuple[bool, dict[str, dict], dict[st
 
 def _empty_source_quality() -> dict:
     return {
+        "loaded": 0,
+        "missing": 0,
+        "stale": 0,
+        "partial": 0,
+        "reviewable": 0,
+        "unknown": 0,
         "current": 0,
         "attention": 0,
         "queued": 0,
-        "missing": 0,
-        "unknown": 0,
         "total": 0,
     }
 
@@ -879,8 +892,17 @@ def _source_quality_for_act(
         or by_url.get(row.get("sursa_url") or "")
     )
     state = _quality_state_from_source(source, registry_available)
+    legacy = {
+        "loaded": "current",
+        "missing": "missing",
+        "stale": "attention",
+        "partial": "queued",
+        "reviewable": "attention",
+        "unknown": "unknown",
+    }[state]
     return {
         **SOURCE_QUALITY_STATES[state],
+        "legacy_cheie": legacy,
         "source_state": (source or {}).get("state", ""),
         "last_attempt_at": (source or {}).get("last_attempt_at"),
         "updated_at": (source or {}).get("updated_at"),
@@ -891,13 +913,23 @@ def _adauga_source_quality(rand: dict, quality: dict) -> None:
     sq = rand.setdefault("source_quality", _empty_source_quality())
     key = quality["cheie"]
     sq[key] += 1
+    if quality["legacy_cheie"] != key:
+        sq[quality["legacy_cheie"]] += 1
     sq["total"] += 1
 
 
 def _source_quality_acceptat(rand: dict, filtru: str | None) -> bool:
     if not filtru:
         return True
-    return (rand.get("source_quality") or {}).get(filtru, 0) > 0
+    key = SOURCE_QUALITY_ALIASES.get(filtru, filtru)
+    return (rand.get("source_quality") or {}).get(key, 0) > 0
+
+
+def _source_quality_filter(value: str | None) -> str | None:
+    if not value:
+        return None
+    key = SOURCE_QUALITY_ALIASES.get(value, value)
+    return key if key in SOURCE_QUALITY_STATES else None
 
 
 PROBLEME_MATRICE = (
@@ -972,7 +1004,7 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
     probleme_valide = {p["cheie"] for p in PROBLEME_MATRICE}
     problema_filtru = problema if problema in probleme_valide else None
-    quality_filtru = source_quality if source_quality in SOURCE_QUALITY_STATES else None
+    quality_filtru = _source_quality_filter(source_quality)
     registry_available, by_identifier, by_url = _source_registry_index(stare)
 
     def tip_acceptat(tip_act: str | None) -> bool:
@@ -1266,6 +1298,10 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "surse_lipsa": sum(r["source_quality"]["missing"] for r in iesire),
         "surse_atentie": sum(r["source_quality"]["attention"] for r in iesire),
         "surse_curente": sum(r["source_quality"]["current"] for r in iesire),
+        "surse_incarcate": sum(r["source_quality"]["loaded"] for r in iesire),
+        "surse_stale": sum(r["source_quality"]["stale"] for r in iesire),
+        "surse_partiale": sum(r["source_quality"]["partial"] for r in iesire),
+        "surse_revizuibile": sum(r["source_quality"]["reviewable"] for r in iesire),
     }
     return {
         "tip": tip,
@@ -1313,7 +1349,7 @@ def _matrice_acte(qs: dict, stare: Stare) -> dict:
     ranguri_valide = {v[0] for v in rang_normativ.CATEGORII.values()}
     rang_filtru = rang if rang in ranguri_valide else None
     domeniu_filtru = domeniu if domeniu in domenii_juridice.chei_valide() else None
-    quality_filtru = source_quality if source_quality in SOURCE_QUALITY_STATES else None
+    quality_filtru = _source_quality_filter(source_quality)
     registry_available, by_identifier, by_url = _source_registry_index(stare)
     if not emitent:
         return {
@@ -1978,6 +2014,10 @@ def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
             "referinte_ue": len(dosar.get("referinte_ue") or []),
             "surse_lipsa": (rand.get("source_quality") or {}).get("missing", 0),
             "surse_atentie": (rand.get("source_quality") or {}).get("attention", 0),
+            "surse_incarcate": (rand.get("source_quality") or {}).get("loaded", 0),
+            "surse_stale": (rand.get("source_quality") or {}).get("stale", 0),
+            "surse_partiale": (rand.get("source_quality") or {}).get("partial", 0),
+            "surse_revizuibile": (rand.get("source_quality") or {}).get("reviewable", 0),
             "viduri": semnale.get("viduri", 0),
             "neconstitutionale": semnale.get("neconstitutionale", 0),
         },
