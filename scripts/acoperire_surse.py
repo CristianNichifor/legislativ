@@ -25,6 +25,9 @@ REQUIRED_FAMILIES = (
     "ue_cellar",
 )
 ATTENTION = source_registry.ATTENTION_STATES
+READY_STATES = frozenset({"unchanged"})
+INCOMPLETE_STATES = frozenset({"discovered", "queued", "fetched"})
+BLOCKING_STATES = ATTENTION | frozenset({"unavailable"})
 
 
 def _portfolio_summary(families: list[dict]) -> dict:
@@ -94,8 +97,18 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             if counts[(family, state)]
         }
         total = total_by_family[family]
-        attention = sum(counts[(family, state)] for state in ATTENTION)
-        status = "missing" if not total else "attention" if attention else "ok"
+        attention = sum(counts[(family, state)] for state in BLOCKING_STATES)
+        ready = sum(counts[(family, state)] for state in READY_STATES)
+        incomplete = sum(counts[(family, state)] for state in INCOMPLETE_STATES)
+        status = (
+            "missing"
+            if not total
+            else "attention"
+            if attention
+            else "unsynced"
+            if incomplete and not ready
+            else "ok"
+        )
         families.append(
             {
                 "family": family,
@@ -103,6 +116,8 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
                 "required": True,
                 "total": total,
                 "attention": attention,
+                "ready": ready,
+                "incomplete": incomplete,
                 "states": states,
                 "status": status,
             }
@@ -114,7 +129,9 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
                 "label": labels.get(family, family),
                 "required": False,
                 "total": total_by_family[family],
-                "attention": sum(counts[(family, state)] for state in ATTENTION),
+                "attention": sum(counts[(family, state)] for state in BLOCKING_STATES),
+                "ready": sum(counts[(family, state)] for state in READY_STATES),
+                "incomplete": sum(counts[(family, state)] for state in INCOMPLETE_STATES),
                 "states": {
                     state: counts[(family, state)]
                     for state in sorted(source_registry.SYNC_STATES)
@@ -199,6 +216,7 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
     projects, project_limitations = _project_stage_summary(stare, now=now, stale_days=stale_days)
     missing = [row for row in families if row["required"] and row["status"] == "missing"]
     attention = [row for row in families if row["attention"]]
+    unsynced = [row for row in families if row["required"] and row["status"] == "unsynced"]
     blockers = []
     blockers.extend(
         {
@@ -218,6 +236,15 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
         }
         for row in attention
     )
+    blockers.extend(
+        {
+            "kind": "source_unsynced",
+            "family": row["family"],
+            "label": row["label"],
+            "message": f"{row['incomplete']} surse nu au încă sync reușit în {row['label']}.",
+        }
+        for row in unsynced
+    )
     if projects["unknown"]:
         blockers.append(
             {
@@ -236,6 +263,8 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
         "projects": projects,
         "missing_required": len(missing),
         "attention_sources": sum(row["attention"] for row in families),
+        "unsynced_required": len(unsynced),
+        "unsynced_sources": sum(row["incomplete"] for row in unsynced),
         "blockers": blockers,
         "portfolio": _portfolio_summary(families),
         "status": "blocked" if missing or blockers else "ok",

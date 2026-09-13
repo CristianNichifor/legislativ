@@ -109,6 +109,7 @@ def report(stare=None) -> dict:
     source_coverage = dashboard.get("source_coverage") or {}
     missing_required = source_coverage.get("missing_required", 0)
     attention_sources = source_coverage.get("attention_sources", 0)
+    unsynced_required = source_coverage.get("unsynced_required", 0)
 
     date_locale = _read("scripts/date_locale.py")
     private_boundaries = _read("docs/private-data-boundaries.md")
@@ -130,7 +131,12 @@ def report(stare=None) -> dict:
         )
     )
 
-    source_ready = missing_required == 0 and attention_sources == 0
+    source_ready = (
+        source_coverage.get("status") == "ok"
+        and missing_required == 0
+        and attention_sources == 0
+        and unsynced_required == 0
+    )
     vertical_ready = bool(vertical) and not vertical_error and all(vertical_checks.values())
     capabilities = [
         _capability(
@@ -165,6 +171,7 @@ def report(stare=None) -> dict:
                 "source_dashboard_available": dashboard.get("contract")
                 == "acceptance-dashboard-v1",
                 "no_required_family_missing": missing_required == 0,
+                "no_required_family_unsynced": unsynced_required == 0,
                 "no_required_source_attention": attention_sources == 0,
             },
             blockers=[
@@ -324,6 +331,8 @@ def report(stare=None) -> dict:
         "source_status": {
             "status": source_coverage.get("status"),
             "missing_required": missing_required,
+            "unsynced_required": unsynced_required,
+            "unsynced_sources": source_coverage.get("unsynced_sources", 0),
             "attention_sources": attention_sources,
             "blockers": source_coverage.get("blockers", []),
         },

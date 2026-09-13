@@ -40,6 +40,13 @@ The gate is expected to report `blocked` until public source coverage and
 lifecycle freshness are proven against the actual local runtime data. Bounded
 vertical workflows can pass before that happens.
 
+Use **Adaugă sursele oficiale de bază** in the source registry, or call
+`POST /api/source-registry` with `{"action":"bootstrap"}`, to register the
+required official source-family entrypoints. That removes the “missing family”
+class of blocker, but the gate still reports `blocked` while those families are
+only `unsynced`. A registered source family is not the same as current legal
+data.
+
 The report is also exposed in the UI through **Gate produs** and over HTTP at:
 
 ```text

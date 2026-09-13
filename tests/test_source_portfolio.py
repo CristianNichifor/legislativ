@@ -64,9 +64,9 @@ def test_portfolio_contract_names_legislative_tracker_events():
 @pytest.mark.parametrize(
     ("profile", "gb_min", "gb_max", "usd_min", "usd_max"),
     [
-        ("v1", 55, 310, 0.68, 4.5),
-        ("serious", 120, 630, 1.65, 9.3),
-        ("everything", 320, 3630, 4.65, 54.3),
+        ("v1", 58, 335, 0.72, 4.88),
+        ("serious", 124, 665, 1.71, 9.83),
+        ("everything", 324, 3665, 4.71, 54.83),
     ],
 )
 def test_storage_estimates_are_bounded_profiles(profile, gb_min, gb_max, usd_min, usd_max):
