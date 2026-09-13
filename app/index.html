@@ -4928,6 +4928,50 @@ function aiDraftExecutionRequest(plan,boundary){
     non_verdict_notice:'Ciornă de lucru; nu verdict juridic.'
   };
 }
+const AI_BYOK_FAILURES={timeout:['timeout',1,'Furnizorul nu a răspuns la timp.'],bad_key:['cheie invalidă',0,'Cheia BYOK a fost respinsă.'],quota:['cotă/rate limit',1,'Cotă sau rate limit.'],refusal:['refuz/siguranță',0,'Furnizorul a refuzat generarea.'],malformed_response:['răspuns invalid',0,'Răspuns fără text utilizabil.'],provider_unavailable:['indisponibil',1,'Furnizor sau rețea indisponibilă.']};
+function aiByokFailureCode(error,response){
+  if(response?.refusal||response?.safety_refusal)return 'refusal';
+  if(response?.failure_code&&AI_BYOK_FAILURES[response.failure_code])return response.failure_code;
+  const raw=[error?.code,error?.name,error?.status,error?.statusCode,error?.message,response?.error,response?.status]
+    .filter(v=>v!==undefined&&v!==null).join(' ').toLowerCase();
+  if(/\b(timeout|timed?out|abort|aborted)\b/.test(raw))return 'timeout';
+  if(/\b(401|403|unauthori[sz]ed|forbidden|auth|api.?key|bad.?key|invalid.?key)\b/.test(raw))return 'bad_key';
+  if(/\b(429|quota|rate.?limit|too many requests|insufficient_quota)\b/.test(raw))return 'quota';
+  if(/\b(refusal|refused|safety|content_filter|policy)\b/.test(raw))return 'refusal';
+  if(/\b(502|503|504|unavailable|network|fetch failed|failed to fetch|econnrefused|dns)\b/.test(raw))return 'provider_unavailable';
+  return response?'malformed_response':'provider_unavailable';
+}
+function aiByokFailure(code){
+  const canonical=AI_BYOK_FAILURES[code]?code:'provider_unavailable',f=AI_BYOK_FAILURES[canonical];
+  return {contract:'ai-byok-provider-failure-v1',failure_code:canonical,label:f[0],
+    retryable:!!f[1],user_message:f[2]+' Nu s-a creat nicio ciornă.',server_calls_model:false,
+    stores_api_key:false,output_status:'no_draft_created'};
+}
+function aiByokFailureResult(plan,boundary,request,error,response){
+  const failure=aiByokFailure(aiByokFailureCode(error,response));
+  return {
+    contract:'ai-byok-execution-result-v1',
+    request,
+    text:'',
+    nota:failure.user_message,
+    status:'failed',
+    failure,
+    insert_header:'',
+    audit:{
+      contract:'ai-draft-execution-audit-v1',
+      event:'ai_draft_execution_failed_in_browser',
+      boundary,
+      input_sha256:plan.input_sha256,
+      evidence_sha256:plan.evidence_sha256,
+      approved_external_send:boundary==='online_byok',
+      server_calls_model:false,
+      stores_api_key:false,
+      output_status:'no_draft_created',
+      failure_code:failure.failure_code,
+      retryable:failure.retryable
+    }
+  };
+}
 async function aiRunEvidenceDraft(plan,boundary,prog){
   if(!plan)throw new Error('Pregătește promptul înainte de rulare.');
   const mode=aiMode();
@@ -4937,9 +4981,14 @@ async function aiRunEvidenceDraft(plan,boundary,prog){
   const approvalPacket=aiExternalApproval(plan,boundary);
   if(!confirmAiExternalApproval(approvalPacket))throw new Error('Anulat — promptul nu a fost trimis.');
   const request=aiDraftExecutionRequest(plan,boundary);
-  const answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog});
+  let answer;
+  try{answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog});}
+  catch(err){return aiByokFailureResult(plan,boundary,request,err,null);}
+  if(answer?.failure_code||answer?.error||answer?.refusal||answer?.safety_refusal){
+    return aiByokFailureResult(plan,boundary,request,null,answer);
+  }
   const text=String(answer?.text||'').trim();
-  if(!text)throw new Error('Modelul nu a întors text.');
+  if(!text)return aiByokFailureResult(plan,boundary,request,null,answer||{});
   return {
     contract:'ai-byok-execution-result-v1',
     request,

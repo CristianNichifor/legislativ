@@ -251,6 +251,9 @@ approval packet with provider, endpoint, model, hashes, evidence count and token
 estimate before any external send. Running creates an
 `ai-byok-execution-result-v1` wrapper around the provider output with request
 metadata and an audit record; tests mock this call and never hit a live provider.
+Timeout, bad-key/auth, quota/rate-limit, refusal/safety, malformed-response and
+provider-unavailable failures are normalized as `ai-byok-provider-failure-v1`;
+they create no draft and do not preserve raw provider error text.
 Only after that can the user run local WebGPU, run online BYOK, copy the prompt,
 or move to MCP. The generated text is inserted only by explicit user action,
 labelled as an unreviewed AI draft, and remains ordinary note text until the user

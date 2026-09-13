@@ -43,6 +43,14 @@ does not call OpenAI, Anthropic or compatible endpoints, and API keys are not
 part of saved app data or approval payloads. Provider calls are tested with
 mocks only; live calls remain a user action in the browser.
 
+BYOK execution failures use the `ai-byok-provider-failure-v1` contract. The
+browser maps mocked/direct provider failures to these states: `timeout`,
+`bad_key`, `quota`, `refusal`, `malformed_response` and
+`provider_unavailable`. A failed run returns an `ai-byok-execution-result-v1`
+with `status: failed`, `output_status: no_draft_created`, a safe user message
+and an audit event. Raw provider error text is not saved because it may contain
+secrets, request IDs or account details.
+
 ## Limits
 
 - Lexical source overlap is a conservative proxy for support.
