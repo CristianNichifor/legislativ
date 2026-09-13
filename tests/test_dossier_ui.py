@@ -332,6 +332,8 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         + "const form=manualNoteFormHtml();"
         "assert.ok(form.includes('data-rule-candidate'));"
         "assert.ok(form.includes('data-ai-boundary-summary'));"
+        "assert.ok(form.includes('data-ai-note-settings'));"
+        "assert.ok(form.includes('data-ai-settings-save'));"
         "assert.ok(form.includes('data-ai-send-note'));"
         "assert.ok(form.includes('data-ai-copy-prompt'));"
         "assert.ok(form.includes('explică problema'));"
@@ -342,6 +344,41 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "assert.ok(form.includes('data-mcp-preview'));"
         "assert.ok(form.includes('data-mcp-copy'));"
         "assert.ok(form.includes('data-mcp-insert'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_note_settings_persist_only_safe_defaults():
+    source = (
+        APP.read_text().split("const AI_NOTE_SETTINGS_KEY=", 1)[1].split("let _onlineOk=", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const store=new Map();"
+        "const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,String(v))};"
+        "const sessionStorage={getItem:k=>k.includes('key')?'SECRET':null};"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiProvider(){return 'openai';}"
+        "function aiModelOnline(){return 'gpt-test';}"
+        "function aiEndpoint(){return 'https://api.test';}"
+        "const AI_NOTE_SETTINGS_KEY="
+        + source
+        + "const form={elements:{ai_boundary:{value:'mcp_handoff'},"
+        "ai_task:{value:'draft_amendment'},"
+        "mcp_server:{value:'desktop-claude'},mcp_tool:{value:'claude.chat'}}};"
+        "const saved=aiNoteSettingsSave(form);"
+        "assert.equal(saved.contract,'ai-note-settings-v1');"
+        "assert.equal(saved.boundary,'mcp_handoff');"
+        "assert.equal(saved.stores_api_key,false);"
+        "assert.ok(!store.get(AI_NOTE_SETTINGS_KEY).includes('SECRET'));"
+        "form.elements.ai_boundary.value='local_ai';form.elements.ai_task.value='issue_note';"
+        "aiNoteSettingsApply(form);"
+        "assert.equal(form.elements.ai_boundary.value,'mcp_handoff');"
+        "const html=aiNoteSettingsSummaryHtml(saved);"
+        "assert.ok(html.includes('MCP aprobat'));"
+        "assert.ok(html.includes('cheia API: nepăstrată'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 
