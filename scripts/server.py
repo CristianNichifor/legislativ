@@ -584,6 +584,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/rule-drafts",
                 "/api/dosare/rule-drafts/checks",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/analize",
                 "/api/dosare/propuneri/surse",
@@ -794,6 +795,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
                 "/api/dosare/rule-candidates/preview",
@@ -942,6 +944,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
                 "/api/dosare/rule-candidates/preview",
@@ -1017,6 +1020,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.ai_drafting import preview
 
                         out = preview(cerere)
+                    elif ruta == "/api/dosare/ai-workflow":
+                        from scripts.ai_workflow import execute
+
+                        out = execute(path, cerere)
                     elif ruta == "/api/dosare/ai-draft/mcp-preview":
                         from scripts.mcp_ai_draft import preview
 

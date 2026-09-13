@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 APPLICATION_ID = 0x4C445352
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 ENGINE_VERSION = "matrice-dosar-v2"
 LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
@@ -82,7 +82,7 @@ def _open(path, *, write=False):
             version = 1
             app = APPLICATION_ID
         if (
-            version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, SCHEMA_VERSION)
+            version not in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, SCHEMA_VERSION)
             or app != APPLICATION_ID
         ):
             raise ValueError("Schema depozitului de dosare nu este compatibilă.")
@@ -248,6 +248,42 @@ def _open(path, *, write=False):
                     "SELECT RAISE(ABORT,'Law rule drafts are append-only'); END"
                 )
             version = 13
+        if write and version == 13:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS ai_draft_audit_events ("
+                "id TEXT PRIMARY KEY, dosar_id TEXT NOT NULL REFERENCES dosare(id), "
+                "event_type TEXT NOT NULL, boundary TEXT NOT NULL, provider TEXT NOT NULL, "
+                "input_sha256 TEXT NOT NULL, evidence_sha256 TEXT NOT NULL, "
+                "result_sha256 TEXT NOT NULL, status TEXT NOT NULL, "
+                "audit_json TEXT NOT NULL, creat_la TEXT NOT NULL)"
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS ai_draft_audit_events_dosar "
+                "ON ai_draft_audit_events(dosar_id,creat_la DESC,id)"
+            )
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS mcp_audit_events ("
+                "id TEXT PRIMARY KEY, dosar_id TEXT NOT NULL REFERENCES dosare(id), "
+                "event_type TEXT NOT NULL, server TEXT NOT NULL, tool TEXT NOT NULL, "
+                "data_sha256 TEXT NOT NULL, request_sha256 TEXT NOT NULL, "
+                "result_sha256 TEXT NOT NULL, status TEXT NOT NULL, "
+                "audit_json TEXT NOT NULL, creat_la TEXT NOT NULL)"
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS mcp_audit_events_dosar "
+                "ON mcp_audit_events(dosar_id,creat_la DESC,id)"
+            )
+            for table, message in (
+                ("ai_draft_audit_events", "AI draft audit events are append-only"),
+                ("mcp_audit_events", "MCP audit events are append-only"),
+            ):
+                for operation in ("UPDATE", "DELETE"):
+                    con.execute(
+                        f"CREATE TRIGGER IF NOT EXISTS {table}_no_{operation.lower()} "
+                        f"BEFORE {operation} ON {table} BEGIN "
+                        f"SELECT RAISE(ABORT,'{message}'); END"
+                    )
+            version = 14
         if write:
             con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         yield con

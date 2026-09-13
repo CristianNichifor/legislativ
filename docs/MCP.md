@@ -10,6 +10,9 @@ The first contract is `mcp-boundary-v1`:
   event.
 - `POST /api/dosare/ai-draft/mcp-preview` builds the existing evidence-grounded AI draft prompt,
   wraps it in the MCP approval contract, and returns a copyable handoff packet.
+- `POST /api/dosare/ai-workflow` completes the bounded local/BYOK assistant run, checks returned
+  draft claims against the selected evidence manifest, blocks out-of-manifest citations, labels
+  uncited legal-looking claims, and stores the result with audit hashes.
 - `POST /api/dosare/ai-draft/mcp-execute` accepts only an explicitly approved payload hash and
   runs the v1 local mock executor for the AI draft workflow.
 - The preview includes server, tool, purpose, capability, visible data preview, truncation state, and
@@ -26,10 +29,16 @@ the capability list, but rejects MCP previews/execution because the public stati
 approved local executor.
 
 The first user workflow is an explicit AI-draft handoff from a manual note. The
-browser prepares the source-backed prompt, shows the MCP approval packet, lets the
-user copy it to a user-owned MCP tool, and accepts pasted output back into the note
-with the MCP audit timestamp and payload hash. The pasted result remains ordinary
-unreviewed note text until the user saves the note.
+browser prepares the source-backed prompt, shows cost/privacy/approval metadata,
+then lets the user choose local deterministic drafting, online BYOK or MCP handoff.
+Local and BYOK results are stored through `ai-draft-storage-audit-v1`; MCP executor
+results are stored through `mcp-executor-boundary-v1`. A draft remains ordinary
+unreviewed note text until the user saves the note, and insertion is blocked when
+the draft cites evidence outside the selected manifest.
+
+Both `ai_draft_audit_events` and `mcp_audit_events` are part of the private dossier
+schema and are append-only. Browser backup/import validation therefore preserves
+AI/MCP audit history instead of treating it as an ad hoc extra table.
 
 Allowed v1 capability classes:
 
