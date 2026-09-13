@@ -15,6 +15,38 @@ MAX_QUOTE = 1800
 MAX_CONTEXT = 2000
 MAX_PROMPT = 12000
 ESTIMATED_OUTPUT_TOKENS = 900
+BYOK_FAILURE_STATES = {
+    "timeout": {
+        "label": "timeout",
+        "retryable": True,
+        "user_message": "Furnizorul nu a răspuns la timp. Nu s-a creat nicio ciornă.",
+    },
+    "bad_key": {
+        "label": "cheie invalidă sau neautorizată",
+        "retryable": False,
+        "user_message": "Cheia BYOK a fost respinsă. Verifică cheia în sesiunea browserului.",
+    },
+    "quota": {
+        "label": "limită, cotă sau rate limit",
+        "retryable": True,
+        "user_message": "Furnizorul a refuzat cererea din cauza cotei sau rate limit.",
+    },
+    "refusal": {
+        "label": "refuz sau filtru de siguranță",
+        "retryable": False,
+        "user_message": "Furnizorul a refuzat să genereze text. Nu s-a creat ciornă.",
+    },
+    "malformed_response": {
+        "label": "răspuns fără text utilizabil",
+        "retryable": False,
+        "user_message": "Răspunsul furnizorului nu conține text utilizabil.",
+    },
+    "provider_unavailable": {
+        "label": "furnizor indisponibil",
+        "retryable": True,
+        "user_message": "Furnizorul sau rețeaua nu este disponibilă momentan.",
+    },
+}
 
 PRIVATE_DATA_EXCLUSIONS = [
     "chei API sau tokenuri",
@@ -144,6 +176,34 @@ def _execution_boundary() -> dict:
         "output_status": "draft_unreviewed",
         "audit_event": "ai_draft_execution_requested",
         "non_verdict_notice": "Ciornă de lucru; nu verdict juridic.",
+        "failure_contract": "ai-byok-provider-failure-v1",
+        "failure_states": [
+            {
+                "code": code,
+                "label": value["label"],
+                "retryable": value["retryable"],
+                "output_status": "no_draft_created",
+            }
+            for code, value in BYOK_FAILURE_STATES.items()
+        ],
+    }
+
+
+def provider_failure_state(code: str) -> dict:
+    """Return a secret-free failure contract for mocked/browser provider adapters."""
+
+    key = str(code or "").strip().lower().replace("-", "_")
+    state = BYOK_FAILURE_STATES.get(key, BYOK_FAILURE_STATES["provider_unavailable"])
+    canonical = key if key in BYOK_FAILURE_STATES else "provider_unavailable"
+    return {
+        "contract": "ai-byok-provider-failure-v1",
+        "failure_code": canonical,
+        "label": state["label"],
+        "retryable": state["retryable"],
+        "user_message": state["user_message"],
+        "server_calls_model": False,
+        "stores_api_key": False,
+        "output_status": "no_draft_created",
     }
 
 
@@ -257,7 +317,9 @@ def preview(data: dict) -> dict:
             "key_retention": "browser_session_only_for_byok",
             "output_status": "draft_unreviewed",
             "private_data_excluded": PRIVATE_DATA_EXCLUSIONS,
+            "provider_failure_states": list(BYOK_FAILURE_STATES),
         },
+        "provider_failure_states": [provider_failure_state(code) for code in BYOK_FAILURE_STATES],
         "audit": {
             "contract": "ai-draft-audit-v1",
             "event": "ai_draft_prompt_previewed",

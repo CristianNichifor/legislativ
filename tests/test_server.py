@@ -849,6 +849,12 @@ def test_law_code_delegated_norm_check_is_review_candidate_not_verdict(tmp_path)
     assert check["contract"] == "law-code-check-delegated-norm-v1"
     assert check["status"] == "candidate_gap_not_verdict"
     assert check["provision_id"] == "ro:lege-98-2016#art3"
+    assert check["deadline_status"] == "deadline_found"
+    assert check["implementation_status"] == "near_candidate_only"
+    assert check["delegation"]["status"] == "delegated_norm_required"
+    assert check["deadline_evidence"]["date"] == "2016-06-25"
+    assert check["implementation_evidence"]["near_candidates"] == ["ordin-1-2017"]
+    assert check["review_candidate"]["not_legal_verdict"] is True
     assert check["evidence"]["near_candidates"] == ["ordin-1-2017"]
     assert check["actions"][0]["eticheta"] == "vezi prevederea"
     assert any("not a legal verdict" in item for item in check["limitations"])
@@ -866,3 +872,59 @@ def test_law_code_delegated_norm_check_reports_truncation(tmp_path):
     assert out["total"] == 3
     assert out["returned"] == 2
     assert out["truncated"] is True
+
+
+def test_law_code_delegated_norm_check_marks_missing_deadline_and_implementation(tmp_path):
+    stare = _build(tmp_path)
+    stare.vid = [
+        {
+            "act_id": "lege-2-2020",
+            "locator": "art2",
+            "text": "Guvernul aprobă normele metodologice.",
+            "instrument": "hg",
+            "cautat": "act de tip «hg» care trimite la lege-2-2020",
+        }
+    ]
+
+    out = _law_code_delegated_norms({"act": ["lege-2-2020"]}, stare)
+    check = out["checks"][0]
+
+    assert check["status"] == "candidate_gap_not_verdict"
+    assert check["deadline_status"] == "deadline_missing"
+    assert check["implementation_status"] == "implementing_act_missing"
+    assert check["deadline_evidence"] == {
+        "status": "deadline_missing",
+        "date": None,
+        "days_overdue": None,
+        "source": "not_available",
+    }
+    assert check["implementation_evidence"]["found_acts"] == []
+    assert check["review_candidate"]["legal_effect"] == "unknown"
+
+
+def test_law_code_delegated_norm_check_keeps_found_implementation_review_only(tmp_path):
+    stare = _build(tmp_path)
+    stare.vid = [
+        {
+            "act_id": "lege-3-2020",
+            "locator": "art9",
+            "text": "Ministerul emite ordinul de aplicare.",
+            "instrument": "ordin",
+            "scadenta": "2020-07-01",
+            "implementing_acts": ["ordin-9-2020"],
+            "cautat": "act de tip «ordin» care trimite la lege-3-2020",
+        }
+    ]
+
+    out = _law_code_delegated_norms({"act": ["lege-3-2020"]}, stare)
+    check = out["checks"][0]
+
+    assert check["status"] == "implementation_found_review_only"
+    assert check["implementation_status"] == "implementing_act_found"
+    assert check["implementation_evidence"]["found_acts"] == ["ordin-9-2020"]
+    assert check["review_candidate"] == {
+        "status": "implementation_found_review_only",
+        "kind": "delegated_implementing_norm",
+        "legal_effect": "unknown",
+        "not_legal_verdict": True,
+    }

@@ -68,6 +68,16 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert out["execution_boundary"]["allowed_modes"] == ["local_ai", "online_byok"]
     assert out["execution_boundary"]["prompt_scope"] == "selected_evidence_only"
     assert out["execution_boundary"]["output_status"] == "draft_unreviewed"
+    assert out["execution_boundary"]["failure_contract"] == "ai-byok-provider-failure-v1"
+    assert [item["code"] for item in out["execution_boundary"]["failure_states"]] == [
+        "timeout",
+        "bad_key",
+        "quota",
+        "refusal",
+        "malformed_response",
+        "provider_unavailable",
+    ]
+    assert out["provider_failure_states"][0]["output_status"] == "no_draft_created"
     assert out["audit"]["approved_external_send"] is False
     assert out["audit"]["model_invoked_by_server"] is False
     assert "Nu inventa surse" in out["system"]
@@ -106,3 +116,26 @@ def test_ai_drafting_requires_bounded_source_evidence():
 
     with pytest.raises(ValueError, match="Tip de ciornă"):
         ai_drafting.preview(payload(task="legal_verdict"))
+
+
+@pytest.mark.parametrize(
+    ("code", "retryable"),
+    [
+        ("timeout", True),
+        ("bad_key", False),
+        ("quota", True),
+        ("refusal", False),
+        ("malformed_response", False),
+        ("provider_unavailable", True),
+        ("unknown-provider-error", True),
+    ],
+)
+def test_ai_byok_provider_failure_states_are_secret_free(code, retryable):
+    out = ai_drafting.provider_failure_state(code)
+
+    assert out["contract"] == "ai-byok-provider-failure-v1"
+    assert out["retryable"] is retryable
+    assert out["server_calls_model"] is False
+    assert out["stores_api_key"] is False
+    assert out["output_status"] == "no_draft_created"
+    assert "SECRET" not in str(out)

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bounded official CELEX text fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "celex",
+    "title",
+    "source_url",
+    "language",
+    "language_state",
+    "fallback",
+    "format",
+    "document_date",
+    "legal_type_uri",
+    "work_uri",
+    "expression_uri",
+    "manifestation_uri",
+    "item_url",
+    "text_sha256",
+    "article_boundaries",
+    "text"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "contract": {"const": "real-celex-text-fixture-v1"},
+    "celex": {"type": "string", "pattern": "^[0-9A-Z()._-]{5,50}$"},
+    "title": {"type": "string", "minLength": 1},
+    "source_url": {"type": "string", "pattern": "^https://eur-lex\\.europa\\.eu/"},
+    "language": {"enum": ["RON", "ENG"]},
+    "language_state": {"enum": ["official_ro", "official_en_fallback"]},
+    "fallback": {"type": "boolean"},
+    "format": {"enum": ["txt", "xhtml", "html", "text", "xml", "fmx4"]},
+    "document_date": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "legal_type_uri": {"type": "string", "minLength": 1},
+    "work_uri": {"type": "string", "minLength": 1},
+    "expression_uri": {"type": "string", "minLength": 1},
+    "manifestation_uri": {"type": "string", "minLength": 1},
+    "item_url": {"type": "string", "minLength": 1},
+    "text_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "article_boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "required_locators", "minimum_articles"],
+      "properties": {
+        "contract": {"const": "celex-article-boundary-v1"},
+        "required_locators": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "pattern": "^art[0-9]+[a-z]?$"}
+        },
+        "minimum_articles": {"type": "integer", "minimum": 1}
+      }
+    },
+    "text": {"type": "string", "minLength": 80}
+  }
+}
