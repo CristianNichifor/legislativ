@@ -209,6 +209,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/mcp",
                     "/api/lifecycle-proiecte",
                     "/api/tracker-evenimente",
+                    "/api/lifecycle-watchlist",
                     "/api/project-evidence-pack",
                     "/api/project-cockpit",
                     "/api/project-draft-seed",
@@ -388,6 +389,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     return
                 try:
                     self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/lifecycle-watchlist":
+                from scripts.lifecycle_watchlist import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare))
                 except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/project-evidence-pack":
@@ -777,6 +787,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/ue/surse",
                 "/api/registru-surse",
                 "/api/tracker-evenimente",
+                "/api/lifecycle-watchlist",
                 "/api/monitor-reconciliere",
                 "/api/mcp/preview",
                 "/api/dosare",
@@ -831,6 +842,7 @@ def face_handler(stare: Stare, *, runtime=None):
                         "/api/ue/surse",
                         "/api/registru-surse",
                         "/api/tracker-evenimente",
+                        "/api/lifecycle-watchlist",
                         "/api/mcp",
                     )
                 )
@@ -893,6 +905,18 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Tracker-ul legislativ nu este disponibil."}, 503)
+                return
+            if ruta == "/api/lifecycle-watchlist":
+                from scripts.lifecycle_watchlist import executa
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(executa(stare, cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json({"error": "Watchlist-ul lifecycle nu este disponibil."}, 503)
                 return
             if ruta == "/api/monitor-reconciliere":
                 from scripts.monitor_tracker import replay_to_tracker
