@@ -2556,6 +2556,41 @@ def construieste_vid(corpus_db: str, graf_db: str, limita: int | None = None) ->
     return [_vid_dict(v) for v in vids if not nota.match(v.obligatie.text.strip())]
 
 
+def _law_code_deadline(row: dict) -> dict:
+    deadline = row.get("scadenta")
+    overdue = row.get("zile_intarziere")
+    return {
+        "status": "deadline_found" if deadline else "deadline_missing",
+        "date": deadline,
+        "days_overdue": overdue,
+        "source": "explicit_or_derived_from_local_report" if deadline else "not_available",
+    }
+
+
+def _law_code_implementation(row: dict) -> dict:
+    found = list(row.get("implementing_acts") or row.get("implementari") or [])
+    near = list(row.get("candidati") or [])
+    if found:
+        status = "implementing_act_found"
+    elif near:
+        status = "near_candidate_only"
+    else:
+        status = "implementing_act_missing"
+    return {
+        "status": status,
+        "searched": row.get("cautat") or "",
+        "found_acts": found,
+        "near_candidates": near,
+        "coverage_required": row.get("instrument") or "",
+    }
+
+
+def _law_code_review_status(implementation: dict) -> str:
+    if implementation["status"] == "implementing_act_found":
+        return "implementation_found_review_only"
+    return "candidate_gap_not_verdict"
+
+
 def _law_code_delegated_norms(qs: dict, stare: Stare) -> dict:
     """First deterministic law-as-code check: delegated implementing norm not found."""
     limita = max(1, min(_numar_qs(qs, "limita", 50), 200))
@@ -2567,22 +2602,40 @@ def _law_code_delegated_norms(qs: dict, stare: Stare) -> dict:
     for row in rows[:limita]:
         locator = row.get("locator") or ""
         act_id = row.get("act_id") or ""
+        deadline = _law_code_deadline(row)
+        implementation = _law_code_implementation(row)
+        status = _law_code_review_status(implementation)
         checks.append(
             {
                 "contract": "law-code-check-delegated-norm-v1",
-                "status": "candidate_gap_not_verdict",
+                "status": status,
                 "check": "delegated_norm_not_found",
                 "act_id": act_id,
                 "locator": locator,
                 "provision_id": f"ro:{act_id}#{locator}" if act_id and locator else "",
                 "instrument": row.get("instrument") or "",
-                "deadline": row.get("scadenta"),
-                "days_overdue": row.get("zile_intarziere"),
+                "deadline": deadline["date"],
+                "days_overdue": deadline["days_overdue"],
+                "deadline_status": deadline["status"],
+                "implementation_status": implementation["status"],
                 "severity": row.get("severitate") or "blocking",
+                "delegation": {
+                    "status": "delegated_norm_required",
+                    "source_text": row.get("text") or "",
+                    "expected_instrument": row.get("instrument") or "",
+                },
+                "deadline_evidence": deadline,
+                "implementation_evidence": implementation,
+                "review_candidate": {
+                    "status": status,
+                    "kind": "delegated_implementing_norm",
+                    "legal_effect": "unknown",
+                    "not_legal_verdict": True,
+                },
                 "evidence": {
                     "text": row.get("text") or "",
-                    "searched": row.get("cautat") or "",
-                    "near_candidates": row.get("candidati") or [],
+                    "searched": implementation["searched"],
+                    "near_candidates": implementation["near_candidates"],
                 },
                 "actions": _actiuni_prevedere(act_id, locator),
                 "limitations": [
