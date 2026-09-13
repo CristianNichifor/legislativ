@@ -103,6 +103,25 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
         "text_sha256": first["text_sha256"],
         "source_hash": first["text_sha256"],
     }
+    assert first["source_metadata"] == {
+        "celex": CELEX,
+        "celex_url": cellar.CELEX_URI.format(celex=CELEX),
+        "item_url": ITEM,
+        "work_uri": "http://publications.europa.eu/resource/cellar/test",
+        "expression_uri": "http://publications.europa.eu/resource/cellar/test.RON",
+        "manifestation_uri": "http://publications.europa.eu/resource/cellar/test.RON.xhtml",
+        "language": "RON",
+        "format": "xhtml",
+        "title": "Test RON",
+        "document_date": None,
+        "legal_type_uri": None,
+        "in_force": None,
+        "read_at": first["source_metadata"]["read_at"],
+        "text_sha256": first["text_sha256"],
+    }
+    assert first["manifestari"]["total"] == 2
+    assert first["manifestari"]["languages"] == {"ENG": 1, "RON": 1}
+    assert first["manifestari"]["readable"][0]["language"] == "RON"
     assert first["articole"]["total"] == 1
     assert first["articole"]["randuri"][0]["locator"] == "art1"
     assert len(first["articole"]["randuri"][0]["sha256"]) == 64
@@ -113,6 +132,7 @@ def test_romanian_preferred_unchanged_import_keeps_snapshot(fixture):
     assert detail["incercare"]["stare"] == "ok"
     assert "text" not in detail["curenta"]["sursa"]
     assert detail["curenta"]["limba_import"]["aleasa"] == "RON"
+    assert detail["curenta"]["source_metadata"]["item_url"] == ITEM
     assert detail["curenta"]["articole"]["total"] == 1
     assert detail["curenta"]["provizii"]["randuri"][0]["locator"] == "art1"
     assert "achizitii" in au.detaliu(state, CELEX, snapshot_id=snapshot_id)["sursa"]["text"]
@@ -176,6 +196,10 @@ def test_metadata_only_import_has_contract_without_snapshot(fixture):
     assert "nu este concluzie juridica" in result["language_note"]
     assert result["source_hash"] == ""
     assert result["snapshot"] is None
+    assert result["source_metadata"] is None
+    assert result["manifestari"]["total"] == 1
+    assert result["manifestari"]["languages"] == {"RON": 1}
+    assert result["manifestari"]["readable"] == []
 
 
 def test_pdf_only_retains_metadata_and_last_good_text(fixture):
@@ -425,6 +449,13 @@ def test_missing_requested_celex_languages_are_unavailable_not_verdict(fixture):
     assert result["language_state"] == "language_unavailable"
     assert result["language_fallback"] is False
     assert "nu este concluzie juridica" in result["language_note"]
+    assert result["source_metadata"] is None
+    assert result["manifestari"] == {
+        "total": 0,
+        "languages": {},
+        "readable": [],
+        "readable_truncated": False,
+    }
     detail = au.detaliu(state, CELEX)
     assert detail["stare"] == "indisponibil"
     assert detail["incercare"]["stare"] == "indisponibil"
