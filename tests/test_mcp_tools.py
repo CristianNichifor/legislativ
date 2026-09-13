@@ -85,9 +85,7 @@ def test_local_tools_search_laws_projects_and_report_source_status(tmp_path):
 def test_timeline_and_evidence_bundle_read_selected_local_project(tmp_path):
     stare = state(tmp_path)
 
-    timeline = mcp_tools.call_tool(
-        stare, "get_project_timeline", {"project_id": "plx-10-2026"}
-    )
+    timeline = mcp_tools.call_tool(stare, "get_project_timeline", {"project_id": "plx-10-2026"})
     bundle = mcp_tools.call_tool(
         stare, "get_evidence_bundle", {"project_id": "plx-10-2026", "event_limit": 10}
     )
