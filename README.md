@@ -1,6 +1,7 @@
 # legislativ
 
 Release scope and remaining work: [v1 completion checklist](docs/RELEASE_V1.md).
+Final product acceptance/status gate: [app completeness gate](docs/APP_COMPLETENESS.md).
 
 Browser checks before shared-control adoption: [local synthetic-corpus baseline](docs/BROWSER_BASELINE.md).
 

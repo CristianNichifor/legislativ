@@ -216,6 +216,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/econsultare-feed",
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
+                    "/api/app-completeness",
                     "/api/needs-attention",
                     "/api/source-tracker-workbench",
                     "/api/surse-proiecte",
@@ -478,6 +479,10 @@ def face_handler(stare: Stare, *, runtime=None):
                 from scripts.acceptance_dashboard import raport
 
                 self._json(raport(stare))
+            elif ruta.path == "/api/app-completeness":
+                from scripts.app_completeness import report
+
+                self._json(report(stare))
             elif ruta.path == "/api/stenograma":
                 self._json(_stenograma(parse_qs(ruta.query), stare))
             elif ruta.path == "/api/rol":
