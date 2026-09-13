@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Real pilot acceptance pack",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "contract",
+    "status",
+    "domain",
+    "acceptance_command",
+    "requirements",
+    "excluded",
+    "notes"
+  ],
+  "properties": {
+    "$schema": {"type": "string"},
+    "contract": {"const": "real-pilot-pack-v1"},
+    "status": {"enum": ["ready", "blocked"]},
+    "domain": {"type": "string", "minLength": 1},
+    "acceptance_command": {"type": "string", "minLength": 1},
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "label", "status", "required", "evidence", "next_action"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z0-9_]+$"},
+          "label": {"type": "string", "minLength": 1},
+          "status": {"enum": ["ready", "blocked", "out_of_scope"]},
+          "required": {"type": "boolean"},
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "id", "path", "sha256", "source_url"],
+              "properties": {
+                "kind": {"type": "string", "minLength": 1},
+                "id": {"type": "string", "minLength": 1},
+                "path": {"type": ["string", "null"]},
+                "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+                "source_url": {"type": ["string", "null"]}
+              }
+            }
+          },
+          "next_action": {"type": "string"}
+        }
+      }
+    },
+    "excluded": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "notes": {"type": "array", "items": {"type": "string", "minLength": 1}}
+  }
+}

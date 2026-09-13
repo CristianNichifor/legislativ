@@ -53,6 +53,34 @@ By default missing authentic findings and missing EU text are reported as
 blocking until the dataset contains reviewer-approved evidence and official EU
 text, or until the pilot scope explicitly excludes them.
 
+## Real pilot pack preflight
+
+`data/real_pilot_pack.json` is the small, machine-readable pack contract for the
+next real-data pilot. Validate it with:
+
+```bash
+uv run python -m scripts.real_pilot_pack
+```
+
+The pack deliberately avoids crawling, rebuilding a multi-GB release, or using
+synthetic bridge findings. It answers one narrower question before running
+`acceptare_date_reale`: do we have the minimum real ingredients for a release
+candidate gate?
+
+Required ingredients:
+
+- real Romanian law text;
+- real Parliament project/procedure snapshot;
+- real public consultation snapshot;
+- at least one official CELEX text, Romanian preferred and English allowed only
+  with explicit language state;
+- one reviewer-approved finding with quoted provisions and proposed wording.
+
+The current pack is blocked by the last four ingredients. Once those are added,
+run the recorded command with `--require-reviewable-finding --require-eu-text`
+so the v2 acceptance gates fail closed instead of staying as advisory
+`attention` items.
+
 The 2026-09-11 pilot record built a valid public release from the two committed
 authentic snapshots and ran the command for `lege-98-2016`. It passed activation,
 search, workbench save and private rollback survival. The run measured 2 acts,
