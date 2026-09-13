@@ -1229,11 +1229,25 @@ def sincronizeaza_ue(stare, source_id: str) -> dict:
             {
                 "id": source_id,
                 "state": "needs_review",
+                "error_category": result.get("language_state") or "text_unavailable",
                 "parser_version": "achizitii_ue.v1",
-                "note": "Metadate UE disponibile, dar fără text RON/ENG compatibil.",
+                "note": result.get("language_note")
+                or "Metadate UE disponibile, dar fără text RON/ENG compatibil.",
+            },
+        )
+    if result.get("stare") == "indisponibil":
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": "unavailable",
+                "error_category": result.get("language_state") or "language_unavailable",
+                "parser_version": "achizitii_ue.v1",
+                "note": result.get("nota") or "Sursa CELEX nu este disponibila in limbile cerute.",
             },
         )
     content_hash = _eu_hash(stare, celex)
+    language_note = result.get("language_note") or result.get("nota") or ""
     inregistreaza(
         stare,
         {
@@ -1242,7 +1256,10 @@ def sincronizeaza_ue(stare, source_id: str) -> dict:
             "http_status": 200,
             "content_hash": content_hash,
             "parser_version": "achizitii_ue.v1",
-            "note": f"CELEX {celex} importat în limba {result.get('limba', 'necunoscută')}.",
+            "note": (
+                f"CELEX {celex} importat în limba {result.get('limba', 'necunoscută')}. "
+                f"{language_note}"
+            ).strip(),
         },
     )
     return inregistreaza(
