@@ -53,6 +53,13 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
     assert any("BYOK" in item for item in out["approval"]["private_data_excluded"])
     assert out["cost_estimate"]["server_cost"] == "none"
     assert out["cost_estimate"]["cost_owner"] == "user_if_byok_or_mcp"
+    assert out["external_approval_payload"]["contract"] == "ai-external-send-approval-v1"
+    assert out["external_approval_payload"]["input_sha256"] == out["input_sha256"]
+    assert out["external_approval_payload"]["evidence_sha256"] == out["evidence_sha256"]
+    assert out["external_approval_payload"]["server_calls_model"] is False
+    assert out["external_approval_payload"]["stores_api_key"] is False
+    assert out["external_approval_payload"]["output_status"] == "draft_unreviewed"
+    assert out["external_approval_payload"]["may_invent_sources"] is False
     assert out["audit"]["approved_external_send"] is False
     assert out["audit"]["model_invoked_by_server"] is False
     assert "Nu inventa surse" in out["system"]

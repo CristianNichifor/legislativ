@@ -416,14 +416,57 @@ def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
         + "const html=aiDraftBoundaryHtml({evidence_count:1,input_sha256:'i'.repeat(64),"
         "evidence_sha256:'e'.repeat(64),status:'draft_unreviewed',prompt:'PROMPT',"
         "estimated_tokens:100,cost_estimate:{estimated_total_tokens:1000,server_cost:'none',cost_owner:'user_if_byok_or_mcp'},"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'},"
         "approval:{required_for_external_ai:true,server_calls_model:false,output_status:'draft_unreviewed'},"
         "evidence_manifest:[{index:1,label:'<Act>',act_id:'lege',locator:'art1',source_hash:'h'.repeat(64)}]},'online_byok');"
         "assert.ok(html.includes('online BYOK'));"
         "assert.ok(html.includes('cost server: none'));"
+        "assert.ok(html.includes('ai-external-send-approval-v1'));"
         "assert.ok(html.includes('Aprobare externă: obligatorie'));"
         "assert.ok(html.includes('serverul cheamă model: nu'));"
         "assert.ok(html.includes('&lt;Act&gt;'));"
         "assert.ok(html.includes('PROMPT'));"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_external_approval_packet_has_cost_provider_and_no_key():
+    source = (
+        APP.read_text()
+        .split("function aiDraftBoundaryHtml", 1)[1]
+        .split("function ruleCandidateOptions", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "let confirmMessage='';"
+        "function confirm(message){confirmMessage=message;return true;}"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
+        "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
+        "key_storage:'sessionStorage_only'};}"
+        "function aiDraftBoundaryHtml"
+        + source
+        + "const plan={evidence_count:2,input_sha256:'i'.repeat(64),evidence_sha256:'e'.repeat(64),"
+        "status:'draft_unreviewed',estimated_tokens:50,cost_estimate:{estimated_total_tokens:950,"
+        "server_cost:'none',cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'}};"
+        "const packet=aiExternalApproval(plan,'online_byok');"
+        "assert.equal(packet.contract,'ai-external-send-approval-v1');"
+        "assert.equal(packet.provider,'openai');"
+        "assert.equal(packet.model,'gpt-test');"
+        "assert.equal(packet.estimated_total_tokens,950);"
+        "assert.equal(packet.server_cost,'none');"
+        "assert.equal(packet.stores_api_key,false);"
+        "assert.equal(packet.key_storage,'sessionStorage_only');"
+        "assert.equal(packet.output_status,'draft_unreviewed');"
+        "assert.equal(packet.may_invent_sources,false);"
+        "assert.equal(confirmAiExternalApproval(packet),true);"
+        "assert.ok(confirmMessage.includes('Tokeni estimați: 950'));"
+        "assert.ok(confirmMessage.includes('Cost server: none'));"
+        "assert.ok(confirmMessage.includes('Cheia API: sesiunea browserului'));"
+        "assert.ok(!JSON.stringify(packet).includes('SECRET'));"
     )
     subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
 
