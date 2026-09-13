@@ -113,6 +113,50 @@ def _provision_summary(snapshot):
     }
 
 
+def _source_metadata(snapshot):
+    source = snapshot.get("sursa") or {}
+    if snapshot.get("stare") != "capturat":
+        return None
+    return {
+        "celex": source.get("celex"),
+        "celex_url": source.get("sursa_url"),
+        "item_url": source.get("item_url"),
+        "work_uri": source.get("work_uri"),
+        "expression_uri": source.get("expression_uri"),
+        "manifestation_uri": source.get("manifestation_uri"),
+        "language": source.get("limba"),
+        "format": source.get("format"),
+        "title": source.get("titlu"),
+        "document_date": source.get("data_document"),
+        "legal_type_uri": source.get("tip_uri"),
+        "in_force": source.get("in_vigoare"),
+        "read_at": source.get("citit_la"),
+        "text_sha256": source.get("text_sha256"),
+    }
+
+
+def _manifestation_inventory(manifestations):
+    counts = {}
+    readable = []
+    for m in manifestations:
+        counts[m.limba] = counts.get(m.limba, 0) + 1
+        if m.format in cellar.FORMATE_TEXT:
+            readable.append(
+                {
+                    "language": m.limba,
+                    "format": m.format,
+                    "item_url": m.item_url,
+                    "title": m.titlu,
+                }
+            )
+    return {
+        "total": len(manifestations),
+        "languages": counts,
+        "readable": readable[:20],
+        "readable_truncated": len(readable) > 20,
+    }
+
+
 def _language_contract(language, preference=cellar.LIMBI_IMPLICITE):
     fallback = bool(language and preference and language != preference[0])
     state = "official_en_fallback" if fallback else "official_ro" if language == "RON" else ""
@@ -146,6 +190,7 @@ def _summary(snapshot):
     }
     source = snapshot.get("sursa") or {}
     out["limba_import"] = _language_contract(source.get("limba"))
+    out["source_metadata"] = _source_metadata(snapshot)
     return out
 
 
@@ -276,6 +321,9 @@ def _contract_payload(result, *, identifier, limbi):
         "language_state": result.get("limba_import", {}).get("stare", ""),
         "language_note": result.get("limba_import", {}).get("nota", ""),
         "source_hash": source_hash,
+        "source_metadata": result.get("source_metadata"),
+        "manifestari": result.get("manifestari")
+        or {"total": 0, "languages": {}, "readable": [], "readable_truncated": False},
         "snapshot": {
             "id": snapshot_id,
             "text_sha256": source_hash,
@@ -310,6 +358,12 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
                 "celex": celex,
                 "stare": "indisponibil",
                 "schimbat": False,
+                "manifestari": {
+                    "total": 0,
+                    "languages": {},
+                    "readable": [],
+                    "readable_truncated": False,
+                },
                 "limba_import": _missing_language_contract("language_unavailable", limbi),
                 "nota": LANGUAGE_NOTES["language_unavailable"],
             }
@@ -317,6 +371,7 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
             raise ValueError("Prea multe manifestari.")
         for m in manifestations:
             url_oficial(m.item_url)
+        inventory = _manifestation_inventory(manifestations)
         with cellar.deschide(stare.eu) as con:
             cellar.scrie_manifestari(con, celex, manifestations)
         try:
@@ -330,6 +385,7 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
                 "celex": celex,
                 "stare": "metadate",
                 "schimbat": False,
+                "manifestari": inventory,
                 "limba_import": _missing_language_contract("text_unavailable", limbi),
                 "nota": LANGUAGE_NOTES["text_unavailable"],
             }
@@ -380,6 +436,8 @@ def _importa(stare, celex, limbi=cellar.LIMBI_IMPLICITE):
             "limba_import": _language_contract(chosen.limba, limbi),
             "instantanee": current.get("id"),
             "text_sha256": current.get("sursa", {}).get("text_sha256"),
+            "source_metadata": _source_metadata(current),
+            "manifestari": inventory,
             "articole": _article_summary(current),
             "provizii": _provision_summary(current),
             "nota": _language_contract(chosen.limba, limbi).get("nota", ""),
