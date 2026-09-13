@@ -620,3 +620,42 @@ def test_registry_post_route_syncs_one_source(monkeypatch, tmp_path):
     assert result[0][0] == 200
     assert result[0][1]["state"] == "changed"
     assert result[0][1]["last_hash"]
+
+
+def test_registry_lists_latest_source_change_contract(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(stare, {"family": "consultare_econsultare", "identifier": "c1"})
+    registry._store_snapshot(
+        stare,
+        row["id"],
+        "a" * 64,
+        {
+            "contract": "econsultare-snapshot-v1",
+            "summary": {"title": "Consultare", "deadline": "2026-09-20", "status": "open"},
+            "documents": [{"url": "https://example.test/initial.pdf", "label": "Expunere"}],
+        },
+        "test.v1",
+    )
+    registry._store_snapshot(
+        stare,
+        row["id"],
+        "b" * 64,
+        {
+            "contract": "econsultare-snapshot-v1",
+            "summary": {"title": "Consultare", "deadline": "2026-09-25", "status": "closed"},
+            "documents": [
+                {"url": "https://example.test/initial.pdf", "label": "Expunere"},
+                {"url": "https://example.test/raport.pdf", "label": "Raport final"},
+            ],
+        },
+        "test.v1",
+    )
+
+    listed = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+
+    assert listed["latest_change"]["contract"] == "source-change-detection-v1"
+    assert [change["type"] for change in listed["latest_change"]["changes"]] == [
+        "new_committee_report",
+        "deadline_changed",
+        "consultation_closed",
+    ]

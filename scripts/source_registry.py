@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from scripts import cellar
+from scripts.source_change_detection import detect_changes
 from scripts.source_sync import STATE_LABELS, SYNC_STATES, can_transition, normalize_state
 
 FAMILIES = {
@@ -211,6 +212,13 @@ def _row(row: sqlite3.Row) -> dict:
 
 def _plain_row(row: sqlite3.Row) -> dict:
     return dict(row)
+
+
+def _latest_change(payloads: list[dict]) -> dict | None:
+    if not payloads:
+        return None
+    previous = payloads[1] if len(payloads) > 1 else None
+    return detect_changes(previous, payloads[0])
 
 
 def _tables(con: sqlite3.Connection) -> set[str]:
@@ -497,6 +505,7 @@ def lista(stare, qs: dict | None = None) -> dict:
         ).fetchall()
         attempts: dict[str, list[dict]] = {row["id"]: [] for row in rows}
         snapshots: dict[str, list[dict]] = {row["id"]: [] for row in rows}
+        snapshot_payloads: dict[str, list[dict]] = {row["id"]: [] for row in rows}
         if attempts:
             placeholders = ",".join("?" for _ in attempts)
             for attempt in con.execute(
@@ -517,8 +526,16 @@ def lista(stare, qs: dict | None = None) -> dict:
                 list(snapshots),
             ):
                 bucket = snapshots[snapshot["source_id"]]
+                payload = json.loads(snapshot["snapshot_json"])
+                payload = {
+                    **payload,
+                    "content_hash": snapshot["content_hash"],
+                    "parser_version": snapshot["parser_version"],
+                    "captured_at": snapshot["captured_at"],
+                }
+                if len(snapshot_payloads[snapshot["source_id"]]) < 2:
+                    snapshot_payloads[snapshot["source_id"]].append(payload)
                 if len(bucket) < 3:
-                    payload = json.loads(snapshot["snapshot_json"])
                     bucket.append(
                         {
                             "captured_at": snapshot["captured_at"],
@@ -545,6 +562,7 @@ def lista(stare, qs: dict | None = None) -> dict:
                     _row(row),
                     attempts=attempts.get(row["id"], []),
                     snapshots=snapshots.get(row["id"], []),
+                    latest_change=_latest_change(snapshot_payloads.get(row["id"], [])),
                 ),
             )
             for row in rows
