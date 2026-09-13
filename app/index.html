@@ -6924,6 +6924,43 @@ function projectWorkbenchNotesHtml(notes=[]){
   if(!notes.length)return '<p>Nicio notă de dosar legată de proiect.</p>';
   return notes.map(note=>`<article class="source-affected-run"><h5>${esc(note.title)}</h5><p class="hint">${esc(note.type)} · ${esc(note.status)} · ${esc(note.locator||'fără locator')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('');
 }
+function projectWorkbenchMarkdown(project,pack){
+  const summary=pack.summary||{}, lines=[
+    `# Pachet dovezi proiect: ${pack.project_id||project.project_id||'proiect'}`,
+    '',
+    project.title||'Fără titlu',
+    '',
+    `- Evenimente: ${summary.events||0}`,
+    `- Evenimente nerevizuite: ${summary.open_events||0}`,
+    `- Note dosar: ${summary.notes||0}`,
+    `- Potriviri lifecycle: ${summary.lifecycle_matches||0}`,
+    '',
+    '## Următorul pas',
+  ];
+  lines.push(...((pack.next_actions||[]).map(item=>`- ${item}`) || []));
+  if(!(pack.next_actions||[]).length)lines.push('- Nicio acțiune deschisă în pachetul curent.');
+  lines.push('', '## Evenimente');
+  for(const event of pack.events||[]){
+    lines.push(`- ${dossierTime(event.occurred_at)} · ${event.display_label||event.event_label||event.event_type} · ${event.title||''}`);
+    if(event.source_url)lines.push(`  Sursă: ${event.source_url}`);
+    if(event.content_hash)lines.push(`  SHA-256: ${event.content_hash}`);
+  }
+  if(!(pack.events||[]).length)lines.push('- Niciun eveniment tracker.');
+  lines.push('', '## Note dosar');
+  for(const note of pack.dossier_notes||[]){
+    lines.push(`- ${note.title} · ${note.type} · ${note.status}`);
+    if(note.act_id||note.locator)lines.push(`  Țintă: ${[note.act_id,note.locator].filter(Boolean).join(' · ')}`);
+    if(note.reasoning)lines.push(`  Raționament: ${note.reasoning}`);
+  }
+  if(!(pack.dossier_notes||[]).length)lines.push('- Nicio notă legată de proiect.');
+  lines.push('', '## Limitări');
+  lines.push(...((pack.limitari||[]).map(item=>`- ${item}`) || []));
+  return lines.join('\n').trim()+'\n';
+}
+function projectWorkbenchFilename(pack){
+  return 'pachet-dovezi-'+String(pack.project_id||'proiect').toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,80)+'.md';
+}
 function projectWorkbenchHtml(project,pack){
   const summary=pack.summary||{};
   const actions=pack.next_actions||[];
@@ -6937,7 +6974,7 @@ function projectWorkbenchHtml(project,pack){
     +`<h5>Dovezi</h5>${projectWorkbenchEvidenceHtml(pack.evidence||[])}`
     +`<h5>Note</h5>${projectWorkbenchNotesHtml(pack.dossier_notes||[])}`
     +(pack.limitari?.length?`<p class="hint">${pack.limitari.map(esc).join(' ')}</p>`:'')
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-workbench-timeline>Timeline</button><button type="button" class="ghost mini" data-workbench-note>Notă în dosar</button><button type="button" class="ghost mini" data-workbench-refresh>Reîncarcă</button></div></section>`;
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-workbench-timeline>Timeline</button><button type="button" class="ghost mini" data-workbench-note>Notă în dosar</button><button type="button" class="ghost mini" data-workbench-copy>Copie Markdown</button><button type="button" class="ghost mini" data-workbench-download>Descarcă Markdown</button><button type="button" class="ghost mini" data-workbench-refresh>Reîncarcă</button></div></section>`;
 }
 async function openProjectWorkbench(project){
   const panel=$('#project-workbench'), status=$('#project-workbench-status'), body=$('#project-workbench-body');
@@ -6956,6 +6993,10 @@ async function openProjectWorkbench(project){
     if(timeline)timeline.onclick=()=>openTrackerTimeline({project_id:projectId,dossier_id:pack.dossier_id||''});
     const note=body.querySelector('[data-workbench-note]');
     if(note)note.onclick=()=>{if(DOSARE_UI.selected?.id)startManualNote(lifecycleSourceNote(project));else lifecyclePrefillDossier(project);};
+    const copy=body.querySelector('[data-workbench-copy]');
+    if(copy)copy.onclick=async()=>{try{await navigator.clipboard.writeText(projectWorkbenchMarkdown(project,pack));status.textContent='Pachetul Markdown a fost copiat.';}catch{status.textContent='Copierea pachetului nu a reușit.';}};
+    const download=body.querySelector('[data-workbench-download]');
+    if(download)download.onclick=()=>{try{const url=URL.createObjectURL(new Blob([projectWorkbenchMarkdown(project,pack)],{type:'text/markdown'}));const link=document.createElement('a');link.href=url;link.download=projectWorkbenchFilename(pack);document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);status.textContent='Descărcarea Markdown a fost pornită.';}catch{status.textContent='Descărcarea nu a reușit.';}};
     const refresh=body.querySelector('[data-workbench-refresh]');
     if(refresh)refresh.onclick=()=>openProjectWorkbench(project);
     status.textContent=`Pachet încărcat: ${pack.summary?.events||0} evenimente, ${pack.summary?.notes||0} note.`;
