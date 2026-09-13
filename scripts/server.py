@@ -213,6 +213,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     "/api/econsultare-feed",
                     "/api/acoperire-surse",
                     "/api/acceptance-dashboard",
+                    "/api/needs-attention",
                     "/api/surse-proiecte",
                     "/api/ue/surse",
                     "/api/date",
@@ -441,6 +442,15 @@ def face_handler(stare: Stare, *, runtime=None):
                 try:
                     self._json(raport(stare, stale_days=int(qs.get("stale_days", ["30"])[0] or 30)))
                 except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/needs-attention":
+                from scripts.attention_feed import lista
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(lista(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/acceptance-dashboard":
                 from scripts.acceptance_dashboard import raport
@@ -755,6 +765,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/ue/surse",
                 "/api/registru-surse",
                 "/api/tracker-evenimente",
+                "/api/monitor-reconciliere",
                 "/api/mcp/preview",
                 "/api/dosare",
                 "/api/dosare/metadate",
@@ -869,6 +880,28 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json({"error": str(exc)}, 400)
                 except (OSError, sqlite3.Error):
                     self._json({"error": "Tracker-ul legislativ nu este disponibil."}, 503)
+                return
+            if ruta == "/api/monitor-reconciliere":
+                from scripts.monitor_tracker import replay_to_tracker
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    limit = int(cerere.get("limit", 200) or 200)
+                    self._json(
+                        replay_to_tracker(
+                            stare,
+                            corpus_db=stare.corpus,
+                            initiative_db=stare.initiative,
+                            limit=limit,
+                        )
+                    )
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                except (OSError, sqlite3.Error):
+                    self._json(
+                        {"error": "Reconcilierea Monitorul Oficial nu este disponibilă."}, 503
+                    )
                 return
             if ruta == "/api/mcp/preview":
                 from scripts.mcp_boundary import preview

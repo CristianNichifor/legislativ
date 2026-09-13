@@ -844,22 +844,40 @@ def _tracker_date(value: str | None) -> str:
     return value
 
 
-def _persist_tracker_event(stare, data: dict) -> None:
+def _tracker_sync_empty() -> dict:
+    return {"contract": "source-sync-tracker-events-v1", "stored": 0, "event_types": {}}
+
+
+def _tracker_sync_summary(events: list[dict]) -> dict:
+    summary = _tracker_sync_empty()
+    summary["stored"] = len(events)
+    for event in events:
+        event_type = event.get("event_type") or "unknown"
+        summary["event_types"][event_type] = summary["event_types"].get(event_type, 0) + 1
+    return summary
+
+
+def _with_tracker_sync(row: dict, events: list[dict]) -> dict:
+    return {**row, "tracker_sync": _tracker_sync_summary(events)}
+
+
+def _persist_tracker_event(stare, data: dict) -> dict | None:
     from scripts import tracker_events
 
     try:
-        tracker_events.adauga(stare, data)
+        return tracker_events.adauga(stare, data)["event"]
     except (ValueError, OSError, sqlite3.Error):
-        return
+        return None
 
 
-def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) -> None:
+def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) -> list[dict]:
     from scripts import achizitii_proiecte
 
     try:
         events = achizitii_proiecte.tracker_events(stare, plx)
     except (ValueError, OSError, sqlite3.Error):
-        return
+        return []
+    stored = []
     for event in events:
         key = event.get("key")
         if key == "opinion_requested":
@@ -870,7 +888,7 @@ def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) 
             if item not in {"key", "date", "project_id", "source_family", "source_url"}
             and value not in (None, "")
         }
-        _persist_tracker_event(
+        saved = _persist_tracker_event(
             stare,
             {
                 "event_type": key,
@@ -883,14 +901,17 @@ def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) 
                 "payload": payload,
             },
         )
+        if saved:
+            stored.append(saved)
+    return stored
 
 
 def _persist_econsultare_tracker_event(
     stare, source_id: str, snapshot: dict, content_hash: str
-) -> None:
+) -> list[dict]:
     from scripts import achizitii_econsultare
 
-    _persist_tracker_event(
+    saved = _persist_tracker_event(
         stare,
         achizitii_econsultare.tracker_event_candidate(
             snapshot,
@@ -899,6 +920,7 @@ def _persist_econsultare_tracker_event(
             observed_at=now(),
         ),
     )
+    return [saved] if saved else []
 
 
 def sincronizeaza_proiect(stare, source_id: str) -> dict:
@@ -937,7 +959,7 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
     snapshot = _project_snapshot(row, plx, operation, result, _project_local_meta(stare, plx))
     content_hash = _project_content_hash(snapshot)
     _store_snapshot(stare, source_id, content_hash, snapshot, PROJECT_PARSER_VERSION)
-    _persist_project_tracker_events(stare, source_id, row, plx)
+    tracker_sync = _persist_project_tracker_events(stare, source_id, row, plx)
     inregistreaza(
         stare,
         {
@@ -950,26 +972,32 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
         },
     )
     if needs_review:
-        return inregistreaza(
+        return _with_tracker_sync(
+            inregistreaza(
+                stare,
+                {
+                    "id": source_id,
+                    "state": "needs_review",
+                    "http_status": 200,
+                    "content_hash": content_hash,
+                    "parser_version": PROJECT_PARSER_VERSION,
+                    "note": "Sursa a fost citită, dar rezultatul necesită verificare manuală.",
+                },
+            ),
+            tracker_sync,
+        )
+    return _with_tracker_sync(
+        inregistreaza(
             stare,
             {
                 "id": source_id,
-                "state": "needs_review",
+                "state": _sync_state(row.get("last_hash", ""), content_hash),
                 "http_status": 200,
                 "content_hash": content_hash,
                 "parser_version": PROJECT_PARSER_VERSION,
-                "note": "Sursa a fost citită, dar rezultatul necesită verificare manuală.",
             },
-        )
-    return inregistreaza(
-        stare,
-        {
-            "id": source_id,
-            "state": _sync_state(row.get("last_hash", ""), content_hash),
-            "http_status": 200,
-            "content_hash": content_hash,
-            "parser_version": PROJECT_PARSER_VERSION,
-        },
+        ),
+        tracker_sync,
     )
 
 
@@ -1066,7 +1094,7 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
         snapshot,
         achizitii_econsultare.PARSER_VERSION,
     )
-    _persist_econsultare_tracker_event(stare, source_id, snapshot, content_hash)
+    tracker_sync = _persist_econsultare_tracker_event(stare, source_id, snapshot, content_hash)
     title = snapshot["summary"].get("title") or snapshot["url"]
     inregistreaza(
         stare,
@@ -1080,28 +1108,32 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
         },
     )
     if result.get("needs_review"):
-        return inregistreaza(
+        return _with_tracker_sync(
+            inregistreaza(
+                stare,
+                {
+                    "id": source_id,
+                    "state": "needs_review",
+                    "http_status": result.get("http_status", 200),
+                    "content_hash": content_hash,
+                    "parser_version": achizitii_econsultare.PARSER_VERSION,
+                    "note": "Pagina a fost citită, dar necesită verificare manuală.",
+                },
+            ),
+            tracker_sync,
+        )
+    return _with_tracker_sync(
+        inregistreaza(
             stare,
             {
                 "id": source_id,
-                "state": "needs_review",
+                "state": _sync_state(row.get("last_hash", ""), content_hash),
                 "http_status": result.get("http_status", 200),
                 "content_hash": content_hash,
                 "parser_version": achizitii_econsultare.PARSER_VERSION,
-                "note": (
-                    "Pagina a fost citită, dar titlul sau documentele necesită verificare manuală."
-                ),
             },
-        )
-    return inregistreaza(
-        stare,
-        {
-            "id": source_id,
-            "state": _sync_state(row.get("last_hash", ""), content_hash),
-            "http_status": result.get("http_status", 200),
-            "content_hash": content_hash,
-            "parser_version": achizitii_econsultare.PARSER_VERSION,
-        },
+        ),
+        tracker_sync,
     )
 
 

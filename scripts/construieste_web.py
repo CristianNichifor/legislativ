@@ -443,6 +443,24 @@ def _raspunde(path, query, body, method='GET'):
             'blockers': [{'kind': 'local_only', 'message': 'Acoperirea surselor urmărite este disponibilă în aplicația locală.'}],
             'limitari': ['GitHub Pages nu are registrul privat de surse urmărite.'],
         }
+    elif path == '/api/needs-attention':
+        out = {
+            'contract': 'legislative-attention-feed-v1',
+            'items': [],
+            'total': 0,
+            'counts': {},
+            'limitari': ['Feed-ul operațional este disponibil în aplicația locală cu registru privat.'],
+        }
+    elif path == '/api/monitor-reconciliere':
+        out = {
+            'contract': 'monitor-publication-reconciliation-v1',
+            'total': 0,
+            'needs_review': 0,
+            'counts': {},
+            'items': [],
+            'source_status': 'blocked',
+            'limitari': ['Reconcilierea Monitorul Oficial este disponibilă numai local.'],
+        }
     elif path == '/api/ue/import-queue': out = _import_queue_ue(qs, _stare)
     elif path == '/api/compune':
         out = _compune(json.loads(body or '{}').get('interventii', []))
