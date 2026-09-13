@@ -25,12 +25,12 @@
     <p data-file class="hint"></p><p data-error role="alert" hidden></p>
     <p class="hint" data-private>Datele private rămân pe acest calculator.</p>
     <div class="dataset-actions">
-      <button type="button" class="ghost mini" data-action="check">Verifică actualizări</button>
-      <button type="button" class="ghost mini" data-action="download" hidden>Descarcă versiunea</button>
+      <button type="button" class="ghost mini" data-action="check">Caută versiune nouă</button>
+      <button type="button" class="ghost mini" data-action="download" hidden>Descarcă datele</button>
       <button type="button" class="ghost mini" data-action="cancel" hidden>Oprește descărcarea</button>
-      <button type="button" class="ghost mini" data-action="activate" hidden>Activează versiunea</button>
+      <button type="button" class="ghost mini" data-action="activate" hidden>Activează datele</button>
       <button type="button" class="ghost mini" data-action="rollback" hidden>Revino la versiunea anterioară</button>
-      <button type="button" class="ghost mini" data-action="reload" hidden>Reîncarcă pagina</button>
+      <button type="button" class="ghost mini" data-action="reload" hidden>Aplică datele în pagină</button>
     </div>`;
   const node = key => host.querySelector(`[data-${key}]`);
   const buttons = [...host.querySelectorAll('[data-action]')];
@@ -87,13 +87,13 @@
       ? `Surse indisponibile in aceasta versiune: ${sourceLabels(absent)}.`
       : offer ? 'Sursele optionale publicabile sunt incluse in aceasta versiune.' : '';
     const labels = {
-      idle: '', checked: offer ? 'Verificare încheiată.' : 'Nicio versiune nouă disponibilă.',
+      idle: '', checked: offer ? 'Căutare încheiată.' : 'Nicio versiune nouă disponibilă.',
       downloading: `Se descarcă: ${size(progress.bytes)} / ${size(progress.total)}`,
-      verifying: 'Se verifică integritatea fișierelor…', ready: 'Versiune verificată, pregătită pentru activare.',
-      active: 'Versiunea este activă.', cancelled: 'Descărcare oprită.', error: 'Actualizarea nu a reușit.',
+      verifying: 'Se verifică descărcarea…', ready: 'Descărcare verificată, pregătită pentru activare.',
+      active: 'Datele sunt active.', cancelled: 'Descărcare oprită.', error: 'Schimbarea datelor nu a reușit.',
     };
     node('status').textContent = reloadNeeded
-      ? 'Datele active s-au schimbat. Reîncarcă pagina când ai păstrat ciornele.' : labels[state] || '';
+      ? 'Datele active s-au schimbat. Aplică datele în pagină când ai păstrat ciornele.' : labels[state] || '';
     if (pendingMutation || uncertain) {
       const spinner = document.createElement('span');
       spinner.className = 'spin'; spinner.setAttribute('aria-hidden', 'true');
@@ -174,7 +174,7 @@
       }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || (response.status === 404
-        ? 'Canalul de actualizări nu este disponibil.' : 'Cererea locală nu a reușit.'));
+        ? 'Canalul de date nu este disponibil.' : 'Cererea locală nu a reușit.'));
       if (status && (data?.mode !== 'local' || !data.progress)) {
         throw new Error('Starea locală nu poate fi confirmată.');
       }

@@ -5,7 +5,7 @@
   const REPORTS = ['termeni.json', 'manifest.json', 'vid.json', 'neconstitutional.json',
     'norme_lovite.json', 'considerente.json', 'parlament.json', 'ue_acoperire.json'];
   const DATABASES = ['corpus.db', 'initiative.db', 'graf.db', 'eu.db'];
-  const LABELS = {'index.json':'Index legislativ', 'termeni.json':'Index de terminologie',
+  const LABELS = {'index.json':'Cautare legislativa', 'termeni.json':'Dictionar de terminologie',
     'manifest.json':'Indicatori de acoperire', 'vid.json':'Rapoarte privind obligatiile',
     'neconstitutional.json':'Rapoarte de constitutionalitate', 'norme_lovite.json':'Prevederi afectate de decizii',
     'considerente.json':'Motivarile deciziilor', 'parlament.json':'Traseu parlamentar',
@@ -164,7 +164,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     const panel = document.createElement('section'); panel.id = 'browser-generation';
     panel.style.cssText = 'margin:0 0 1rem;padding:.75rem 0;border-bottom:1px solid var(--rule);min-width:0;font: .85rem var(--sans);letter-spacing:0';
-    panel.innerHTML = '<h2 style="font-size:1rem;margin:0">Date legislative online</h2><p data-active></p><p data-offer></p><p class="hint" data-coverage></p><p class="hint">Citire online a bazelor SQLite; hash-ul integral al bazelor nu este verificat. Fara copie offline a corpusului complet.</p><p role="status" data-status></p><div class="dossier-actions"><button type="button" class="ghost mini" data-check>Verifica actualizarile</button><button type="button" class="ghost mini" data-select hidden>Schimba versiunea online</button><button type="button" class="ghost mini" data-previous hidden>Versiunea precedenta</button><button type="button" class="ghost mini" data-clear hidden>Revino la datele incluse</button><button type="button" class="ghost mini" data-reload hidden>Reincarca pagina</button></div>';
+    panel.innerHTML = '<h2 style="font-size:1rem;margin:0">Date legislative online</h2><p data-active></p><p data-offer></p><p class="hint" data-coverage></p><p class="hint">Citire online a bazelor SQLite; hash-ul integral al bazelor nu este verificat. Fara copie offline a corpusului complet.</p><p role="status" data-status></p><div class="dossier-actions"><button type="button" class="ghost mini" data-check>Cauta versiune noua</button><button type="button" class="ghost mini" data-select hidden>Alege versiunea online</button><button type="button" class="ghost mini" data-previous hidden>Alege versiunea precedenta</button><button type="button" class="ghost mini" data-clear hidden>Revino la datele incluse</button><button type="button" class="ghost mini" data-reload hidden>Aplica datele in pagina</button></div>';
     document.querySelector('header').after(panel);
     panel.querySelector('.dossier-actions').style.cssText = 'display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem';
     panel.querySelectorAll('p').forEach(p => {p.style.overflowWrap = 'anywhere'; p.style.margin = '.4rem 0';});
@@ -178,14 +178,14 @@
     function render(data) {
       current = data;
       const included = data.legacy_root ? 'versiunea publicata ' + data.legacy_root.split('/').filter(Boolean).pop() : 'datele incluse';
-      node('active').textContent = `In aceasta fila: ${data.active?.release || included}. Selectata pentru reincarcare: ${data.selected?.release || included}.`;
+      node('active').textContent = `In aceasta fila: ${data.active?.release || included}. Pregatita pentru aplicare: ${data.selected?.release || included}.`;
       node('offer').textContent = data.offer ? `Oferta: ${data.offer.release} · publicata ${data.offer.created_at} · verificata ${data.offer.checked_at} · rapoarte: ${(data.offer.report_bytes / 1048576).toFixed(2)} MiB` : '';
       const missing = data.active?.missing || data.legacy_missing || [];
       const coverage = [];
       if (data.boot_error) coverage.push('Sursele acestei file nu sunt disponibile: pornirea a esuat.');
       else if (missing.length) coverage.push(`In aceasta fila, acoperire indisponibila: ${scope.browserSourceLabels(missing)}.`);
       if (data.selected && data.selected.sha256 !== data.active?.sha256 && data.selected.missing.length) {
-        coverage.push(`Versiunea selectata pentru reincarcare, surse absente: ${scope.browserSourceLabels(data.selected.missing)}.`);
+        coverage.push(`Versiunea pregatita pentru aplicare, surse absente: ${scope.browserSourceLabels(data.selected.missing)}.`);
       }
       if (data.offer?.missing.length) coverage.push(`Oferta, surse absente: ${scope.browserSourceLabels(data.offer.missing)}.`);
       node('coverage').textContent = coverage.join(' ');
@@ -196,7 +196,7 @@
     async function act(fn) {
       if (busy) return; busy = true; panel.querySelectorAll('button').forEach(b => b.disabled = true);
       node('status').textContent = 'Operatie in curs...';
-      try { await fn(); render(await api()); node('status').textContent = 'Operatie incheiata. Selectia se aplica la reincarcarea paginii.'; }
+      try { await fn(); render(await api()); node('status').textContent = 'Operatie incheiata. Datele alese se aplica dupa confirmarea din pagina.'; }
       catch (e) {
         node('status').textContent = 'Operatia nu a fost confirmata; verificati starea selectiei. ' + e.message;
         try {render(await api());} catch (_) {node('status').textContent += ' Starea selectiei este indisponibila.';}

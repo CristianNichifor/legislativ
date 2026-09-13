@@ -177,7 +177,7 @@ class PublicTransport:
 
     def open(self, url, offset=0):
         if self._origin(url) != self.origin:
-            raise ValueError("Actualizarea nu poate schimba originea configurata.")
+            raise ValueError("Schimbarea datelor nu poate modifica originea configurata.")
         headers = {"Accept-Encoding": "identity", "User-Agent": "Legislativ-dataset/1"}
         if offset:
             headers["Range"] = f"bytes={offset}-"
@@ -316,7 +316,7 @@ class DatasetManager:
     def start(self, fingerprint):
         with self.lock:
             if not self.offer or fingerprint != self.offer["sha256"]:
-                raise ValueError("Verifica si confirma oferta curenta.")
+                raise ValueError("Cauta si confirma versiunea disponibila.")
             active = self.active()
             if active and active["generation"] == fingerprint:
                 raise ValueError("Versiunea este deja activa.")

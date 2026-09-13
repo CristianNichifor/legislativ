@@ -89,6 +89,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
       const button = action => host.locator(`[data-action="${action}"]`);
       await host.waitFor({state: 'visible'});
       assert.match(await host.innerText(), /Nicio bază legislativă instalată/);
+      assert.equal(await button('check').innerText(), 'Caută versiune nouă');
       await page.screenshot({path: `/tmp/dataset-updates-empty-${width}.png`});
       assert.equal(posts.length, 0);
       await page.waitForTimeout(2700);
@@ -102,6 +103,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
       unavailable = false;
       await button('check').click();
       await button('download').waitFor({state: 'visible'});
+      assert.equal(await button('download').innerText(), 'Descarcă datele');
       await button('check').click();
       await page.waitForFunction(() => !document.querySelector('[data-action="check"]').disabled);
       assert.match(await host.locator('[data-offer]').innerText(), /2026-09-10 · 8 MiB/);
@@ -122,10 +124,11 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
       await button('download').waitFor({state: 'visible'});
       assert.equal(posts.at(-1).action, 'cancel');
       status.progress.state = 'verifying';
-      await page.waitForFunction(() => document.querySelector('[data-status]').textContent.includes('integritatea'));
+      await page.waitForFunction(() => document.querySelector('[data-status]').textContent.includes('verifică descărcarea'));
       assert.equal(await button('activate').isVisible(), false);
       status.progress.state = 'ready';
       await button('activate').waitFor({state: 'visible'});
+      assert.equal(await button('activate').innerText(), 'Activează datele');
       await page.evaluate(() => {
         window.unsaved = true;
         window.addEventListener('beforeunload', event => {
@@ -151,6 +154,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
         assert.equal(gets, getsDuringActivation, 'Do not poll while synchronous mutation is pending');
       }
       await button('reload').waitFor({state: 'visible'});
+      assert.equal(await button('reload').innerText(), 'Aplică datele în pagină');
       assert.equal(await page.locator('#draft').evaluate(el => !!el.closest('[inert]')), false);
       assert.equal(documents, 1, 'Activation must not reload automatically');
       assert.equal(await page.locator('#draft').inputValue(), 'Ciornă privată');
@@ -158,6 +162,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
       await button('reload').click();
       assert.equal(documents, 1);
       await button('rollback').click();
+      assert.equal(await button('rollback').innerText(), 'Revino la versiunea anterioară');
       assert.equal(posts.at(-1).action, 'activate');
       await page.evaluate(() => { window.unsaved = false; });
       page.once('dialog', dialog => dialog.accept());
@@ -178,6 +183,7 @@ const initial = () => ({mode: 'local', channel: 'https://date.cristian-nichifor.
         const host = document.querySelector('#dataset-updates');
         return host.scrollWidth > host.clientWidth;
       }), false, 'Update panel must not overflow');
+      assert.doesNotMatch(await host.innerText(), /reîncarcă|reincarca|rebuild|index/i);
       for (const element of await host.locator('button:visible').all()) {
         const box = await element.boundingBox();
         assert.ok(box.x >= 0 && box.x + box.width <= width);
