@@ -64,6 +64,14 @@ def validate(path: Path = PACK, *, root: Path = ROOT) -> dict:
                 continue
             if expected and _sha256(source_path) != expected:
                 problems.append({"key": key, "message": f"Evidence hash mismatch: {rel_path}"})
+            if evidence.get("kind") == "real_reviewable_finding":
+                from scripts import real_reviewable_finding
+
+                finding = real_reviewable_finding.validate(source_path, root=root)
+                if finding["status"] != "ready":
+                    problems.append(
+                        {"key": key, "message": "Reviewable finding artifact is not ready."}
+                    )
 
     computed_status = "blocked" if blocked or problems else "ready"
     return {

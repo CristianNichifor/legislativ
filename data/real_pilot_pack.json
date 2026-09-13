@@ -1,7 +1,7 @@
 {
   "$schema": "../schema/real_pilot_pack.schema.json",
   "contract": "real-pilot-pack-v1",
-  "status": "blocked",
+  "status": "ready",
   "domain": "bounded public procurement",
   "acceptance_command": "uv run python -m scripts.acceptare_date_reale /tmp/legislativ-v1-pilot-release --min-acts 2 --pilot-act lege-98-2016 --require-reviewable-finding --require-eu-text",
   "requirements": [
@@ -79,10 +79,18 @@
     {
       "key": "reviewable_finding",
       "label": "Reviewer-approved finding",
-      "status": "blocked",
+      "status": "ready",
       "required": true,
-      "evidence": [],
-      "next_action": "Record one authentic gap/CCR/EU-risk finding with quoted provisions and reviewer-approved proposal wording."
+      "evidence": [
+        {
+          "kind": "real_reviewable_finding",
+          "id": "public-procurement-conflict-interest-plx33",
+          "path": "data/real_reviewable_finding.json",
+          "sha256": "19a089a9079877646b9a00b7d9c9a93296e829ae42159e6824437186e9b38de2",
+          "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667"
+        }
+      ],
+      "next_action": ""
     }
   ],
   "excluded": [

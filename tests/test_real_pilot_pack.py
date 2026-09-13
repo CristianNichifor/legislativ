@@ -22,12 +22,10 @@ def test_real_pilot_pack_reports_current_blockers_without_crawling():
     out = real_pilot_pack.validate()
 
     assert out["contract"] == "real-pilot-pack-v1"
-    assert out["status"] == "blocked"
-    assert out["declared_status"] == "blocked"
-    assert out["ready_requirements"] == 4
-    assert out["blocked"] == [
-        "reviewable_finding",
-    ]
+    assert out["status"] == "ready"
+    assert out["declared_status"] == "ready"
+    assert out["ready_requirements"] == 5
+    assert out["blocked"] == []
     assert out["problems"] == []
     assert "--require-reviewable-finding --require-eu-text" in out["acceptance_command"]
     assert "bulk crawling" in out["excluded"]

@@ -97,7 +97,16 @@ language state. Validate the CELEX text hash and article-boundary metadata with:
 uv run python -m scripts.real_celex_text
 ```
 
-The current pack is blocked only by the reviewer-approved finding ingredient.
+The current real pilot pack has all required ingredients ready for the closed-gate
+acceptance command. The reviewer-approved finding ingredient is backed by
+`data/real_reviewable_finding.json`; it records one source-bound pilot finding
+with exact Romanian quotes, source hashes, reviewer status and proposed wording.
+Validate it and exercise the dossier/proposal/export path with:
+
+```bash
+uv run python -m scripts.real_reviewable_finding --seed-work-dir /tmp/legislativ-reviewable-finding
+```
+
 The public-consultation ingredient is backed by
 `data/real_public_consultation_snapshot.json`, a compact real e-consultare
 ActionGrid row fixture. Validate that slice with:
@@ -106,7 +115,7 @@ ActionGrid row fixture. Validate that slice with:
 uv run python -m scripts.real_public_consultation
 ```
 
-Once the remaining ingredients are added, run the recorded command with
+With those ingredients present, run the recorded command with
 `--require-reviewable-finding --require-eu-text` so the v2 acceptance gates fail
 closed instead of staying as advisory `attention` items.
 
@@ -152,10 +161,9 @@ resolution. Keep synthetic controls out of authentic-domain denominators.
 ## Remaining M7 gates
 
 - User confirms domain, document/version boundary and intended research questions.
-- Extend the approved release data or measurements enough to produce at least one
-  authentic reviewable gap/CCR finding, then save reviewer-approved proposal
-  wording from that finding. The 2026-09-11 run has
-  `workbench.finding_to_proposal = not_exercised_no_authentic_gap_or_ccr_finding`.
+- Promote `data/real_reviewable_finding.json` into the full real-data acceptance
+  release so the accepted run, not only the preflight, exercises reviewer-approved
+  proposal wording from source-bound evidence.
 - Import official EU text for the 8 CELEX references signaled by `lege-98-2016`
   or explicitly narrow the pilot so EU assessment is out of scope. The current
   pilot records `workbench.eu_availability.neimportate = 8`.
