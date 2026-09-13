@@ -6263,10 +6263,19 @@ function sourceRegistryTrackerProject(row){
   const value=String(row.identifier||'').trim();
   return /^[a-z0-9_.:/ -]{1,200}$/i.test(value)&&!/^https?:/i.test(value)?value:'';
 }
+function sourceRegistryProjectWorkbenchHtml(row){
+  const project=sourceRegistryTrackerProject(row);
+  if(!project||!['parlament','camera','senat'].includes(row.family))return '';
+  return `<button type="button" class="ghost mini" data-source-workbench-project="${esc(project)}">Pachet dovezi</button>`;
+}
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryChangeHtml(row)}${sourceRegistryImpactHtml(row)}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+  const workbench=sourceRegistryProjectWorkbenchHtml(row);
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p><p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryChangeHtml(row)}${sourceRegistryImpactHtml(row)}${workbench?`<div class="dossier-actions">${workbench}</div>`:''}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+}
+function bindSourceRegistryWorkbench(scope){
+  scope.querySelectorAll('[data-source-workbench-project]').forEach(button=>button.onclick=()=>openProjectWorkbench({project_id:button.dataset.sourceWorkbenchProject}));
 }
 async function sourceRegistryApi(body=null,params=null){
   const path='/api/registru-surse'+(params?'?'+params.toString():'');
@@ -6296,8 +6305,9 @@ function sourceRegistryRowHtml(row,families,index=0){
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
   const tracker=`<button type="button" class="ghost mini" data-source-tracker="${esc(index)}">Evenimente tracker</button>`;
+  const workbench=sourceRegistryProjectWorkbenchHtml(row);
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryChangeHtml(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p><p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryChangeHtml(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}${workbench}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
@@ -6309,6 +6319,7 @@ async function inspectSourceRegistryRow(id){
     if(!row)throw Error('Sursa selectată nu mai există.');
     sourceRegistryConfigure(data);
     detail.innerHTML=sourceRegistryDetailHtml(row,data.families);
+    bindSourceRegistryWorkbench(detail);
     status.textContent=sourceRegistryOutcome(row,'Sursă selectată');
   }catch(err){status.textContent=err.message;}
 }
@@ -6345,6 +6356,7 @@ async function loadSourceRegistry(offset=0,notice=''){
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
     list.querySelectorAll('[data-source-open-project]').forEach(button=>button.onclick=()=>openAcquisitionProject(button.dataset.sourceOpenProject));
+    bindSourceRegistryWorkbench(list);
     list.querySelectorAll('[data-source-open-eu]').forEach(button=>button.onclick=()=>openEuSource(button.dataset.sourceOpenEu));
   }catch(err){status.textContent=err.message;}
 }
@@ -6891,7 +6903,8 @@ function trackerEventHtml(event){
   const normalized=event.display_label&&event.display_label!==event.title?` · ${event.display_label}`:'';
   const stage=event.stage_label?` · etapa ${event.stage_label}`:'';
   const evidence=`<details><summary>Dovezi eveniment</summary><dl class="hint"><dt>Sursă</dt><dd>${esc(event.source_family||'necunoscută')}</dd><dt>ID sursă</dt><dd>${esc(event.source_id||'necunoscut')}</dd><dt>Hash</dt><dd>${esc(event.content_hash||'necunoscut')}</dd></dl>${source?`<p><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a></p>`:''}</details>`;
-  return `<li class="tracker-timeline-event" data-tracker-event="${esc(event.id)}"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(label)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)}${esc(normalized)}${esc(stage)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p>${evidence}<p class="hint">${esc(reviewText)}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-tracker-note-event="${esc(event.id)}">Creează notă în dosar</button><button type="button" class="ghost mini" data-tracker-review-event="${esc(event.id)}" ${review.reviewed?'disabled':''}>Marchează revizuit</button></div></div></li>`;
+  const workbench=event.project_id?`<button type="button" class="ghost mini" data-tracker-workbench-project="${esc(event.project_id)}">Pachet dovezi</button>`:'';
+  return `<li class="tracker-timeline-event" data-tracker-event="${esc(event.id)}"><span class="tracker-timeline-date">${esc(dossierTime(event.occurred_at))}</span><div class="tracker-timeline-body"><strong>${esc(label)}</strong>${summary?`<p>${esc(summary)}</p>`:''}<p class="tracker-timeline-source">${esc(event.event_label||event.event_type)}${esc(normalized)}${esc(stage)} · ${esc(event.source_family||'sursă necunoscută')}${event.dossier_id?` · dosar ${esc(event.dossier_id)}`:''}${source?` · <a href="${esc(source)}" target="_blank" rel="noopener noreferrer">sursa</a>`:''}</p>${evidence}<p class="hint">${esc(reviewText)}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-tracker-note-event="${esc(event.id)}">Creează notă în dosar</button>${workbench}<button type="button" class="ghost mini" data-tracker-review-event="${esc(event.id)}" ${review.reviewed?'disabled':''}>Marchează revizuit</button></div></div></li>`;
 }
 async function trackerTimelineApi(body){
   const response=await fetch('/api/tracker-evenimente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -6923,6 +6936,9 @@ function bindTrackerTimelineActions(listSelector='#tracker-timeline-list',status
     button.disabled=true;status.textContent='Creez nota din evenimentul tracker…';
     try{await trackerTimelineApi({action:'create_note',id:button.dataset.trackerNoteEvent,dosar_id:dossierId});await reload();}
     catch(err){status.textContent=err.message;button.disabled=false;}
+  });
+  out.querySelectorAll('[data-tracker-workbench-project]').forEach(button=>button.onclick=()=>{
+    openProjectWorkbench({project_id:button.dataset.trackerWorkbenchProject});
   });
 }
 function trackerTimelineHtml(data){
