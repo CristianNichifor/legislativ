@@ -612,6 +612,55 @@ def test_matrix_graph_renderer_labels_scaffold_edges_and_drilldowns():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_matrix_drilldown_renderer_exposes_sources_and_authoring_actions():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert "matrice-drilldown-v1" in html
+    assert "matrix-drilldown-btn" in html
+    source = html.split("function mActiuni", 1)[1].split("async function mArataActe", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const nf=n=>String(n);"
+        "const locRo=s=>'Loc '+s;"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "const empty=s=>'<p>'+esc(s)+'</p>';"
+        "function mActiuni"
+        + source
+        + "const d={gasit:true,emitent:'Parlamentul <x>',rand:{exemple:{viduri:[{act_id:'lege-1',"
+        "locator:'art1',text:'Guvernul aprobă <b>',instrument:'hg',actiuni:[{fel:'prevedere',"
+        "act_id:'lege-1',locator:'art1',eticheta:'vezi prevederea'}]}],neconstitutionale:[{"
+        "act_id:'lege-2',locator:'art2',text:'Text CCR <img>',decizie:'DCC <x>',"
+        "actiuni:[{fel:'prevedere',act_id:'lege-2',locator:'art2'}]}]}},drilldown:{"
+        "contract:'matrice-drilldown-v1',summary:{prevederi:2,proiecte:1,referinte_ue:1,"
+        "surse_lipsa:1,surse_atentie:1},proiecte:[{plx_id:'PL-x 1/2026',titlu:'Proiect <b>',"
+        "stadiu:'raport',sursa_url:'https://www.cdep.ro/p',citit_la:'2026'}],referinte_ue:[{"
+        "celex:'32014L0024',importat:false,mentionari:2,comanda_import:'python -m import <x>'}],"
+        "surse:[{act_id:'lege-1',cheie_citare:'Legea 1',titlu:'Titlu <bad>',"
+        "sursa_url:'javascript:alert(1)',source_quality:{eticheta:'Sursă lipsă'},"
+        "domeniu:{eticheta:'achiziții',dovezi:['titlu: <mark>']}}],limitari:['local <script>']}};"
+        "const h=mDrilldownHtml(d);"
+        "assert.ok(h.includes('Drilldown matrice'))"
+        ";assert.ok(h.includes('matrice-drilldown-v1'));"
+        "assert.ok(h.includes('prevederi suport'));"
+        "assert.ok(h.includes('dosar și propuneri'));"
+        "assert.ok(h.includes('compară proiecte'));"
+        "assert.ok(h.includes('graf / reguli'));"
+        "assert.ok(h.includes('data-matrix-note=\"lacuna\"'));"
+        "assert.ok(h.includes('data-matrix-note=\"constitutionalitate\"'));"
+        "assert.ok(h.includes('data-matrix-note=\"ue\"'));"
+        "assert.ok(h.includes('data-plx=\"PL-x 1/2026\"'));"
+        "assert.ok(h.includes('fișă parlamentară'));"
+        "assert.ok(h.includes('lipsește din eu.db'));"
+        "assert.ok(h.includes('Sursă lipsă'));"
+        "assert.ok(!h.includes('<x>')&&!h.includes('<bad>')&&!h.includes('<img>')"
+        "&&!h.includes('<script>')&&!h.includes('<mark>')&&!h.includes('javascript:'));"
+    )
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_source_registry_renderer_escapes_and_labels_states():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split("const PROJECT_WATCH_KEY=", 1)[0]

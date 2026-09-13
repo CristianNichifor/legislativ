@@ -780,6 +780,21 @@ def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     assert out["acte"]["total"] == 1
     assert out["acte"]["acte"][0]["act_id"] == "lege-98-2016"
     assert out["referinte_ue"][0]["celex"] == "32014L0024"
+    assert out["proiecte"]["initiative"][0]["plx_id"] == "plx-1-2024"
+    assert out["drilldown"]["contract"] == "matrice-drilldown-v1"
+    assert out["drilldown"]["summary"]["prevederi"] == 2
+    assert out["drilldown"]["summary"]["proiecte"] == 1
+    assert out["drilldown"]["prevederi"][0]["kind"] == "lacuna"
+    assert out["drilldown"]["prevederi"][1]["kind"] == "constitutionalitate"
+    assert out["drilldown"]["proiecte"][0]["plx_id"] == "plx-1-2024"
+    assert out["drilldown"]["referinte_ue"][0]["celex"] == "32014L0024"
+    assert out["drilldown"]["surse"][0]["act_id"] == "lege-98-2016"
+    assert {e["kind"] for e in out["drilldown"]["entry_points"]} >= {
+        "manual_note",
+        "proposal_drafting",
+        "project_compare",
+        "rule_candidate",
+    }
     assert out["pasi"]
     assert "Dosar matrice: Parlamentul" in out["markdown"]
     assert "32014L0024" in out["markdown"]

@@ -1936,6 +1936,89 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
     return "\n".join(linii).strip()
 
 
+def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
+    rand = dosar.get("rand") or {}
+    semnale = rand.get("semnale") or {}
+    exemple = rand.get("exemple") or {}
+    prevederi = []
+    for kind, rows in (
+        ("lacuna", exemple.get("viduri") or []),
+        ("constitutionalitate", exemple.get("neconstitutionale") or []),
+    ):
+        for row in rows:
+            prevederi.append(
+                {
+                    "kind": kind,
+                    "act_id": row.get("act_id", ""),
+                    "locator": row.get("locator", ""),
+                    "text": row.get("text", ""),
+                    "instrument": row.get("instrument", ""),
+                    "decizie": row.get("decizie", ""),
+                    "severitate": row.get("severitate", ""),
+                    "actiuni": row.get("actiuni") or [],
+                }
+            )
+    acte = [
+        {
+            "act_id": a.get("act_id", ""),
+            "cheie_citare": a.get("cheie_citare", ""),
+            "titlu": a.get("titlu", ""),
+            "sursa_url": a.get("sursa_url", ""),
+            "source_quality": a.get("source_quality") or {},
+            "domeniu": a.get("domeniu") or {},
+        }
+        for a in (dosar.get("acte") or {}).get("acte", [])
+    ]
+    return {
+        "contract": "matrice-drilldown-v1",
+        "summary": {
+            "acte": rand.get("acte", 0),
+            "prevederi": len(prevederi),
+            "proiecte": len((proiecte or {}).get("initiative") or []),
+            "referinte_ue": len(dosar.get("referinte_ue") or []),
+            "surse_lipsa": (rand.get("source_quality") or {}).get("missing", 0),
+            "surse_atentie": (rand.get("source_quality") or {}).get("attention", 0),
+            "viduri": semnale.get("viduri", 0),
+            "neconstitutionale": semnale.get("neconstitutionale", 0),
+        },
+        "prevederi": prevederi,
+        "proiecte": [
+            {
+                "plx_id": p.get("plx_id", ""),
+                "titlu": p.get("titlu", ""),
+                "stadiu": p.get("stadiu", ""),
+                "sursa_url": p.get("sursa_url", ""),
+                "citit_la": p.get("citit_la", ""),
+            }
+            for p in (proiecte or {}).get("initiative") or []
+        ],
+        "referinte_ue": dosar.get("referinte_ue") or [],
+        "surse": acte,
+        "entry_points": [
+            {
+                "kind": "manual_note",
+                "label": "Creează notă din fiecare prevedere, referință UE sau candidat.",
+            },
+            {
+                "kind": "proposal_drafting",
+                "label": "Deschide dosarul de lucru pentru propuneri și text exportabil.",
+            },
+            {
+                "kind": "project_compare",
+                "label": "Compară proiectele pendinte care ating actele rândului.",
+            },
+            {
+                "kind": "rule_candidate",
+                "label": "Deschide prevederea și propune regulă law-as-code.",
+            },
+        ],
+        "limitari": [
+            "Drilldown-ul grupează dovezi locale existente; nu reconsultă sursele oficiale.",
+            *list((proiecte or {}).get("limitari") or []),
+        ],
+    }
+
+
 def _matrice_dosar(qs: dict, stare: Stare) -> dict:
     emitent = _prima(qs, "emitent").strip()
     tip = _prima(qs, "tip").strip()
@@ -1995,6 +2078,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
     acte = _matrice_acte(acte_qs, stare)
     act_ids = {a.get("act_id") or "" for a in acte.get("acte") or []}
     referinte_ue = _referinte_ue_dosar(stare, act_ids)
+    proiecte = _matrice_proiecte(acte_qs, stare)
     problema_eticheta = next(
         (
             p["eticheta"]
@@ -2014,6 +2098,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
         "problema_eticheta": problema_eticheta,
         "rand": rand,
         "acte": acte,
+        "proiecte": proiecte,
         "referinte_ue": referinte_ue,
         "contradictii": _matrice_contradictii(acte_qs, stare),
         "pasi": _pasi_dosar_matrice(rand, matrice.get("problema"), referinte_ue),
@@ -2023,6 +2108,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
             *list(acte.get("limitari") or []),
         ],
     }
+    dosar["drilldown"] = _drilldown_dosar_matrice(dosar, proiecte)
     dosar["markdown"] = _markdown_dosar_matrice(dosar)
     return dosar
 

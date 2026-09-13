@@ -565,6 +565,10 @@
   .matrix-graph-node{border:1px solid var(--rule-soft);border-radius:var(--r1);padding:.5rem .6rem;background:var(--surface)}
   .matrix-graph-edge{border-left:2px solid var(--note);padding:.45rem .55rem;margin:.35rem 0;background:var(--surface)}
   .matrix-graph-meta{font-family:var(--sans);font-size:.68rem;color:var(--ink-mute);overflow-wrap:anywhere}
+  .matrix-drilldown{border:1px solid var(--rule);border-left:3px solid var(--note);border-radius:var(--r1);background:var(--surface);padding:.65rem .75rem;margin:.6rem 0}
+  .matrix-drilldown-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:.45rem;margin:.55rem 0}
+  .matrix-drilldown-item{border-top:1px solid var(--rule-soft);padding:.45rem 0;overflow-wrap:anywhere}
+  .matrix-drilldown-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0}
   /* EU provisions: candidate CELEX matches, compact enough to compare several locators at once */
   .ue-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin:.6rem 0 .8rem}
   .ue-tools select{width:12rem;font-size:.82rem;padding-block:.45rem}
@@ -7746,6 +7750,88 @@ function mGraphHtml(d){
   h+=(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
   return h;
 }
+function mDrilldownHtml(d){
+  if(!d||!d.gasit) return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.");
+  const drill=d.drilldown||{}, summary=drill.summary||{}, ex=(d.rand&&d.rand.exemple)||{};
+  const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
+  let h=`<div class="matrix-drilldown"><div class="parc-h">Drilldown matrice · ${esc(d.emitent||"")}</div>`
+    +`<p class="hint">${esc(drill.contract||"matrice-drilldown-v1")} · dovezi locale și intrări de lucru pentru rândul selectat.</p>`
+    +`<div class="matrix-stats">`
+    +stat("prevederi suport",summary.prevederi)+stat("proiecte pendinte",summary.proiecte)
+    +stat("referințe UE",summary.referinte_ue)+stat("surse lipsă",summary.surse_lipsa)
+    +stat("surse cu atenție",summary.surse_atentie)+`</div>`;
+  h+=`<div class="parc-h">Intrări de lucru</div><div class="matrix-drilldown-actions">`
+    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar și propuneri</button>`
+    +`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(d.emitent||"")}">compară proiecte</button>`
+    +`<button type="button" class="ghost mini matrix-graph" data-emitent="${esc(d.emitent||"")}">graf / reguli</button>`
+    +`</div>`;
+  const vid=ex.viduri||[], nec=ex.neconstitutionale||[];
+  h+=`<div class="parc-h">Prevederi suport</div>`;
+  if(vid.length||nec.length){
+    h+=vid.map((v,i)=>`<div class="matrix-drilldown-item"><b>Lacună</b> · <span class="dom-cheie">${esc(v.act_id||"")}</span> ${esc(locRo(v.locator||""))} `
+      +(v.instrument?`· ${esc(v.instrument)} `:"")+mActiuni(v.actiuni)
+      +`<br><span class="hint">${esc(v.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="lacuna" data-matrix-index="${i}">Creează notă</button></div></div>`).join("")
+      +nec.map((n,i)=>`<div class="matrix-drilldown-item"><b>CCR</b> · <span class="dom-cheie">${esc(n.act_id||"")}</span> ${esc(locRo(n.locator||""))} `
+      +(n.decizie?`· ${esc(n.decizie)} `:"")+mActiuni(n.actiuni)
+      +`<br><span class="hint">${esc(n.text||"")}</span><div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="constitutionalitate" data-matrix-index="${i}">Creează notă</button></div></div>`).join("");
+  }else h+=`<p class="hint">Nu există exemple de lacune sau CCR pentru rândul curent.</p>`;
+  h+=`<div class="parc-h">Proiecte care ating rândul</div>`;
+  const projects=drill.proiecte||[];
+  h+=projects.length?projects.slice(0,8).map(p=>{
+    const href=urlSigur(p.sursa_url);
+    return `<div class="matrix-drilldown-item"><span class="plx">${esc(p.plx_id||"")}</span> ${esc((p.titlu||"").slice(0,150))}`
+      +`<br><span class="hint">${esc(p.stadiu||"stadiu necunoscut")}${p.citit_la?` · ${esc(p.citit_la)}`:""}`
+      +(href?` · <a href="${esc(href)}" target="_blank" rel="noopener noreferrer">fișă parlamentară</a>`:"")+`</span>`
+      +` <button type="button" class="ghost mini parc-buton" data-plx="${esc(p.plx_id||"")}">parcurs</button><div class="parc-loc" data-loc="${esc(p.plx_id||"")}"></div></div>`;
+  }).join(""):`<p class="hint">Niciun proiect pendinte în selecția locală.</p>`;
+  h+=`<div class="parc-h">Referințe UE</div>`;
+  const ue=drill.referinte_ue||[];
+  h+=ue.length?ue.map((ref,i)=>`<div class="matrix-drilldown-item"><span class="dom-cheie">${esc(ref.celex||"")}</span> `
+    +`${ref.importat?"text local disponibil":"lipsește din eu.db"} · ${nf(ref.mentionari||0)} menționări`
+    +(ref.comanda_import&&!ref.importat?`<br><code>${esc(ref.comanda_import)}</code>`:"")
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-note="ue" data-matrix-index="${i}">Creează notă</button></div></div>`).join("")
+    :`<p class="hint">Nu există referințe CELEX explicite în actele listate.</p>`;
+  h+=`<div class="parc-h">Surse și domeniu</div>`;
+  const sources=drill.surse||[];
+  h+=sources.length?`<div class="matrix-drilldown-grid">`+sources.slice(0,12).map(a=>{
+    const href=urlSigur(a.sursa_url), q=a.source_quality||{}, dom=a.domeniu||{};
+    return `<div class="matrix-graph-node">`
+      +(href?`<a class="dom-cheie" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(a.cheie_citare||a.act_id)}</a>`:`<span class="dom-cheie">${esc(a.cheie_citare||a.act_id)}</span>`)
+      +`<div>${esc((a.titlu||"").slice(0,150))}</div><div class="matrix-graph-meta">${esc(q.eticheta||"sursă necunoscută")}`
+      +(dom.eticheta?` · ${esc(dom.eticheta)}`:"")
+      +((dom.dovezi||[]).length?` · ${(dom.dovezi||[]).map(esc).join(" · ")}`:"")+`</div></div>`;
+  }).join("")+`</div>`:`<p class="hint">Nicio sursă listată pentru filtrele curente.</p>`;
+  h+=(drill.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
+  return h+`</div>`;
+}
+async function mArataDrilldown(buton){
+  const out=$("#m-drilldown-rand"); if(!out) return;
+  if(buton.dataset.deschis==="1"){
+    out.innerHTML="";
+    buton.dataset.deschis="";
+    buton.textContent="drilldown dovezi";
+    return;
+  }
+  buton.dataset.deschis="1";
+  buton.textContent="ascunde drilldown";
+  out.innerHTML=`<div class="parc"><span class="spin"></span> adun dovezile…</div>`;
+  const f=mFiltreCurente();
+  const qs=new URLSearchParams({emitent:buton.dataset.emitent||"",limita:"80"});
+  for(const key of ["tip","rang","domeniu","problema","source_quality"]) if(f[key]) qs.set(key,f[key]);
+  try{
+    const d=await fetch("/api/matrice-dosar?"+qs.toString()).then(r=>r.json());
+    if(!out.isConnected||buton.dataset.deschis!=="1") return;
+    out.innerHTML=mDrilldownHtml(d);
+    out.querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
+    out.querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
+    out.querySelectorAll(".matrix-drafts").forEach(b=>b.onclick=()=>mArataProiecte(b));
+    out.querySelectorAll(".matrix-graph").forEach(b=>b.onclick=()=>mArataGrafMatrice(b));
+    out.querySelectorAll(".parc-buton").forEach(b=>b.onclick=()=>comutaParcurs(b));
+    bindMatrixNoteButtons(out,d);
+  }catch(e){
+    out.innerHTML=empty("Nu am putut încărca drilldown-ul pentru acest rând.");
+  }
+}
 async function mArataActe(buton){
   const out=$("#m-acte-rand"); if(!out) return;
   if(buton.dataset.deschis==="1"){
@@ -8194,10 +8280,11 @@ function mArataRand(el){
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`
     +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button>`
+    +`<button type="button" class="ghost mini matrix-drilldown-btn" data-emitent="${esc(r.emitent)}">drilldown dovezi</button>`
     +`<button type="button" class="ghost mini matrix-graph" data-emitent="${esc(r.emitent)}">graf matrice</button>`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
     +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">Contradicții candidate</button>`
-    +`<div id="m-acte-rand"></div><div id="m-graf-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
+    +`<div id="m-acte-rand"></div><div id="m-drilldown-rand"></div><div id="m-graf-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
   h+=`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(r.emitent)}">Compară proiecte</button><div id="m-proiecte-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
@@ -8224,6 +8311,7 @@ function mArataRand(el){
   $("#m-detalii").innerHTML=h+`</div>`;
   $("#m-detalii").querySelectorAll(".matrix-prov").forEach(b=>b.onclick=()=>mPrevedere(b));
   $("#m-detalii").querySelectorAll(".matrix-acts").forEach(b=>b.onclick=()=>mArataActe(b));
+  $("#m-detalii").querySelectorAll(".matrix-drilldown-btn").forEach(b=>b.onclick=()=>mArataDrilldown(b));
   $("#m-detalii").querySelectorAll(".matrix-graph").forEach(b=>b.onclick=()=>mArataGrafMatrice(b));
   $("#m-detalii").querySelectorAll(".matrix-dossier").forEach(b=>b.onclick=()=>mArataDosar(b));
   $("#m-detalii").querySelectorAll(".matrix-contradictii").forEach(b=>b.onclick=()=>mArataContradictii(b));
