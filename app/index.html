@@ -432,6 +432,12 @@
   .manual-note-meta{font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);display:flex;flex-wrap:wrap;gap:.25rem .7rem;margin:.25rem 0}
   .manual-note-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.4rem;margin:.55rem 0}
   .manual-note-summary button{text-align:left;white-space:normal;overflow-wrap:anywhere}
+  .daily-workflow{border-block:1px solid var(--rule);padding:.7rem 0;margin:.2rem 0 .9rem}
+  .daily-workflow h3{font-size:1rem;margin:.1rem 0 .25rem}
+  .daily-flow-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:.45rem;margin:.65rem 0;padding:0;list-style:none}
+  .daily-flow-steps li{border-top:1px solid var(--rule-soft);padding:.45rem 0;min-width:0}
+  .daily-flow-steps b{display:block;font-size:.82rem}
+  .daily-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
   .gap-workflow{border:1px solid var(--rule);border-left:3px solid #18745b;padding:.65rem;margin:.65rem 0;background:#f8fbfa;overflow-wrap:anywhere}
   .gap-workflow h4{font-size:.92rem;margin:0 0 .3rem}
   .gap-workflow p{margin:.25rem 0}
@@ -1371,6 +1377,28 @@
       </div>
 
       <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
+        <section class="daily-workflow" id="legislative-workflow" aria-labelledby="legislative-workflow-title">
+          <h3 id="legislative-workflow-title">Flux zilnic pentru lacune și contradicții</h3>
+          <p class="hint" id="legislative-workflow-status" role="status">
+            Pornește de la o lege sau un proiect, deschide matricea, salvează nota cu dovezi,
+            apoi pregătește ciorna și exportul din dosarul local.
+          </p>
+          <ol class="daily-flow-steps">
+            <li><b>1. Caută legea/proiectul</b><span>Identifică actul, proiectul sau consultarea publică.</span></li>
+            <li><b>2. Deschide matricea</b><span>Filtrează domeniu, rang, problemă și calitatea surselor.</span></li>
+            <li><b>3. Notează semnalul</b><span>Lacună, contradicție, CCR sau risc UE, cu citat și sursă.</span></li>
+            <li><b>4. Redactează</b><span>Folosește dovezile pentru ciornă, reguli și propuneri.</span></li>
+            <li><b>5. Exportă</b><span>Păstrează raportul, nota, propunerea și limitările.</span></li>
+          </ol>
+          <div class="dossier-actions">
+            <button type="button" class="ghost mini" data-workflow-open-search>Caută sursă</button>
+            <button type="button" class="ghost mini" data-workflow-open-matrix>Filtrează matricea</button>
+            <button type="button" class="ghost mini" data-workflow-open-dossier>Dosar local</button>
+            <button type="button" class="ghost mini" data-workflow-open-note>Notă gap/UE</button>
+            <button type="button" class="ghost mini" data-workflow-open-draft>Ciornă amendament</button>
+            <button type="button" class="ghost mini" data-workflow-open-export>Export</button>
+          </div>
+        </section>
         <section class="source-inventory" aria-labelledby="source-title">
           <div class="source-heading"><h3 id="source-title">Acoperirea surselor</h3><div class="source-actions">
             <button type="button" class="ghost mini" id="source-refresh">Reîncarcă inventarul</button>
@@ -1899,6 +1927,43 @@ PANES.forEach((p,index)=>{
   };
 });
 $(".app").dataset.pane = "lint";   // initial tab
+function bindDailyWorkflow(){
+  const root=$('#legislative-workflow');if(!root)return;
+  const status=$('#legislative-workflow-status');
+  const reveal=(selector,message)=>{
+    selectTab('matrice');
+    const node=$(selector);
+    if(!node){status.textContent='Panoul nu este disponibil în această instalare.';return null;}
+    if('open' in node)node.open=true;
+    node.scrollIntoView({block:'start'});
+    status.textContent=message;
+    return node;
+  };
+  root.querySelector('[data-workflow-open-search]').onclick=()=>{selectTab('cauta');status.textContent='Caută actul, proiectul sau termenul de domeniu.';$('#q')?.focus();};
+  root.querySelector('[data-workflow-open-matrix]').onclick=()=>{selectTab('matrice');status.textContent='Alege filtrele și deschide un rând pentru dovezi.';$('#m-q')?.focus();};
+  root.querySelector('[data-workflow-open-dossier]').onclick=()=>{reveal('#dossier-library','Alege sau creează dosarul local înainte de notă și export.');};
+  root.querySelector('[data-workflow-open-note]').onclick=()=>{
+    const panel=reveal('#dossier-library','Alege un dosar, apoi salvează nota cu citat și sursă.');
+    if(!panel)return;
+    if(DOSARE_UI.selected?.id){
+      MANUAL_NOTES_UI.editing=null;
+      loadManualNotes(DOSARE_UI.selected.id,0);
+      $('#dossier-notes')?.scrollIntoView({block:'start'});
+    }else $('#dossier-status').textContent='Alege sau creează un dosar înainte de nota gap/UE.';
+  };
+  root.querySelector('[data-workflow-open-draft]').onclick=()=>{
+    const panel=reveal('#dossier-library','Spațiul de redactare folosește proiectul, dovezile și regulile locale.');
+    if(!panel)return;
+    if(DOSARE_UI.selected?.id)$('#dossier-writing')?.scrollIntoView({block:'start'});
+    else $('#dossier-status').textContent='Alege sau creează un dosar înainte de ciorna de amendament.';
+  };
+  root.querySelector('[data-workflow-open-export]').onclick=()=>{
+    const panel=reveal('#dossier-library','Exportă din analiza salvată, propuneri sau pachetul de dovezi.');
+    if(!panel)return;
+    ($('#dossier-saved')?.textContent?$('#dossier-saved'):$('#dossier-proposals')||panel).scrollIntoView({block:'start'});
+  };
+}
+bindDailyWorkflow();
 
 // ---- theme: auto / light / dark, remembered per browser ----
 (function(){
@@ -7955,8 +8020,8 @@ function mDrilldownHtml(d){
     +stat("surse stale",summary.surse_stale)+stat("surse parțiale",summary.surse_partiale)
     +stat("revizuibile",summary.surse_revizuibile)+`</div>`;
   h+=`<div class="parc-h">Intrări de lucru</div><div class="matrix-drilldown-actions">`
-    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar și propuneri</button>`
-    +`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(d.emitent||"")}">compară proiecte</button>`
+    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar + note</button>`
+    +`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(d.emitent||"")}">proiecte / amendamente</button>`
     +`<button type="button" class="ghost mini matrix-graph" data-emitent="${esc(d.emitent||"")}">graf / reguli</button>`
     +`</div>`;
   const vid=ex.viduri||[], nec=ex.neconstitutionale||[];
@@ -8003,7 +8068,7 @@ async function mArataDrilldown(buton){
   if(buton.dataset.deschis==="1"){
     out.innerHTML="";
     buton.dataset.deschis="";
-    buton.textContent="drilldown dovezi";
+    buton.textContent="dovezi și semnale";
     return;
   }
   buton.dataset.deschis="1";
@@ -8031,7 +8096,7 @@ async function mArataActe(buton){
   if(buton.dataset.deschis==="1"){
     out.innerHTML="";
     buton.dataset.deschis="";
-    buton.textContent="arată actele din rând";
+    buton.textContent="acte sursă";
     return;
   }
   buton.dataset.deschis="1";
@@ -8342,7 +8407,7 @@ async function mArataDosar(buton){
   if(buton.dataset.deschis==="1"){
     out.innerHTML="";
     buton.dataset.deschis="";
-    buton.textContent="dosar de lucru";
+    buton.textContent="dosar + note";
     return;
   }
   buton.dataset.deschis="1";
@@ -8476,13 +8541,13 @@ function mArataRand(el){
     +` · ${nf(s.viduri)} lacune · `
     +`${nf(s.neconstitutionale)} nereparate după Curte · ${nf(s.initiative_in_lucru)} inițiative · `
     +`${nf(s.amendamente_primite)} amendări primite</div>`
-    +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">arată actele din rând</button>`
-    +`<button type="button" class="ghost mini matrix-drilldown-btn" data-emitent="${esc(r.emitent)}">drilldown dovezi</button>`
+    +`<div class="row"><button type="button" class="ghost mini matrix-acts" data-emitent="${esc(r.emitent)}">acte sursă</button>`
+    +`<button type="button" class="ghost mini matrix-drilldown-btn" data-emitent="${esc(r.emitent)}">dovezi și semnale</button>`
     +`<button type="button" class="ghost mini matrix-graph" data-emitent="${esc(r.emitent)}">graf matrice</button>`
-    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar de lucru</button></div>`
-    +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">Contradicții candidate</button>`
+    +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(r.emitent)}">dosar + note</button></div>`
+    +`<button type="button" class="ghost mini matrix-contradictii" data-emitent="${esc(r.emitent)}">contradicții candidate</button>`
     +`<div id="m-acte-rand"></div><div id="m-drilldown-rand"></div><div id="m-graf-rand"></div><div id="m-dosar-rand"></div><div id="m-contradictii-rand"></div>`;
-  h+=`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(r.emitent)}">Compară proiecte</button><div id="m-proiecte-rand"></div>`;
+  h+=`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(r.emitent)}">proiecte / amendamente</button><div id="m-proiecte-rand"></div>`;
   h+=mDomeniuExemple(r.domeniu_exemple);
   const vid=ex.viduri||[];
   if(vid.length){

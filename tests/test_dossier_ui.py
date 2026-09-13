@@ -91,6 +91,62 @@ def test_library_is_in_matrix_tab():
     assert parser.found
 
 
+def test_matrix_tab_exposes_daily_legislative_workflow():
+    source = APP.read_text()
+    assert 'id="legislative-workflow"' in source
+    assert "Flux zilnic pentru lacune și contradicții" in source
+    assert "data-workflow-open-search" in source
+    assert "data-workflow-open-note" in source
+    assert "data-workflow-open-draft" in source
+    assert "data-workflow-open-export" in source
+    assert "dosar + note" in source
+    assert "dovezi și semnale" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_daily_workflow_buttons_open_existing_panels():
+    source = APP.read_text().split("function bindDailyWorkflow", 1)[1].split("// ---- theme:", 1)[0]
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "const buttons=new Map();"
+        "const root={querySelector:s=>buttons.get(s)};"
+        "for(const key of ['search','matrix','dossier','note','draft','export'])"
+        "{buttons.set('[data-workflow-open-'+key+']',{onclick:null});}"
+        "const status={},q={focus:()=>calls.push(['focus','q'])},"
+        "m={focus:()=>calls.push(['focus','m'])};"
+        "const dossier={open:false,scrollIntoView:o=>calls.push(['scroll','dossier',o.block])};"
+        "const saved={textContent:'saved',"
+        "scrollIntoView:o=>calls.push(['scroll','saved',o.block])};"
+        "const proposals={scrollIntoView:o=>calls.push(['scroll','proposals',o.block])};"
+        "const notes={scrollIntoView:o=>calls.push(['scroll','notes',o.block])};"
+        "const dossierStatus={textContent:''};"
+        "const nodes={'#legislative-workflow':root,'#legislative-workflow-status':status,"
+        "'#q':q,'#m-q':m,'#dossier-library':dossier,'#dossier-saved':saved,"
+        "'#dossier-proposals':proposals,'#dossier-notes':notes,'#dossier-status':dossierStatus};"
+        "function $(sel){return nodes[sel]||null;}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "let DOSARE_UI={selected:null};"
+        "const MANUAL_NOTES_UI={editing:'kept'};"
+        "function loadManualNotes(){calls.push(['notes-loaded']);}"
+        "function bindDailyWorkflow"
+        + source
+        + "buttons.get('[data-workflow-open-search]').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['tab','cauta'],['focus','q']]);"
+        "buttons.get('[data-workflow-open-matrix]').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['tab','matrice'],['focus','m']]);"
+        "buttons.get('[data-workflow-open-note]').onclick();"
+        "assert.equal(dossier.open,true);"
+        "assert.ok(dossierStatus.textContent.includes('Alege sau creează'));"
+        "DOSARE_UI={selected:{id:'d1'}};buttons.get('[data-workflow-open-note]').onclick();"
+        "assert.equal(MANUAL_NOTES_UI.editing,null);"
+        "assert.ok(calls.some(c=>c[0]==='notes-loaded'));"
+        "buttons.get('[data-workflow-open-export]').onclick();"
+        "assert.deepEqual(calls.slice(-1),[['scroll','saved','start']]);"
+    )
+    subprocess.run(["node", "-e", code], check=True, capture_output=True, timeout=10)
+
+
 def test_dossier_creation_surfaces_source_freshness_warning():
     source = APP.read_text()
     assert 'id="dossier-source-warning"' in source
