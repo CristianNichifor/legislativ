@@ -17,6 +17,10 @@ The first contract is `mcp-boundary-v1`:
   uncited legal-looking claims, and stores the result with audit hashes.
 - `POST /api/dosare/ai-draft/mcp-execute` accepts only an explicitly approved payload hash and
   runs the v1 local mock executor for the AI draft workflow.
+- `POST /api/dosare/mcp-export-preview` builds a bounded Markdown export from the selected
+  dossier/note evidence and wraps it in the MCP approval contract.
+- `POST /api/dosare/mcp-export-execute` accepts only an explicitly approved payload hash and
+  stores the v1 local mock export result with audit.
 - The preview includes server, tool, purpose, capability, visible data preview, truncation state, and
   SHA-256 of the full text.
 - The preview includes cost ownership and token estimate metadata. Server cost is `none`; a real
@@ -25,10 +29,10 @@ The first contract is `mcp-boundary-v1`:
   request supplies `approved: true` plus the exact preview `data_sha256`.
 
 The v1 executor does not connect to Claude, ChatGPT, GitHub, calendar or document tools. It supports
-only `local-mock/ai.draft`, which is a deterministic local adapter used to prove configure, test,
-approve, run and audit behavior without network access or credential storage. GitHub Pages can show
-the capability list, but rejects MCP previews/execution because the public static worker has no
-approved local executor.
+only `local-mock/ai.draft` and `local-mock/document.export`, deterministic local adapters used to
+prove configure, test, approve, run and audit behavior without network access or credential storage.
+GitHub Pages can show the capability list, but rejects MCP previews/execution because the public
+static worker has no approved local executor.
 
 The first user workflow is an explicit AI-draft handoff from a manual note. The
 browser prepares the source-backed prompt, shows cost/privacy/approval metadata,
@@ -36,7 +40,9 @@ then lets the user choose local deterministic drafting, online BYOK or MCP hando
 Local and BYOK results are stored through `ai-draft-storage-audit-v1`; MCP executor
 results are stored through `mcp-executor-boundary-v1`. A draft remains ordinary
 unreviewed note text until the user saves the note, and insertion is blocked when
-the draft cites evidence outside the selected manifest.
+the draft cites evidence outside the selected manifest. The first non-AI workflow
+is a local-mock dossier/note Markdown export; it stores `export_unreviewed` audit
+and never sends the document to an external storage provider in v1.
 
 Both `ai_draft_audit_events` and `mcp_audit_events` are part of the private dossier
 schema and are append-only. Browser backup/import validation therefore preserves
@@ -64,11 +70,15 @@ Executor rules:
 
 `scripts.mcp_executor` implements `mcp-executor-boundary-v1`:
 
-- `test_config({"server":"local-mock","tool":"ai.draft"})` reports whether the selected executor is
+- `test_config({"server":"local-mock","tool":"ai.draft"})` or
+  `test_config({"server":"local-mock","tool":"document.export"})` reports whether the selected
+  executor is
   available.
 - `execute(path, request)` recomputes the MCP preview from selected evidence, compares the approved
   payload hash, runs the deterministic local mock adapter and stores an audit event in the private
   dossier database.
+- `execute_export(path, request)` applies the same approval/hash/audit boundary to the bounded
+  document export workflow.
 - Executor audit events include server, tool, timestamp, payload hash, selected evidence ids, result
   hash and the explicit user action.
 
@@ -83,14 +93,15 @@ The execute request must include only:
 - `approved_data_sha256` — must match the preview payload hash.
 
 The returned draft is labeled `draft_unreviewed`, includes a non-verdict notice and may be inserted
-into a note through the ordinary note workflow. The executor never accepts API keys, never stores
-credentials and never sends legal text to an external MCP server in v1.
+into a note through the ordinary note workflow. The export result is labeled `export_unreviewed` and
+contains a local mock document id plus the exact Markdown stored in audit. The executor never accepts
+API keys, never stores credentials and never sends legal text to an external MCP server in v1.
 
 ## Runtime surface v1
 
 `scripts.mcp_runtime` implements `mcp-runtime-surface-v1`:
 
-- lists the local `local-mock/ai.draft` server/tool;
+- lists the local `local-mock/ai.draft` and `local-mock/document.export` tools;
 - exposes the approval/audit schema the UI must show before execution;
 - exposes retry/failure states for unavailable MCP, unknown server/tool, missing approval, payload
   mismatch and executor failure;

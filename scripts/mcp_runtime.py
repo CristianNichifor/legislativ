@@ -52,7 +52,15 @@ def registry() -> dict:
                         "requires_preview": True,
                         "requires_user_approval": True,
                         "result_status": "draft_unreviewed",
-                    }
+                    },
+                    {
+                        "id": mcp_executor.SUPPORTED_EXPORT_TOOL,
+                        "label": "Export document local simulat",
+                        "capability": "document_export",
+                        "requires_preview": True,
+                        "requires_user_approval": True,
+                        "result_status": "export_unreviewed",
+                    },
                 ],
             }
         ],
@@ -80,7 +88,7 @@ def registry() -> dict:
             failure("executor_failed", "Executorul MCP a eșuat.", retryable=True),
         ],
         "limitari": [
-            "V1 listează și testează doar local-mock/ai.draft.",
+            "V1 listează și testează doar adaptoare local-mock.",
             "Nu se trimit date către servere MCP externe din acest runtime.",
             "Fiecare apel extern viitor trebuie să afișeze payloadul și să ceară aprobare.",
         ],
@@ -108,6 +116,6 @@ def test_connection(request: dict) -> dict:
         "credentials_stored": False,
         "failure": None
         if config["available"]
-        else failure("unknown_server", "V1 acceptă doar local-mock/ai.draft."),
+        else failure("unknown_server", "V1 acceptă doar local-mock cu unelte aprobate."),
         "created_at": _now(),
     }
