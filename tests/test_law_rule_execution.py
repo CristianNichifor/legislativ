@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import date
 from types import SimpleNamespace
 
-from scripts import dosare, law_rule_drafts, law_rule_execution, rule_candidate_queue
+from scripts import depozit, dosare, law_rule_drafts, law_rule_execution, rule_candidate_queue
+from scripts.api import Inregistrare
+from scripts.colector import act_din_inregistrare
+from scripts.graf import _deschide_graf, construieste
 from scripts.server import face_handler
 
 DOSAR_ID = "b" * 32
@@ -69,6 +73,37 @@ def state_with_vid(tmp_path):
             "limitari": ["Corpusul nu se declară complet pentru actele de tip «hg»."],
         }
     ]
+    state.are_graf = lambda: False
+    return state
+
+
+def graph_with_repeal(tmp_path):
+    corpus = tmp_path / "corpus.db"
+    with depozit.deschide(corpus) as con:
+        rec = Inregistrare(
+            titlu="LEGE nr. 200",
+            tip_act="LEGE",
+            numar="200",
+            an=None,
+            data_vigoare=date(2020, 1, 1),
+            emitent="X",
+            publicatie="MO",
+            link_html="http://legislatie.just.ro/Public/DetaliiDocument/2000",
+            text="Articolul 15 din Legea nr. 98/2016 se abrogă.",
+        )
+        depozit.scrie_inregistrare(con, rec, act_din_inregistrare(rec))
+    graf = tmp_path / "graf.db"
+    construieste(str(corpus), str(graf))
+    con = _deschide_graf(str(graf), readonly=True)
+    con.close()
+    return graf
+
+
+def state_with_graph(tmp_path):
+    state = state_with_vid(tmp_path)
+    state.graf = str(graph_with_repeal(tmp_path))
+    state.are_graf = lambda: True
+    state.republicari = lambda _acte: {}
     return state
 
 
@@ -160,6 +195,155 @@ def test_rule_draft_text_execution_matches_supplied_project_text(tmp_path):
     assert row["checks"]["action_found"] is True
     assert row["checks"]["deadline_found"] is True
     assert "nu verdict juridic" in row["limitations"][0]
+
+
+def test_rule_draft_text_flags_obligation_without_actor(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    save_draft(path)
+
+    result = law_rule_execution.draft_text(
+        path,
+        {
+            "id": DOSAR_ID,
+            "text": "Art. 3. Se aprobă normele metodologice în termen de 30 zile.",
+        },
+        state,
+    )
+
+    row = result["rows"][0]
+    assert row["status"] == "candidate_issue_not_verdict"
+    assert row["issue_candidates"][0]["code"] == "obligation_actor_missing"
+    assert row["issue_candidates"][0]["status"] == "candidate_issue_not_legal_verdict"
+    assert row["issue_candidates"][0]["source"]["source_hash"] == "a" * 64
+    assert "nu verdict juridic" in row["issue_candidates"][0]["limitations"][0]
+
+
+def test_rule_draft_text_flags_procedure_missing_deadline_and_body(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    save_draft(
+        path,
+        candidate(
+            modality="procedure",
+            text="Autoritatea publică stabilește procedura în 10 zile dacă primește cererea.",
+            actor="Autoritatea publică",
+            action="stabilește procedura",
+            deadline="10 zile",
+            condition="dacă primește cererea",
+        ),
+    )
+
+    result = law_rule_execution.draft_text(
+        path,
+        {"id": DOSAR_ID, "text": "Autoritatea publică stabilește procedura."},
+        state,
+    )
+
+    codes = {issue["code"] for issue in result["rows"][0]["issue_candidates"]}
+    assert {"procedure_deadline_missing", "procedure_body_missing"} <= codes
+    assert result["candidate_issues"] >= 2
+
+
+def test_rule_draft_text_flags_missing_or_ambiguous_reference_act(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+
+    result = law_rule_execution.draft_text(
+        path,
+        {"id": DOSAR_ID, "text": "Se aplică art. 5 în termen de 30 de zile."},
+        state,
+    )
+
+    assert result["candidate_issues"] == 1
+    issue = result["issue_candidates"][0]
+    assert issue["code"] == "reference_missing_or_ambiguous_act"
+    assert issue["source"]["quote"] == "art. 5"
+
+
+def test_rule_draft_text_flags_repealed_reference_when_graph_available(tmp_path):
+    state = state_with_graph(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+
+    result = law_rule_execution.draft_text(
+        path,
+        {"id": DOSAR_ID, "text": "Se aplică articolul 15 din Legea nr. 98/2016."},
+        state,
+    )
+
+    issue = result["issue_candidates"][0]
+    assert issue["code"] == "amends_repealed_provision"
+    assert issue["evidence"]["act_id"] == "lege-98-2016"
+    assert issue["evidence"]["locator"] == "art15"
+    assert result["checks"]["graph_repeal_or_change"] is True
+
+
+def test_rule_draft_text_surfaces_saved_eu_conflict_hypothesis(tmp_path):
+    state = state_with_vid(tmp_path)
+    path = dosare.cale(state)
+    create_dossier(path)
+    result_json = {
+        "state": "linked_hypothesis",
+        "baza": {"selection": {"celex": "32014L0024", "locator": "art1"}},
+        "substantive_candidate": {
+            "ipoteza": "potential_conflict",
+            "obligatie": "achiziții publice transparente",
+            "motiv": "ipoteză salvată",
+        },
+    }
+    with dosare._open(path, write=True) as con:
+        con.execute(
+            "INSERT INTO rulari VALUES (?,?,?,?,?,?,?,?)",
+            (
+                "2" * 32,
+                DOSAR_ID,
+                "2026-09-14T00:00:00+00:00",
+                "test",
+                "d" * 64,
+                "{}",
+                "{}",
+                "{}",
+            ),
+        )
+        con.execute(
+            "INSERT INTO propuneri VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                "3" * 32,
+                "2" * 32,
+                "4" * 32,
+                1,
+                "d" * 64,
+                "Propunere",
+                "Text",
+                "Motiv",
+                "2026-09-14T00:00:00+00:00",
+            ),
+        )
+        con.execute(
+            "INSERT INTO legaturi_ue(id,propunere_id,creat_la,cerere_json,rezultat_json) "
+            "VALUES (?,?,?,?,?)",
+            (
+                "5" * 32,
+                "3" * 32,
+                "2026-09-14T00:00:00+00:00",
+                "{}",
+                json.dumps(result_json),
+            ),
+        )
+
+    result = law_rule_execution.draft_text(
+        path,
+        {"id": DOSAR_ID, "text": "Proiect privind achiziții publice transparente."},
+        state,
+    )
+
+    assert result["checks"]["saved_eu_links"] is True
+    assert result["issue_candidates"][0]["code"] == "selected_eu_article_potential_conflict"
+    assert result["issue_candidates"][0]["source"]["celex"] == "32014L0024"
 
 
 def test_rule_draft_text_execution_keeps_partial_match_distinct(tmp_path):

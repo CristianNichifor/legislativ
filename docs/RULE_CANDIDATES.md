@@ -149,3 +149,47 @@ codeable must stay in the queue.
 law-as-code bridge, but they are still explicitly labelled
 `draft_rule_not_legal_verdict`; deterministic checks may consume them only as
 reviewable source-backed inputs.
+
+## Deterministic draft/proposal checks
+
+`POST /api/dosare/rule-drafts/execute-draft` runs promoted draft rules against a
+single draft/proposal text supplied by the user:
+
+```json
+{
+  "id": "dosar id",
+  "act": "optional act filter",
+  "text": "draft or amendment text",
+  "limit": 50
+}
+```
+
+The response contract is `law-rule-draft-text-execution-v1`. It never calls AI,
+never consults external services and never returns a legal verdict. Every finding
+is a `law-rule-deterministic-issue-v1` candidate for human review.
+
+The v1 deterministic slice checks:
+
+- obligation/action found without the reviewed actor;
+- procedure/deadline/body fields missing from the supplied text;
+- locator references such as `art. 5` where no act is cited in the same fragment;
+- citations to provisions the local graph marks as repealed;
+- citations to provisions the local graph marks as suspended, derogated from or
+  prorogated;
+- delegated norms already reported as missing by the local gap checker;
+- saved EU links whose author-declared hypothesis is `potential_conflict`, when
+  the draft text overlaps the retained CELEX/article evidence.
+
+Each issue cites its source:
+
+- for draft-rule checks: `rule_draft_id`, `candidate_id`, `provision_id`,
+  `act_id`, `locator`, `source_hash` and `text_sha256`;
+- for draft-text/reference checks: the supplied text hash and exact matched
+  quote/span where available;
+- for graph checks: the quoted citation plus act/locator and graph-derived
+  repeal or qualification evidence;
+- for EU checks: saved CELEX, article locator and the retained obligation quote.
+
+Uncertainty is part of the contract. Missing graph data, missing EU links, absent
+source text or synonym-heavy drafting is reported as a limitation, not treated as
+proof that the draft is clean.

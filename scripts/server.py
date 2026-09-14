@@ -1070,7 +1070,7 @@ def face_handler(stare: Stare, *, runtime=None):
                     elif ruta == "/api/dosare/rule-drafts/execute-draft":
                         from scripts import law_rule_execution
 
-                        out = law_rule_execution.draft_text(path, cerere)
+                        out = law_rule_execution.draft_text(path, cerere, stare)
                     elif ruta == "/api/dosare/ai-draft":
                         from scripts.ai_drafting import preview
 
