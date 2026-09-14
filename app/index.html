@@ -7512,7 +7512,8 @@ function lifecycleStatusSummaryHtml(project){
   if(project.source_state==='unavailable'||project.unavailable)missing.push('sursă indisponibilă');
   if(project.registry_needs_attention)missing.push('sursă urmărită de revizuit');
   if((project.timeline_coverage?.missing||[]).length&&Number(project.timeline_coverage?.total_events||0)>0)missing.push('dovezi tracker incomplete');
-  const next=project.registry_can_sync?'sincronizează sursa urmărită':(project.timeline_coverage?.next_action|| (project.needs_attention?'deschide revizia sursei':'monitorizează următorul eveniment oficial'));
+  const needsEvidence=(project.timeline_coverage?.missing||[]).length&&Number(project.timeline_coverage?.total_events||0)>0;
+  const next=project.registry_can_sync?'sincronizează sursa urmărită':(needsEvidence?project.timeline_coverage.next_action:(project.needs_attention?'deschide revizia sursei':'monitorizează următorul eveniment oficial'));
   return `<section class="lifecycle-overview-card"><span class="hint">Stadiu curent</span><strong>${esc(project.stage?.label||project.status||'Necunoscut')}</strong><span class="hint">Ultimul pas: ${esc(lifecycleEventText(project))}</span><br><span class="hint">Date lipsă: ${esc(missing.join(', ')||'niciuna semnalată')}</span><br><span class="hint">Următorul pas: ${esc(next)}</span></section>`;
 }
 async function projectSourceCoverageApi(projectId){
@@ -7563,7 +7564,8 @@ function lifecycleRowHtml(project,index=0){
   const sync=project.registry_can_sync?`<button type="button" class="ghost mini" data-lifecycle-sync-source="${index}">Sincronizează sursa urmărită</button>`:'';
   const review=['changed','needs_review'].includes(project.registry_source_state)?`<button type="button" class="ghost mini" data-lifecycle-review-source="${index}">Revizuiește sursa</button>`:'';
   const markWatch=project.watch_item?.needs_attention?`<button type="button" class="ghost mini" data-lifecycle-watch-review="${index}">Marchează follow revizuit</button>`:'';
-  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}${lifecycleTimelineCoverageHtml(project)}${lifecyclePathCoverageHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button>${markWatch}<button type="button" class="ghost mini" data-lifecycle-watch-dossier="${index}">Urmărește în dosar</button><button type="button" class="ghost mini" data-lifecycle-cockpit="${index}">Cockpit</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-coverage="${index}">Acoperire surse</button><button type="button" class="ghost mini" data-lifecycle-draft="${index}">Draft</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
+  const evidence=(project.timeline_coverage?.missing||[]).length&&Number(project.timeline_coverage?.total_events||0)>0?`<button type="button" class="ghost mini" data-lifecycle-missing-evidence="${index}">Dovadă lipsă</button>`:'';
+  return `<article class="lifecycle-row lifecycle-row-${attention}" data-lifecycle-row="${index}"><h4>${esc(project.project_id||'Fără id')} · ${esc(project.title||'Fără titlu')}</h4>${lifecycleStatusSummaryHtml(project)}<p><strong>${esc(lifecycleStateLabel(project))}</strong> · ${esc(stage)}${stageDate}</p>${lifecycleTimelineHtml(project)}${lifecycleTimelineCoverageHtml(project)}${lifecyclePathCoverageHtml(project)}<p class="hint">Ultimul eveniment: ${esc(lifecycleEventText(project))}</p><p class="hint">${esc(lifecycleUncertaintyText(project))}</p><p class="hint">Sursă: ${esc(project.source_name||'necunoscută')} · Văzut: ${esc(dossierTime(project.last_seen))} · Actualizat: ${esc(dossierTime(project.last_updated))}</p>${registry}${affectedText}<p>${source}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-lifecycle-watch="${index}">${esc(watch)}</button>${markWatch}<button type="button" class="ghost mini" data-lifecycle-watch-dossier="${index}">Urmărește în dosar</button><button type="button" class="ghost mini" data-lifecycle-cockpit="${index}">Cockpit</button><button type="button" class="ghost mini" data-lifecycle-workbench="${index}">Workbench</button><button type="button" class="ghost mini" data-lifecycle-coverage="${index}">Acoperire surse</button>${evidence}<button type="button" class="ghost mini" data-lifecycle-draft="${index}">Draft</button><button type="button" class="ghost mini" data-lifecycle-timeline="${index}">Timeline</button><button type="button" class="ghost mini" data-lifecycle-dossier="${index}">Pregătește dosar</button><button type="button" class="ghost mini" data-lifecycle-open="${index}">Deschide sursele proiectului</button>${sync}${review}</div></article>`;
 }
 function lifecycleSourceNote(project){
   const source=project.registry_source||{};
@@ -7785,6 +7787,17 @@ function renderLifecycleList(){
   list.querySelectorAll('[data-lifecycle-timeline]').forEach(button=>{
     button.onclick=()=>openTrackerTimeline({project_id:projects[Number(button.dataset.lifecycleTimeline)]?.project_id||''});
   });
+  list.querySelectorAll('[data-lifecycle-missing-evidence]').forEach(button=>{
+    button.onclick=()=>{
+      const project=projects[Number(button.dataset.lifecycleMissingEvidence)];
+      const stage=project?.timeline_coverage?.next_missing_stage||{};
+      openTrackerTimeline({
+        project_id:project?.project_id||'',
+        event_type:(stage.required_any||[])[0]||'',
+        source_family:stage.suggested_source_family||''
+      });
+    };
+  });
   list.querySelectorAll('[data-lifecycle-workbench]').forEach(button=>{
     button.onclick=()=>openProjectWorkbench(projects[Number(button.dataset.lifecycleWorkbench)]||{});
   });
@@ -7887,6 +7900,13 @@ function configureTrackerEventTypes(data){
   const types=data.event_types||[];
   select.innerHTML='<option value="">Toate tipurile</option>'+types.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('');
   select.dataset.loaded='1';
+}
+function setSelectValue(select,value){
+  if(!select||!value)return;
+  if(![...select.options].some(option=>option.value===value)){
+    select.add(new Option(value,value));
+  }
+  select.value=value;
 }
 const TRACKER_COVERAGE_STAGES=[
   {key:'consultation',label:'Consultare',types:['public_consultation_opened','public_consultation_closed']},
@@ -7991,12 +8011,15 @@ async function loadTrackerTimeline(offset=0){
     status.textContent=`${data.events?.length||0} din ${data.total||0} evenimente pentru ${scope}${filters?` · ${filters}`:''}.`;
   }catch(err){if(token===TRACKER_TIMELINE.sequence){status.textContent=err.message;out.innerHTML='';}}
 }
-function openTrackerTimeline({project_id='',dossier_id=''}={}){
+function openTrackerTimeline({project_id='',dossier_id='',event_type='',source_family='',reviewed=''}={}){
   const panel=$('#project-tracker-timeline'), form=$('#tracker-timeline-search');
   if(!panel||!form)return;
   panel.open=true;
   if(project_id)form.elements.project_id.value=project_id;
   if(dossier_id)form.elements.dossier_id.value=dossier_id;
+  setSelectValue(form.elements.event_type,event_type);
+  setSelectValue(form.elements.source_family,source_family);
+  setSelectValue(form.elements.reviewed,reviewed);
   loadTrackerTimeline(0);
   panel.scrollIntoView({block:'nearest'});
 }

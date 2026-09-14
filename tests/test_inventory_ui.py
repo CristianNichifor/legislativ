@@ -494,6 +494,7 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         "assert.ok(h.includes('următoarea: Monitor'));"
         "assert.ok(h.includes('Completează &lt;x&gt;'));"
         "assert.ok(h.includes('Verifică Monitor &lt;x&gt;'));"
+        "assert.ok(h.includes('data-lifecycle-missing-evidence'));"
         "assert.ok(h.includes('Prospețime sursă: Schimbată'));"
         "assert.ok(h.includes('ultima verificare now'));"
         "assert.ok(h.includes('data-stage=\"report\"'));"
@@ -709,6 +710,9 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
 def test_lifecycle_renderer_exposes_phase_b_work_buckets():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     assert '<option value="evidence">Dovezi tracker lipsă</option>' in html
+    assert "function setSelectValue(select,value)" in html
+    assert "event_type:(stage.required_any||[])[0]||''" in html
+    assert "source_family:stage.suggested_source_family||''" in html
     assert '<option value="deadline">Termen apropiat/depășit</option>' in html
     assert '<option value="committee">Comisii și rapoarte</option>' in html
     assert '<option value="vote">Plen, vot sau adoptare</option>' in html
