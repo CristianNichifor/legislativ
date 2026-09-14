@@ -386,6 +386,14 @@ def _raspunde(path, query, body, method='GET'):
     elif path == '/api/inventar-surse':
         from scripts.servicii import _inventar_surse
         out = _inventar_surse(_stare)
+    elif path == '/api/app-completeness':
+        from scripts.app_completeness import report
+        out = report(_stare)
+        out['mod'] = 'static'
+        out['limitari'] = [
+            *out.get('limitari', []),
+            'GitHub Pages poate afișa gate-ul, dar verificarea surselor oficiale rulează numai în aplicația locală.',
+        ]
     elif path == '/api/cauta':
         # The same filters the shard path accepts. Dropping them here would give the UI a type
         # selector and a year range that quietly do nothing.
@@ -451,6 +459,11 @@ def _raspunde(path, query, body, method='GET'):
             'attention_sources': 0,
             'blockers': [{'kind': 'local_only', 'message': 'Acoperirea surselor urmărite este disponibilă în aplicația locală.'}],
             'limitari': ['GitHub Pages nu are registrul privat de surse urmărite.'],
+        }
+    elif path == '/api/registru-surse':
+        out = {
+            'mod': 'static',
+            'error': 'Registrul surselor și sincronizarea ancorelor oficiale sunt disponibile numai în aplicația locală.',
         }
     elif path == '/api/needs-attention':
         out = {
