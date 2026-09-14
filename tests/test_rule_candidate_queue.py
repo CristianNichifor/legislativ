@@ -130,6 +130,39 @@ def test_rule_candidate_queue_filters_and_rejects_invalid_records(state):
         )
 
 
+def test_rule_candidate_queue_survives_backup_with_authoring_metadata(state):
+    create_dossier(state)
+    path = dosare.cale(state)
+    saved = rule_candidate_queue.salveaza(
+        path,
+        {
+            "id": "5" * 32,
+            "dosar_id": DOSAR_ID,
+            "candidate": candidate(
+                source_url="https://legislatie.just.ro/Public/DetaliiDocument/178667",
+                applicability_scope="proceduri de achiziție publică",
+                confidence="medium",
+                extraction_method="manual_note",
+                origin_kind="manual_note",
+                origin_id="6" * 32,
+            ),
+        },
+    )
+    backup = path.with_name("rules-backup.db")
+
+    dosare.backup(path, backup)
+    restored = rule_candidate_queue.lista(backup, DOSAR_ID)
+
+    assert restored["items"][0]["candidate_id"] == saved["candidate_id"]
+    assert restored["items"][0]["candidate"]["source_url"].startswith("https://legislatie.")
+    assert restored["items"][0]["candidate"]["applicability_scope"] == (
+        "proceduri de achiziție publică"
+    )
+    assert restored["items"][0]["candidate"]["confidence"] == "medium"
+    assert restored["items"][0]["candidate"]["extraction_method"] == "manual_note"
+    assert restored["items"][0]["candidate"]["origin_id"] == "6" * 32
+
+
 def test_rule_candidate_queue_http_is_local_only(state):
     create_dossier(state)
     body = {

@@ -5056,11 +5056,18 @@ const RULE_CANDIDATE_REVIEW_STATES={
   machine_detected:'Detectat de mașină',human_reviewed:'Revizuit uman',
   legally_validated:'Validat juridic',disputed:'Disputat',obsolete:'Învechit'
 };
+const RULE_CANDIDATE_CONFIDENCE={
+  unknown:'Necunoscută',low:'Scăzută',medium:'Medie',high:'Ridicată'
+};
+const RULE_CANDIDATE_EXTRACTION_METHODS={
+  manual:'Manual',provision:'Din prevedere',manual_note:'Din notă',
+  matrix:'Din matrice',ai_draft:'Din ciornă AI',mcp_draft:'Din rezultat MCP',imported:'Importat'
+};
 const RULE_QUEUE_BUCKETS={
   all:'Toți candidații',needs_more_structure:'Necesită structurare',needs_legal_review:'Necesită revizie juridică',
   not_codeable:'Nepotrivit pentru codificare',reviewable:'Revizuibil',human_reviewed:'Revizuit uman'
 };
-const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null,draft:null};
+const MANUAL_NOTES_UI={offset:0,sequence:0,editing:null,draft:null,rule:null};
 let ruleDraftsSequence=0;
 
 function manualNoteExportMarkdown(note){
@@ -5123,7 +5130,10 @@ function manualNoteFormHtml(editing=null){
     +'<details><summary>Checklist auto-revizie</summary><ul><li>Dovada are citat sau rezumat verificabil.</li><li>Sursa oficială ori hash-ul local sunt atașate.</li><li>Raționamentul spune de ce este lacună, loophole, contradicție sau risc.</li><li>Concluzia rămâne ipoteză de lucru, nu verdict juridic.</li></ul></details>'
     +ruleCandidateControlsHtml({
       act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
-      text:editing?.evidence_quote||'',provision_id:''
+      source_url:editing?.source_url||'',text:editing?.evidence_quote||'',provision_id:'',
+      extraction_method:editing?.extraction_method||'manual_note',
+      origin_kind:editing?.origin_kind||'manual_note',
+      origin_id:editing?.origin_id||editing?.id||''
     })
     +aiUnifiedDraftPanelHtml('dovezi selectate')
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
@@ -5376,22 +5386,28 @@ function ruleCandidateOptions(items,current=''){
 }
 function ruleCandidateControlsHtml(seed={}){
   const v=name=>esc(seed[name]||'');
-  return '<details data-rule-candidate><summary>Propune regulă</summary>'
+  const title=seed.editing?'Editează candidatul':'Propune regulă';
+  return '<details data-rule-candidate><summary>'+title+'</summary>'
     +'<p class="hint">Previzualizarea verifică sursa și câmpurile. Salvarea pune candidatul în coada locală a dosarului; nu produce verdict juridic.</p>'
     +`<label>ID prevedere<input name="rule_provision_id" maxlength="240" value="${v('provision_id')}" placeholder="ro:lege-98-2016#art7.alin2"></label>`
     +`<label>Act<input name="rule_act_id" maxlength="200" value="${v('act_id')}"></label>`
     +`<label>Locator<input name="rule_locator" maxlength="120" value="${v('locator')}"></label>`
+    +`<label>URL sursă<input name="rule_source_url" type="url" maxlength="1000" value="${v('source_url')}"></label>`
     +`<label>SHA-256 sursă<input name="rule_source_hash" maxlength="64" value="${v('source_hash')}"></label>`
     +`<label>Text prevedere<textarea name="rule_text" rows="4" maxlength="12000">${v('text')}</textarea></label>`
     +`<label>Tip regulă<select name="rule_modality">${ruleCandidateOptions(RULE_CANDIDATE_MODALITIES,seed.modality||'obligation')}</select></label>`
     +`<label>Stare revizie<select name="rule_review_state">${ruleCandidateOptions(RULE_CANDIDATE_REVIEW_STATES,seed.review_state||'machine_detected')}</select></label>`
-    +'<label>Actor<input name="rule_actor" maxlength="300"></label>'
-    +'<label>Condiție<textarea name="rule_condition" rows="2" maxlength="1200"></textarea></label>'
-    +'<label>Acțiune<textarea name="rule_action" rows="2" maxlength="1200"></textarea></label>'
-    +'<label>Termen<input name="rule_deadline" maxlength="300"></label>'
-    +'<label>Excepții<textarea name="rule_exceptions" rows="2" maxlength="2000" placeholder="o excepție pe linie"></textarea></label>'
-    +'<label>Efect<textarea name="rule_effect" rows="2" maxlength="1200"></textarea></label>'
-    +'<label>Reviewer<input name="rule_reviewer" maxlength="160"></label>'
+    +'<label>Actor<input name="rule_actor" maxlength="300" value="'+v('actor')+'"></label>'
+    +'<label>Condiție / declanșator<textarea name="rule_condition" rows="2" maxlength="1200">'+v('condition')+'</textarea></label>'
+    +'<label>Acțiune<textarea name="rule_action" rows="2" maxlength="1200">'+v('action')+'</textarea></label>'
+    +'<label>Termen / regulă de dată<input name="rule_deadline" maxlength="300" value="'+v('deadline')+'"></label>'
+    +'<label>Excepții<textarea name="rule_exceptions" rows="2" maxlength="2000" placeholder="o excepție pe linie">'+esc((seed.exceptions||[]).join('\n'))+'</textarea></label>'
+    +'<label>Efect<textarea name="rule_effect" rows="2" maxlength="1200">'+v('effect')+'</textarea></label>'
+    +'<label>Domeniu de aplicare<textarea name="rule_applicability_scope" rows="2" maxlength="1200">'+v('applicability_scope')+'</textarea></label>'
+    +`<label>Încredere<select name="rule_confidence">${ruleCandidateOptions(RULE_CANDIDATE_CONFIDENCE,seed.confidence||'unknown')}</select></label>`
+    +`<label>Metodă extragere<select name="rule_extraction_method">${ruleCandidateOptions(RULE_CANDIDATE_EXTRACTION_METHODS,seed.extraction_method||'manual')}</select></label>`
+    +`<input type="hidden" name="rule_origin_kind" value="${v('origin_kind')}"><input type="hidden" name="rule_origin_id" value="${v('origin_id')}">`
+    +'<label>Reviewer<input name="rule_reviewer" maxlength="160" value="'+v('reviewer')+'"></label>'
     +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-preview>Previzualizează candidatul</button><button type="button" class="ghost mini" data-rule-save disabled>Salvează în coadă</button><p class="hint" role="status" data-rule-status></p></div>'
     +'<pre data-rule-result></pre></details>';
 }
@@ -5401,6 +5417,7 @@ function ruleCandidatePayload(root,source={}){
     provision_id:field('rule_provision_id')||source.provision_id||'',
     act_id:field('rule_act_id')||source.act_id||'',
     locator:field('rule_locator')||source.locator||'',
+    source_url:field('rule_source_url')||source.source_url||source.sursa_url||'',
     source_hash:field('rule_source_hash')||source.source_hash||'',
     text:field('rule_text')||source.text||'',
     modality:field('rule_modality')||'obligation',
@@ -5411,6 +5428,11 @@ function ruleCandidatePayload(root,source={}){
     deadline:field('rule_deadline'),
     exceptions:field('rule_exceptions').split(/\n+/).map(s=>s.trim()).filter(Boolean),
     effect:field('rule_effect'),
+    applicability_scope:field('rule_applicability_scope'),
+    confidence:field('rule_confidence')||'unknown',
+    extraction_method:field('rule_extraction_method')||source.extraction_method||'manual',
+    origin_kind:field('rule_origin_kind')||source.origin_kind||'',
+    origin_id:field('rule_origin_id')||source.origin_id||'',
     reviewer:field('rule_reviewer')
   };
 }
@@ -5445,8 +5467,12 @@ function bindManualNoteRuleCandidate(form){
   bindRuleCandidateControls(form,()=>({
     act_id:form.elements.act_id?.value||'',
     locator:form.elements.locator?.value||'',
+    source_url:form.elements.source_url?.value||'',
     source_hash:form.elements.source_hash?.value||'',
-    text:form.elements.evidence_quote?.value||''
+    text:form.elements.evidence_quote?.value||'',
+    extraction_method:'manual_note',
+    origin_kind:'manual_note',
+    origin_id:MANUAL_NOTES_UI.editing?.id||''
   }));
 }
 function bindManualNoteAiDraft(form){
@@ -5494,6 +5520,9 @@ function bindManualNoteAiDraft(form){
     if(!draft)return;
     const field=form.elements.reasoning;
     field.value=(field.value?field.value.trim()+'\n\n':'')+draft;
+    if(form.elements.rule_extraction_method)form.elements.rule_extraction_method.value='ai_draft';
+    if(form.elements.rule_origin_kind)form.elements.rule_origin_kind.value='ai_draft';
+    if(form.elements.rule_origin_id)form.elements.rule_origin_id.value=plan?.input_sha256||'';
     field.dispatchEvent(new Event('input',{bubbles:true}));
     insert.disabled=true;status.textContent='Ciorna a fost inserată în raționament; salvează nota când ești gata.';
   };
@@ -5522,6 +5551,9 @@ function bindManualNoteMcpDraft(form,section){
     if(!text){status.textContent='Lipește rezultatul MCP înainte de inserare.';return;}
     const field=form.elements.reasoning;
     field.value=(field.value?field.value.trim()+'\n\n':'')+mcpDraftInsertText(plan,text);
+    if(form.elements.rule_extraction_method)form.elements.rule_extraction_method.value='mcp_draft';
+    if(form.elements.rule_origin_kind)form.elements.rule_origin_kind.value='mcp_draft';
+    if(form.elements.rule_origin_id)form.elements.rule_origin_id.value=plan?.mcp?.approval?.data_sha256||'';
     field.dispatchEvent(new Event('input',{bubbles:true}));
     insert.disabled=true;status.textContent='Rezultatul MCP a fost inserat cu audit; salvează nota când ești gata.';
   };
@@ -5877,6 +5909,7 @@ async function startManualNote(prefill,options={}){
   if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de a salva nota.';return;}
   MANUAL_NOTES_UI.editing=prefill;
   MANUAL_NOTES_UI.draft=options.draft?{task:options.task||'issue_note'}:null;
+  MANUAL_NOTES_UI.rule=options.rule?true:null;
   await loadManualNotes(DOSARE_UI.selected.id,0);
   $('#dossier-notes').scrollIntoView({block:'start'});
   $('#dossier-notes input[name="title"]')?.focus();
@@ -5956,6 +5989,11 @@ async function loadManualNotes(dossierId,offset=0){
     host.querySelector('[data-note-clear]').onclick=()=>{MANUAL_NOTES_UI.editing=null;loadManualNotes(dossierId,offset);};
     bindManualNoteRuleCandidate(form);
     bindManualNoteAiDraft(form);
+    if(MANUAL_NOTES_UI.rule){
+      MANUAL_NOTES_UI.rule=null;
+      const box=form.querySelector('[data-rule-candidate]');
+      if(box){box.open=true;box.scrollIntoView({block:'center'});}
+    }
     if(MANUAL_NOTES_UI.draft&&manualNoteDraftReady(MANUAL_NOTES_UI.editing)){
       const draft=MANUAL_NOTES_UI.draft;MANUAL_NOTES_UI.draft=null;
       prepareManualNoteDraft(form,draft.task);
@@ -5979,7 +6017,9 @@ function ruleCandidateQueueHtml(item,index){
   return `<article class="manual-note" data-rule-queue-index="${index}"><h5>${esc(ruleCandidateSummary(c))}</h5>`
     +`<div class="manual-note-meta"><span>${esc(RULE_QUEUE_BUCKETS[item.bucket]||item.bucket)}</span><span>${esc(RULE_CANDIDATE_REVIEW_STATES[c.review_state]||c.review_state)}</span><span>${esc(c.act_id||'')} ${esc(c.locator||'')}</span></div>`
     +`<p>${esc(c.condition||'Fără condiție explicită')}</p><p>${esc(c.effect||'Fără efect codificat')}</p>`
-    +`<p class="hint">Prevedere: ${esc(c.provision_id||'')} · SHA-256 sursă: ${esc(c.source_hash||'')}</p>`
+    +`<p class="hint">Prevedere: ${esc(c.provision_id||'')} · metodă: ${esc(RULE_CANDIDATE_EXTRACTION_METHODS[c.extraction_method||'manual']||c.extraction_method||'manual')} · încredere: ${esc(RULE_CANDIDATE_CONFIDENCE[c.confidence]||c.confidence||'necunoscută')} · SHA-256 sursă: ${esc(c.source_hash||'')}</p>`
+    +(c.applicability_scope?`<p class="hint">Domeniu aplicare: ${esc(c.applicability_scope)}</p>`:'')
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-edit>Editează candidat</button></div><div data-rule-edit-host></div>`
     +(item.actiuni?.promote_to_rule?'<details data-rule-promote><summary>Promovează în ciornă law-as-code</summary><form><label>Acceptat de<input name="accepted_by" maxlength="160" required></label><label>Notă acceptare<textarea name="acceptance_note" rows="2" maxlength="1200" required></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Acceptă ca regulă-ciornă</button><p class="hint" role="status" data-rule-promote-status></p></div></form></details>':'<p class="hint">Nu poate fi promovat până nu este revizuibil sau revizuit uman.</p>')
     +`<details><summary>Contract candidat</summary><pre>${esc(JSON.stringify(c,null,2))}</pre></details></article>`;
 }
@@ -6077,6 +6117,24 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
       }catch(err){textStatus.textContent=err.message;}
     };
     host.querySelector('[data-rule-draft-text-clear]').onclick=()=>{textForm.reset();textOut.innerHTML=ruleDraftTextExecutionHtml(null);textStatus.textContent='';};
+    host.querySelectorAll('[data-rule-edit]').forEach(button=>button.onclick=()=>{
+      const item=queue.items[Number(button.closest('[data-rule-queue-index]').dataset.ruleQueueIndex)];
+      const target=button.closest('[data-rule-queue-index]').querySelector('[data-rule-edit-host]');
+      if(!item||!target)return;
+      if(target.children.length){target.textContent='';return;}
+      target.innerHTML=ruleCandidateControlsHtml({
+        ...(item.candidate||{}),
+        editing:true,
+        origin_kind:'rule_candidate_queue',
+        origin_id:item.id
+      });
+      const box=target.querySelector('[data-rule-candidate]');if(box)box.open=true;
+      bindRuleCandidateControls(target,()=>({
+        ...(item.candidate||{}),
+        origin_kind:'rule_candidate_queue',
+        origin_id:item.id
+      }));
+    });
     host.querySelectorAll('[data-rule-promote] form').forEach(form=>{
       form.onsubmit=async e=>{
         e.preventDefault();if(!form.reportValidity())return;
@@ -9054,7 +9112,7 @@ function mEvidenceRecordHtml(row){
     +`<div class="matrix-graph-meta">${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">sursă oficială</a> · `:""}${hash}${parser} · ${esc(row.uncertainty||"incertitudine neprecizată")}</div>`
     +(row.quote?`<blockquote class="source-text">${esc(row.quote)}</blockquote>`:`<p class="hint">Citatul exact lipsește din dovada locală.</p>`)
     +(row.not_legal_verdict?`<p class="hint">Dovadă pentru analiză; nu verdict juridic.</p>`:"")
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-rule-evidence="${esc(row.id||"")}">Propune regulă</button><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
     +`</article>`;
 }
 function mRelatedItemsHtml(related){
@@ -9472,6 +9530,25 @@ function mDosarHtml(d){
 }
 
 function bindMatrixNoteButtons(host,d){
+  host.querySelectorAll('[data-matrix-rule-evidence]').forEach(button=>button.onclick=()=>{
+    const row=(d.drilldown?.evidence_records||[]).find(item=>item.id===button.dataset.matrixRuleEvidence);
+    if(!row)return;
+    startManualNote({
+      title:`Regulă din matrice · ${row.label||row.kind||'dovadă'}`,
+      type:row.kind==='constitutionalitate'?'constitutionalitate':row.kind==='risc_ue'?'risc_ue':'lacuna',
+      act_id:row.act_id||'',
+      locator:row.locator||'',
+      evidence_quote:row.quote||'',
+      source_url:row.source_url||'',
+      source_hash:row.source_hash||'',
+      reasoning:['Candidat law-as-code pornit din dovadă de matrice.',row.uncertainty?`Incertitudine: ${row.uncertainty}.`:'','Nu verdict juridic.'].filter(Boolean).join('\n'),
+      status:row.quote&&(row.source_url||row.source_hash)?'ready_for_review':'needs_evidence',
+      extraction_method:'matrix',
+      origin_kind:'matrix_evidence',
+      origin_id:row.id||'',
+      revizie:0
+    },{rule:true});
+  });
   host.querySelectorAll('[data-matrix-ai-evidence]').forEach(button=>button.onclick=()=>{
     const row=(d.drilldown?.evidence_records||[]).find(item=>item.id===button.dataset.matrixAiEvidence);
     if(!row)return;
@@ -9561,7 +9638,8 @@ async function mPrevedere(buton){
         const identity=d.identity||{};
         host.innerHTML=ruleCandidateControlsHtml({
           provision_id:d.provision_id||identity.provision_id||'',act_id:d.act_id||identity.act_id||'',locator:d.locator||identity.locator||'',
-          source_hash:d.source_hash||identity.source_hash||'',text:d.text||''
+          source_url:d.source_url||d.sursa_url||identity.source_url||'',source_hash:d.source_hash||identity.source_hash||'',text:d.text||'',
+          extraction_method:'provision',origin_kind:'provision',origin_id:d.provision_id||identity.provision_id||''
         });
         const box=host.querySelector('[data-rule-candidate]');if(box)box.open=true;
         bindRuleCandidateControls(host,()=>d);

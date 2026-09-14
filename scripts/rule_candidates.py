@@ -31,6 +31,10 @@ MODALITIES: Final[frozenset[str]] = frozenset(
 REVIEW_STATES: Final[frozenset[str]] = frozenset(
     {"machine_detected", "human_reviewed", "legally_validated", "disputed", "obsolete"}
 )
+CONFIDENCE_LEVELS: Final[frozenset[str]] = frozenset({"unknown", "low", "medium", "high"})
+EXTRACTION_METHODS: Final[frozenset[str]] = frozenset(
+    {"manual", "provision", "manual_note", "matrix", "ai_draft", "mcp_draft", "imported"}
+)
 REQUIRED: Final[frozenset[str]] = frozenset(
     {"provision_id", "act_id", "locator", "source_hash", "text", "modality", "review_state"}
 )
@@ -48,12 +52,18 @@ class RuleCandidate:
     review_state: str
     text_sha256: str
     source_hash: str
+    source_url: str = ""
     actor: str = ""
     condition: str = ""
     action: str = ""
     deadline: str = ""
     exceptions: tuple[str, ...] = field(default_factory=tuple)
     effect: str = ""
+    applicability_scope: str = ""
+    confidence: str = "unknown"
+    extraction_method: str = "manual"
+    origin_kind: str = ""
+    origin_id: str = ""
     reviewer: str = ""
     limitations: tuple[str, ...] = field(default_factory=tuple)
 
@@ -100,13 +110,19 @@ def _candidate_id(payload: dict) -> str:
         for key in (
             "provision_id",
             "source_hash",
+            "source_url",
             "modality",
+            "review_state",
             "actor",
             "condition",
             "action",
             "deadline",
             "effect",
             "exceptions",
+            "applicability_scope",
+            "confidence",
+            "extraction_method",
+            "reviewer",
         )
     }
     return _sha(dosare._json(material))[:32]
@@ -124,6 +140,12 @@ def validate(request: dict) -> dict:
             "deadline",
             "exceptions",
             "effect",
+            "source_url",
+            "applicability_scope",
+            "confidence",
+            "extraction_method",
+            "origin_kind",
+            "origin_id",
             "reviewer",
         }
     )
@@ -138,6 +160,7 @@ def validate(request: dict) -> dict:
         "act_id": _text(request["act_id"], 200, True),
         "locator": _text(request["locator"], 120, True),
         "source_hash": _hash(request["source_hash"]),
+        "source_url": _text(request.get("source_url", ""), 1000),
         "text": text,
         "modality": modality,
         "review_state": review_state,
@@ -147,6 +170,13 @@ def validate(request: dict) -> dict:
         "deadline": _text(request.get("deadline"), 300),
         "exceptions": list(_exceptions(request.get("exceptions"))),
         "effect": _text(request.get("effect"), 1200),
+        "applicability_scope": _text(request.get("applicability_scope", ""), 1200),
+        "confidence": _enum(request.get("confidence", "unknown"), CONFIDENCE_LEVELS, "Încredere"),
+        "extraction_method": _enum(
+            request.get("extraction_method", "manual"), EXTRACTION_METHODS, "Metodă extragere"
+        ),
+        "origin_kind": _text(request.get("origin_kind", ""), 80),
+        "origin_id": _text(request.get("origin_id", ""), 240),
         "reviewer": _text(request.get("reviewer"), 160),
     }
     limitations: list[str] = [
@@ -175,12 +205,18 @@ def validate(request: dict) -> dict:
         review_state=review_state,
         text_sha256=_sha(text),
         source_hash=normalized["source_hash"],
+        source_url=normalized["source_url"],
         actor=normalized["actor"],
         condition=normalized["condition"],
         action=normalized["action"],
         deadline=normalized["deadline"],
         exceptions=tuple(normalized["exceptions"]),
         effect=normalized["effect"],
+        applicability_scope=normalized["applicability_scope"],
+        confidence=normalized["confidence"],
+        extraction_method=normalized["extraction_method"],
+        origin_kind=normalized["origin_kind"],
+        origin_id=normalized["origin_id"],
         reviewer=normalized["reviewer"],
         limitations=tuple(limitations),
     ).to_dict()
