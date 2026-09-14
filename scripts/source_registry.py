@@ -696,6 +696,88 @@ def bootstrap(stare) -> dict:
     }
 
 
+def descopera_econsultare(stare, data: dict | None = None) -> dict:
+    """Fetch the official e-consultare listing and register bounded row snapshots."""
+    data = data or {}
+    try:
+        limit = int(data.get("limit", 50))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Limită e-consultare invalidă.") from exc
+    from scripts import achizitii_econsultare
+
+    listing = achizitii_econsultare.descopera_actiongrid(limit=limit)
+    created = 0
+    updated = 0
+    stored_snapshots = 0
+    tracker_events = 0
+    sources = []
+    for snapshot in listing["snapshots"]:
+        summary = snapshot.get("summary") or {}
+        source = descopera(
+            stare,
+            {
+                "family": "consultare_econsultare",
+                "identifier": snapshot.get("url", ""),
+                "url": snapshot.get("url", ""),
+                "label": summary.get("title") or snapshot.get("url", ""),
+            },
+        )
+        was_created = source["state"] == "discovered" and not source.get("last_hash")
+        content_hash = achizitii_econsultare.snapshot_hash(snapshot)
+        _store_snapshot(
+            stare, source["id"], content_hash, snapshot, achizitii_econsultare.PARSER_VERSION
+        )
+        stored_snapshots += 1
+        events = _persist_econsultare_tracker_event(stare, source["id"], snapshot, content_hash)
+        tracker_events += len(events)
+        final_state = (
+            "needs_review"
+            if not summary.get("title")
+            else _sync_state(source.get("last_hash", ""), content_hash)
+        )
+        if source["state"] == "discovered" and final_state != "needs_review":
+            source = pune_in_coada(stare, source["id"])
+        if source["state"] == "queued" and final_state in {"changed", "unchanged"}:
+            source = inregistreaza(
+                stare,
+                {
+                    "id": source["id"],
+                    "state": "fetched",
+                    "http_status": listing.get("http_status", 200),
+                    "content_hash": content_hash,
+                    "parser_version": achizitii_econsultare.PARSER_VERSION,
+                    "note": "Rând e-consultare descoperit din lista oficială.",
+                },
+            )
+        source = inregistreaza(
+            stare,
+            {
+                "id": source["id"],
+                "state": final_state,
+                "http_status": listing.get("http_status", 200),
+                "content_hash": content_hash,
+                "parser_version": achizitii_econsultare.PARSER_VERSION,
+                "note": "Rând e-consultare actualizat din lista oficială.",
+            },
+        )
+        created += int(was_created)
+        updated += int(not was_created)
+        sources.append(_with_tracker_sync(source, events))
+    return {
+        "contract": "source-registry-econsultare-discovery-v1",
+        "listing_url": listing["listing_url"],
+        "endpoint_url": listing["endpoint_url"],
+        "http_status": listing["http_status"],
+        "created": created,
+        "updated": updated,
+        "stored_snapshots": stored_snapshots,
+        "tracker_events": tracker_events,
+        "sources": sources,
+        "limit": listing["limit"],
+        "limitations": listing["limitations"],
+    }
+
+
 def pune_in_coada(stare, source_id: str) -> dict:
     source_id = _token(source_id, required=True)
     stamp = now()
@@ -1521,4 +1603,6 @@ def executa(stare, data: dict) -> dict:
         raise ValueError("Familia de surse nu are sincronizare directă.")
     if action == "bootstrap":
         return bootstrap(stare)
+    if action == "discover_econsultare":
+        return descopera_econsultare(stare, data)
     raise ValueError("Acțiune registru necunoscută.")

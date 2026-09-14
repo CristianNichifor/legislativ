@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,46 @@ HTML = """
   </body>
 </html>
 """.encode()
+
+ACTIONGRID = json.dumps(
+    {
+        "results": [
+            {
+                "id": "3758",
+                "datePublished": "2026-09-14T00:01:13.4750961+03:00",
+                "fields": [
+                    {"Name": "StartConsDesc", "FormattedValue": "11/09/2026"},
+                    {"Name": "StatusProiect", "FormattedValue": "Consultare Publică"},
+                    {
+                        "Name": "Detalii1",
+                        "FormattedValue": (
+                            "Proiect de Ordin privind transporturile <br> "
+                            "<i><small>Ordin de Ministru - MINISTERUL TRANSPORTURILOR"
+                            "</small></i>"
+                        ),
+                    },
+                    {
+                        "Name": "Detaliiproiect",
+                        "FormattedValue": (
+                            'Detalii <a href="https://e-consultare.gov.ro/'
+                            "Proiecte-Legislative-Publice/"
+                            'Propunere-Proiecte-Dezbatere-Publica/a/b">'
+                            "...mai multe detalii</a>"
+                        ),
+                    },
+                    {
+                        "Name": "Termeneproiectlegislativ",
+                        "FormattedValue": (
+                            "Interval Consultare Publica:11/09/2026 - 28/09/2026<br>"
+                            "Termen limită transmitere propuneri: 28/09/2026"
+                        ),
+                    },
+                ],
+            }
+        ]
+    },
+    ensure_ascii=False,
+).encode()
 
 
 def state(tmp_path):
@@ -55,6 +96,21 @@ def test_econsultare_parser_extracts_bounded_snapshot():
 def test_econsultare_rejects_non_official_urls():
     with pytest.raises(ValueError, match="e-consultare.gov.ro"):
         ec.url_oficial("https://example.com/consultare/123")
+
+
+def test_econsultare_discovers_official_actiongrid_listing(monkeypatch):
+    monkeypatch.setattr(ec, "descarca_actiongrid", lambda: (ACTIONGRID, 200))
+
+    out = ec.descopera_actiongrid(limit=10)
+
+    assert out["contract"] == "econsultare-actiongrid-discovery-v1"
+    assert out["http_status"] == 200
+    assert out["listing_url"] == "https://e-consultare.gov.ro/Consultare-public%C4%83"
+    assert out["endpoint_url"].startswith("https://e-consultare.gov.ro/DesktopModules/")
+    assert out["total"] == 1
+    assert out["snapshots"][0]["url"].endswith("/a/b")
+    assert out["snapshots"][0]["summary"]["authority"] == "MINISTERUL TRANSPORTURILOR"
+    assert out["snapshots"][0]["summary"]["deadline"] == "28/09/2026"
 
 
 def test_econsultare_snapshot_builds_open_tracker_event_candidate():

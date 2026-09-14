@@ -4,7 +4,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import cellar, depozit, documente_proiecte, dosare, tracker_events
+from scripts import (
+    achizitii_econsultare,
+    cellar,
+    depozit,
+    documente_proiecte,
+    dosare,
+    tracker_events,
+)
 from scripts import source_registry as registry
 from scripts.server import face_handler
 
@@ -168,6 +175,67 @@ def test_registry_bootstraps_required_official_source_anchors(tmp_path):
 
     with pytest.raises(ValueError, match="Ancora de familie"):
         registry.executa(stare, {"action": "sync", "id": by_family["camera"]["id"]})
+
+
+def test_registry_discovers_econsultare_listing_sources(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    detail_url = "https://e-consultare.gov.ro/Proiecte-Legislative-Publice/a/b"
+    snapshot = {
+        "contract": "econsultare-source-snapshot-v1",
+        "family": "consultare_econsultare",
+        "url": detail_url,
+        "summary": {
+            "title": "Proiect consultare publică",
+            "authority": "Ministerul Test",
+            "status": "open",
+            "deadline": "28/09/2026",
+            "documents": 0,
+            "truncated": False,
+        },
+        "title": "Proiect consultare publică",
+        "authority": "Ministerul Test",
+        "status": "open",
+        "deadline": "28/09/2026",
+        "documents": [],
+        "truncated": False,
+    }
+
+    monkeypatch.setattr(
+        achizitii_econsultare,
+        "descopera_actiongrid",
+        lambda limit=50: {
+            "contract": "econsultare-actiongrid-discovery-v1",
+            "listing_url": achizitii_econsultare.LISTING_URL,
+            "endpoint_url": achizitii_econsultare.ACTIONGRID_URL,
+            "http_status": 200,
+            "snapshots": [snapshot],
+            "total": 1,
+            "limit": limit,
+            "limitations": ["fixture"],
+        },
+    )
+
+    out = registry.executa(stare, {"action": "discover_econsultare", "limit": 20})
+
+    assert out["contract"] == "source-registry-econsultare-discovery-v1"
+    assert out["created"] == 1
+    assert out["updated"] == 0
+    assert out["stored_snapshots"] == 1
+    assert out["tracker_events"] == 1
+    assert out["sources"][0]["identifier"] == detail_url
+    assert out["sources"][0]["state"] == "changed"
+    selected = registry.lista(stare, {"id": [out["sources"][0]["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"]["title"] == "Proiect consultare publică"
+    events = tracker_events.lista(
+        stare, {"source_family": ["consultare_econsultare"], "limit": ["10"]}
+    )
+    assert events["total"] == 1
+    assert events["events"][0]["project_id"] == detail_url
+
+    again = registry.executa(stare, {"action": "discover_econsultare", "limit": 20})
+    assert again["created"] == 0
+    assert again["updated"] == 1
+    assert again["sources"][0]["state"] == "unchanged"
 
 
 def test_registry_rejects_invalid_sources_and_transitions(tmp_path):

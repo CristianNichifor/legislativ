@@ -1445,7 +1445,7 @@
         </details>
         <details class="dossier-library" id="econsultare-feed">
           <summary>Consultări publice · e-consultare</summary>
-          <div class="dossier-actions"><label>Stare<select id="econsultare-feed-status"><option value="open">Deschise</option><option value="">Toate</option><option value="unknown">Necunoscute</option><option value="closed">Închise</option></select></label><button type="button" id="econsultare-feed-refresh" class="ghost mini">Reîncarcă feed</button><button type="button" id="econsultare-feed-open-registry" class="ghost mini">Registru surse</button></div>
+          <div class="dossier-actions"><label>Stare<select id="econsultare-feed-status"><option value="open">Deschise</option><option value="">Toate</option><option value="unknown">Necunoscute</option><option value="closed">Închise</option></select></label><button type="button" id="econsultare-feed-discover" class="ghost mini">Descoperă consultări oficiale</button><button type="button" id="econsultare-feed-refresh" class="ghost mini">Reîncarcă feed</button><button type="button" id="econsultare-feed-open-registry" class="ghost mini">Registru surse</button></div>
           <p id="econsultare-feed-summary" class="hint" role="status">Feed neîncărcat.</p>
           <div id="econsultare-feed-list"></div>
         </details>
@@ -7091,6 +7091,17 @@ $('#monitor-replay-tracker').onclick=replayMonitorToTracker;
 $('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 $('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
 $('#econsultare-feed').ontoggle=e=>{if(e.currentTarget.open)loadEconsultareFeed();};
+$('#econsultare-feed-discover').onclick=async()=>{
+  const button=$('#econsultare-feed-discover'),status=$('#econsultare-feed-summary');
+  button.disabled=true;status.textContent='Descopăr consultările din lista oficială e-consultare…';
+  try{
+    const data=await sourceRegistryApi({action:'discover_econsultare',limit:50});
+    await loadEconsultareFeed();
+    if($('#source-registry').open)await loadSourceRegistry(0);
+    status.textContent=`Consultări oficiale: ${data.created||0} noi, ${data.updated||0} actualizate, ${data.tracker_events||0} evenimente tracker.`;
+  }catch(err){status.textContent=err.message;}
+  finally{button.disabled=false;}
+};
 $('#econsultare-feed-refresh').onclick=loadEconsultareFeed;
 $('#econsultare-feed-status').onchange=loadEconsultareFeed;
 $('#econsultare-feed-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
