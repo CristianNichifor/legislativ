@@ -1424,6 +1424,7 @@
             <button type="submit" class="ghost mini">Pornește fluxul</button>
             <p class="hint" id="real-workflow-status" role="status"></p>
           </form>
+          <div id="real-workflow-handoff"></div>
         </section>
         <section class="source-inventory" aria-labelledby="source-title">
           <div class="source-heading"><h3 id="source-title">Acoperirea surselor</h3><div class="source-actions">
@@ -2009,6 +2010,55 @@ async function realWorkflowAttachToDossier(guessed,source,status){
   if(status)status.textContent+=' Sursa este urmărită și în dosarul curent.';
   return true;
 }
+function realWorkflowSourceNote(guessed,source={}){
+  const state=SOURCE_STATE_LABELS[source.state]||source.state||'stare necunoscută';
+  const title=(source.label||guessed.identifier||guessed.url||'Sursă publică').slice(0,160);
+  const isEu=guessed.family==='ue_cellar';
+  const evidence=[
+    `Sursă publică: ${title}.`,
+    `Familie: ${source.family||guessed.family}.`,
+    `Identificator: ${source.identifier||guessed.identifier}.`,
+    `Stare locală: ${state}.`,
+    source.last_attempt_at?`Ultima încercare: ${dossierTime(source.last_attempt_at)}.`:'',
+    source.last_error?`Eroare: ${source.last_error}.`:'',
+  ].filter(Boolean).join('\n');
+  return {
+    title:(isEu?'Risc UE · ':'Revizie sursă · ')+title,
+    type:isEu?'risc_ue':'necorelare',
+    act_id:source.identifier||guessed.identifier||'',
+    locator:'',
+    evidence_quote:evidence,
+    source_url:source.url||guessed.url||'',
+    source_hash:source.last_hash||'',
+    reasoning:'Verifică textul oficial și notează lacuna, contradicția, termenul sau riscul observat. Aceasta este o notă de lucru, nu verdict juridic.',
+    status:'needs_evidence',
+    revizie:0
+  };
+}
+function realWorkflowRenderHandoff(guessed,source={}){
+  const host=$('#real-workflow-handoff');if(!host)return;
+  const state=SOURCE_STATE_LABELS[source.state]||source.state||'necunoscută';
+  const label=source.label||guessed.identifier||guessed.url||'Sursă publică';
+  const when=source.last_attempt_at||source.updated_at||'';
+  const missing=[
+    source.url?'':'URL oficial necapturat încă',
+    source.last_hash?'':'hash local indisponibil până la sync reușit',
+    ['failed','needs_review','rate_limited'].includes(source.state)?'sursa cere revizie manuală':'',
+  ].filter(Boolean);
+  host.innerHTML=`<section class="source-review" data-real-workflow-handoff><h4>${esc(label)}</h4>`
+    +`<p><strong>${esc(state)}</strong> · ${esc(source.family||guessed.family)} · ${esc(source.identifier||guessed.identifier)}</p>`
+    +`<p class="hint">${when?'Ultima verificare: '+esc(dossierTime(when)):'Fără verificare locală.'}${source.last_hash?' · SHA-256: '+esc(source.last_hash.slice(0,16))+'…':''}</p>`
+    +(source.url?`<p>${acquisitionLink(source.url,'Sursa oficială')}</p>`:'')
+    +(source.last_error?`<p role="status">${esc(source.last_error)}</p>`:'')
+    +(missing.length?`<ul class="hint">${missing.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
+    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-real-source-note>Notează în dosar</button><button type="button" class="ghost mini" data-real-source-export>Export dosar</button></div></section>';
+  host.querySelector('[data-real-source-note]').onclick=()=>startManualNote(realWorkflowSourceNote(guessed,source));
+  host.querySelector('[data-real-source-export]').onclick=()=>{
+    if(!DOSARE_UI.selected?.id){$('#dossier-library').open=true;$('#dossier-status').textContent='Alege sau creează un dosar înainte de export.';return;}
+    const button=document.querySelector('[data-workflow-open-export]');
+    button?.click();
+  };
+}
 async function startRealWorkflow(form){
   const status=$('#real-workflow-status'), fields=Object.fromEntries(new FormData(form));
   const guessed=realWorkflowGuess(fields.identifier,fields.family);
@@ -2023,6 +2073,7 @@ async function startRealWorkflow(form){
       status.textContent='Sincronizez numai sursa selectată…';
       synced=await sourceRegistryApi({action:'sync',id:source.id});
     }
+    realWorkflowRenderHandoff(guessed,synced);
     await loadSourceRegistry(0,sourceRegistryOutcome(synced,'Flux real'));
     await inspectSourceRegistryRow(synced.id||source.id);
     if(guessed.family==='ue_cellar'){
