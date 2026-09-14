@@ -945,3 +945,15 @@ def test_eu_issue_note_builder_renderer_escapes_sources_and_blockers():
         "assert.ok(!saved.includes('Risc <b>'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+
+
+def test_eu_source_manager_prefills_source_backed_issue_note_flow():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+
+    assert "function prefillEuIssueBuilderFromSource" in html
+    assert "data-eu-note-locator" in html
+    assert "Folosește în nota UE" in html
+    assert "Completează sursa românească și previzualizează baza." in html
+    assert "Constructorul de note UE nu este disponibil." in html
+    assert "a fost precompletat în nota UE" in html
+    assert "apoi Legături UE și CELEX" not in html

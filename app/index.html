@@ -9378,11 +9378,11 @@ function euSourceIdentifierCelex(value){
   return celex;
 }
 function euSourceLanguage(language){return language==='RON'?'Română oficială':language==='ENG'?'Engleză oficială · alternativă la textul românesc':'Limbă necunoscută';}
-function euSourceArticleSummary(articles){
+function euSourceArticleSummary(articles,options={}){
   const rows=(articles&&articles.randuri)||[];
   if(!articles||!articles.total)return '<p class="hint">Nu există articole delimitate pentru această instantanee.</p>';
   return `<p class="hint">${nf(articles.total)} articole delimitate${articles.trunchiat?' · afișare parțială':''}. Hash-ul este al textului extras pentru articol.</p>`
-    +`<div class="ue-ref-list">`+rows.slice(0,12).map(a=>`<div class="ue-ref"><span class="ue-loc">${esc(a.locator)}</span>${esc(a.titlu||'fără titlu')}<br><span class="hint">${esc(a.sha256||'')}</span></div>`).join("")+`</div>`;
+    +`<div class="ue-ref-list">`+rows.slice(0,12).map(a=>`<div class="ue-ref"><span class="ue-loc">${esc(a.locator)}</span>${esc(a.titlu||'fără titlu')}<br><span class="hint">${esc(a.sha256||'')}</span>${options.noteAction?`<br><button type="button" class="ghost mini" data-eu-note-locator="${esc(a.locator)}">Folosește în nota UE</button>`:''}</div>`).join("")+`</div>`;
 }
 function euSourceMeta(source){
   return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>Source hash / SHA-256 text extras: ${esc(source.text_sha256)}</p>`;
@@ -9411,18 +9411,48 @@ async function openEuSource(identifier,offset=0){
   }catch(err){if(token===EU_SOURCE.sequence){status.textContent=err.message;out.innerHTML='<button type="button" class="ghost mini">Reîncearcă încărcarea</button>';out.querySelector('button').onclick=()=>openEuSource(celex,offset);}}
   if(token===EU_SOURCE.sequence)$('#eu-source-manager').scrollIntoView({block:'start'});
 }
+async function prefillEuIssueBuilderFromSource(d,locator=''){
+  if(!DOSARE_UI.selected?.id){
+    $('#dossier-library').open=true;
+    $('#dossier-status').textContent=`Alege sau creează un dosar, apoi folosește CELEX ${d.celex} în nota UE.`;
+    loadDossiers(DOSARE_UI.offset);
+    return;
+  }
+  $('#dossier-library').open=true;
+  await loadManualNotes(DOSARE_UI.selected.id,MANUAL_NOTES_UI.offset||0);
+  const box=$('#dossier-notes [data-eu-issue-builder]'),form=box?.querySelector('[data-eu-issue-form]');
+  if(!box||!form){$('#dossier-status').textContent='Constructorul de note UE nu este disponibil.';return;}
+  box.open=true;
+  form.elements.celex.value=d.celex;
+  form.elements.instantanee.innerHTML=`<option value="${esc(d.curenta.id)}">${esc((d.curenta.sursa?.limba||'')+' · '+d.curenta.id.slice(0,12)+' · '+(d.curenta.sursa?.text_sha256||''))}</option>`;
+  form.elements.instantanee.value=d.curenta.id;
+  if(locator){
+    const article=(d.curenta.articole?.randuri||[]).find(a=>a.locator===locator);
+    form.elements.locator.innerHTML=`<option value="${esc(locator)}">${esc(locator+(article?.titlu?' · '+article.titlu:''))}</option>`;
+    form.elements.locator.value=locator;
+  }else{
+    form.elements.locator.innerHTML='<option value="">Încarcă articole sau alege din lista CELEX</option>';
+  }
+  if(!form.elements.title.value)form.elements.title.value=`Risc UE · ${d.celex}${locator?' · '+locator:''}`;
+  if(!form.elements.uncertainty.value)form.elements.uncertainty.value='Aplicabilitatea, transpunerea și actualitatea trebuie confirmate de revizie umană.';
+  if(!form.elements.rationale.value)form.elements.rationale.value='Ipoteză de lucru din surse păstrate local; nu verdict juridic.';
+  $('#dossier-status').textContent=`CELEX ${d.celex}${locator?' · '+locator:''} a fost precompletat în nota UE. Completează sursa românească și previzualizează baza.`;
+  box.scrollIntoView({block:'start'});
+  form.elements.national_id.focus();
+}
 function renderEuSource(d){
   const out=$('#eu-source-detail'),attempt=d.incercare,source=d.curenta?.sursa||{};
   const lang=d.curenta?.limba_import||{};
   out.innerHTML=`<h4>${esc(d.celex)} · ${esc(euSourceStatus(d))}</h4><p class="hint">Import explicit, câte un CELEX. Preferă româna oficială; engleza este marcată ca fallback când nu există text românesc compatibil. Fără traducere automată și fără verdict juridic.</p>`
     +`<button type="button" class="ghost mini" data-eu-import>${attempt&&attempt.stare!=='ok'?'Reîncearcă importul':d.stare==='text_disponibil'?'Verifică și importă actualizarea':'Importă din Cellar'}</button>`
     +(attempt?`<p class="hint">Ultima încercare: ${esc(dossierTime(attempt.incercat_la))}<br>Ultima preluare de text reușită în acest flux: ${attempt.reusit_la?esc(dossierTime(attempt.reusit_la)):'Necunoscută'}</p>${attempt.eroare?`<p>${esc(attempt.eroare)}</p>`:''}`:'<p class="hint">Nicio încercare înregistrată în acest flux.</p>')
-    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Preferință limbă: ${esc((lang.preferinta||[]).join(' → ')||'RON → ENG')}<br>Limbă aleasă: ${esc(lang.eticheta||euSourceLanguage(source.limba))}${lang.fallback?' · fallback explicit':''}<br>Snapshot curent: ${esc(d.curenta.id)}<br>Source hash: ${esc(source.text_sha256||'')}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în dosar</button></div><details open><summary>Articole / prevederi importate</summary>${euSourceArticleSummary(d.curenta.articole)}</details>`:'')
+    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Preferință limbă: ${esc((lang.preferinta||[]).join(' → ')||'RON → ENG')}<br>Limbă aleasă: ${esc(lang.eticheta||euSourceLanguage(source.limba))}${lang.fallback?' · fallback explicit':''}<br>Snapshot curent: ${esc(d.curenta.id)}<br>Source hash: ${esc(source.text_sha256||'')}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în nota UE</button></div><details open><summary>Articole / prevederi importate</summary>${euSourceArticleSummary(d.curenta.articole,{noteAction:true})}</details>`:'')
     +`<details><summary>Manifestări Cellar locale · ${d.manifestari.length}${d.manifestari_trunchiate?'+':''}</summary>${d.manifestari.map(m=>`<p>${esc(m.limba)} · ${esc(m.format)} · ${acquisitionLink(m.item_url,m.titlu||'Sursa oficială')}</p>`).join('')||'<p>Nicio manifestare locală.</p>'}</details>`
     +`<details data-eu-history><summary>Instantanee istorice</summary><p class="hint">Text extras păstrat local, nu versiuni juridice certificate.</p><div data-eu-history-list></div></details><div data-eu-source-text></div>`;
   out.querySelector('[data-eu-import]').onclick=()=>importEuSource(d.celex);
   const useDossier=out.querySelector('[data-eu-use-dossier]');
-  if(useDossier)useDossier.onclick=()=>{$('#dossier-library').open=true;$('#dossier-status').textContent=`Pentru dosar: alege o constatare/propunere salvată, apoi Legături UE și CELEX ${d.celex} · instantanee ${d.curenta.id}.`;loadDossiers(DOSARE_UI.offset);};
+  if(useDossier)useDossier.onclick=()=>prefillEuIssueBuilderFromSource(d);
+  out.querySelectorAll('[data-eu-note-locator]').forEach(button=>button.onclick=()=>prefillEuIssueBuilderFromSource(d,button.dataset.euNoteLocator));
   const show=async id=>{
     const target=out.querySelector('[data-eu-source-text]'),token=++EU_SOURCE.sequence;target.textContent='Încarc textul păstrat…';
     try{const snapshot=await euSourceApi({celex:d.celex,instantanee:id});if(!target.isConnected||token!==EU_SOURCE.sequence)return;const isCurrent=id===d.curenta?.id;target.innerHTML=`<h4>${isCurrent?'Text local curent':'Text istoric păstrat'}</h4><details><summary>Identitate instantanee și articole</summary><p class="hint">${esc(snapshot.id)}</p>${euSourceArticleSummary(snapshot.articole)}</details>`+(isCurrent?'':euSourceMeta(snapshot.sursa))+'<div class="source-text"></div>';target.querySelector('.source-text').textContent=snapshot.sursa.text;}
