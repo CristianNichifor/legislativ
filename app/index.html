@@ -1467,8 +1467,8 @@
           <div id="acceptance-dashboard-result"></div>
         </details>
         <details class="dossier-library" id="econsultare-feed">
-          <summary>Consultări publice · e-consultare</summary>
-          <div class="dossier-actions"><label>Stare<select id="econsultare-feed-status"><option value="open">Deschise</option><option value="">Toate</option><option value="unknown">Necunoscute</option><option value="closed">Închise</option></select></label><button type="button" id="econsultare-feed-discover" class="ghost mini">Descoperă consultări oficiale</button><button type="button" id="econsultare-feed-refresh" class="ghost mini">Reîncarcă feed</button><button type="button" id="econsultare-feed-open-registry" class="ghost mini">Registru surse</button></div>
+          <summary>Consultări publice · feed local</summary>
+          <div class="dossier-actions"><label>Familie<select id="econsultare-feed-family"><option value="">Toate</option><option value="consultare_econsultare">e-consultare</option><option value="consultare_guvern">Guvern</option><option value="consultare_minister">Ministere</option></select></label><label>Stare<select id="econsultare-feed-status"><option value="open">Deschise</option><option value="">Toate</option><option value="unknown">Necunoscute</option><option value="closed">Închise</option></select></label><button type="button" id="econsultare-feed-discover" class="ghost mini">Descoperă consultări oficiale</button><button type="button" id="econsultare-feed-refresh" class="ghost mini">Reîncarcă feed</button><button type="button" id="econsultare-feed-open-registry" class="ghost mini">Registru surse</button></div>
           <p id="econsultare-feed-summary" class="hint" role="status">Feed neîncărcat.</p>
           <div id="econsultare-feed-list"></div>
         </details>
@@ -7347,24 +7347,31 @@ function econsultareFeedHtml(data){
     const url=urlSigur(item.url);
     const deadline=item.deadline||item.deadline_raw||'termen necunoscut';
     const attention=item.needs_attention?' · necesită atenție':'';
+    const missing=(item.missing_fields||[]).length?` · lipsesc: ${esc(item.missing_fields.join(', '))}`:'';
+    const family=item.family||'consultare_econsultare';
+    const familyLabel=item.family_label||'Consultări publice';
+    const next=item.next_action?`<p class="hint">Următorul pas: ${esc(item.next_action)}</p>`:'';
     const review=item.can_review?`<button type="button" class="ghost mini" data-econsultare-review="${esc(item.source_id)}">Marchează revizuită</button>`:'';
     return `<article class="source-registry-row" data-source-severity="${item.needs_attention?'attention':'ready'}"><h4>${esc(item.title||item.label)} · ${esc(econsultareFeedStatus(item.status))}</h4>`
-      +`<p>${esc(item.authority||'Autoritate neextrasă')} · termen ${esc(deadline)} · ${esc(item.documents||0)} atașamente${esc(attention)}</p>`
+      +`<p>${esc(familyLabel)} · ${esc(item.authority||'Autoritate neextrasă')} · termen ${esc(deadline)} · ${esc(item.documents||0)} atașamente${esc(attention)}${missing}</p>`
       +`<p class="hint">Registru: ${esc(item.state)} · captură ${esc(dossierTime(item.snapshot_at||item.updated_at))}${item.last_error?` · ${esc(item.last_error)}`:''}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:''}</p>`
-      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-econsultare-source="${esc(item.source_id)}">Deschide sursa</button><button type="button" class="ghost mini" data-econsultare-sync="${esc(item.source_id)}">Sincronizează sursa</button>${review}<button type="button" class="ghost mini" data-econsultare-timeline>Timeline consultări</button></div></article>`;
+      +next
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-econsultare-source="${esc(item.source_id)}">Deschide sursa</button><button type="button" class="ghost mini" data-econsultare-sync="${esc(item.source_id)}">Sincronizează sursa</button>${review}<button type="button" class="ghost mini" data-econsultare-timeline="${esc(family)}">Timeline consultări</button></div></article>`;
   }).join('');
 }
 async function loadEconsultareFeed(){
   const status=$('#econsultare-feed-summary'),list=$('#econsultare-feed-list');
   const wanted=$('#econsultare-feed-status').value;
-  status.textContent='Încarc feed-ul local e-consultare…';list.innerHTML='';
+  const family=$('#econsultare-feed-family').value;
+  status.textContent='Încarc feed-ul local de consultări publice…';list.innerHTML='';
   try{
-    const params=new URLSearchParams({limit:'100'});if(wanted)params.set('status',wanted);
+    const params=new URLSearchParams({limit:'100'});if(wanted)params.set('status',wanted);if(family)params.set('family',family);
     const response=await fetch('/api/econsultare-feed?'+params);
-    const data=await response.json().catch(()=>({error:'Feed-ul e-consultare nu este disponibil.'}));
-    if(!response.ok||data.error)throw Error(data.error||'Feed-ul e-consultare nu este disponibil.');
+    const data=await response.json().catch(()=>({error:'Feed-ul consultărilor publice nu este disponibil.'}));
+    if(!response.ok||data.error)throw Error(data.error||'Feed-ul consultărilor publice nu este disponibil.');
     list.innerHTML=econsultareFeedHtml(data);
-    status.textContent=`${data.total||0} consultări în feed-ul local · ${data.attention||0} necesită atenție.`;
+    const families=Object.entries(data.families||{}).filter(([,count])=>count).map(([key,count])=>`${key.replace('consultare_','')}: ${count}`).join(' · ');
+    status.textContent=`${data.total||0} consultări în feed-ul local · ${data.attention||0} necesită atenție${families?` · ${families}`:''}.`;
     list.querySelectorAll('[data-econsultare-source]').forEach(button=>button.onclick=()=>{
       $('#source-registry').open=true;inspectSourceRegistryRow(button.dataset.econsultareSource);
     });
@@ -7380,7 +7387,7 @@ async function loadEconsultareFeed(){
     });
     list.querySelectorAll('[data-econsultare-timeline]').forEach(button=>button.onclick=()=>{
       openTrackerTimeline();const form=$('#tracker-timeline-search');
-      form.elements.source_family.value='consultare_econsultare';form.elements.reviewed.value='0';loadTrackerTimeline(0);
+      form.elements.source_family.value=button.dataset.econsultareTimeline||'consultare_econsultare';form.elements.reviewed.value='0';loadTrackerTimeline(0);
     });
   }catch(err){status.textContent=err.message;}
 }
@@ -7407,6 +7414,7 @@ $('#econsultare-feed-discover').onclick=async()=>{
 };
 $('#econsultare-feed-refresh').onclick=loadEconsultareFeed;
 $('#econsultare-feed-status').onchange=loadEconsultareFeed;
+$('#econsultare-feed-family').onchange=loadEconsultareFeed;
 $('#econsultare-feed-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null,watchIds:new Set(),watchItems:[]};
