@@ -1096,7 +1096,7 @@ def test_eu_source_language_status_and_provenance_renderer():
         "assert.ok(euSourceStatus({stare:'integritate_invalida'}).includes('neverificabil'));"
         "const h=euSourceMeta({titlu:'<script>',limba:'ENG',citit_la:'now',text_sha256:'<img>'});"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
-        "assert.ok(h.includes('Source hash')&&h.includes('SHA-256 text extras')"
+        "assert.ok(h.includes('Amprentă sursă')&&h.includes('SHA-256 text extras')"
         "&&h.includes('alternativă'));"
         "const a=euSourceArticleSummary({total:1,randuri:["
         "{locator:'art<script>',titlu:'T<img>',sha256:'abc'}]});"
