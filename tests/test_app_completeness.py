@@ -165,3 +165,7 @@ def test_app_completeness_is_visible_in_ui():
     assert "fetch('/api/app-completeness')" in html
     assert "completion_claim_allowed" in html
     assert "source-registry-bootstrap" in html
+    assert "acceptance-source-sync" in html
+    assert "Verifică sursele oficiale de bază" in html
+    assert "sync_bootstrap" in html
+    assert "bindAcceptanceDashboardActions" in html

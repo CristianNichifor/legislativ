@@ -1102,6 +1102,10 @@ def test_static_worker_explicitly_rejects_source_acquisition():
     assert "'mod': 'static'" in eu and "'error':" in eu
     mcp = source.split("elif path == '/api/mcp/preview':", 1)[1].split("elif path", 1)[0]
     assert "'mod': 'static'" in mcp and "'error':" in mcp
+    gate = source.split("elif path == '/api/app-completeness':", 1)[1].split("elif path", 1)[0]
+    assert "report(_stare)" in gate and "GitHub Pages poate afișa gate-ul" in gate
+    registry = source.split("elif path == '/api/registru-surse':", 1)[1].split("elif path", 1)[0]
+    assert "'mod': 'static'" in registry and "aplicația locală" in registry
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
