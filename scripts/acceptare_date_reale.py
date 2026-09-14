@@ -256,6 +256,7 @@ def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str
     availability = _eu_availability(httpd, references)
     return {
         "status": "passed",
+        "run_id": run["id"],
         "act_id": selected,
         "engine_version": run["engine_version"],
         "signals": {
@@ -277,6 +278,89 @@ def pilot_workbench(httpd, dossier_id: str, *, search_results: dict, act_id: str
             "No synthetic bridge is used by this acceptance runner.",
             "Proposal save is not automated until a real reviewer-approved finding/wording exists.",
         ],
+    }
+
+
+def pilot_three_source_dossier(
+    httpd,
+    dossier_id: str,
+    run_id: str,
+    *,
+    project_id: str,
+    consultation_url: str,
+    celex: str,
+) -> dict:
+    """Prove the Phase A handoff: project + consultation + CELEX survive dossier export."""
+    if not run_id:
+        return {
+            "status": "skipped_no_run",
+            "contract": "dossier-source-manifest-v1",
+            "total": 0,
+            "kinds": [],
+            "values": [],
+            "attention": 0,
+            "manifest": {},
+            "markdown_includes_sources": False,
+            "rollback_survived": False,
+            "limitations": ["Nu există rulare de export pentru verificarea surselor din dosar."],
+        }
+    sources = [
+        {
+            "tip": "project",
+            "valoare": project_id,
+            "eticheta": f"Proiect parlamentar · {project_id}",
+        },
+        {
+            "tip": "keyword",
+            "valoare": consultation_url,
+            "eticheta": "Consultare publică",
+        },
+        {
+            "tip": "celex",
+            "valoare": celex,
+            "eticheta": f"Act UE · {celex}",
+        },
+    ]
+    for index, source in enumerate(sources, start=1):
+        request(
+            httpd,
+            "/api/dosare/watchlist",
+            {
+                "action": "add",
+                "id": f"{index:032x}",
+                "dosar_id": dossier_id,
+                **source,
+            },
+        )
+    review = request(
+        httpd,
+        "/api/dosare/revizuiri?" + urlencode({"id": dossier_id, "rulare_id": run_id}),
+    )
+    manifest = review.get("manifest_surse_dosar") or {}
+    kinds = {item.get("tip") for item in manifest.get("surse") or []}
+    values = {item.get("valoare") for item in manifest.get("surse") or []}
+    missing = [
+        label
+        for label, passed in (
+            ("project", "project" in kinds and project_id in values),
+            ("consultation", "keyword" in kinds and consultation_url in values),
+            ("celex", "celex" in kinds and celex in values),
+            ("markdown_manifest", "Surse urmărite în dosar" in review.get("markdown", "")),
+        )
+        if not passed
+    ]
+    if missing:
+        raise AssertionError({"missing": missing, "manifest": manifest})
+    return {
+        "status": "passed",
+        "contract": manifest.get("contract"),
+        "total": manifest.get("total"),
+        "kinds": sorted(kinds),
+        "values": sorted(values),
+        "attention": manifest.get("attention"),
+        "manifest": manifest,
+        "markdown_includes_sources": True,
+        "limitations": manifest.get("limitari") or [],
     }
 
 
@@ -313,6 +397,7 @@ def v2_readiness(
 ) -> dict:
     """Classify a real-data acceptance result without inventing legal success."""
     workbench = result.get("workbench") or {}
+    source_handoff = result.get("source_handoff") or {}
     eu = workbench.get("eu_availability") or {}
     finding_to_proposal = workbench.get("finding_to_proposal") or ""
     gates = [
@@ -365,6 +450,25 @@ def v2_readiness(
                 "acceptance out of scope."
             ),
         ),
+        _gate(
+            "three_source_dossier_handoff",
+            "Project, consultation and CELEX stay attached to exported dossier",
+            bool(
+                source_handoff.get("status") == "passed"
+                and source_handoff.get("rollback_survived") is True
+                and int(source_handoff.get("total") or 0) >= 3
+            ),
+            required=True,
+            evidence={
+                "total": int(source_handoff.get("total") or 0),
+                "kinds": source_handoff.get("kinds") or [],
+                "rollback_survived": bool(source_handoff.get("rollback_survived")),
+                "contract": source_handoff.get("contract"),
+            },
+            next_action=(
+                "Fix dossier watchlist/export persistence before claiming Phase A handoff."
+            ),
+        ),
     ]
     blocked = [gate["key"] for gate in gates if gate["status"] == "blocked"]
     attention = [gate["key"] for gate in gates if gate["status"] == "attention"]
@@ -398,6 +502,12 @@ def main(argv=None):
         default="",
         help="act id to open in the real-data law workbench; defaults to the first search result",
     )
+    parser.add_argument("--pilot-project", default="PL-x 33/2025")
+    parser.add_argument(
+        "--pilot-consultation",
+        default="https://e-consultare.gov.ro/Consultare-publica",
+    )
+    parser.add_argument("--pilot-celex", default="32014L0024")
     parser.add_argument(
         "--require-reviewable-finding",
         action="store_true",
@@ -448,16 +558,35 @@ def main(argv=None):
             workbench = pilot_workbench(
                 httpd, dossier_id, search_results=results, act_id=args.pilot_act
             )
+            source_handoff = pilot_three_source_dossier(
+                httpd,
+                dossier_id,
+                workbench.get("run_id", ""),
+                project_id=args.pilot_project,
+                consultation_url=args.pilot_consultation,
+                celex=args.pilot_celex,
+            )
             before = request(httpd, "/api/dosare?id=" + dossier_id)
             request(httpd, body={"action": "rollback"})
             after = request(httpd, "/api/dosare?id=" + dossier_id)
             if before["titlu"] != after["titlu"]:
                 raise AssertionError((before, after))
+            after_export = request(
+                httpd,
+                "/api/dosare/revizuiri?"
+                + urlencode({"id": dossier_id, "rulare_id": workbench.get("run_id", "")}),
+            )
+            source_handoff["rollback_survived"] = (
+                after_export.get("manifest_surse_dosar") == source_handoff["manifest"]
+            )
+            if not source_handoff["rollback_survived"]:
+                raise AssertionError(source_handoff)
             result = {
                 "release": release,
                 "acte": summary["acte"],
                 "search_results": len(results["results"]),
                 "workbench": workbench,
+                "source_handoff": source_handoff,
                 "dossier_survived_rollback": True,
                 "seconds": round(time.monotonic() - started, 2),
                 "data_home": str(home),
