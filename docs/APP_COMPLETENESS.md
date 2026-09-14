@@ -56,3 +56,24 @@ The report is also exposed in the UI through **Gate produs** and over HTTP at:
 The older acceptance dashboard remains a supporting read-only status view. The
 completeness gate is stricter and is the one to use before claiming final
 product acceptance.
+
+## Local runtime acceptance
+
+Use the same persistent data directory as the local app when checking a real
+install:
+
+```bash
+python -m scripts.app_completeness --data-home ~/.local/share/legislativ
+```
+
+To close the official-source anchor gate for that install, run the bounded
+availability verifier before the report:
+
+```bash
+python -m scripts.app_completeness --data-home ~/.local/share/legislativ --sync-source-anchors --require-complete
+```
+
+This verifies each official family entrypoint and stores only the bounded
+availability snapshot in the local source registry. It does not crawl large
+datasets, upload private dossiers, call AI or mark legal coverage as complete
+without the visible limitations in the report.

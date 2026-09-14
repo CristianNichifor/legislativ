@@ -407,7 +407,7 @@ def _family_next_action(
 
 
 def _project_stage_summary(stare, *, now: datetime, stale_days: int) -> tuple[dict, list[str]]:
-    path = stare.initiative
+    path = Path(stare.initiative)
     if not path.exists():
         return {
             "total": 0,

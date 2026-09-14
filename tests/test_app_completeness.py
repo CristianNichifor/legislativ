@@ -82,6 +82,47 @@ def test_app_completeness_require_complete_cli_exits_nonzero():
     assert out["source_status"]["unsynced_required"] == 12
 
 
+def test_app_completeness_data_home_without_sync_reports_missing_sources(tmp_path, capsys):
+    result = app_completeness.main(["--data-home", str(tmp_path)])
+    out = json.loads(capsys.readouterr().out)
+
+    assert result == 0
+    assert out["status"] == "blocked"
+    assert out["source_status"]["missing_required"] == 12
+    assert out["source_status"]["unsynced_required"] == 0
+    assert not (tmp_path / "private" / "empty" / "initiative.sources.db").exists()
+
+
+def test_app_completeness_data_home_sync_anchors_can_close_gate(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(
+        source_registry,
+        "_fetch_official_anchor",
+        lambda url: {
+            "http_status": 200,
+            "content_hash": source_registry._stable_hash({"url": url}),
+            "title": "Official source",
+            "content_type": "text/html",
+            "bytes": 64,
+            "truncated": False,
+            "error": "",
+        },
+    )
+
+    result = app_completeness.main(
+        ["--data-home", str(tmp_path), "--sync-source-anchors", "--require-complete"]
+    )
+    out = json.loads(capsys.readouterr().out)
+
+    assert result == 0
+    assert out["status"] == "ready"
+    assert out["completion_claim_allowed"] is True
+    assert out["source_status"]["missing_required"] == 0
+    assert out["source_status"]["unsynced_required"] == 0
+    assert out["source_anchor_sync"]["counts"] == {"unchanged": 14}
+    lifecycle = next(item for item in out["capabilities"] if item["key"] == "lifecycle_tracking")
+    assert lifecycle["state"] == "ready"
+
+
 def test_app_completeness_default_report_bootstraps_official_source_anchors():
     out = app_completeness.report()
 
