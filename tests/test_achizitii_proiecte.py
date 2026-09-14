@@ -222,6 +222,7 @@ def test_tracker_events_read_partial_local_parcurs_tables(tmp_path):
 def test_discovery_only_store_remains_compatible_with_existing_importer(state):
     action(state, "descopera")
     assert dp.versiuni(state, "plx-000") == []
+    assert dp.linkuri(state, "plx-000")[0]["url"] == URL
     result = action(state, "importa", url=URL)
     assert result["text"] == "Retained text"
     assert len(dp.versiuni(state, "plx-000")) == 1
@@ -229,6 +230,29 @@ def test_discovery_only_store_remains_compatible_with_existing_importer(state):
     assert detail["versiuni_total"] == 1
     assert len(detail["incercari"]) == 2
     assert all(r["stare"] == "ok" and r["reusit_la"] for r in detail["incercari"])
+
+
+def test_discovery_records_unavailable_document_references_as_failures(state, monkeypatch):
+    monkeypatch.setattr(
+        dp,
+        "descarca",
+        lambda url, *args: (
+            f'<a href="{URL}">Raport final</a><a href="/proiecte/aviz.doc">Aviz CL</a>'
+        ).encode(),
+    )
+
+    action(state, "descopera")
+    detail = ap.detaliu(state, "plx-000")
+
+    assert detail["stare"] == "descoperit"
+    assert detail["documente_total"] == 2
+    assert detail["documente_indisponibile_total"] == 1
+    assert detail["parliamentary_evidence"]["counts"]["documents"] == 2
+    assert detail["parliamentary_evidence"]["counts"]["reports"] == 1
+    assert detail["parliamentary_evidence"]["counts"]["opinions"] == 1
+    failure = next(r for r in detail["incercari"] if r["operatie"] == "document_indisponibil")
+    assert failure["stare"] == "eroare"
+    assert "disponibil" in failure["eroare"]
 
 
 def test_failure_preserves_previous_success_and_immutable_import_retry(state, monkeypatch):

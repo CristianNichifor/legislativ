@@ -57,6 +57,21 @@ def test_discovery_resolves_relative_urls_and_preserves_version_labels():
     ]
 
 
+def test_discovery_persists_document_links_and_unavailable_references(stare, monkeypatch):
+    page = (
+        f'<a href="{URL}">Raport favorabil</a><a href="/proiecte/2026/aviz.doc">Aviz legacy</a>'
+    ).encode()
+    monkeypatch.setattr(dp, "descarca", lambda url, *args: page)
+
+    out = dp.lista(stare, "plx-1")
+    links = dp.linkuri(stare, "plx-1")
+
+    assert out["documente"] == [{"url": URL, "label": "Raport favorabil"}]
+    assert out["documente_indisponibile"][0]["label"] == "Aviz legacy"
+    assert {row["status"] for row in links} == {"available", "unavailable"}
+    assert {row["label"] for row in links} == {"Raport favorabil", "Aviz legacy"}
+
+
 def test_import_hash_versions_ownership_and_offline_history(stare, monkeypatch):
     data = catre_docx("", "Articolul 7 se abrogă.")
 

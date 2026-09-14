@@ -6,6 +6,7 @@ import sqlite3
 from collections import Counter
 from contextlib import closing
 from datetime import UTC, datetime
+from pathlib import Path
 
 from scripts import source_portfolio, source_registry
 from scripts.lifecycle import DEFAULT_STALE_DAYS, project_lifecycle_item
@@ -79,6 +80,7 @@ def _portfolio_summary(families: list[dict]) -> dict:
 def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
     labels = source_registry.families()
     counts: Counter[tuple[str, str]] = Counter()
+    evidence_counts = _parliamentary_evidence_by_family(stare)
     total_by_family: Counter[str] = Counter()
     checked_by_family: dict[str, str] = {}
     limitations = []
@@ -137,6 +139,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             "fetched": fetched,
             "changed": counts[(family, "changed")],
             "failed": failed,
+            "parliamentary_evidence_counts": evidence_counts.get(family, _empty_evidence_counts()),
             "last_checked": checked_by_family.get(family, ""),
             "next_action": _family_next_action(
                 status=status,
@@ -167,6 +170,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             "fetched": sum(counts[(family, state)] for state in FETCHED_STATES),
             "changed": counts[(family, "changed")],
             "failed": failed,
+            "parliamentary_evidence_counts": evidence_counts.get(family, _empty_evidence_counts()),
             "last_checked": checked_by_family.get(family, ""),
             "next_action": _family_next_action(
                 status=status,
@@ -186,6 +190,113 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
         row["actions"] = _family_actions(row)
         families.append(row)
     return families, limitations
+
+
+def _empty_evidence_counts() -> dict:
+    return {
+        "documents": 0,
+        "reports": 0,
+        "votes": 0,
+        "avize": 0,
+        "unavailable_documents": 0,
+    }
+
+
+def _evidence_kind(label: str) -> str:
+    folded = label.casefold()
+    if "raport" in folded:
+        return "reports"
+    if "aviz" in folded or "punct de vedere" in folded:
+        return "avize"
+    if "vot" in folded or "voturi" in folded:
+        return "votes"
+    return "documents"
+
+
+def _parliament_family_from_project(row: dict) -> str:
+    if row.get("cam") == 1:
+        return "senat"
+    if row.get("cam") == 2:
+        return "camera"
+    return "parlament"
+
+
+def _parliamentary_evidence_by_family(stare) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+
+    def bucket(family: str) -> dict:
+        return out.setdefault(family, _empty_evidence_counts())
+
+    try:
+        from scripts import documente_proiecte, tracker_events
+        from scripts.text import cheie
+
+        initiative_family: dict[str, str] = {}
+        initiative_path = (
+            Path(getattr(stare, "initiative", "")) if getattr(stare, "initiative", None) else None
+        )
+        if initiative_path and initiative_path.exists():
+            with closing(
+                sqlite3.connect(initiative_path.resolve().as_uri() + "?mode=ro", uri=True)
+            ) as con:
+                con.row_factory = sqlite3.Row
+                tables = {
+                    r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+                if "initiative" in tables:
+                    initiative_family = {
+                        row["plx_id"]: _parliament_family_from_project(dict(row))
+                        for row in con.execute("SELECT plx_id, cam FROM initiative")
+                    }
+
+        documents_path = documente_proiecte.cale_store(stare)
+        if documents_path.exists():
+            with closing(
+                sqlite3.connect(documents_path.resolve().as_uri() + "?mode=ro", uri=True)
+            ) as con:
+                con.row_factory = sqlite3.Row
+                tables = {
+                    r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+                if "document_links" in tables:
+                    for row in con.execute("SELECT plx_id, label, url, status FROM document_links"):
+                        family = initiative_family.get(row["plx_id"], "parlament")
+                        counts = bucket(family)
+                        counts["documents"] += 1
+                        label = cheie((row["label"] or "") + " " + (row["url"] or ""))
+                        kind = _evidence_kind(label)
+                        if kind != "documents":
+                            counts[kind] += 1
+                        if row["status"] == "unavailable":
+                            counts["unavailable_documents"] += 1
+
+        tracker_path = tracker_events.cale(stare)
+        if tracker_path.exists():
+            with closing(
+                sqlite3.connect(tracker_path.resolve().as_uri() + "?mode=ro", uri=True)
+            ) as con:
+                con.row_factory = sqlite3.Row
+                tables = {
+                    r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                }
+                if "tracker_events" in tables:
+                    for row in con.execute(
+                        "SELECT source_family,event_type,count(*) total FROM tracker_events "
+                        "GROUP BY source_family,event_type"
+                    ):
+                        family = row["source_family"] or "parlament"
+                        if family not in {"camera", "senat", "parlament", "avize"}:
+                            continue
+                        counts = bucket(family)
+                        if row["event_type"] == "report_filed":
+                            counts["reports"] += row["total"]
+                        elif row["event_type"] == "vote_recorded":
+                            counts["votes"] += row["total"]
+                        elif row["event_type"] in {"opinion_received", "opinion_requested"}:
+                            counts["avize"] += row["total"]
+    except (OSError, sqlite3.Error, ValueError, AttributeError):
+        return out
+    return out
 
 
 def _family_support(family: str) -> dict:

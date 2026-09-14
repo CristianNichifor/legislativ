@@ -621,6 +621,47 @@ def _project_freshness_status(
     )
 
 
+def _document_evidence_counts(documents: list[dict]) -> dict:
+    counts = {
+        "documents": len(documents),
+        "reports": 0,
+        "opinions": 0,
+        "votes": 0,
+        "unavailable_documents": 0,
+    }
+    for document in documents:
+        label = cheie((document.get("label") or "") + " " + (document.get("url") or ""))
+        if document.get("status") == "unavailable":
+            counts["unavailable_documents"] += 1
+        if "raport" in label:
+            counts["reports"] += 1
+        if "aviz" in label or "punct de vedere" in label:
+            counts["opinions"] += 1
+        if "vot" in label or "voturi" in label:
+            counts["votes"] += 1
+    return counts
+
+
+def _merge_document_evidence(timeline_coverage: dict, document_evidence: dict) -> dict:
+    if not document_evidence:
+        return timeline_coverage
+    out = {**timeline_coverage}
+    counts = {**(out.get("evidence_counts") or {})}
+    for key, value in document_evidence.get("counts", {}).items():
+        if key == "unavailable_documents":
+            continue
+        counts[key] = max(int(counts.get(key) or 0), int(value or 0))
+    out["evidence_counts"] = counts
+    urls = set(out.get("document_urls") or [])
+    urls.update(
+        document.get("url")
+        for document in document_evidence.get("documents") or []
+        if document.get("url") and document.get("status") != "unavailable"
+    )
+    out["document_urls"] = sorted(urls)[:50]
+    return out
+
+
 def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) -> dict:
     events = events or []
     evidence_counts = {
@@ -774,6 +815,7 @@ def project_lifecycle_item(
     registry: dict | None = None,
     latest_event: dict | None = None,
     timeline_coverage: dict | None = None,
+    parliamentary_evidence: dict | None = None,
     affected_dossiers: int = 0,
     now: datetime | None = None,
     stale_days: int = DEFAULT_STALE_DAYS,
@@ -812,7 +854,11 @@ def project_lifecycle_item(
         deadline=deadline,
         stage_change=stage_change,
     )
-    timeline_coverage = timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or "")
+    parliamentary_evidence = parliamentary_evidence or {}
+    timeline_coverage = _merge_document_evidence(
+        timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or ""),
+        parliamentary_evidence,
+    )
     freshness_status = _project_freshness_status(
         source_state=source_state,
         stale=stale,
@@ -832,6 +878,7 @@ def project_lifecycle_item(
         "stage_date": latest["date"],
         "latest_event": latest,
         "timeline_coverage": timeline_coverage,
+        "parliamentary_evidence": parliamentary_evidence,
         "missing_source_states": missing_sources,
         "source_freshness_status": freshness_status,
         "source_freshness_state": freshness_status["state"],
@@ -938,6 +985,80 @@ def _affected_dossier_counts(stare, identifiers: list[str]) -> dict[str, int]:
         return {}
 
 
+def _project_document_evidence(stare, identifiers: list[str]) -> dict[str, dict]:
+    if not identifiers:
+        return {}
+    try:
+        from scripts import documente_proiecte
+
+        path = documente_proiecte.cale_store(stare)
+        if not path.exists():
+            return {}
+        with closing(_readonly(path)) as con:
+            tables = {
+                r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if not tables.intersection({"document_links", "documente"}):
+                return {}
+            placeholders = ",".join("?" for _ in identifiers)
+            rows: list[dict] = []
+            if "document_links" in tables:
+                rows.extend(
+                    dict(r)
+                    for r in con.execute(
+                        "SELECT plx_id, url, label, source_url, status, discovered_at "
+                        "FROM document_links WHERE plx_id IN (" + placeholders + ")",
+                        identifiers,
+                    )
+                )
+            if "documente" in tables:
+                rows.extend(
+                    dict(r)
+                    for r in con.execute(
+                        "SELECT plx_id, url, label, url AS source_url, status, preluat_la AS "
+                        "discovered_at FROM documente WHERE plx_id IN (" + placeholders + ")",
+                        identifiers,
+                    )
+                )
+    except (OSError, sqlite3.Error, ValueError):
+        return {}
+    grouped: dict[str, dict] = {}
+    seen: set[tuple[str, str, str]] = set()
+    for row in rows:
+        key = (row.get("plx_id") or "", row.get("url") or "", row.get("label") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        item = grouped.setdefault(
+            row.get("plx_id") or "",
+            {
+                "contract": "parliamentary-project-evidence-summary-v1",
+                "counts": {},
+                "documents": [],
+                "available_document_links": 0,
+                "unavailable_document_links": 0,
+            },
+        )
+        item["documents"].append(row)
+    for item in grouped.values():
+        counts = _document_evidence_counts(item["documents"])
+        item["counts"] = {
+            "documents": counts["documents"],
+            "committees": 0,
+            "reports": counts["reports"],
+            "opinions": counts["opinions"],
+            "votes": counts["votes"],
+            "plenary": 0,
+        }
+        item["available_document_links"] = sum(
+            1
+            for document in item["documents"]
+            if document.get("url") and document.get("status") != "unavailable"
+        )
+        item["unavailable_document_links"] = counts["unavailable_documents"]
+    return grouped
+
+
 def project_lifecycle_summary(
     stare,
     *,
@@ -1014,6 +1135,7 @@ def project_lifecycle_summary(
     registry = _project_registry_sources(stare, identifiers)
     latest_events = _latest_project_events(stare.initiative, identifiers)
     timeline_coverage = _project_timeline_coverage(stare, identifiers)
+    parliamentary_evidence = _project_document_evidence(stare, identifiers)
     affected = _affected_dossier_counts(stare, identifiers)
     projects = [
         project_lifecycle_item(
@@ -1022,6 +1144,7 @@ def project_lifecycle_summary(
             latest_event=latest_events.get(row.get("plx_id", "")),
             timeline_coverage=timeline_coverage.get(row.get("plx_id", ""))
             or _empty_timeline_coverage(row.get("plx_id", "")),
+            parliamentary_evidence=parliamentary_evidence.get(row.get("plx_id", "")),
             affected_dossiers=affected.get(row.get("plx_id", ""), 0),
             now=now,
             stale_days=stale_days,

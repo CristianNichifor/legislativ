@@ -2,7 +2,7 @@ import io
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from scripts import depozit, dosare, source_registry, tracker_events
+from scripts import depozit, documente_proiecte, dosare, source_registry, tracker_events
 from scripts.lifecycle import (
     ACTIVE_STAGE_KEYS,
     CANONICAL_PROJECT_STATUSES,
@@ -518,6 +518,52 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
     )
     assert "evidence" in out["projects"][0]["filter_buckets"]
     assert out["filter_buckets"]["evidence"] == 1
+
+
+def test_project_lifecycle_summary_includes_discovered_parliamentary_documents(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 41/2026',2,'41','Lege documente','Raport depus',"
+            "'2026-09-10T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect41')"
+        )
+        con.commit()
+    state.documente_db = tmp_path / "documente.db"
+    documente_proiecte.salveaza_linkuri(
+        state,
+        "PL-x 41/2026",
+        [
+            {
+                "url": "https://www.cdep.ro/proiecte/raport.pdf",
+                "label": "Raport favorabil",
+                "status": "available",
+            },
+            {
+                "url": "https://www.cdep.ro/proiecte/voturi.pdf",
+                "label": "Lista voturi",
+                "status": "available",
+            },
+            {"url": "", "label": "Aviz legacy", "status": "unavailable"},
+        ],
+        "https://www.cdep.ro/proiect41",
+    )
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 41/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    project = out["projects"][0]
+    evidence = project["parliamentary_evidence"]
+    assert evidence["counts"]["documents"] == 3
+    assert evidence["counts"]["reports"] == 1
+    assert evidence["counts"]["votes"] == 1
+    assert evidence["counts"]["opinions"] == 1
+    assert evidence["unavailable_document_links"] == 1
+    assert project["timeline_coverage"]["evidence_counts"]["documents"] == 3
+    assert (
+        "https://www.cdep.ro/proiecte/raport.pdf" in project["timeline_coverage"]["document_urls"]
+    )
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):

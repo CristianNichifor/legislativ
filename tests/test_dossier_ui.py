@@ -1046,6 +1046,39 @@ def test_legislative_writing_workspace_renders_context_and_actions():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_source_coverage_family_renders_parliamentary_evidence_counts():
+    source = (
+        APP.read_text()
+        .split("function sourceCoverageFamilyHtml", 1)[1]
+        .split("function sourceCoverageActionHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;')"
+        ".replaceAll('\"','&quot;');"
+        "const dossierTime=s=>s||'';"
+        "const SOURCE_STATE_LABELS={unchanged:'Neschimbată'};"
+        "function sourceCoverageFamilyHtml"
+        + source
+        + "const row={family:'camera',label:'Camera Deputaților',status:'ok',required:true,"
+        "support:{label:'Suportată',policy:'Incremental'},total:1,fetched:1,changed:0,"
+        "failed:0,incomplete:0,last_checked:'2026-09-12',states:{unchanged:1},"
+        "next_action:'Verifică',parliamentary_evidence_counts:{documents:2,reports:1,"
+        "votes:1,avize:1,unavailable_documents:1}};"
+        "const html=sourceCoverageFamilyHtml(row);"
+        "assert.ok(html.includes('2 documente'));"
+        "assert.ok(html.includes('1 rapoarte'));"
+        "assert.ok(html.includes('1 voturi'));"
+        "assert.ok(html.includes('1 avize'));"
+        "assert.ok(html.includes('1 documente indisponibile'));"
+        "const note=sourceCoverageFamilyNote(row);"
+        "assert.ok(note.evidence_quote.includes('2 documente, 1 rapoarte, 1 voturi, 1 avize'));"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_project_cockpit_handoff_opens_writing_workspace():
     source = (
         APP.read_text()

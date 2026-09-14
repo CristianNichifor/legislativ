@@ -7606,6 +7606,9 @@ function sourceCoverageFamilyHtml(row){
   const duty=row.required?'sursă necesară':'sursă opțională';
   const checked=row.last_checked?dossierTime(row.last_checked):'niciodată';
   const support=row.support||{};
+  const ev=row.parliamentary_evidence_counts||{};
+  const evTotal=Number(ev.documents||0)+Number(ev.reports||0)+Number(ev.votes||0)+Number(ev.avize||0)+Number(ev.unavailable_documents||0);
+  const evLine=evTotal?`<p class="hint">Dovezi parlamentare: ${esc(ev.documents||0)} documente · ${esc(ev.reports||0)} rapoarte · ${esc(ev.votes||0)} voturi · ${esc(ev.avize||0)} avize · ${esc(ev.unavailable_documents||0)} documente indisponibile</p>`:'';
   const actionList=(row.actions&&row.actions.length)?row.actions:[
     {key:'open_family',label:'Deschide familia',target:row.family,enabled:true},
     ...(row.attention?[{key:'retry_failures',label:'Doar atenționări',target:row.family,enabled:true}]:[])
@@ -7625,12 +7628,14 @@ function sourceCoverageFamilyHtml(row){
   return `<article class="coverage-card coverage-${esc(row.status||'ok')}" data-source-control-family="${esc(row.family)}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4>`
     +`<p>${esc(duty)} · ${esc(support.label||'Suport necunoscut')} · ${row.total||0} surse · ${row.fetched||0} citite · ${row.changed||0} schimbate · ${row.failed||0} eșuate/indisponibile · ${row.incomplete||0} fără stare finală</p>`
     +`<p class="hint">Ultima verificare: ${esc(checked)}<br>${esc(states)}</p>`
+    +evLine
     +(support.policy?`<p class="hint">${esc(support.policy)}</p>`:'')
     +`<p class="source-next">Următorul pas: ${esc(row.next_action||'Verifică registrul surselor.')}</p>`
     +`<div class="dossier-actions">${buttons}</div></article>`;
 }
 function sourceCoverageFamilyNote(row){
   const support=row.support?.label?`Suport: ${row.support.label}`:'';
+  const ev=row.parliamentary_evidence_counts||{};
   const lines=[
     `Familie surse: ${row.label||row.family}`,
     `Stare acoperire: ${row.status||'necunoscută'}`,
@@ -7639,6 +7644,7 @@ function sourceCoverageFamilyNote(row){
     `Surse citite: ${row.fetched||0}`,
     `Surse schimbate: ${row.changed||0}`,
     `Surse eșuate/indisponibile: ${row.failed||0}`,
+    `Dovezi: ${ev.documents||0} documente, ${ev.reports||0} rapoarte, ${ev.votes||0} voturi, ${ev.avize||0} avize, ${ev.unavailable_documents||0} documente indisponibile`,
     `Fără stare finală: ${row.incomplete||0}`,
     row.last_checked?`Ultima verificare: ${dossierTime(row.last_checked)}`:'Ultima verificare: niciodată',
     row.next_action?`Următorul pas: ${row.next_action}`:'',
@@ -9066,10 +9072,10 @@ async function openProjectWorkbench(project){
 }
 const ACQUISITION={offset:0,query:'',selected:null,sequence:0,busy:false,loaded:false,documents:new Map(),versions:new Map()};
 const IMPORT_STATES={extras:'Text extras',ocr_necesar:'Necesită OCR / verificare',fara_text:'Fără text extras'};
-const ACQUISITION_ACTIONS={descopera:'Consultare fișă',importa:'Import document',actualizeaza:'Verificare și import actualizare'};
+const ACQUISITION_ACTIONS={descopera:'Consultare fișă',importa:'Import document',actualizeaza:'Verificare și import actualizare',document_indisponibil:'Document indisponibil'};
 function acquisitionLink(url,label){const safe=urlSigur(url);return safe?`<a href="${esc(safe)}" target="_blank" rel="noopener noreferrer">${esc(label||url)}</a>`:'Sursă oficială necunoscută';}
 function acquisitionState(row){
-  const state=row.stare==='metadate'?'Doar metadate locale':row.stare==='importat'?`${row.versiuni_total} versiuni importate`:'Importuri indisponibile';
+  const state=row.stare==='metadate'?'Doar metadate locale':row.stare==='descoperit'?`${row.documente_total||0} documente descoperite`:row.stare==='importat'?`${row.versiuni_total} versiuni importate`:'Importuri indisponibile';
   return state+(row.ultima_incercare?.stare==='eroare'?' · Ultima încercare eșuată':'');
 }
 function acquisitionRowHtml(row){
@@ -9079,7 +9085,7 @@ function acquisitionVersionHtml(doc){
   return `<h4>${esc(doc.label)}</h4><p>${esc(IMPORT_STATES[doc.status]||'Stare de extragere necunoscută')}</p><p class="hint">Import păstrat: ${esc(dossierTime(doc.preluat_la))} · Limbă: necunoscută</p><p>${acquisitionLink(doc.url)}</p><details><summary>Amprenta documentului</summary><p>SHA-256: ${esc(doc.sha256)}</p></details>`;
 }
 function acquisitionAttemptsHtml(rows){
-  return rows.map((r,i)=>`<div class="acquisition-attempt"><b>${esc(ACQUISITION_ACTIONS[r.operatie]||r.operatie)} · ${r.stare==='ok'?'Reușită':'Eșuată'}</b><p>${acquisitionLink(r.url)}</p><p class="hint">Ultima încercare: ${esc(dossierTime(r.incercat_la))}<br>Ultima reușită pentru această acțiune și sursă: ${r.reusit_la?esc(dossierTime(r.reusit_la)):'Necunoscută'}</p>${r.eroare?`<p>${esc(r.eroare)}</p><button type="button" class="ghost mini" data-acquisition-retry="${i}">Reîncearcă</button>`:''}</div>`).join('')||'<p>Nicio încercare înregistrată în acest flux.</p>';
+  return rows.map((r,i)=>`<div class="acquisition-attempt"><b>${esc(ACQUISITION_ACTIONS[r.operatie]||r.operatie)} · ${r.stare==='ok'?'Reușită':'Eșuată'}</b><p>${acquisitionLink(r.url)}</p><p class="hint">Ultima încercare: ${esc(dossierTime(r.incercat_la))}<br>Ultima reușită pentru această acțiune și sursă: ${r.reusit_la?esc(dossierTime(r.reusit_la)):'Necunoscută'}</p>${r.eroare?`<p>${esc(r.eroare)}</p>${r.operatie==='document_indisponibil'?'':`<button type="button" class="ghost mini" data-acquisition-retry="${i}">Reîncearcă</button>`}`:''}</div>`).join('')||'<p>Nicio încercare înregistrată în acest flux.</p>';
 }
 function acquisitionBusy(value){
   ACQUISITION.busy=value;
@@ -9119,7 +9125,8 @@ async function loadAcquisitionDetail(plx){
 function renderAcquisitionDetail(d){
   const out=$('#acquisition-detail'),plx=d.plx_id;
   const row=$('#acquisition-list [aria-current=true] small:last-child');if(row)row.textContent=acquisitionState(d);
-  out.innerHTML=`<h4>${esc(plx)} · ${esc(d.titlu)}</h4><p>${esc(d.stadiu||'Stadiu necunoscut')}</p><p>${acquisitionLink(d.fisa_url,'Fișa parlamentară oficială')}</p><p class="hint">Metadate locale: ${esc(dossierTime(d.citit_la))} · Actualitate necunoscută · Limbă necunoscută</p>`
+  const evidence=d.parliamentary_evidence?.counts||{};
+  out.innerHTML=`<h4>${esc(plx)} · ${esc(d.titlu)}</h4><p>${esc(d.stadiu||'Stadiu necunoscut')}</p><p>${acquisitionLink(d.fisa_url,'Fișa parlamentară oficială')}</p><p class="hint">Metadate locale: ${esc(dossierTime(d.citit_la))} · Actualitate necunoscută · Limbă necunoscută</p><p class="hint"><strong>Dovezi:</strong> ${esc(evidence.documents||0)} documente · ${esc(evidence.reports||0)} rapoarte · ${esc(evidence.opinions||0)} avize · ${esc(evidence.votes||0)} voturi · ${esc(d.documente_indisponibile_total||0)} indisponibile</p>`
     +`<button type="button" class="ghost mini" data-acquisition-discover ${d.fisa_url?'':'disabled'}>Consultă documentele oficiale</button><p data-acquisition-operation role="status" class="hint"></p><div data-acquisition-documents></div>`
     +`<h4>Versiuni locale · ${d.versiuni_total}</h4><div data-acquisition-versions></div>`
     +`<details data-acquisition-attempts ${d.incercari.some(r=>r.stare==='eroare')?'open':''}><summary>Încercări de preluare</summary>${acquisitionAttemptsHtml(d.incercari)}${d.incercari_trunchiate?'<p class="hint">Primele 100 de surse și acțiuni afișate.</p>':''}</details>`;
