@@ -675,12 +675,23 @@
     background:transparent;border:0;border-bottom:2px solid transparent;color:var(--ink-mute)}
   .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
   .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .workflow-nav{display:flex;flex-wrap:wrap;gap:.35rem;margin:-.35rem 0 1rem;font-family:var(--sans)}
-  .workflow-nav button{font-size:.76rem;font-weight:600;min-height:2rem;padding:.35rem .65rem;
+  .workflow-nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,8.5rem),1fr));
+    gap:.45rem;margin:-.35rem 0 .75rem;font-family:var(--sans)}
+  .workflow-nav button{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;
+    gap:.08rem;font-size:.78rem;font-weight:700;min-height:3.25rem;padding:.48rem .65rem;
     border:1px solid var(--rule);border-left:3px solid var(--rule);border-radius:var(--r1);
-    background:var(--surface);color:var(--ink-mid);cursor:pointer;white-space:normal}
+    background:var(--surface);color:var(--ink-mid);cursor:pointer;white-space:normal;text-align:left;
+    box-shadow:var(--e1)}
+  .workflow-nav button small{font-size:.64rem;font-weight:400;color:var(--ink-mute);line-height:1.25}
   .workflow-nav button:hover{border-color:var(--accent);background:var(--accent-wash);color:var(--ink)}
   .workflow-nav button[aria-current="true"]{border-left-color:var(--accent);color:var(--ink)}
+  .workflow-nav button[aria-current="true"] small{color:var(--ink-mid)}
+  .civic-workspace-status{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,12rem),1fr));
+    gap:.5rem;margin:0 0 1rem;font-family:var(--sans)}
+  .civic-workspace-status span{border:1px solid var(--rule-soft);border-radius:var(--r1);
+    background:var(--surface);padding:.55rem .65rem;min-height:3.2rem;font-size:.76rem;color:var(--ink-mid)}
+  .civic-workspace-status b{display:block;font-size:.64rem;text-transform:uppercase;
+    letter-spacing:.08em;color:var(--ink-mute);margin-bottom:.12rem}
   /* pinned to the top-right of the tab strip, so it never orphans onto its own line when the tabs
      wrap on a narrow viewport */
   .tema{position:absolute;top:0;right:0;background:transparent;border:1px solid var(--rule);
@@ -1253,16 +1264,22 @@
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
-  <nav class="workflow-nav" aria-label="Navigare fluxuri principale">
-    <button type="button" data-main-nav="start" aria-current="true">Start</button>
-    <button type="button" data-main-nav="search">Search</button>
-    <button type="button" data-main-nav="track">Track</button>
-    <button type="button" data-main-nav="matrix">Matrix</button>
-    <button type="button" data-main-nav="dossiers">Dossiers</button>
-    <button type="button" data-main-nav="sources">Sources</button>
-    <button type="button" data-main-nav="ai">AI/MCP</button>
-    <button type="button" data-main-nav="settings">Settings</button>
+  <nav class="workflow-nav" aria-label="Navigare spații de lucru">
+    <button type="button" data-main-nav="start" aria-current="true">Start<small>alege fluxul</small></button>
+    <button type="button" data-main-nav="search">Surse<small>lege, proiect, consultare, CELEX</small></button>
+    <button type="button" data-main-nav="track">Urmărire<small>stadii, comisii, avize, voturi</small></button>
+    <button type="button" data-main-nav="matrix">Matrice<small>lacune și contradicții</small></button>
+    <button type="button" data-main-nav="dossiers">Dosare<small>lucru privat local</small></button>
+    <button type="button" data-main-nav="ai">Redactare<small>ciorne, AI/BYOK/MCP</small></button>
+    <button type="button" data-main-nav="rules">Reguli<small>law-as-code revizuibil</small></button>
+    <button type="button" data-main-nav="status">Stadiu<small>gate produs și limitări</small></button>
   </nav>
+  <section class="civic-workspace-status" aria-label="Principii de lucru">
+    <span><b>Surse publice</b>Actualitate, lipsuri și limitări vizibile înainte de concluzii.</span>
+    <span><b>Dosare private</b>Notele, ciornele și backupurile rămân în spațiul local.</span>
+    <span><b>Dovezi exacte</b>Fiecare constatare păstrează URL, citat, locator și hash când există.</span>
+    <span><b>Revizie umană</b>AI, MCP și regulile produc ciorne sau candidați, nu verdicte juridice.</span>
+  </section>
 
   <div class="app">
     <div class="main">
@@ -2076,7 +2093,7 @@ function openWorkflowTarget(target){
     selectTab('matrice');const panel=$("#lifecycle-tracker");if(panel)panel.open=true;
     $("#lifecycle-search")?.scrollIntoView({block:'start'});
     setMainNavCurrent(target);
-    setFirstRunStatus('Track deschide stadiile proiectelor, termenele, comisiile, voturile și sursele care cer atenție.');
+    setFirstRunStatus('Urmărire deschide stadiile proiectelor, termenele, comisiile, avizele, voturile și sursele care cer atenție.');
     return;
   }
   if(target==='matrix'){selectTab('matrice');setMainNavCurrent(target);$("#m-q")?.focus();setFirstRunStatus('Matricea este spațiul principal pentru lacune, contradicții și riscuri urmărite.');return;}
@@ -2084,26 +2101,29 @@ function openWorkflowTarget(target){
     selectTab('matrice');const panel=$("#dossier-library");if(panel)panel.open=true;
     panel?.scrollIntoView({block:'start'});
     setMainNavCurrent(target);
-    setFirstRunStatus('Dossiers deschide dosarele private locale: note, dovezi, ciorne și export.');
+    setFirstRunStatus('Dosare deschide lucrul privat local: note, dovezi, ciorne și export.');
     return;
   }
-  if(target==='sources'){
+  if(target==='rules'){
+    selectTab('matrice');const panel=$("#dossier-library");if(panel)panel.open=true;
+    panel?.scrollIntoView({block:'start'});
+    setMainNavCurrent(target);
+    setFirstRunStatus('Reguli deschide candidații law-as-code din dosar: revizuibili, sursați și niciodată verdict juridic.');
+    return;
+  }
+  if(target==='status'){
     selectTab('matrice');const panel=$("#source-registry");if(panel)panel.open=true;
+    const coverage=$("#source-coverage");if(coverage)coverage.open=true;
     $("#source-title")?.scrollIntoView({block:'start'});
     setMainNavCurrent(target);
-    setFirstRunStatus('Sources arată acoperirea surselor și registrul de sincronizare punctuală.');
+    setFirstRunStatus('Stadiu arată acoperirea surselor, gate-ul produsului și limitările care blochează finalizarea.');
     return;
   }
   if(target==='ai'){
     selectTab('consolidat');$("#ai-mode")?.focus();
     setMainNavCurrent(target);
-    setFirstRunStatus('AI/MCP este explicit: local, BYOK sau handoff aprobat; rezultatele sunt ciorne nerevizuite.');
+    setFirstRunStatus('Redactare asistată este explicită: local, BYOK sau MCP aprobat; rezultatele sunt ciorne nerevizuite.');
     return;
-  }
-  if(target==='settings'){
-    selectTab('consolidat');$("#ai-mode")?.focus();
-    setMainNavCurrent(target);
-    setFirstRunStatus('Settings include tema și setările AI/BYOK. Cheile API rămân doar în sesiunea browserului.');
   }
 }
 document.querySelectorAll('[data-main-nav]').forEach(button=>{

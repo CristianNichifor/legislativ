@@ -197,8 +197,14 @@ def test_first_run_navigation_is_top_level_and_stateful():
     assert 'id="pane-start"' in source
     assert 'data-main-nav="track"' in source
     assert 'data-main-nav="dossiers"' in source
-    assert 'data-main-nav="sources"' in source
     assert 'data-main-nav="ai"' in source
+    assert 'data-main-nav="rules"' in source
+    assert 'data-main-nav="status"' in source
+    assert "Navigare spații de lucru" in source
+    assert "Surse<small>lege, proiect, consultare, CELEX</small>" in source
+    assert "Urmărire<small>stadii, comisii, avize, voturi</small>" in source
+    assert "Dovezi exacte" in source
+    assert "Revizie umană" in source
     assert "Pornește o analiză legislativă" in source
     assert "Aplicația nu dă verdict juridic" in source
     assert "Datele publice și dosarele private sunt separate" in source
@@ -216,14 +222,16 @@ def test_first_run_shortcuts_reuse_existing_panels_without_duplicate_forms():
     code = (
         "const assert=require('node:assert/strict');"
         "const calls=[];"
-        "const navTargets=['start','search','track','matrix','dossiers','sources','ai','settings'];"
+        "const navTargets=['start','search','track','matrix','dossiers','ai','rules','status'];"
         "const navs=navTargets.map(target=>({dataset:{mainNav:target},current:'',onclick:null,"
         "setAttribute(k,v){if(k==='aria-current')this.current=v;}}));"
         "const startTargets=['source','dossier','matrix','draft'];"
         "const startActions=startTargets.map(action=>({dataset:{startAction:action},"
         "onclick:null}));"
         "const panels={};"
-        "for(const id of ['lifecycle-tracker','dossier-library','source-registry'])"
+        "const panelIds=['lifecycle-tracker','dossier-library','source-registry',"
+        "'source-coverage'];"
+        "for(const id of panelIds)"
         "panels['#'+id]={open:false,scrollIntoView:o=>calls.push(['scroll',id,o.block])};"
         "panels['#lifecycle-search']={scrollIntoView:o=>calls.push(['scroll','lifecycle-search',o.block])};"
         "panels['#source-title']={scrollIntoView:o=>calls.push(['scroll','source-title',o.block])};"
@@ -241,7 +249,10 @@ def test_first_run_shortcuts_reuse_existing_panels_without_duplicate_forms():
         "assert.deepEqual(calls.slice(0,2),[['tab','matrice'],['scroll','lifecycle-search','start']]);"
         "assert.equal(navs.find(n=>n.dataset.mainNav==='track').current,'true');"
         "openWorkflowTarget('dossiers');assert.equal(panels['#dossier-library'].open,true);"
-        "openWorkflowTarget('sources');assert.equal(panels['#source-registry'].open,true);"
+        "openWorkflowTarget('rules');assert.equal(panels['#dossier-library'].open,true);"
+        "assert.ok(panels['#first-run-status'].textContent.includes('law-as-code'));"
+        "openWorkflowTarget('status');assert.equal(panels['#source-registry'].open,true);"
+        "assert.equal(panels['#source-coverage'].open,true);"
         "openWorkflowTarget('ai');assert.deepEqual(calls.slice(-2),[['tab','consolidat'],['focus','ai-mode']]);"
         "assert.ok(panels['#first-run-status'].textContent.includes('ciorne nerevizuite'));"
         "startActions.find(b=>b.dataset.startAction==='source').onclick();"
