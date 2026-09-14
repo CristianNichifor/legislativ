@@ -836,6 +836,89 @@ def test_matrix_problem_filter_turns_rows_into_a_work_queue(tmp_path):
     assert _matrice({"problema": ["neconstitutionale"]}, _stare(fara_neconst))["randuri"] == []
 
 
+def test_matrix_workspace_summarizes_daily_work_queues(tmp_path):
+    stare = _stare(tmp_path, graf=True, initiative=True)
+    from scripts import dosare, note_manuale, source_registry, tracker_events
+
+    dossier = dosare.creeaza(
+        dosare.cale(stare),
+        {"id": "a" * 32, "titlu": "Dosar achiziții", "intrebare": "", "domeniu": ""},
+    )
+    note_manuale.salveaza(
+        dosare.cale(stare),
+        {
+            "id": "b" * 32,
+            "dosar_id": dossier["id"],
+            "revizie": 0,
+            "title": "Lacună cu dovezi",
+            "type": "lacuna",
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "evidence_quote": "Guvernul aprobă normele.",
+            "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+            "source_hash": "c" * 64,
+            "reasoning": "Necesită verificare.",
+            "status": "ready_for_review",
+        },
+    )
+    lege = source_registry.executa(
+        stare,
+        {
+            "family": "legislatie_ro",
+            "identifier": "lege-98-2016",
+            "url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+        },
+    )
+    source_registry.executa(stare, {"action": "queue", "id": lege["id"]})
+    source_registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": lege["id"],
+            "state": "needs_review",
+            "content_hash": "d" * 64,
+        },
+    )
+    tracker_events.adauga(
+        stare,
+        {
+            "event_type": "published_in_monitor",
+            "project_id": "lege-98-2016",
+            "source_family": "monitorul_oficial_pi",
+            "source_id": "mo-390",
+            "source_url": "https://monitoruloficial.ro/",
+            "title": "Publicare MO",
+            "occurred_at": "2016-05-23",
+            "content_hash": "e" * 64,
+            "payload": {"number": 390},
+        },
+    )
+
+    out = _matrice(
+        {
+            "review_state": ["ready_for_review"],
+            "source_family": ["monitorul_oficial_pi"],
+            "lifecycle_state": ["published_monitor"],
+        },
+        stare,
+    )
+
+    workspace = out["workspace"]
+    assert workspace["contract"] == "law-matrix-workspace-v1"
+    assert workspace["not_legal_verdict"] is True
+    assert workspace["active_filters"] == {
+        "review_state": "ready_for_review",
+        "source_family": "monitorul_oficial_pi",
+        "lifecycle_state": "published_monitor",
+    }
+    assert workspace["summary"]["manual_notes"] == 1
+    assert workspace["summary"]["tracker_events"] == 1
+    assert workspace["summary"]["tracker_unreviewed"] == 1
+    assert workspace["manual_notes"]["notes_by_type"] == {"lacuna": 1}
+    assert workspace["tracker"]["by_type"] == {"published_in_monitor": 1}
+    assert any(action["kind"] == "filter_tracker" for action in workspace["actions"])
+
+
 def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     stare = _stare(tmp_path, graf=True, initiative=True)
     from scripts import source_registry

@@ -112,6 +112,12 @@ def test_matrix_tab_exposes_daily_legislative_workflow():
     assert "data-workflow-open-export" in source
     assert "dosar + note" in source
     assert "dovezi și semnale" in source
+    assert 'id="m-workspace"' in source
+    assert 'id="m-review-state"' in source
+    assert 'id="m-source-family"' in source
+    assert 'id="m-lifecycle-state"' in source
+    assert "Spațiu de lucru matrice" in source
+    assert "candidați, nu verdict juridic" in source
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
