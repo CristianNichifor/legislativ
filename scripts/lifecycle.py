@@ -83,6 +83,13 @@ TIMELINE_COVERAGE_SOURCE_HINTS = {
     "vote": "Verifică ordinea de zi și votul din plen.",
     "publication": "Verifică Monitorul Oficial după adoptare/promulgare.",
 }
+TIMELINE_COVERAGE_SOURCE_FAMILIES = {
+    "consultation": "consultare_econsultare",
+    "committee": "camera",
+    "report": "camera",
+    "vote": "camera",
+    "publication": "monitorul_oficial_pi",
+}
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -576,6 +583,7 @@ def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) 
                 "required_any": sorted(required),
                 "latest_at": latest,
                 "source_hint": TIMELINE_COVERAGE_SOURCE_HINTS.get(key, ""),
+                "suggested_source_family": TIMELINE_COVERAGE_SOURCE_FAMILIES.get(key, ""),
                 "source_families": sorted(
                     {row.get("source_family", "") for row in rows if row.get("source_family")}
                 ),

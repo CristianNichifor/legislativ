@@ -480,9 +480,11 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
     assert coverage["total_events"] == 3
     assert by_key["committee"]["state"] == "present"
     assert by_key["committee"]["event_types"] == ["committee_assignment"]
+    assert by_key["committee"]["suggested_source_family"] == "camera"
     assert by_key["report"]["count"] == 1
     assert by_key["vote"]["latest_at"] == "2026-09-09T10:00:00+00:00"
     assert by_key["publication"]["state"] == "missing"
+    assert by_key["publication"]["suggested_source_family"] == "monitorul_oficial_pi"
     assert "publication" in coverage["missing"]
     assert coverage["next_missing_stage"]["key"] == "consultation"
     assert coverage["next_source_hint"].startswith("Verifică e-consultare")

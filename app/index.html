@@ -7512,7 +7512,8 @@ function lifecycleStatusSummaryHtml(project){
   if(project.source_state==='unavailable'||project.unavailable)missing.push('sursă indisponibilă');
   if(project.registry_needs_attention)missing.push('sursă urmărită de revizuit');
   if((project.timeline_coverage?.missing||[]).length&&Number(project.timeline_coverage?.total_events||0)>0)missing.push('dovezi tracker incomplete');
-  const next=project.registry_can_sync?'sincronizează sursa urmărită':(project.timeline_coverage?.next_action|| (project.needs_attention?'deschide revizia sursei':'monitorizează următorul eveniment oficial'));
+  const needsEvidence=(project.timeline_coverage?.missing||[]).length&&Number(project.timeline_coverage?.total_events||0)>0;
+  const next=project.registry_can_sync?'sincronizează sursa urmărită':(needsEvidence?project.timeline_coverage.next_action:(project.needs_attention?'deschide revizia sursei':'monitorizează următorul eveniment oficial'));
   return `<section class="lifecycle-overview-card"><span class="hint">Stadiu curent</span><strong>${esc(project.stage?.label||project.status||'Necunoscut')}</strong><span class="hint">Ultimul pas: ${esc(lifecycleEventText(project))}</span><br><span class="hint">Date lipsă: ${esc(missing.join(', ')||'niciuna semnalată')}</span><br><span class="hint">Următorul pas: ${esc(next)}</span></section>`;
 }
 async function projectSourceCoverageApi(projectId){
@@ -7549,7 +7550,8 @@ function lifecycleTimelineCoverageHtml(project){
   const missing=(coverage.missing||[]).length;
   const next=coverage.next_missing_stage?.label?` · următoarea: ${coverage.next_missing_stage.label}`:'';
   const hint=coverage.next_source_hint?` · ${coverage.next_source_hint}`:'';
-  return `<div class="lifecycle-timeline" data-lifecycle-event-coverage>${stages.map(item=>`<span class="lifecycle-step ${item.state==='present'?'lifecycle-step-done':'lifecycle-step-attention'}">${esc(item.label)}<br><small>${item.count?`${esc(item.count)} dovad${item.count===1?'ă':'e'}`:'lipsă local'}</small></span>`).join('')}</div><p class="hint">Dovezi tracker: ${esc(coverage.total_events||0)} evenimente locale · ${missing?`${missing} etape fără dovadă locală${esc(next)}`:'traseu public acoperit'} · ${esc(coverage.next_action||'Verifică timeline-ul înainte de concluzii.')}${esc(hint)}</p>`;
+  const action=missing&&Number(coverage.total_events||0)>0?'<button type="button" class="ghost mini" data-lifecycle-missing-evidence>Deschide dovada lipsă</button>':'';
+  return `<div class="lifecycle-timeline" data-lifecycle-event-coverage>${stages.map(item=>`<span class="lifecycle-step ${item.state==='present'?'lifecycle-step-done':'lifecycle-step-attention'}">${esc(item.label)}<br><small>${item.count?`${esc(item.count)} dovad${item.count===1?'ă':'e'}`:'lipsă local'}</small></span>`).join('')}</div><p class="hint">Dovezi tracker: ${esc(coverage.total_events||0)} evenimente locale · ${missing?`${missing} etape fără dovadă locală${esc(next)}`:'traseu public acoperit'} · ${esc(coverage.next_action||'Verifică timeline-ul înainte de concluzii.')}${esc(hint)}</p>${action}`;
 }
 function lifecycleRowHtml(project,index=0){
   const attention=project.needs_attention?'attention':'ok', url=urlSigur(project.url);
@@ -7785,6 +7787,17 @@ function renderLifecycleList(){
   list.querySelectorAll('[data-lifecycle-timeline]').forEach(button=>{
     button.onclick=()=>openTrackerTimeline({project_id:projects[Number(button.dataset.lifecycleTimeline)]?.project_id||''});
   });
+  list.querySelectorAll('[data-lifecycle-missing-evidence]').forEach(button=>{
+    button.onclick=()=>{
+      const row=button.closest('[data-lifecycle-row]'), project=projects[Number(row?.dataset.lifecycleRow)];
+      const stage=project?.timeline_coverage?.next_missing_stage||{};
+      openTrackerTimeline({
+        project_id:project?.project_id||'',
+        event_type:(stage.required_any||[])[0]||'',
+        source_family:stage.suggested_source_family||''
+      });
+    };
+  });
   list.querySelectorAll('[data-lifecycle-workbench]').forEach(button=>{
     button.onclick=()=>openProjectWorkbench(projects[Number(button.dataset.lifecycleWorkbench)]||{});
   });
@@ -7887,6 +7900,13 @@ function configureTrackerEventTypes(data){
   const types=data.event_types||[];
   select.innerHTML='<option value="">Toate tipurile</option>'+types.map(type=>`<option value="${esc(type)}">${esc(type)}</option>`).join('');
   select.dataset.loaded='1';
+}
+function setSelectValue(select,value){
+  if(!select||!value)return;
+  if(![...select.options].some(option=>option.value===value)){
+    select.add(new Option(value,value));
+  }
+  select.value=value;
 }
 const TRACKER_COVERAGE_STAGES=[
   {key:'consultation',label:'Consultare',types:['public_consultation_opened','public_consultation_closed']},
@@ -7991,12 +8011,15 @@ async function loadTrackerTimeline(offset=0){
     status.textContent=`${data.events?.length||0} din ${data.total||0} evenimente pentru ${scope}${filters?` · ${filters}`:''}.`;
   }catch(err){if(token===TRACKER_TIMELINE.sequence){status.textContent=err.message;out.innerHTML='';}}
 }
-function openTrackerTimeline({project_id='',dossier_id=''}={}){
+function openTrackerTimeline({project_id='',dossier_id='',event_type='',source_family='',reviewed=''}={}){
   const panel=$('#project-tracker-timeline'), form=$('#tracker-timeline-search');
   if(!panel||!form)return;
   panel.open=true;
   if(project_id)form.elements.project_id.value=project_id;
   if(dossier_id)form.elements.dossier_id.value=dossier_id;
+  setSelectValue(form.elements.event_type,event_type);
+  setSelectValue(form.elements.source_family,source_family);
+  setSelectValue(form.elements.reviewed,reviewed);
   loadTrackerTimeline(0);
   panel.scrollIntoView({block:'nearest'});
 }
