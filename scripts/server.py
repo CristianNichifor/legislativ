@@ -129,6 +129,7 @@ from scripts.servicii import (
 )
 
 APP = Path(__file__).resolve().parent.parent / "app"
+CLIENT_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
 # The largest request body this server will read into memory: a `.docx` at `fisiere.MAX_INCARCARE`
 # plus the third that base64 adds, plus room for the rest of the JSON.
 MAX_CERERE = 30 * 1024 * 1024
@@ -225,8 +226,11 @@ def face_handler(stare: Stare, *, runtime=None):
                 )
             ):
                 self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(corp)
+            try:
+                self.end_headers()
+                self.wfile.write(corp)
+            except CLIENT_DISCONNECT_ERRORS:
+                self.close_connection = True
 
         def _fisier(self, nume: str, tip: str) -> None:
             cale = APP / nume
@@ -237,8 +241,11 @@ def face_handler(stare: Stare, *, runtime=None):
             self.send_response(200)
             self.send_header("Content-Type", tip)
             self.send_header("Content-Length", str(len(corp)))
-            self.end_headers()
-            self.wfile.write(corp)
+            try:
+                self.end_headers()
+                self.wfile.write(corp)
+            except CLIENT_DISCONNECT_ERRORS:
+                self.close_connection = True
 
         def _dispatch(self, method):
             if runtime is None:

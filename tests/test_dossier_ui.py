@@ -221,6 +221,15 @@ def test_first_run_navigation_is_top_level_and_stateful():
     assert "Aplicația nu dă verdict juridic" in source
     assert "Datele publice și dosarele private sunt separate" in source
     assert "function openWorkflowTarget" in source
+    assert 'id="ai-product-flow"' in source
+    assert "data-ai-product-flow" in source
+    assert "Fără chei salvate/exportate" in source
+    assert "Cost server zero" in source
+    assert "ciornă nerevizuită, nu verdict juridic" in source
+    assert "data-ai-open-matrix-evidence" in source
+    assert "data-ai-open-dossier-writing" in source
+    assert "data-ai-open-mcp-runtime" in source
+    assert "function bindAiProductFlow" in source
     assert "function explainDisabledControls" in source
 
 
@@ -242,7 +251,7 @@ def test_first_run_shortcuts_reuse_existing_panels_without_duplicate_forms():
         "onclick:null}));"
         "const panels={};"
         "const panelIds=['lifecycle-tracker','dossier-library','source-registry',"
-        "'source-coverage'];"
+        "'source-coverage','ai-product-flow'];"
         "for(const id of panelIds)"
         "panels['#'+id]={open:false,scrollIntoView:o=>calls.push(['scroll',id,o.block])};"
         "panels['#lifecycle-search']={scrollIntoView:o=>calls.push(['scroll','lifecycle-search',o.block])};"
@@ -265,10 +274,46 @@ def test_first_run_shortcuts_reuse_existing_panels_without_duplicate_forms():
         "assert.ok(panels['#first-run-status'].textContent.includes('law-as-code'));"
         "openWorkflowTarget('status');assert.equal(panels['#source-registry'].open,true);"
         "assert.equal(panels['#source-coverage'].open,true);"
-        "openWorkflowTarget('ai');assert.deepEqual(calls.slice(-2),[['tab','consolidat'],['focus','ai-mode']]);"
+        "openWorkflowTarget('ai');assert.deepEqual(calls.slice(-3),[['tab','matrice'],['scroll','ai-product-flow','start'],['focus','m-q']]);"
         "assert.ok(panels['#first-run-status'].textContent.includes('ciorne nerevizuite'));"
         "startActions.find(b=>b.dataset.startAction==='source').onclick();"
         "assert.deepEqual(calls.slice(-1),[['tab','cauta']]);"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_product_flow_routes_to_existing_matrix_dossier_and_mcp_surfaces():
+    source = APP.read_text().split("function bindAiProductFlow", 1)[1].split("// ---- theme:", 1)[0]
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "let DOSARE_UI={selected:null};"
+        "const buttons=new Map();"
+        "const root={querySelector(sel){return buttons.get(sel);}};"
+        "['[data-ai-open-matrix-evidence]','[data-ai-open-dossier-writing]',"
+        "'[data-ai-open-mcp-runtime]'].forEach(sel=>buttons.set(sel,{onclick:null}));"
+        "const mcp={scrollIntoView:o=>calls.push(['scroll','mcp',o.block])};"
+        "const dossier={open:false,scrollIntoView:o=>calls.push(['scroll','dossier',o.block]),"
+        "querySelector:sel=>sel==='[data-mcp-runtime-surface]'?mcp:null};"
+        "const panels={'#ai-product-flow':root,'#ai-product-flow-status':{textContent:''},"
+        "'#m-q':{focus:()=>calls.push(['focus','m-q'])},'#dossier-library':dossier,"
+        "'#dossier-status':{textContent:''},'#dossier-writing':{scrollIntoView:o=>calls.push(['scroll','writing',o.block])}};"
+        "function $(sel){return panels[sel]||null;}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "function bindAiProductFlow"
+        + source
+        + "buttons.get('[data-ai-open-matrix-evidence]').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['tab','matrice'],['focus','m-q']]);"
+        "assert.ok(panels['#ai-product-flow-status'].textContent.includes('AI din dovadă'));"
+        "buttons.get('[data-ai-open-dossier-writing]').onclick();"
+        "assert.equal(dossier.open,true);"
+        "assert.ok(panels['#dossier-status'].textContent.includes('Alege sau creează'));"
+        "DOSARE_UI={selected:{id:'d1'}};buttons.get('[data-ai-open-dossier-writing]').onclick();"
+        "assert.deepEqual(calls.slice(-1),[['scroll','writing','start']]);"
+        "buttons.get('[data-ai-open-mcp-runtime]').onclick();"
+        "assert.deepEqual(calls.slice(-1),[['scroll','mcp','start']]);"
+        "assert.ok(panels['#ai-product-flow-status'].textContent.includes('aprobare explicită'));"
     )
     run_node(code)
 

@@ -1605,6 +1605,23 @@
           <div id="lifecycle-source-review"></div>
           <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled data-disabled-reason="Încarcă stadiile înainte de paginare.">←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled data-disabled-reason="Nu există încă pagină următoare în stadii.">→</button></div>
         </details>
+        <section class="daily-workflow" id="ai-product-flow" data-ai-product-flow aria-labelledby="ai-product-flow-title">
+          <h3 id="ai-product-flow-title">Redactare AI din dovezi selectate</h3>
+          <p class="daily-workflow-status" id="ai-product-flow-status" role="status">
+            Alege o dovadă din matrice sau din dosar. AI poate pregăti promptul local, BYOK sau MCP numai ca ciornă nerevizuită.
+          </p>
+          <div class="matrix-stats">
+            <div class="matrix-stat"><b>local</b><span>rulează fără cost extern când runtime-ul local este disponibil</span></div>
+            <div class="matrix-stat"><b>BYOK</b><span>cheia rămâne în sesiunea browserului, fără salvare sau export</span></div>
+            <div class="matrix-stat"><b>MCP</b><span>payload previzualizat, aprobare explicită, audit înainte de rezultat</span></div>
+          </div>
+          <p class="hint">Cost server zero. Fără chei salvate/exportate. Ieșirea este ciornă nerevizuită, nu verdict juridic, și trebuie să citeze dovezile selectate.</p>
+          <div class="dossier-actions">
+            <button type="button" class="ghost mini" data-ai-open-matrix-evidence>Alege dovadă din matrice</button>
+            <button type="button" class="ghost mini" data-ai-open-dossier-writing>Deschide dosarul și ciorna</button>
+            <button type="button" class="ghost mini" data-ai-open-mcp-runtime>Verifică MCP</button>
+          </div>
+        </section>
         <details class="dossier-library" id="source-project-manager">
           <summary>Surse parlamentare · Import și actualizări</summary>
           <form id="acquisition-search" class="dossier-actions"><label>Caută inițiativa<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label><button type="submit" class="ghost mini">Caută</button><button type="button" id="acquisition-refresh" class="ghost mini" title="Reîncarcă datele locale" aria-label="Reîncarcă datele locale">↻</button></form>
@@ -2121,9 +2138,12 @@ function openWorkflowTarget(target){
     return;
   }
   if(target==='ai'){
-    selectTab('consolidat');$("#ai-mode")?.focus();
+    selectTab('matrice');
+    const hub=$("#ai-product-flow");
+    hub?.scrollIntoView({block:'start'});
+    $("#m-q")?.focus();
     setMainNavCurrent(target);
-    setFirstRunStatus('Redactare asistată este explicită: local, BYOK sau MCP aprobat; rezultatele sunt ciorne nerevizuite.');
+    setFirstRunStatus('Redactare asistată pornește din dovezi selectate: local, BYOK sau MCP aprobat; rezultatele sunt ciorne nerevizuite.');
     return;
   }
 }
@@ -2347,6 +2367,33 @@ function bindDailyWorkflow(){
   mark('source');
 }
 bindDailyWorkflow();
+function bindAiProductFlow(){
+  const root=$("#ai-product-flow");if(!root)return;
+  const status=$("#ai-product-flow-status");
+  const openDossier=message=>{
+    const panel=$("#dossier-library");
+    if(panel){panel.open=true;panel.scrollIntoView({block:'start'});}
+    if(status)status.textContent=message;
+    return panel;
+  };
+  root.querySelector('[data-ai-open-matrix-evidence]').onclick=()=>{
+    selectTab('matrice');
+    $("#m-q")?.focus();
+    if(status)status.textContent='Filtrează matricea, deschide un rând și folosește „AI din dovadă” pentru a crea nota cu citat și sursă.';
+  };
+  root.querySelector('[data-ai-open-dossier-writing]').onclick=()=>{
+    selectTab('matrice');
+    openDossier('Alege dosarul local, apoi folosește panoul AI din notă, propunere sau pachetul dosarului.');
+    if(DOSARE_UI.selected?.id)$("#dossier-writing")?.scrollIntoView({block:'start'});
+    else $("#dossier-status").textContent='Alege sau creează un dosar înainte de redactarea asistată.';
+  };
+  root.querySelector('[data-ai-open-mcp-runtime]').onclick=()=>{
+    selectTab('matrice');
+    const panel=openDossier('MCP se folosește din panoul AI al notei/dosarului: previzualizare, aprobare explicită, audit.');
+    panel?.querySelector('[data-mcp-runtime-surface]')?.scrollIntoView({block:'start'});
+  };
+}
+bindAiProductFlow();
 
 // ---- theme: auto / light / dark, remembered per browser ----
 (function(){
