@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import acoperire_surse, depozit, source_registry
+from scripts import acoperire_surse, depozit, documente_proiecte, source_registry
 
 
 def state(tmp_path):
@@ -81,6 +81,42 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
     assert families["camera"]["tracked_sources"] == 1
     assert out["portfolio"]["storage_estimates"]["serious"]["gb_max"] == 665
     assert out["status"] == "blocked"
+
+
+def test_source_coverage_exposes_parliamentary_document_evidence_counts(tmp_path):
+    stare = state(tmp_path)
+    with depozit.deschide(stare.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 2/2026',2,'2','Lege','Raport depus',"
+            "'2026-09-10T00:00:00+00:00','2026-09-01','https://www.cdep.ro/p2')"
+        )
+        con.commit()
+    stare.documente_db = tmp_path / "documente.db"
+    documente_proiecte.salveaza_linkuri(
+        stare,
+        "PL-x 2/2026",
+        [
+            {
+                "url": "https://www.cdep.ro/proiecte/raport.pdf",
+                "label": "Raport favorabil",
+                "status": "available",
+            },
+            {"url": "", "label": "Aviz legacy", "status": "unavailable"},
+        ],
+        "https://www.cdep.ro/p2",
+    )
+
+    out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
+
+    camera = next(row for row in out["families"] if row["family"] == "camera")
+    assert camera["parliamentary_evidence_counts"] == {
+        "documents": 2,
+        "reports": 1,
+        "votes": 0,
+        "avize": 1,
+        "unavailable_documents": 1,
+    }
 
 
 def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):

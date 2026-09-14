@@ -50,7 +50,8 @@ def descarca(url: str, limita: int = MAX_BYTES) -> bytes:
 class _Linkuri(HTMLParser):
     def __init__(self, baza):
         super().__init__(convert_charrefs=True)
-        self.baza, self.curent, self.linkuri = baza, None, {}
+        self.baza, self.curent, self.indisponibil_curent, self.linkuri = baza, None, None, {}
+        self.indisponibile = {}
         self.randuri = []
 
     def handle_starttag(self, tag, attrs):
@@ -59,14 +60,21 @@ class _Linkuri(HTMLParser):
             self.randuri.append({"text": "", "docs": []})
         if tag == "a":
             self.curent = None
+            self.indisponibil_curent = None
+            raw_href = attrs.get("href", "")
             try:
-                url = url_oficial(urljoin(self.baza, attrs.get("href", "")))
+                url = url_oficial(urljoin(self.baza, raw_href))
             except ValueError:
+                self.indisponibil_curent = {"url": "", "label": attrs.get("title", "")}
                 return
             if urlsplit(url).path.lower().endswith((".pdf", ".docx")):
                 self.curent = {"url": url, "label": attrs.get("title", "")}
+            else:
+                self.indisponibil_curent = {"url": url, "label": attrs.get("title", "")}
         if tag == "img" and self.curent:
             self.curent["label"] += " " + attrs.get("alt", "")
+        if tag == "img" and self.indisponibil_curent:
+            self.indisponibil_curent["label"] += " " + attrs.get("alt", "")
 
     def handle_data(self, data):
         if self.randuri:
@@ -74,6 +82,8 @@ class _Linkuri(HTMLParser):
             row["text"] = (row["text"] + " " + data)[:1000]
         if self.curent:
             self.curent["label"] += data
+        if self.indisponibil_curent:
+            self.indisponibil_curent["label"] += data
 
     def handle_endtag(self, tag):
         if tag == "tr" and self.randuri:
@@ -89,12 +99,48 @@ class _Linkuri(HTMLParser):
             if self.randuri:
                 self.randuri[-1]["docs"].append(d)
             self.curent = None
+        if tag == "a" and self.indisponibil_curent:
+            d = self.indisponibil_curent
+            label = " ".join(d["label"].split())[:300]
+            url = d.get("url") or ""
+            if _pare_document_indisponibil(label, url):
+                d["label"] = label or Path(urlsplit(url).path).name or "Document indisponibil"
+                self.indisponibile.setdefault(url or d["label"], d)
+            self.indisponibil_curent = None
+
+
+def _pare_document_indisponibil(label: str, url: str) -> bool:
+    folded = (label + " " + url).casefold()
+    return any(
+        term in folded
+        for term in (
+            ".doc",
+            ".rtf",
+            ".xls",
+            "document",
+            "forma",
+            "raport",
+            "aviz",
+            "punct de vedere",
+            "expunere",
+            "motiv",
+        )
+    )
 
 
 def descopera(html: str, baza: str) -> list[dict]:
     parser = _Linkuri(url_oficial(baza))
     parser.feed(html)
     return list(parser.linkuri.values())
+
+
+def descopera_detaliat(html: str, baza: str) -> dict:
+    parser = _Linkuri(url_oficial(baza))
+    parser.feed(html)
+    return {
+        "documente": list(parser.linkuri.values()),
+        "indisponibile": list(parser.indisponibile.values()),
+    }
 
 
 def cale_store(stare) -> Path:
@@ -123,6 +169,65 @@ def versiuni(stare, plx: str) -> list[dict]:
         ]
 
 
+def init_linkuri(con: sqlite3.Connection) -> None:
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS document_links (id TEXT PRIMARY KEY, plx_id TEXT NOT NULL, "
+        "url TEXT NOT NULL, label TEXT NOT NULL, source_url TEXT NOT NULL, status TEXT NOT NULL, "
+        "discovered_at TEXT NOT NULL)"
+    )
+    con.execute(
+        "CREATE INDEX IF NOT EXISTS document_links_project "
+        "ON document_links(plx_id, discovered_at DESC, id)"
+    )
+
+
+def _link_id(plx: str, url: str, label: str, status: str) -> str:
+    return hashlib.sha256(json.dumps([plx, url, label, status]).encode()).hexdigest()
+
+
+def salveaza_linkuri(stare, plx: str, docs: list[dict], fisa_url: str) -> None:
+    now = datetime.now(UTC).isoformat()
+    with sqlite3.connect(cale_store(stare)) as con:
+        init_linkuri(con)
+        for doc in docs:
+            url = str(doc.get("url") or "")
+            label = str(doc.get("label") or "").strip()[:300]
+            status = str(doc.get("status") or "available")
+            if status not in {"available", "unavailable"}:
+                status = "unavailable"
+            if status == "available" and not url:
+                continue
+            ident = _link_id(plx, url, label, status)
+            con.execute(
+                "INSERT INTO document_links VALUES (?,?,?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET label=excluded.label, "
+                "source_url=excluded.source_url, status=excluded.status, "
+                "discovered_at=excluded.discovered_at",
+                (ident, plx, url, label or url or "Document indisponibil", fisa_url, status, now),
+            )
+
+
+def linkuri(stare, plx: str, *, limit: int = 100) -> list[dict]:
+    path = cale_store(stare)
+    if not path.exists():
+        return []
+    with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True) as con:
+        con.row_factory = sqlite3.Row
+        if not con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='document_links'"
+        ).fetchone():
+            return []
+        return [
+            dict(r)
+            for r in con.execute(
+                "SELECT id, plx_id, url, label, source_url, status, discovered_at "
+                "FROM document_links WHERE plx_id=? "
+                "ORDER BY status, discovered_at DESC, id LIMIT ?",
+                (plx, limit),
+            )
+        ]
+
+
 def lista(stare, plx: str) -> dict:
     with closing(
         sqlite3.connect(Path(stare.initiative).resolve().as_uri() + "?mode=ro", uri=True)
@@ -144,9 +249,18 @@ def lista(stare, plx: str) -> dict:
             "fisa_url": url,
             "avertisment": "Sursa nu este disponibilă; sunt afișate importurile locale.",
         }
-    docs = descopera(html, url)
+    discovered = descopera_detaliat(html, url)
+    docs = discovered["documente"]
+    unavailable = [{**doc, "status": "unavailable"} for doc in discovered["indisponibile"]]
+    salveaza_linkuri(
+        stare,
+        plx,
+        [{**doc, "status": "available"} for doc in docs] + unavailable,
+        url,
+    )
     return {
         "documente": docs[:100],
+        "documente_indisponibile": unavailable[:100],
         "trunchiat": len(docs) > 100,
         "fisa_url": url,
         "versiuni": history,

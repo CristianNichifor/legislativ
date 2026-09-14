@@ -138,6 +138,17 @@ def _document_matches(document, *needles):
     return any(needle in folded for needle in needles)
 
 
+def _document_category(document):
+    folded = _fold((document.get("label") or "") + " " + (document.get("url") or ""))
+    if "raport" in folded:
+        return "report"
+    if "aviz" in folded or "punct de vedere" in folded:
+        return "opinion"
+    if "vot" in folded or "voturi" in folded:
+        return "vote"
+    return "document"
+
+
 def _event_documents(key, documents):
     if key == "report_filed":
         needles = ("raport",)
@@ -169,11 +180,24 @@ def parliamentary_evidence_summary(*, documents=(), events=()):
         "plenary": sum(1 for event in events if event.get("key") == "plenary_agenda"),
     }
     available_links = sum(1 for doc in documents if doc.get("url"))
+    unavailable_links = sum(1 for doc in documents if doc.get("status") == "unavailable")
+    document_counts = {"reports": 0, "opinions": 0, "votes": 0}
+    for doc in documents:
+        category = _document_category(doc)
+        if category == "report":
+            document_counts["reports"] += 1
+        elif category == "opinion":
+            document_counts["opinions"] += 1
+        elif category == "vote":
+            document_counts["votes"] += 1
+    for key, value in document_counts.items():
+        counts[key] = max(counts[key], value)
     missing = [key for key, value in counts.items() if key != "documents" and not value]
     return {
         "contract": "parliamentary-project-evidence-summary-v1",
         "counts": counts,
         "available_document_links": available_links,
+        "unavailable_document_links": unavailable_links,
         "missing": missing,
         "complete": not missing,
         "next_action": (
@@ -359,7 +383,15 @@ def tracker_events(stare, plx, *, limit=MAX_TRACKER_EVENTS):
 
 
 def _local(stare, plx, detail=False):
-    out = {"versiuni_total": 0, "versiuni": [], "incercari": [], "stare": "metadate"}
+    out = {
+        "versiuni_total": 0,
+        "documente_total": 0,
+        "documente_indisponibile_total": 0,
+        "documente_descoperite": [],
+        "versiuni": [],
+        "incercari": [],
+        "stare": "metadate",
+    }
     path = documente.cale_store(stare)
     if not path.exists():
         return out
@@ -383,6 +415,26 @@ def _local(stare, plx, detail=False):
                         (plx, MAX_RECORDS),
                     )
                 ]
+        if "document_links" in tables:
+            out["documente_total"] = con.execute(
+                "SELECT count(*) FROM document_links WHERE plx_id=?", (plx,)
+            ).fetchone()[0]
+            out["documente_indisponibile_total"] = con.execute(
+                "SELECT count(*) FROM document_links WHERE plx_id=? AND status='unavailable'",
+                (plx,),
+            ).fetchone()[0]
+            if out["documente_total"] and out["stare"] == "metadate":
+                out["stare"] = "descoperit"
+            if detail:
+                out["documente_descoperite"] = [
+                    dict(r)
+                    for r in con.execute(
+                        "SELECT id, url, label, source_url, status, discovered_at "
+                        "FROM document_links WHERE plx_id=? "
+                        "ORDER BY status, discovered_at DESC, id LIMIT ?",
+                        (plx, MAX_RECORDS),
+                    )
+                ]
         if "achizitii" in tables:
             rows = [
                 dict(r)
@@ -398,6 +450,7 @@ def _local(stare, plx, detail=False):
                 out["incercari"] = rows[:MAX_RECORDS]
                 out["incercari_trunchiate"] = len(rows) > MAX_RECORDS
         out["versiuni_trunchiate"] = out["versiuni_total"] > len(out["versiuni"])
+        out["documente_trunchiate"] = out["documente_total"] > len(out["documente_descoperite"])
     return out
 
 
@@ -435,7 +488,7 @@ def detaliu(stare, plx):
     meta = _metadata(_initiative(stare, plx))
     local = _local(stare, plx, detail=True)
     events = tracker_events(stare, plx)
-    documents = [*local.get("versiuni", [])]
+    documents = [*local.get("documente_descoperite", []), *local.get("versiuni", [])]
     return {
         **meta,
         **local,
@@ -473,6 +526,21 @@ def _record(stare, plx, operation, url, version, error=None):
         )
 
 
+def _record_unavailable_documents(stare, plx, result):
+    for doc in result.get("documente_indisponibile") or []:
+        url = doc.get("url") or doc.get("label") or result.get("fisa_url") or ""
+        if not url:
+            continue
+        _record(
+            stare,
+            plx,
+            "document_indisponibil",
+            url,
+            None,
+            "Fișa proiectului referă un document care nu este disponibil pentru import automat.",
+        )
+
+
 def executa(stare, request):
     if (
         not isinstance(request, dict)
@@ -502,6 +570,7 @@ def executa(stare, request):
     try:
         if operation == "descopera":
             result = documente.lista(stare, plx)
+            _record_unavailable_documents(stare, plx, result)
             if result.get("avertisment"):
                 raise OSError("Official source unavailable")
         elif operation == "importa":
