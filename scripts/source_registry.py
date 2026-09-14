@@ -797,11 +797,14 @@ def descopera_econsultare(stare, data: dict | None = None) -> dict:
         )
         was_created = source["state"] == "discovered" and not source.get("last_hash")
         content_hash = achizitii_econsultare.snapshot_hash(snapshot)
+        previous_snapshot = _latest_snapshot_payload(stare, source["id"])
         _store_snapshot(
             stare, source["id"], content_hash, snapshot, achizitii_econsultare.PARSER_VERSION
         )
         stored_snapshots += 1
-        events = _persist_econsultare_tracker_event(stare, source["id"], snapshot, content_hash)
+        events = _persist_econsultare_tracker_event(
+            stare, source["id"], snapshot, content_hash, previous_snapshot
+        )
         tracker_events += len(events)
         final_state = (
             "needs_review"
@@ -1139,23 +1142,29 @@ def _manual_documents(value) -> list[dict]:
 def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
     if not isinstance(metadata, dict):
         raise ValueError("Metadata sursă invalidă.")
+    from scripts import achizitii_econsultare
+
     family = row["family"]
     title = _text(metadata.get("title") or row.get("label") or row.get("identifier"), limit=300)
     authority = _text(metadata.get("authority", ""), limit=300)
-    status = _token(metadata.get("status", ""))
+    status = achizitii_econsultare.normalizeaza_status(_text(metadata.get("status", ""), limit=120))
     deadline = _text(metadata.get("deadline", ""), limit=80)
+    deadline_iso = achizitii_econsultare.normalizeaza_data(deadline)
     project_id = _text(
         metadata.get("project_id") or row.get("identifier") or row.get("url"), limit=200
     )
     occurred_at = _text(metadata.get("occurred_at", ""), limit=80)
     documents = _manual_documents(metadata.get("documents"))
     if family in {"consultare_guvern", "consultare_minister"}:
+        document_metadata = achizitii_econsultare._document_metadata(documents)
         summary = {
             "title": title,
             "authority": authority,
-            "status": status or "unknown",
+            "status": status,
             "deadline": deadline,
+            "deadline_iso": deadline_iso,
             "documents": len(documents),
+            "document_metadata": document_metadata,
             "truncated": bool(
                 isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
             ),
@@ -1216,8 +1225,9 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
         "issuer": summary.get("issuer", ""),
         "position": summary.get("position", ""),
         "observations": _text(metadata.get("observations", ""), limit=500),
-        "status": status or ("received" if family == "avize" else "unknown"),
+        "status": status if family in {"consultare_guvern", "consultare_minister"} else "received",
         "deadline": deadline,
+        "deadline_iso": deadline_iso,
         "monitor": summary.get("number", ""),
         "monitor_part": summary.get("part", ""),
         "publication_date": summary.get("date", ""),
@@ -1249,6 +1259,7 @@ def _manual_metadata_hash(snapshot: dict) -> str:
             "observations": snapshot["observations"],
             "status": snapshot["status"],
             "deadline": snapshot["deadline"],
+            "deadline_iso": snapshot.get("deadline_iso", ""),
             "project_id": snapshot["project_id"],
             "occurred_at": snapshot["occurred_at"],
             "documents": snapshot["documents"],
@@ -1375,6 +1386,27 @@ def _store_snapshot(
         con.commit()
 
 
+def _latest_snapshot_payload(stare, source_id: str) -> dict | None:
+    source_id = _token(source_id, required=True)
+    path = cale(stare)
+    if not path.exists():
+        return None
+    with closing(_open(path)) as con:
+        init(con)
+        row = con.execute(
+            "SELECT snapshot_json FROM source_snapshots WHERE source_id=? "
+            "ORDER BY captured_at DESC, seq DESC LIMIT 1",
+            (source_id,),
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        payload = json.loads(row["snapshot_json"])
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _tracker_date(value: str | None) -> str:
     value = (value or "").strip()
     if not value:
@@ -1453,16 +1485,40 @@ def _persist_project_tracker_events(
 
 
 def _persist_econsultare_tracker_event(
-    stare, source_id: str, snapshot: dict, content_hash: str
+    stare,
+    source_id: str,
+    snapshot: dict,
+    content_hash: str,
+    previous_snapshot: dict | None = None,
+) -> list[dict]:
+    from scripts import achizitii_econsultare
+
+    saved = []
+    for event in achizitii_econsultare.tracker_event_candidates(
+        snapshot,
+        source_id=source_id,
+        content_hash=content_hash,
+        observed_at=now(),
+        previous_snapshot=previous_snapshot,
+    ):
+        row = _persist_tracker_event(stare, event)
+        if row:
+            saved.append(row)
+    return saved
+
+
+def _persist_consultation_unavailable_event(
+    stare, source_id: str, row: dict, reason: str, *, family: str | None = None
 ) -> list[dict]:
     from scripts import achizitii_econsultare
 
     saved = _persist_tracker_event(
         stare,
-        achizitii_econsultare.tracker_event_candidate(
-            snapshot,
+        achizitii_econsultare.tracker_event_source_unavailable(
             source_id=source_id,
-            content_hash=content_hash,
+            source_url=row.get("url") or row.get("identifier") or "",
+            source_family=family or row.get("family") or "consultare_econsultare",
+            reason=reason,
             observed_at=now(),
         ),
     )
@@ -1470,7 +1526,11 @@ def _persist_econsultare_tracker_event(
 
 
 def _persist_manual_metadata_tracker_event(
-    stare, source_id: str, snapshot: dict, content_hash: str
+    stare,
+    source_id: str,
+    snapshot: dict,
+    content_hash: str,
+    previous_snapshot: dict | None = None,
 ) -> list[dict]:
     family = snapshot.get("family")
     observed_at = now()
@@ -1514,45 +1574,21 @@ def _persist_manual_metadata_tracker_event(
         )
         return [saved] if saved else []
     if family in {"consultare_guvern", "consultare_minister"}:
-        status = (snapshot.get("status") or "unknown").strip().lower()
-        event_type = (
-            "public_consultation_closed"
-            if status in {"closed", "inchisa", "închisă"}
-            else "public_consultation_opened"
-        )
-        deadline = snapshot.get("deadline") or snapshot.get("occurred_at")
-        payload = {
-            "authority": snapshot.get("authority", ""),
-            "project_url": snapshot.get("url", ""),
-            "status": status,
-        }
-        if event_type == "public_consultation_closed":
-            payload["closed_at"] = _tracker_date(deadline)
-        else:
-            if deadline:
-                payload["deadline"] = _tracker_date(deadline)
-            payload["attachment_hashes"] = [
-                item["content_hash"]
-                for item in snapshot.get("documents", [])
-                if item.get("content_hash")
-            ][:100]
-            payload["documents"] = snapshot.get("documents", [])[:100]
-        saved = _persist_tracker_event(
-            stare,
-            {
-                "event_type": event_type,
-                "project_id": snapshot.get("project_id") or snapshot.get("url") or source_id,
-                "source_family": family,
-                "source_id": source_id,
-                "source_url": snapshot.get("url", ""),
-                "occurred_at": _tracker_date(deadline),
-                "observed_at": observed_at,
-                "title": snapshot.get("title") or "Consultare publică",
-                "payload": {key: value for key, value in payload.items() if value not in ("", [])},
-                "content_hash": content_hash,
-            },
-        )
-        return [saved] if saved else []
+        from scripts import achizitii_econsultare
+
+        saved = []
+        for event in achizitii_econsultare.tracker_event_candidates(
+            snapshot,
+            source_id=source_id,
+            content_hash=content_hash,
+            observed_at=observed_at,
+            previous_snapshot=previous_snapshot,
+            source_family=family,
+        ):
+            row = _persist_tracker_event(stare, event)
+            if row:
+                saved.append(row)
+        return saved
     if family == "avize" and snapshot.get("issuer") and snapshot.get("project_id"):
         payload = {
             "issuer": snapshot.get("issuer", ""),
@@ -1760,17 +1796,24 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
     try:
         result = achizitii_econsultare.sincronizeaza(_econsultare_url(row))
     except ValueError as exc:
-        return inregistreaza(
-            stare,
-            {
-                "id": source_id,
-                "state": "failed",
-                "error_category": "fetch_failed",
-                "note": str(exc)[:500],
-            },
+        tracker_sync = _persist_consultation_unavailable_event(
+            stare, source_id, row, "fetch_failed"
+        )
+        return _with_tracker_sync(
+            inregistreaza(
+                stare,
+                {
+                    "id": source_id,
+                    "state": "failed",
+                    "error_category": "fetch_failed",
+                    "note": str(exc)[:500],
+                },
+            ),
+            tracker_sync,
         )
     snapshot = result["snapshot"]
     content_hash = result["content_hash"]
+    previous_snapshot = _latest_snapshot_payload(stare, source_id)
     _store_snapshot(
         stare,
         source_id,
@@ -1778,7 +1821,9 @@ def sincronizeaza_econsultare(stare, source_id: str) -> dict:
         snapshot,
         achizitii_econsultare.PARSER_VERSION,
     )
-    tracker_sync = _persist_econsultare_tracker_event(stare, source_id, snapshot, content_hash)
+    tracker_sync = _persist_econsultare_tracker_event(
+        stare, source_id, snapshot, content_hash, previous_snapshot
+    )
     title = snapshot["summary"].get("title") or snapshot["url"]
     inregistreaza(
         stare,
@@ -1830,8 +1875,11 @@ def sincronizeaza_manual_metadata(stare, source_id: str, metadata: dict | None =
         row = pune_in_coada(stare, source_id)
     snapshot = _manual_metadata_snapshot(row, metadata or {})
     content_hash = _manual_metadata_hash(snapshot)
+    previous_snapshot = _latest_snapshot_payload(stare, source_id)
     _store_snapshot(stare, source_id, content_hash, snapshot, MANUAL_METADATA_PARSER_VERSION)
-    tracker_sync = _persist_manual_metadata_tracker_event(stare, source_id, snapshot, content_hash)
+    tracker_sync = _persist_manual_metadata_tracker_event(
+        stare, source_id, snapshot, content_hash, previous_snapshot
+    )
     inregistreaza(
         stare,
         {
@@ -1845,6 +1893,11 @@ def sincronizeaza_manual_metadata(stare, source_id: str, metadata: dict | None =
     needs_review = not snapshot.get("project_id") or (
         row["family"] == "avize" and not snapshot.get("issuer")
     )
+    if row["family"] in {"consultare_guvern", "consultare_minister"}:
+        summary = snapshot.get("summary") or {}
+        needs_review = needs_review or not summary.get("authority")
+        needs_review = needs_review or not summary.get("deadline_iso")
+        needs_review = needs_review or summary.get("status") == "unknown"
     if row["family"] == "monitorul_oficial_pi":
         needs_review = needs_review or not (
             snapshot.get("monitor") and snapshot.get("publication_date")

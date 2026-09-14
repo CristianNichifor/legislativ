@@ -269,7 +269,9 @@ def test_registry_discovers_econsultare_listing_sources(monkeypatch, tmp_path):
             "authority": "Ministerul Test",
             "status": "open",
             "deadline": "28/09/2026",
+            "deadline_iso": "2026-09-28",
             "documents": 0,
+            "document_metadata": {"total": 0, "by_type": {}, "with_hash": 0, "labels": []},
             "truncated": False,
         },
         "title": "Proiect consultare publică",
@@ -301,7 +303,7 @@ def test_registry_discovers_econsultare_listing_sources(monkeypatch, tmp_path):
     assert out["created"] == 1
     assert out["updated"] == 0
     assert out["stored_snapshots"] == 1
-    assert out["tracker_events"] == 1
+    assert out["tracker_events"] == 2
     assert out["sources"][0]["identifier"] == detail_url
     assert out["sources"][0]["state"] == "changed"
     selected = registry.lista(stare, {"id": [out["sources"][0]["id"]]})["sources"][0]
@@ -309,8 +311,12 @@ def test_registry_discovers_econsultare_listing_sources(monkeypatch, tmp_path):
     events = tracker_events.lista(
         stare, {"source_family": ["consultare_econsultare"], "limit": ["10"]}
     )
-    assert events["total"] == 1
-    assert events["events"][0]["project_id"] == detail_url
+    assert events["total"] == 2
+    assert {event["event_type"] for event in events["events"]} == {
+        "public_consultation_announced",
+        "public_consultation_opened",
+    }
+    assert all(event["project_id"] == detail_url for event in events["events"])
 
     again = registry.executa(stare, {"action": "discover_econsultare", "limit": 20})
     assert again["created"] == 0
@@ -614,8 +620,11 @@ def test_registry_syncs_ministry_consultation_metadata_to_tracker(tmp_path):
     assert synced["sync_status"]["can_sync"] is True
     assert synced["tracker_sync"] == {
         "contract": "source-sync-tracker-events-v1",
-        "stored": 1,
-        "event_types": {"public_consultation_opened": 1},
+        "stored": 2,
+        "event_types": {
+            "public_consultation_announced": 1,
+            "public_consultation_opened": 1,
+        },
     }
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
     assert selected["snapshots"][0]["summary"] == {
@@ -623,18 +632,67 @@ def test_registry_syncs_ministry_consultation_metadata_to_tracker(tmp_path):
         "authority": "Ministerul Dezvoltării",
         "status": "open",
         "deadline": "15.10.2026",
+        "deadline_iso": "2026-10-15",
         "documents": 1,
+        "document_metadata": {
+            "total": 1,
+            "by_type": {"pdf": 1},
+            "with_hash": 1,
+            "labels": ["Proiect act normativ"],
+        },
         "truncated": False,
     }
     events = tracker_events.lista(stare, {"source_family": ["consultare_minister"]})
-    assert events["total"] == 1
-    assert events["events"][0]["event_type"] == "public_consultation_opened"
-    assert events["events"][0]["project_id"] == "mdlap-consultare-1"
-    assert events["events"][0]["payload"]["attachment_hashes"] == ["e" * 64]
-    assert events["events"][0]["content_hash"] == synced["last_hash"]
+    assert events["total"] == 2
+    by_type = {event["event_type"]: event for event in events["events"]}
+    assert by_type["public_consultation_opened"]["project_id"] == "mdlap-consultare-1"
+    assert by_type["public_consultation_opened"]["payload"]["attachment_hashes"] == ["e" * 64]
+    assert by_type["public_consultation_opened"]["content_hash"] == synced["last_hash"]
 
     listed = registry.lista(stare)
     assert listed["counts"]["consultare_minister:changed"] == 1
+
+
+def test_registry_ministry_consultation_missing_metadata_enters_review_queue(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "consultare_minister",
+            "identifier": "minister-partial-1",
+            "url": "https://www.mdlpa.ro/pages/consultare-partiala",
+            "label": "Consultare ministerială incompletă",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "title": "Proiect fără metadata completă",
+                "project_id": "minister-partial-1",
+            },
+        },
+    )
+
+    assert synced["state"] == "needs_review"
+    assert synced["tracker_sync"]["event_types"]["public_consultation_metadata_review"] == 1
+    review_queue = tracker_events.lista(
+        stare,
+        {
+            "source_family": ["consultare_minister"],
+            "event_type": ["public_consultation_metadata_review"],
+            "reviewed": ["0"],
+        },
+    )
+    assert review_queue["total"] == 1
+    assert review_queue["events"][0]["payload"]["missing"] == [
+        "authority",
+        "status",
+        "deadline",
+    ]
 
 
 def test_registry_syncs_government_consultation_metadata_to_tracker(tmp_path):
@@ -676,8 +734,11 @@ def test_registry_syncs_government_consultation_metadata_to_tracker(tmp_path):
     assert synced["parser_version"] == registry.MANUAL_METADATA_PARSER_VERSION
     assert synced["tracker_sync"] == {
         "contract": "source-sync-tracker-events-v1",
-        "stored": 1,
-        "event_types": {"public_consultation_opened": 1},
+        "stored": 2,
+        "event_types": {
+            "public_consultation_announced": 1,
+            "public_consultation_opened": 1,
+        },
     }
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
     assert selected["snapshots"][0]["summary"] == {
@@ -685,15 +746,22 @@ def test_registry_syncs_government_consultation_metadata_to_tracker(tmp_path):
         "authority": "Guvernul României",
         "status": "open",
         "deadline": "15.10.2026",
+        "deadline_iso": "2026-10-15",
         "documents": 1,
+        "document_metadata": {
+            "total": 1,
+            "by_type": {"pdf": 1},
+            "with_hash": 1,
+            "labels": ["Proiect hotărâre"],
+        },
         "truncated": False,
     }
     events = tracker_events.lista(stare, {"source_family": ["consultare_guvern"]})
-    assert events["total"] == 1
-    assert events["events"][0]["event_type"] == "public_consultation_opened"
-    assert events["events"][0]["project_id"] == "gov-consultare-1"
-    assert events["events"][0]["payload"]["authority"] == "Guvernul României"
-    assert events["events"][0]["payload"]["attachment_hashes"] == ["f" * 64]
+    assert events["total"] == 2
+    by_type = {event["event_type"]: event for event in events["events"]}
+    assert by_type["public_consultation_opened"]["project_id"] == "gov-consultare-1"
+    assert by_type["public_consultation_opened"]["payload"]["authority"] == "Guvernul României"
+    assert by_type["public_consultation_opened"]["payload"]["attachment_hashes"] == ["f" * 64]
 
 
 def test_registry_discovers_government_consultation_metadata(tmp_path):
@@ -712,13 +780,16 @@ def test_registry_discovers_government_consultation_metadata(tmp_path):
     )
 
     assert out["contract"] == "source-registry-guvern-consultation-discovery-v1"
-    assert out["tracker_events"] == 1
+    assert out["tracker_events"] == 2
     assert out["source"]["family"] == "consultare_guvern"
     assert out["source"]["state"] == "changed"
-    assert out["source"]["tracker_sync"]["event_types"] == {"public_consultation_opened": 1}
+    assert out["source"]["tracker_sync"]["event_types"] == {
+        "public_consultation_announced": 1,
+        "public_consultation_opened": 1,
+    }
     events = tracker_events.lista(stare, {"source_family": ["consultare_guvern"]})
-    assert events["total"] == 1
-    assert events["events"][0]["project_id"] == "HG servicii publice"
+    assert events["total"] == 2
+    assert all(event["project_id"] == "HG servicii publice" for event in events["events"])
 
 
 def test_registry_discovers_government_consultation_rejects_non_sgg(tmp_path):

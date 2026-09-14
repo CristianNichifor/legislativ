@@ -77,7 +77,14 @@ def test_econsultare_parser_extracts_bounded_snapshot():
         "authority": "Ministerul Dezvoltării",
         "status": "open",
         "deadline": "15.10.2026",
+        "deadline_iso": "2026-10-15",
         "documents": 2,
+        "document_metadata": {
+            "total": 2,
+            "by_type": {"docx": 1, "pdf": 1},
+            "with_hash": 0,
+            "labels": ["Notă de fundamentare", "Proiect act normativ"],
+        },
         "truncated": False,
     }
     assert out["documents"] == [
@@ -137,11 +144,51 @@ def test_econsultare_snapshot_builds_open_tracker_event_candidate():
             "project_url": "https://e-consultare.gov.ro/consultare/123",
             "status": "open",
             "deadline": "2026-10-15T00:00:00+00:00",
-            "attachment_hashes": [],
             "documents": snapshot["documents"],
+            "document_metadata": snapshot["document_metadata"],
         },
         "content_hash": "a" * 64,
     }
+
+
+def test_econsultare_snapshot_builds_first_class_tracker_events():
+    previous = ec.parseaza(HTML, "https://e-consultare.gov.ro/consultare/123")
+    snapshot = ec.parseaza(
+        HTML.replace(b"15.10.2026", b"20.10.2026").replace(
+            b"</body>", b'<a href="/upload/impact.pdf">Studiu impact</a></body>'
+        ),
+        "https://e-consultare.gov.ro/consultare/123",
+    )
+
+    events = ec.tracker_event_candidates(
+        snapshot,
+        previous_snapshot=previous,
+        source_id="src_123",
+        content_hash="c" * 64,
+        observed_at="2026-09-13T10:00:00+00:00",
+    )
+
+    by_type = {event["event_type"]: event for event in events}
+    assert set(by_type) == {
+        "public_consultation_announced",
+        "public_consultation_opened",
+        "public_consultation_deadline_changed",
+        "public_consultation_document_added",
+    }
+    assert (
+        by_type["public_consultation_deadline_changed"]["payload"]["previous_deadline"]
+        == "2026-10-15T00:00:00+00:00"
+    )
+    assert (
+        by_type["public_consultation_deadline_changed"]["payload"]["deadline"]
+        == "2026-10-20T00:00:00+00:00"
+    )
+    assert by_type["public_consultation_document_added"]["payload"]["documents"] == [
+        {
+            "url": "https://e-consultare.gov.ro/upload/impact.pdf",
+            "label": "Studiu impact",
+        }
+    ]
 
 
 def test_econsultare_snapshot_builds_closed_tracker_event_candidate():
@@ -182,6 +229,12 @@ def test_econsultare_tracker_candidate_uses_observed_at_without_deadline():
     assert candidate["event_type"] == "public_consultation_opened"
     assert candidate["occurred_at"] == "2026-09-13T10:00:00+00:00"
     assert "deadline" not in candidate["payload"]
+    events = ec.tracker_event_candidates(
+        snapshot,
+        source_id="src_123",
+        observed_at="2026-09-13T10:00:00+00:00",
+    )
+    assert events[-1]["event_type"] == "public_consultation_metadata_review"
 
 
 def test_registry_syncs_one_econsultare_source(monkeypatch, tmp_path):
@@ -208,13 +261,16 @@ def test_registry_syncs_one_econsultare_source(monkeypatch, tmp_path):
     events = tracker_events.lista(
         stare, {"source_family": ["consultare_econsultare"], "limit": ["10"]}
     )
-    assert events["total"] == 1
-    assert events["events"][0]["event_type"] == "public_consultation_opened"
-    assert events["events"][0]["project_id"] == "https://e-consultare.gov.ro/consultare/123"
-    assert events["events"][0]["occurred_at"] == "2026-10-15T00:00:00+00:00"
-    assert events["events"][0]["payload"]["authority"] == "Ministerul Dezvoltării"
-    assert events["events"][0]["source_id"] == row["id"]
-    assert events["events"][0]["content_hash"] == changed["last_hash"]
+    assert events["total"] == 2
+    by_type = {event["event_type"]: event for event in events["events"]}
+    assert {"public_consultation_announced", "public_consultation_opened"} <= set(by_type)
+    assert by_type["public_consultation_opened"]["project_id"] == (
+        "https://e-consultare.gov.ro/consultare/123"
+    )
+    assert by_type["public_consultation_opened"]["occurred_at"] == "2026-10-15T00:00:00+00:00"
+    assert by_type["public_consultation_opened"]["payload"]["authority"] == "Ministerul Dezvoltării"
+    assert by_type["public_consultation_opened"]["source_id"] == row["id"]
+    assert by_type["public_consultation_opened"]["content_hash"] == changed["last_hash"]
 
     unchanged = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert unchanged["state"] == "unchanged"
@@ -238,12 +294,14 @@ def test_registry_econsultare_changed_and_needs_review(monkeypatch, tmp_path):
     changed = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert changed["state"] == "changed"
     assert changed["last_hash"] != first["last_hash"]
+    assert changed["tracker_sync"]["event_types"]["public_consultation_deadline_changed"] == 1
 
     bare = b"<html><body><p>Consultare publica fara documente.</p></body></html>"
     monkeypatch.setattr(ec, "descarca", lambda url: (bare, 200))
     review = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert review["state"] == "needs_review"
     assert review["last_error"] == ""
+    assert review["tracker_sync"]["event_types"]["public_consultation_metadata_review"] == 1
 
 
 def test_registry_econsultare_records_bounded_failure(monkeypatch, tmp_path):
@@ -261,3 +319,4 @@ def test_registry_econsultare_records_bounded_failure(monkeypatch, tmp_path):
 
     assert failed["state"] == "failed"
     assert failed["last_error"] == "fetch_failed"
+    assert failed["tracker_sync"]["event_types"] == {"public_consultation_source_unavailable": 1}

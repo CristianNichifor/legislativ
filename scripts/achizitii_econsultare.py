@@ -29,6 +29,7 @@ DATE = re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b")
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HREF = re.compile(r'href=["\']([^"\']+)["\']', re.I)
 TAG = re.compile(r"<[^>]+>")
+DOCUMENT_EXTENSIONS = (".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx")
 
 
 def url_oficial(url: str) -> str:
@@ -81,7 +82,7 @@ class _Parser(HTMLParser):
                 return
             url = urljoin(self.baza, href)
             path = urlsplit(url).path.lower()
-            if path.endswith((".pdf", ".doc", ".docx", ".odt", ".rtf", ".xls", ".xlsx")):
+            if path.endswith(DOCUMENT_EXTENSIONS):
                 self.current_link = {"url": url, "label": attrs.get("title", "")}
 
     def handle_data(self, data):
@@ -133,6 +134,68 @@ def _date_after(labels: tuple[str, ...], text: str) -> str:
     return ""
 
 
+def normalizeaza_data(value: str | None) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if DATE.fullmatch(value):
+        day, month, year = re.split(r"[./-]", value)
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+    if ISO_DATE.fullmatch(value):
+        return value
+    return ""
+
+
+def normalizeaza_status(value: str | None) -> str:
+    text = " ".join((value or "").strip().lower().split())
+    if not text:
+        return "unknown"
+    if text in {"open", "opened", "deschisa", "deschisă"}:
+        return "open"
+    if text in {"closed", "inchisa", "închisă"}:
+        return "closed"
+    if text in {"announced", "anuntata", "anunțată"}:
+        return "announced"
+    if any(term in text for term in ("închis", "inchis", "finalizat", "expirat", "arhivat")):
+        return "closed"
+    if any(
+        term in text
+        for term in (
+            "consultare public",
+            "în consultare",
+            "in consultare",
+            "deschis",
+            "activ",
+            "termen limită",
+            "termen limita",
+        )
+    ):
+        return "open"
+    if any(term in text for term in ("anunț", "anunt", "publicat", "transparen")):
+        return "announced"
+    return "unknown"
+
+
+def _document_metadata(documents: list[dict]) -> dict:
+    by_type: dict[str, int] = {}
+    hashed = 0
+    for document in documents:
+        path = urlsplit(document.get("url", "")).path.lower()
+        suffix = Path(path).suffix.lstrip(".") or "unknown"
+        by_type[suffix] = by_type.get(suffix, 0) + 1
+        value = document.get("content_hash") or document.get("hash") or document.get("sha256") or ""
+        if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value):
+            hashed += 1
+    return {
+        "total": len(documents),
+        "by_type": dict(sorted(by_type.items())),
+        "with_hash": hashed,
+        "labels": [
+            document.get("label", "") for document in documents[:10] if document.get("label")
+        ],
+    }
+
+
 def parseaza(data: bytes, baza: str) -> dict:
     url = url_oficial(baza)
     html = data.decode("utf-8", errors="replace")
@@ -145,15 +208,13 @@ def parseaza(data: bytes, baza: str) -> dict:
     deadline = _date_after(("termen limită", "termen de transmitere", "până la data de"), text)
     if not deadline and dates:
         deadline = dates[-1]
-    status = (
-        "open"
-        if re.search(r"\b(în consultare|consultare publică|termen limită)\b", text, re.I)
-        else "unknown"
-    )
+    status = normalizeaza_status(text)
     documents = [
         {"url": item["url"], "label": item["label"]}
         for item in sorted(parser.links.values(), key=lambda item: item["url"])[:100]
     ]
+    deadline_iso = normalizeaza_data(deadline)
+    document_summary = _document_metadata(documents)
     return {
         "contract": "econsultare-source-snapshot-v1",
         "family": "consultare_econsultare",
@@ -163,14 +224,18 @@ def parseaza(data: bytes, baza: str) -> dict:
             "authority": authority,
             "status": status,
             "deadline": deadline,
+            "deadline_iso": deadline_iso,
             "documents": len(documents),
+            "document_metadata": document_summary,
             "truncated": len(parser.links) > 100,
         },
         "title": title[:300],
         "authority": authority,
         "status": status,
         "deadline": deadline,
+        "deadline_iso": deadline_iso,
         "documents": documents,
+        "document_metadata": document_summary,
         "truncated": len(parser.links) > 100,
     }
 
@@ -215,12 +280,7 @@ def _deadline_from_terms(value: str) -> str:
 
 
 def _status_from_grid(value: str) -> str:
-    text = _plain_html(value).lower()
-    if "consultare" in text and "public" in text:
-        return "open"
-    if "închis" in text or "inchis" in text or "finalizat" in text:
-        return "closed"
-    return "unknown"
+    return normalizeaza_status(_plain_html(value))
 
 
 def actiongrid_row_hash(row: dict) -> str:
@@ -242,7 +302,9 @@ def snapshot_din_actiongrid(row: dict, *, listing_url: str) -> dict:
     authority = _authority_from_details(title_html)
     status = _status_from_grid(_field(row, "StatusProiect"))
     deadline = _deadline_from_terms(terms)
+    deadline_iso = normalizeaza_data(deadline)
     source_hash = actiongrid_row_hash(row)
+    document_summary = _document_metadata([])
     return {
         "contract": "econsultare-source-snapshot-v1",
         "family": "consultare_econsultare",
@@ -252,14 +314,18 @@ def snapshot_din_actiongrid(row: dict, *, listing_url: str) -> dict:
             "authority": authority,
             "status": status,
             "deadline": deadline,
+            "deadline_iso": deadline_iso,
             "documents": 0,
+            "document_metadata": document_summary,
             "truncated": False,
         },
         "title": title,
         "authority": authority,
         "status": status,
         "deadline": deadline,
+        "deadline_iso": deadline_iso,
         "documents": [],
+        "document_metadata": document_summary,
         "truncated": False,
         "source_metadata": {
             "contract": "econsultare-actiongrid-row-v1",
@@ -312,6 +378,7 @@ def snapshot_hash(snapshot: dict) -> str:
         "contract": snapshot["contract"],
         "url": snapshot["url"],
         "summary": snapshot["summary"],
+        "document_metadata": snapshot.get("document_metadata", {}),
         "documents": snapshot["documents"],
         "truncated": snapshot["truncated"],
     }
@@ -332,6 +399,10 @@ def _tracker_date(value: str | None, *, fallback: str | None = None) -> str:
     return value
 
 
+def _event_date(value: str | None, fallback: str) -> str:
+    return _tracker_date(value, fallback=fallback)
+
+
 def _attachment_hashes(documents: list[dict]) -> list[str]:
     hashes: list[str] = []
     for document in documents:
@@ -339,6 +410,28 @@ def _attachment_hashes(documents: list[dict]) -> list[str]:
         if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{64}", value):
             hashes.append(value)
     return hashes[:100]
+
+
+def _missing_fields(summary: dict) -> list[str]:
+    missing = []
+    if not (summary.get("authority") or "").strip():
+        missing.append("authority")
+    if normalizeaza_status(str(summary.get("status") or "")) == "unknown":
+        missing.append("status")
+    if not (summary.get("deadline_iso") or normalizeaza_data(str(summary.get("deadline") or ""))):
+        missing.append("deadline")
+    return missing
+
+
+def _document_key(document: dict) -> str:
+    return str(
+        document.get("content_hash")
+        or document.get("hash")
+        or document.get("sha256")
+        or document.get("url")
+        or document.get("label")
+        or ""
+    )
 
 
 def tracker_event_candidate(
@@ -349,39 +442,197 @@ def tracker_event_candidate(
     observed_at: str | None = None,
 ) -> dict:
     """Return an add-ready tracker event candidate for one e-consultare snapshot."""
+    candidates = tracker_event_candidates(
+        snapshot,
+        source_id=source_id,
+        content_hash=content_hash,
+        observed_at=observed_at,
+    )
+    for event in candidates:
+        if event["event_type"] in {"public_consultation_opened", "public_consultation_closed"}:
+            return event
+    return candidates[0]
+
+
+def tracker_event_candidates(
+    snapshot: dict,
+    *,
+    source_id: str = "",
+    content_hash: str = "",
+    observed_at: str | None = None,
+    previous_snapshot: dict | None = None,
+    source_family: str = "consultare_econsultare",
+) -> list[dict]:
+    """Return add-ready tracker events for one consultation snapshot."""
     summary = snapshot.get("summary") or {}
-    status = str(summary.get("status") or snapshot.get("status") or "unknown").strip().lower()
+    status = normalizeaza_status(str(summary.get("status") or snapshot.get("status") or "unknown"))
     documents = snapshot.get("documents") if isinstance(snapshot.get("documents"), list) else []
     url = snapshot.get("url") or ""
     title = summary.get("title") or snapshot.get("title") or "Consultare publică"
     authority = summary.get("authority") or snapshot.get("authority", "")
-    deadline = summary.get("deadline") or snapshot.get("deadline", "")
-    fallback_date = observed_at or datetime.now(UTC).isoformat()
-    event_type = (
-        "public_consultation_closed" if status == "closed" else "public_consultation_opened"
+    deadline = (
+        summary.get("deadline_iso")
+        or snapshot.get("deadline_iso")
+        or summary.get("deadline")
+        or snapshot.get("deadline", "")
     )
-    payload = {
+    fallback_date = observed_at or datetime.now(UTC).isoformat()
+    project_id = snapshot.get("project_id") or url or source_id
+    base_payload = {
         "authority": authority,
         "project_url": url,
         "status": status or "unknown",
     }
-    if event_type == "public_consultation_closed":
-        payload["closed_at"] = _tracker_date(deadline, fallback=fallback_date)
+    events = [
+        {
+            "event_type": "public_consultation_announced",
+            "project_id": project_id,
+            "source_family": source_family,
+            "source_id": source_id,
+            "source_url": url,
+            "occurred_at": _event_date(
+                (snapshot.get("source_metadata") or {}).get("published")
+                or (snapshot.get("source_metadata") or {}).get("date_published"),
+                fallback_date,
+            ),
+            "observed_at": observed_at or "",
+            "title": title,
+            "payload": {key: value for key, value in base_payload.items() if value not in ("", [])},
+            "content_hash": content_hash,
+        }
+    ]
+    if status == "closed":
+        payload = {**base_payload, "closed_at": _event_date(deadline, fallback_date)}
+        event_type = "public_consultation_closed"
     else:
-        payload["deadline"] = _tracker_date(deadline, fallback=fallback_date) if deadline else ""
-        payload["attachment_hashes"] = _attachment_hashes(documents)
-        payload["documents"] = documents[:100]
+        payload = {
+            **base_payload,
+            "deadline": _event_date(deadline, fallback_date) if deadline else "",
+            "attachment_hashes": _attachment_hashes(documents),
+            "documents": documents[:100],
+            "document_metadata": (
+                snapshot.get("document_metadata") or summary.get("document_metadata") or {}
+            ),
+        }
+        event_type = "public_consultation_opened"
+    events.append(
+        {
+            "event_type": event_type,
+            "project_id": project_id,
+            "source_family": source_family,
+            "source_id": source_id,
+            "source_url": url,
+            "occurred_at": _event_date(deadline, fallback_date),
+            "observed_at": observed_at or "",
+            "title": title,
+            "payload": {key: value for key, value in payload.items() if value not in ("", [])},
+            "content_hash": content_hash,
+        }
+    )
+    if previous_snapshot:
+        previous_summary = previous_snapshot.get("summary") or {}
+        previous_deadline = (
+            previous_summary.get("deadline_iso")
+            or previous_snapshot.get("deadline_iso")
+            or previous_summary.get("deadline")
+            or previous_snapshot.get("deadline")
+            or ""
+        )
+        if normalizeaza_data(str(previous_deadline)) != normalizeaza_data(str(deadline)):
+            events.append(
+                {
+                    "event_type": "public_consultation_deadline_changed",
+                    "project_id": project_id,
+                    "source_family": source_family,
+                    "source_id": source_id,
+                    "source_url": url,
+                    "occurred_at": _event_date(deadline, fallback_date),
+                    "observed_at": observed_at or "",
+                    "title": title,
+                    "payload": {
+                        **base_payload,
+                        "previous_deadline": (
+                            _event_date(previous_deadline, fallback_date)
+                            if previous_deadline
+                            else ""
+                        ),
+                        "deadline": _event_date(deadline, fallback_date) if deadline else "",
+                    },
+                    "content_hash": content_hash,
+                }
+            )
+        previous_docs = {
+            _document_key(document)
+            for document in previous_snapshot.get("documents", [])
+            if _document_key(document)
+        }
+        added_documents = [
+            document
+            for document in documents
+            if _document_key(document) and _document_key(document) not in previous_docs
+        ][:100]
+        if added_documents:
+            events.append(
+                {
+                    "event_type": "public_consultation_document_added",
+                    "project_id": project_id,
+                    "source_family": source_family,
+                    "source_id": source_id,
+                    "source_url": url,
+                    "occurred_at": fallback_date,
+                    "observed_at": observed_at or "",
+                    "title": title,
+                    "payload": {
+                        **base_payload,
+                        "documents": added_documents,
+                        "attachment_hashes": _attachment_hashes(added_documents),
+                    },
+                    "content_hash": content_hash,
+                }
+            )
+    missing = _missing_fields(summary)
+    if missing:
+        events.append(
+            {
+                "event_type": "public_consultation_metadata_review",
+                "project_id": project_id,
+                "source_family": source_family,
+                "source_id": source_id,
+                "source_url": url,
+                "occurred_at": fallback_date,
+                "observed_at": observed_at or "",
+                "title": title,
+                "payload": {**base_payload, "deadline": deadline, "missing": missing},
+                "content_hash": content_hash,
+            }
+        )
+    return events
+
+
+def tracker_event_source_unavailable(
+    *,
+    source_id: str,
+    source_url: str,
+    source_family: str = "consultare_econsultare",
+    reason: str = "fetch_failed",
+    observed_at: str | None = None,
+) -> dict:
+    stamp = observed_at or datetime.now(UTC).isoformat()
     return {
-        "event_type": event_type,
-        "project_id": url or source_id,
-        "source_family": "consultare_econsultare",
+        "event_type": "public_consultation_source_unavailable",
+        "project_id": source_url or source_id,
+        "source_family": source_family,
         "source_id": source_id,
-        "source_url": url,
-        "occurred_at": _tracker_date(deadline, fallback=fallback_date),
-        "observed_at": observed_at or "",
-        "title": title,
-        "payload": {key: value for key, value in payload.items() if value not in (None, "")},
-        "content_hash": content_hash,
+        "source_url": source_url,
+        "occurred_at": stamp,
+        "observed_at": stamp,
+        "title": "Sursă consultare indisponibilă",
+        "payload": {
+            "project_url": source_url,
+            "reason": reason[:120],
+            "missing": ["source"],
+        },
+        "content_hash": "",
     }
 
 
@@ -392,5 +643,5 @@ def sincronizeaza(url: str) -> dict:
         "http_status": http_status,
         "content_hash": snapshot_hash(snapshot),
         "snapshot": snapshot,
-        "needs_review": not snapshot["title"] or snapshot["summary"]["documents"] == 0,
+        "needs_review": bool(_missing_fields(snapshot["summary"])),
     }
