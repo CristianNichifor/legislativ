@@ -12,6 +12,7 @@ import json
 import re
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from scripts import ai_drafting, dosare
 
@@ -20,6 +21,35 @@ AUDIT_CONTRACT = "ai-draft-storage-audit-v1"
 MAX_PROVIDER = 120
 MAX_RESULT = 8000
 BOUNDARIES = {"local_ai", "online_byok", "mcp_handoff"}
+BYOK_REQUEST_CONTRACT = "ai-byok-execution-request-v1"
+BYOK_RESULT_CONTRACT = "ai-byok-execution-result-v1"
+BYOK_RETRYABLE_FAILURES = ["timeout", "quota", "provider_unavailable"]
+BYOK_PROVIDERS = {
+    "openai": {
+        "label": "OpenAI",
+        "default_endpoint": "https://api.openai.com/v1/chat/completions",
+        "default_model": "gpt-4o-mini",
+        "auth_headers": ["Authorization"],
+    },
+    "anthropic": {
+        "label": "Anthropic",
+        "default_endpoint": "https://api.anthropic.com/v1/messages",
+        "default_model": "claude-3-5-haiku-latest",
+        "auth_headers": ["x-api-key"],
+    },
+}
+SECRET_FIELDS = {
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "key",
+    "password",
+    "secret",
+    "token",
+    "x-api-key",
+    "x_api_key",
+}
 
 
 def _now() -> str:
@@ -36,6 +66,18 @@ def _hash_json(value: object) -> str:
 
 def _hash_text(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _contains_secret_field(value: object) -> bool:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).strip().lower().replace("-", "_") in SECRET_FIELDS:
+                return True
+            if _contains_secret_field(item):
+                return True
+    elif isinstance(value, list):
+        return any(_contains_secret_field(item) for item in value)
+    return False
 
 
 def _provider(value: object, boundary: str) -> str:
@@ -195,6 +237,8 @@ def preview(request: dict) -> dict:
 
 def execute(path: Path | str, request: dict) -> dict:
     required = {"id", "dosar_id", "boundary", "draft", "provider", "approved", "result_text"}
+    if _contains_secret_field(request):
+        raise ValueError("Credentialele BYOK nu se trimit serverului.")
     if not isinstance(request, dict) or set(request) != required:
         raise ValueError("Cerere de finalizare AI invalidă.")
     audit_id = dosare._id(request["id"])
@@ -276,6 +320,198 @@ def execute(path: Path | str, request: dict) -> dict:
             ),
         )
     return read(path, dossier_id, audit_id)
+
+
+def _byok_provider(value: object) -> str:
+    provider = str(value or "openai").strip().lower().replace("-", "_")
+    if provider not in BYOK_PROVIDERS:
+        raise ValueError("Furnizor BYOK neacceptat.")
+    return provider
+
+
+def _https_endpoint(value: object, provider: str) -> str:
+    endpoint = dosare._text(value or BYOK_PROVIDERS[provider]["default_endpoint"], 500, True)
+    parsed = urlparse(endpoint)
+    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+        raise ValueError("Endpoint BYOK invalid.")
+    host = parsed.hostname or ""
+    if provider == "openai" and not (
+        host in {"api.openai.com", "api.openai.test"}
+        or host.endswith(".openai.com")
+        or host.endswith(".openai.test")
+    ):
+        raise ValueError("Endpoint OpenAI BYOK invalid.")
+    if provider == "anthropic" and not (
+        host in {"api.anthropic.com", "api.anthropic.test"}
+        or host.endswith(".anthropic.com")
+        or host.endswith(".anthropic.test")
+    ):
+        raise ValueError("Endpoint Anthropic BYOK invalid.")
+    return endpoint
+
+
+def _int_range(value: object, default: int, minimum: int, maximum: int, label: str) -> int:
+    if value in (None, ""):
+        return default
+    try:
+        number = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} BYOK invalid.") from exc
+    if not minimum <= number <= maximum:
+        raise ValueError(f"{label} BYOK invalid.")
+    return number
+
+
+def _byok_body(provider: str, model: str, plan: dict) -> dict:
+    if provider == "anthropic":
+        return {
+            "model": model,
+            "max_tokens": ai_drafting.ESTIMATED_OUTPUT_TOKENS,
+            "temperature": 0.2,
+            "system": plan["system"],
+            "messages": [{"role": "user", "content": plan["prompt"]}],
+        }
+    return {
+        "model": model,
+        "max_tokens": ai_drafting.ESTIMATED_OUTPUT_TOKENS,
+        "temperature": 0.2,
+        "stream": False,
+        "messages": [
+            {"role": "system", "content": plan["system"]},
+            {"role": "user", "content": plan["prompt"]},
+        ],
+    }
+
+
+def byok_request(request: dict) -> dict:
+    """Build the browser-executed BYOK call contract without accepting credentials."""
+
+    required = {"draft", "provider", "model", "endpoint", "timeout_ms", "max_retries"}
+    if _contains_secret_field(request):
+        raise ValueError("Credentialele BYOK nu se trimit serverului.")
+    if not isinstance(request, dict) or set(request) != required:
+        raise ValueError("Cerere BYOK invalidă.")
+    provider = _byok_provider(request["provider"])
+    model = dosare._text(
+        request.get("model") or BYOK_PROVIDERS[provider]["default_model"], 120, True
+    )
+    endpoint = _https_endpoint(request.get("endpoint"), provider)
+    timeout_ms = _int_range(request.get("timeout_ms"), 45000, 1000, 120000, "Timeout")
+    max_retries = _int_range(request.get("max_retries"), 1, 0, 2, "Retry")
+    plan = ai_drafting.preview(request["draft"])
+    body = _byok_body(provider, model, plan)
+    body_sha = _hash_json(body)
+    created_at = _now()
+    return {
+        "contract": BYOK_REQUEST_CONTRACT,
+        "status": "ready_for_browser_execution",
+        "provider": provider,
+        "provider_label": BYOK_PROVIDERS[provider]["label"],
+        "model": model,
+        "endpoint": endpoint,
+        "method": "POST",
+        "timeout_ms": timeout_ms,
+        "retry_policy": {
+            "contract": "ai-byok-retry-policy-v1",
+            "max_retries": max_retries,
+            "retryable_failures": BYOK_RETRYABLE_FAILURES,
+            "creates_draft_on_failure": False,
+            "result_imported_on_failure": False,
+        },
+        "headers": {
+            "contract": "ai-byok-redacted-headers-v1",
+            "content_type": "application/json",
+            "auth_headers_required": BYOK_PROVIDERS[provider]["auth_headers"],
+            "authorization_value": "browser_session_key_only",
+            "redacted": True,
+            "api_key_included": False,
+        },
+        "body": body,
+        "body_sha256": body_sha,
+        "input_sha256": plan["input_sha256"],
+        "evidence_sha256": plan["evidence_sha256"],
+        "request_sha256": _hash_json(
+            {
+                "provider": provider,
+                "model": model,
+                "endpoint": endpoint,
+                "timeout_ms": timeout_ms,
+                "max_retries": max_retries,
+                "body_sha256": body_sha,
+            }
+        ),
+        "external_approval_payload": plan["external_approval_payload"],
+        "failure_contract": "ai-byok-provider-failure-v1",
+        "failure_states": [
+            ai_drafting.provider_failure_state(code) for code in ai_drafting.BYOK_FAILURE_STATES
+        ],
+        "audit": {
+            "contract": "ai-byok-execution-audit-v1",
+            "event": "ai_byok_request_prepared",
+            "created_at": created_at,
+            "server_calls_model": False,
+            "stores_api_key": False,
+            "api_key_uploaded": False,
+            "app_paid_provider": False,
+            "output_status": "draft_unreviewed",
+            "result_review_state": "unreviewed",
+        },
+        "privacy": {
+            "server_calls_model": False,
+            "stores_api_key": False,
+            "api_key_uploaded": False,
+            "key_storage": "browser_session_only_for_byok",
+            "private_data_excluded": plan["export_manifest"]["private_data_excluded"],
+        },
+        "limitari": [
+            "Serverul pregătește contractul; browserul utilizatorului execută apelul BYOK.",
+            "Cheia API nu este acceptată în payload și nu este inclusă în răspuns.",
+            (
+                "Eșecurile furnizorului nu creează ciorne, constatări acceptate "
+                "sau rezultate importate."
+            ),
+            "Rezultatul valid trebuie salvat ulterior ca draft nerevizuit prin auditul dosarului.",
+        ],
+    }
+
+
+def byok_failure_result(request: dict) -> dict:
+    required = {"request", "failure_code", "provider_status"}
+    if _contains_secret_field(request):
+        raise ValueError("Credentialele BYOK nu se trimit serverului.")
+    if not isinstance(request, dict) or set(request) != required:
+        raise ValueError("Rezultat BYOK invalid.")
+    prepared = request["request"]
+    if not isinstance(prepared, dict) or prepared.get("contract") != BYOK_REQUEST_CONTRACT:
+        raise ValueError("Contract BYOK invalid.")
+    failure = ai_drafting.provider_failure_state(request["failure_code"])
+    provider_status = dosare._text(request.get("provider_status", ""), 120)
+    return {
+        "contract": BYOK_RESULT_CONTRACT,
+        "status": "failed",
+        "request_sha256": prepared["request_sha256"],
+        "provider": prepared["provider"],
+        "model": prepared["model"],
+        "provider_status": provider_status,
+        "failure": {
+            **failure,
+            "creates_draft": False,
+            "result_imported": False,
+            "accepted_findings_created": False,
+            "review_state": "none",
+        },
+        "audit": {
+            "contract": "ai-byok-execution-audit-v1",
+            "event": "ai_byok_execution_failed",
+            "created_at": _now(),
+            "failure_code": failure["failure_code"],
+            "server_calls_model": False,
+            "stores_api_key": False,
+            "api_key_uploaded": False,
+            "output_status": "no_draft_created",
+            "accepted_findings_created": False,
+        },
+    }
 
 
 def read(path: Path | str, dossier_id: str, audit_id: str) -> dict:

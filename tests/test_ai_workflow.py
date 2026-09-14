@@ -94,6 +94,140 @@ def test_preview_shows_cost_privacy_and_approval():
     assert out["cost_estimate"]["server_cost"] == "none"
 
 
+def test_byok_request_contract_builds_openai_payload_without_key():
+    out = ai_workflow.byok_request(
+        {
+            "draft": draft_request(),
+            "provider": "openai",
+            "model": "gpt-test",
+            "endpoint": "https://api.openai.test/v1/chat/completions",
+            "timeout_ms": 30000,
+            "max_retries": 2,
+        }
+    )
+
+    text = json.dumps(out)
+    assert out["contract"] == "ai-byok-execution-request-v1"
+    assert out["status"] == "ready_for_browser_execution"
+    assert out["provider"] == "openai"
+    assert out["method"] == "POST"
+    assert out["timeout_ms"] == 30000
+    assert out["retry_policy"]["contract"] == "ai-byok-retry-policy-v1"
+    assert out["retry_policy"]["retryable_failures"] == [
+        "timeout",
+        "quota",
+        "provider_unavailable",
+    ]
+    assert out["retry_policy"]["creates_draft_on_failure"] is False
+    assert out["headers"]["api_key_included"] is False
+    assert out["headers"]["auth_headers_required"] == ["Authorization"]
+    assert [item["role"] for item in out["body"]["messages"]] == ["system", "user"]
+    assert out["audit"]["server_calls_model"] is False
+    assert out["audit"]["stores_api_key"] is False
+    assert out["audit"]["api_key_uploaded"] is False
+    assert out["audit"]["result_review_state"] == "unreviewed"
+    assert out["privacy"]["key_storage"] == "browser_session_only_for_byok"
+    assert "SECRET" not in text
+
+
+def test_byok_request_contract_builds_anthropic_payload_without_key():
+    out = ai_workflow.byok_request(
+        {
+            "draft": draft_request(),
+            "provider": "anthropic",
+            "model": "claude-test",
+            "endpoint": "https://api.anthropic.test/v1/messages",
+            "timeout_ms": "",
+            "max_retries": "",
+        }
+    )
+
+    assert out["provider"] == "anthropic"
+    assert out["timeout_ms"] == 45000
+    assert out["retry_policy"]["max_retries"] == 1
+    assert out["headers"]["auth_headers_required"] == ["x-api-key"]
+    assert out["body"]["model"] == "claude-test"
+    assert out["body"]["system"] == out["body"]["system"].strip()
+    assert out["body"]["messages"] == [
+        {"role": "user", "content": out["body"]["messages"][0]["content"]}
+    ]
+    assert "Guvernul aprobă normele" in out["body"]["messages"][0]["content"]
+
+
+def test_byok_request_rejects_uploaded_credentials():
+    with pytest.raises(ValueError, match="Credentialele BYOK"):
+        ai_workflow.byok_request(
+            {
+                "draft": draft_request(),
+                "provider": "openai",
+                "model": "gpt-test",
+                "endpoint": "https://api.openai.test/v1/chat/completions",
+                "timeout_ms": 30000,
+                "max_retries": 1,
+                "api_key": "SECRET-USER-KEY",
+            }
+        )
+
+    with pytest.raises(ValueError, match="Credentialele BYOK"):
+        ai_workflow.byok_failure_result(
+            {
+                "request": {"contract": "ai-byok-execution-request-v1", "token": "SECRET"},
+                "failure_code": "timeout",
+                "provider_status": "timeout",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("provider", "endpoint", "message"),
+    [
+        ("openai", "https://evilopenai.com/v1/chat/completions", "Endpoint OpenAI"),
+        ("anthropic", "https://evil-anthropic.com/v1/messages", "Endpoint Anthropic"),
+        ("openai", "http://api.openai.test/v1/chat/completions", "Endpoint BYOK"),
+    ],
+)
+def test_byok_request_rejects_invalid_or_lookalike_endpoints(provider, endpoint, message):
+    with pytest.raises(ValueError, match=message):
+        ai_workflow.byok_request(
+            {
+                "draft": draft_request(),
+                "provider": provider,
+                "model": "test-model",
+                "endpoint": endpoint,
+                "timeout_ms": 30000,
+                "max_retries": 1,
+            }
+        )
+
+
+def test_byok_failure_result_does_not_create_draft_or_accepted_finding():
+    prepared = ai_workflow.byok_request(
+        {
+            "draft": draft_request(),
+            "provider": "openai",
+            "model": "gpt-test",
+            "endpoint": "https://api.openai.test/v1/chat/completions",
+            "timeout_ms": 30000,
+            "max_retries": 1,
+        }
+    )
+    out = ai_workflow.byok_failure_result(
+        {"request": prepared, "failure_code": "quota", "provider_status": "429"}
+    )
+
+    assert out["contract"] == "ai-byok-execution-result-v1"
+    assert out["status"] == "failed"
+    assert out["failure"]["failure_code"] == "quota"
+    assert out["failure"]["creates_draft"] is False
+    assert out["failure"]["result_imported"] is False
+    assert out["failure"]["accepted_findings_created"] is False
+    assert out["failure"]["review_state"] == "none"
+    assert out["audit"]["event"] == "ai_byok_execution_failed"
+    assert out["audit"]["output_status"] == "no_draft_created"
+    assert out["audit"]["accepted_findings_created"] is False
+    assert "SECRET" not in json.dumps(out)
+
+
 def test_local_mock_generates_gap_proposal_checklist_and_append_only_audit(dossier_db):
     out = ai_workflow.execute(dossier_db, execute_request())
     retry = ai_workflow.execute(dossier_db, execute_request())
@@ -178,3 +312,40 @@ def test_http_route_stores_workflow_only_for_local_origin(dossier_db):
     assert code == 200
     assert data["contract"] == "ai-draft-storage-audit-v1"
     assert data["audit_json" if False else "server_calls_model"] is False
+
+
+def test_http_byok_routes_are_local_only_and_secret_free(dossier_db):
+    state = SimpleNamespace(initiative=dossier_db.with_suffix(".initiative.db"), date_dir=None)
+    state.dosare_db = dossier_db
+    body = {
+        "draft": draft_request(),
+        "provider": "openai",
+        "model": "gpt-test",
+        "endpoint": "https://api.openai.test/v1/chat/completions",
+        "timeout_ms": 30000,
+        "max_retries": 1,
+    }
+
+    assert (
+        http_request(
+            state,
+            "POST",
+            "/api/dosare/ai-byok-request",
+            body,
+            origin="https://evil.test",
+        )[0]
+        == 403
+    )
+
+    code, prepared = http_request(state, "POST", "/api/dosare/ai-byok-request", body)
+    assert code == 200
+    assert prepared["contract"] == "ai-byok-execution-request-v1"
+    code, failed = http_request(
+        state,
+        "POST",
+        "/api/dosare/ai-byok-failure",
+        {"request": prepared, "failure_code": "timeout", "provider_status": "timeout"},
+    )
+    assert code == 200
+    assert failed["failure"]["creates_draft"] is False
+    assert "SECRET" not in json.dumps(failed)

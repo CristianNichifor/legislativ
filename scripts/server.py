@@ -831,6 +831,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-byok-request",
+                "/api/dosare/ai-byok-failure",
                 "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
@@ -1006,6 +1008,8 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/note-ue",
                 "/api/dosare/note-ue/previzualizare",
                 "/api/dosare/ai-draft",
+                "/api/dosare/ai-byok-request",
+                "/api/dosare/ai-byok-failure",
                 "/api/dosare/ai-workflow",
                 "/api/dosare/ai-draft/mcp-preview",
                 "/api/dosare/ai-draft/mcp-execute",
@@ -1086,6 +1090,14 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.ai_drafting import preview
 
                         out = preview(cerere)
+                    elif ruta == "/api/dosare/ai-byok-request":
+                        from scripts.ai_workflow import byok_request
+
+                        out = byok_request(cerere)
+                    elif ruta == "/api/dosare/ai-byok-failure":
+                        from scripts.ai_workflow import byok_failure_result
+
+                        out = byok_failure_result(cerere)
                     elif ruta == "/api/dosare/ai-workflow":
                         from scripts.ai_workflow import execute
 
