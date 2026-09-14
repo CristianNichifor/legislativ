@@ -3497,6 +3497,11 @@ function aiNoteSettingsSummaryHtml(s){
     +(s.boundary==='online_byok'?`<p class="hint">Model: ${esc(s.online_model||'necompletat')} · endpoint: ${esc(s.endpoint||'necompletat')}</p>`:'')
     +(s.boundary==='mcp_handoff'?`<p class="hint">MCP: ${esc([s.mcp_server,s.mcp_tool].filter(Boolean).join(' / ')||'necompletat')}</p>`:'');
 }
+function mcpRuntimePanelHtml(){
+  return '<div data-mcp-runtime-surface><p class="hint">Suprafață MCP: listare servere, test conexiune, previzualizare payload și aprobare explicită. Nu există transfer ascuns.</p>'
+    +'<div class="dossier-actions"><button type="button" class="ghost mini" data-mcp-discover>Listează servere</button><button type="button" class="ghost mini" data-mcp-test>Testează conexiunea</button></div>'
+    +'<p class="hint" role="status" data-mcp-runtime-status>Executor MCP netestat.</p><pre data-mcp-runtime-result></pre></div>';
+}
 function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
   return '<details data-ai-note-draft data-unified-ai-draft><summary>AI din '+esc(label)+'</summary>'
     +'<p class="hint">Panou unic pentru dossier, notă, propunere și matrice. Construiește prompt numai din dovezile selectate, cu manifest și cost înainte de rulare. Nu verdict juridic.</p>'
@@ -3504,7 +3509,7 @@ function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
     +`<label>Sarcină AI<select name="ai_task">${aiDraftTaskOptions()}</select></label>`
     +'<label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label>'
     +'<button type="button" class="ghost mini" data-ai-settings-save>Salvează implicit</button><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează ciorna</button></div>'
-    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details>'
+    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary>'+mcpRuntimePanelHtml()+'<p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="local-mock"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="ai.draft"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details>'
     +'<p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>';
 }
 let _onlineOk=false;
@@ -5632,7 +5637,27 @@ function mcpDraftInsertText(plan,text){
 function bindManualNoteMcpDraft(form,section){
   const box=section.querySelector('[data-mcp-ai-draft]');if(!box)return;
   const preview=box.querySelector('[data-mcp-preview]'),copy=box.querySelector('[data-mcp-copy]'),insert=box.querySelector('[data-mcp-insert]'),status=box.querySelector('[data-mcp-status]'),out=box.querySelector('[data-mcp-preview-result]');
+  const discover=box.querySelector('[data-mcp-discover]'),test=box.querySelector('[data-mcp-test]'),runtimeStatus=box.querySelector('[data-mcp-runtime-status]'),runtimeOut=box.querySelector('[data-mcp-runtime-result]');
   let plan=null;
+  async function showMcpRuntime(){
+    runtimeStatus.textContent='Citesc lista MCP…';runtimeOut.textContent='';
+    try{
+      const data=await api('/api/mcp/runtime');
+      const server=data.servers?.[0],tool=server?.tools?.[0];
+      if(server&&tool&&!form.elements.mcp_server.value&&!form.elements.mcp_tool.value){form.elements.mcp_server.value=server.id;form.elements.mcp_tool.value=tool.id;}
+      runtimeOut.textContent=JSON.stringify({contract:data.contract,status:data.status,servers:data.servers,approval:data.approval,failure_states:data.failure_states},null,2);
+      runtimeStatus.textContent='MCP listat: payload preview obligatoriu, aprobare explicită pentru fiecare apel.';
+    }catch(err){runtimeStatus.textContent='MCP indisponibil în acest mod; aplicația rămâne utilizabilă fără MCP. '+err.message;}
+  }
+  if(discover)discover.onclick=showMcpRuntime;
+  if(test)test.onclick=async()=>{
+    runtimeStatus.textContent='Testez conexiunea MCP…';runtimeOut.textContent='';
+    try{
+      const data=await dossierApi('/api/mcp/test',{server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value});
+      runtimeOut.textContent=JSON.stringify(data,null,2);
+      runtimeStatus.textContent=data.available?'Conexiune locală disponibilă. Urmează previzualizarea și aprobarea payloadului.':'MCP indisponibil: '+(data.failure?.message||data.status);
+    }catch(err){runtimeStatus.textContent='Test MCP eșuat: '+err.message;}
+  };
   form.addEventListener('input',e=>{if(e.target.closest('[data-mcp-ai-draft]'))return;plan=null;copy.disabled=true;insert.disabled=true;out.textContent='';});
   preview.onclick=async()=>{
     plan=null;copy.disabled=true;insert.disabled=true;preview.disabled=true;status.textContent='Construiesc pachetul MCP din dovezi…';out.textContent='';

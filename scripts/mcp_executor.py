@@ -33,6 +33,18 @@ def _hash_json(value: object) -> str:
     ).hexdigest()
 
 
+def _selected_evidence_ids(plan: dict) -> list[str]:
+    ids = []
+    for item in plan.get("evidence_manifest", []):
+        if not isinstance(item, dict):
+            continue
+        act_id = str(item.get("act_id") or "").strip()
+        locator = str(item.get("locator") or "").strip()
+        label = str(item.get("label") or "").strip()
+        ids.append(":".join(part for part in (act_id, locator) if part) or label)
+    return [item for item in ids if item]
+
+
 def _ensure_schema(con: sqlite3.Connection) -> None:
     con.execute(
         "CREATE TABLE IF NOT EXISTS mcp_audit_events ("
@@ -131,6 +143,7 @@ def execute(path: Path | str, request: dict) -> dict:
         raise ValueError("Payloadul MCP aprobat nu mai corespunde cererii curente.")
     result_text = dosare._text(_mock_ai_draft(plan), MAX_RESULT, True)
     result_sha = hashlib.sha256(result_text.encode()).hexdigest()
+    selected_evidence_ids = _selected_evidence_ids(plan)
     payload = {
         "contract": CONTRACT,
         "workflow": "ai_draft",
@@ -139,6 +152,8 @@ def execute(path: Path | str, request: dict) -> dict:
         "approved_data_sha256": approved_hash,
         "request_sha256": _hash_json(request["draft"]),
         "result_sha256": result_sha,
+        "selected_evidence_ids": selected_evidence_ids,
+        "user_action": "approved_and_executed",
         "output_status": "draft_unreviewed",
         "external_calls": False,
         "credentials_stored": False,
@@ -184,8 +199,13 @@ def execute(path: Path | str, request: dict) -> dict:
                             "event": "mcp_ai_draft_executed",
                             "approved": True,
                             "created_at": created_at,
+                            "timestamp": created_at,
                             "data_sha256": approved_hash,
+                            "payload_hash": approved_hash,
+                            "selected_evidence_ids": selected_evidence_ids,
                             "result_sha256": result_sha,
+                            "result_hash": result_sha,
+                            "user_action": "approved_and_executed",
                             "requires_user_approval": True,
                             "cost_owner": "user_account_or_user_key",
                             "external_calls": False,

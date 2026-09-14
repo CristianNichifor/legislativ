@@ -567,6 +567,12 @@ def face_handler(stare: Stare, *, runtime=None):
                 if not self._dosare_permis():
                     return
                 self._json(capabilities())
+            elif ruta.path == "/api/mcp/runtime":
+                from scripts.mcp_runtime import registry
+
+                if not self._dosare_permis():
+                    return
+                self._json(registry())
             elif ruta.path == "/api/surse-proiecte":
                 from scripts import achizitii_proiecte
 
@@ -804,6 +810,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/tracker-evenimente",
                 "/api/lifecycle-watchlist",
                 "/api/monitor-reconciliere",
+                "/api/mcp/test",
                 "/api/mcp/preview",
                 "/api/dosare",
                 "/api/dosare/metadate",
@@ -963,6 +970,16 @@ def face_handler(stare: Stare, *, runtime=None):
                     return
                 try:
                     self._json(preview(cerere))
+                except ValueError as exc:
+                    self._json({"error": str(exc)}, 400)
+                return
+            if ruta == "/api/mcp/test":
+                from scripts.mcp_runtime import test_connection
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(test_connection(cerere))
                 except ValueError as exc:
                     self._json({"error": str(exc)}, 400)
                 return

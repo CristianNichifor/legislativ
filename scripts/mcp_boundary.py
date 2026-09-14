@@ -74,6 +74,7 @@ def capabilities() -> dict:
         "capabilities": [{"key": key, **value} for key, value in CAPABILITIES.items()],
         "execution": {
             "implemented": True,
+            "runtime_contract": "mcp-runtime-surface-v1",
             "executor_contract": "mcp-executor-boundary-v1",
             "supported_executor": "local-mock/ai.draft",
             "requires_user_approval": True,
@@ -82,6 +83,14 @@ def capabilities() -> dict:
             "credentials_stored": False,
             "hidden_external_calls": False,
             "external_calls": False,
+        },
+        "runtime": {
+            "servers_endpoint": "/api/mcp/runtime",
+            "test_endpoint": "/api/mcp/test",
+            "preview_endpoint": "/api/mcp/preview",
+            "execution_endpoint": "/api/dosare/ai-draft/mcp-execute",
+            "payload_preview_required": True,
+            "failure_contract": "mcp-runtime-failure-v1",
         },
         "limits": {
             "contract": "mcp-boundary-limits-v1",
