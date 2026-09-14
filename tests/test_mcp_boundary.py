@@ -80,6 +80,13 @@ def test_preview_requires_explicit_payload_and_never_marks_approved():
     assert result["cost_estimate"]["cost_owner"] == "user_account_or_user_key"
     assert result["approval"]["data_preview"] == "Art. 1: dovada citata."
     assert len(result["approval"]["data_sha256"]) == 64
+    assert result["approval_state"] == "preview_created"
+    assert result["audit_event"]["timestamp"] == result["audit_event"]["created_at"]
+    assert result["audit_event"]["payload_hash"] == result["approval"]["data_sha256"]
+    assert result["audit_event"]["result_hash"] is None
+    assert result["audit_event"]["selected_evidence_ids"] == []
+    assert result["audit_event"]["user_action"] == "previewed"
+    assert result["audit_event"]["approval_state"] == "preview_created"
 
 
 def test_preview_truncates_visible_text_but_hashes_full_payload():
@@ -127,8 +134,25 @@ def test_runtime_registry_exposes_servers_approval_schema_and_failures():
         "document.export",
     }
     assert result["approval"]["payload_preview_required"] is True
+    assert result["discovery"]["contract"] == "mcp-runtime-discovery-v1"
+    assert result["discovery"]["server_count"] == 1
+    assert result["discovery"]["tool_count"] == 2
+    assert result["discovery"]["external_transport_configured"] is False
+    assert result["discovery"]["hidden_external_calls"] is False
+    assert "preview_created" in result["servers"][0]["tools"][0]["approval_states"]
     assert result["approval"]["audit_schema"]["selected_evidence_ids"] == "array"
     assert result["approval"]["audit_schema"]["result_hash"] == "sha256_or_null"
+    assert result["approval"]["audit_log_schema"]["contract"] == "mcp-audit-log-schema-v1"
+    assert result["approval"]["audit_log_schema"]["required_fields"] == [
+        "server",
+        "tool",
+        "timestamp",
+        "payload_hash",
+        "selected_evidence_ids",
+        "result_hash",
+        "user_action",
+    ]
+    assert result["approval"]["audit_log_schema"]["append_only"] is True
     assert {item["code"] for item in result["failure_states"]} >= {
         "mcp_unavailable",
         "approval_required",

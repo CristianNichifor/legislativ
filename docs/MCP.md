@@ -25,8 +25,11 @@ The first contract is `mcp-boundary-v1`:
   SHA-256 of the full text.
 - The preview includes cost ownership and token estimate metadata. Server cost is `none`; a real
   executor must disclose provider-side pricing/retention before approval.
-- Preview audit events are `approved: false`. Executor audit events are persisted only after the
-  request supplies `approved: true` plus the exact preview `data_sha256`.
+- Preview audit events are `approved: false` and `approval_state: preview_created`. Executor audit
+  events are persisted only after the request supplies `approved: true` plus the exact preview
+  `data_sha256`.
+- Every preview/execution audit event uses the same required fields: `server`, `tool`, `timestamp`,
+  `payload_hash`, `selected_evidence_ids`, `result_hash` and `user_action`.
 
 The v1 executor does not connect to Claude, ChatGPT, GitHub, calendar or document tools. It supports
 only `local-mock/ai.draft` and `local-mock/document.export`, deterministic local adapters used to
@@ -102,7 +105,11 @@ API keys, never stores credentials and never sends legal text to an external MCP
 `scripts.mcp_runtime` implements `mcp-runtime-surface-v1`:
 
 - lists the local `local-mock/ai.draft` and `local-mock/document.export` tools;
+- exposes `mcp-runtime-discovery-v1` metadata so the UI can refresh server/tool discovery without
+  treating unavailable MCP as an app failure;
 - exposes the approval/audit schema the UI must show before execution;
+- exposes `mcp-audit-log-schema-v1`, an append-only audit schema with server, tool, timestamp,
+  payload hash, selected evidence ids, result hash and the explicit user action;
 - exposes retry/failure states for unavailable MCP, unknown server/tool, missing approval, payload
   mismatch and executor failure;
 - keeps the app usable when MCP is unavailable.

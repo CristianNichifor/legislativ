@@ -5,6 +5,8 @@ This prepares an approved external-call payload. It does not execute MCP.
 
 from __future__ import annotations
 
+import copy
+
 from scripts import ai_drafting, dosare, mcp_boundary
 
 MAX_SERVER_TEXT = 120
@@ -26,9 +28,18 @@ def preview(request: dict) -> dict:
             "data": plan["prompt"],
         }
     )
+    selected_evidence_ids = [
+        ":".join(part for part in (item.get("act_id"), item.get("locator")) if part)
+        or item.get("label", "")
+        for item in plan["evidence_manifest"]
+    ]
+    selected_evidence_ids = [item for item in selected_evidence_ids if item]
+    approval = copy.deepcopy(approval)
+    approval["audit_event"]["selected_evidence_ids"] = selected_evidence_ids
     return {
         "contract": "mcp-ai-evidence-draft-v1",
         "status": "requires_user_approval",
+        "approval_state": "preview_created",
         "ai_contract": plan["contract"],
         "system": plan["system"],
         "prompt": plan["prompt"],
@@ -59,6 +70,7 @@ def preview(request: dict) -> dict:
             "mcp_data_sha256": approval["approval"]["data_sha256"],
             "approved_external_send": False,
             "model_invoked_by_server": False,
+            "selected_evidence_ids": selected_evidence_ids,
             "source_references": plan["export_manifest"]["source_references"],
         },
         "evidence_count": plan["evidence_count"],
