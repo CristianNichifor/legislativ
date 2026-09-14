@@ -80,6 +80,16 @@ def test_current_ui_reports_the_actual_checked_in_status():
     assert out["status"] == "ready"
     assert out["warnings"] == []
     assert out["visible_in"]["inputs"] == ["app/index.html", "app/civic-ui-adapter.css"]
+    assert out["checks"]["technical_provenance_warning_policy"] == {
+        "prefer": "Romanian user-facing labels",
+        "warning_terms": ["Source hash", "stale"],
+        "allowed_machine_detail_areas": [
+            "details",
+            "data-raw-contract",
+            "data-debug",
+            "debug",
+        ],
+    }
 
 
 def test_civic_adapter_exposes_workspace_and_review_primitives():
@@ -123,6 +133,43 @@ def test_internal_visible_wording_blocks(tmp_path):
     blocker = next(item for item in out["blockers"] if item["kind"] == "internal_wording_visible")
     assert any("reload" in evidence.lower() for evidence in blocker["evidence"])
     assert any("cache" in evidence.lower() for evidence in blocker["evidence"])
+
+
+def test_technical_provenance_terms_warn_in_primary_copy(tmp_path):
+    write_fixture(
+        tmp_path, minimal_html("<p>Source hash and stale remain in primary copy.</p>"), ADAPTER
+    )
+
+    out = ux_acceptance.report(tmp_path)
+
+    assert out["acceptance_allowed"] is True
+    assert {item["message"] for item in out["warnings"]} == {
+        "Technical wording remains visible: Source hash.",
+        "Technical wording remains visible: stale.",
+    }
+
+
+def test_technical_provenance_terms_are_allowed_in_machine_detail_areas(tmp_path):
+    write_fixture(
+        tmp_path,
+        minimal_html(
+            """
+            <details>
+              <summary>Contract brut</summary>
+              <p>Source hash and stale are raw terms.</p>
+            </details>
+            <section data-raw-contract><p>Source hash appears in the stored payload.</p></section>
+            <section data-debug><p>stale appears in diagnostics.</p></section>
+            <section class="debug"><p>Source hash appears in debug output.</p></section>
+            """
+        ),
+        ADAPTER,
+    )
+
+    out = ux_acceptance.report(tmp_path)
+
+    assert out["acceptance_allowed"] is True
+    assert out["warnings"] == []
 
 
 def test_missing_source_and_ai_copy_block(tmp_path):

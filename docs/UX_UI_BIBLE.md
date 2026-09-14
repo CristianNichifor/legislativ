@@ -26,6 +26,12 @@ should prefer verbs a researcher understands:
 - "candidate issue", "missing evidence", "source changed", "possible conflict"
   and "requires human review", never legal verdict language.
 
+Technical legal provenance terms should not lead primary copy. Prefer Romanian
+labels such as "Amprentă sursă", "amprentă SHA-256" and "actualizare necesară".
+Machine terms are acceptable inside explicit details/raw contract/debug areas
+when the user is inspecting exact provenance or diagnostics, but normal workflow
+labels should remain Romanian and task-oriented.
+
 ## Phases
 
 ### UX-1: Source Start
@@ -126,6 +132,8 @@ UX/UI work is acceptable when:
   proposal -> export without reading developer docs;
 - every major panel has one primary purpose and uses user-facing language rather
   than pipeline terms;
+- technical provenance terms stay behind detail/raw/debug affordances unless a
+  Romanian label introduces them;
 - every warning, candidate and draft opens its source, quote, hash, uncertainty
   and review state, or says which source is missing;
 - no screen hides privacy, cost, unsupported-source or stale-data boundaries;

@@ -12,6 +12,29 @@ from pathlib import Path
 
 CONTRACT = "ux-acceptance-gate-v1"
 INTERNAL_WORDING = ("rebuild", "index", "reload", "cache", "manifest", "shard")
+TECHNICAL_PROVENANCE_WARNING_TERMS = ("Source hash", "stale")
+TECHNICAL_PROVENANCE_ALLOWED_AREAS = (
+    "details",
+    "data-raw-contract",
+    "data-debug",
+    "debug",
+)
+VOID_HTML_TAGS = {
+    "area",
+    "base",
+    "br",
+    "col",
+    "embed",
+    "hr",
+    "img",
+    "input",
+    "link",
+    "meta",
+    "param",
+    "source",
+    "track",
+    "wbr",
+}
 
 
 class UXAcceptanceError(RuntimeError):
@@ -56,6 +79,48 @@ class _VisibleTextParser(HTMLParser):
                 self.text.append(normalized)
 
 
+class _PrimaryVisibleTextParser(HTMLParser):
+    """Visible text parser that skips accepted machine-detail areas."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._ignored: list[str] = []
+        self._allowed_depth = 0
+        self.text: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attrs_dict = dict(attrs)
+        if tag in {"script", "style", "template", "svg"}:
+            self._ignored.append(tag)
+        if tag in VOID_HTML_TAGS:
+            return
+        if self._allowed_depth or self._is_allowed_area(tag, attrs_dict):
+            self._allowed_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._ignored and self._ignored[-1] == tag:
+            self._ignored.pop()
+        if self._allowed_depth and tag not in VOID_HTML_TAGS:
+            self._allowed_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._ignored or self._allowed_depth:
+            return
+        normalized = " ".join(html.unescape(data).split())
+        if normalized:
+            self.text.append(normalized)
+
+    @staticmethod
+    def _is_allowed_area(tag: str, attrs: dict[str, str | None]) -> bool:
+        if tag == "details":
+            return True
+        if "data-raw-contract" in attrs or "data-debug" in attrs:
+            return True
+        class_name = attrs.get("class") or ""
+        element_id = attrs.get("id") or ""
+        return "debug" in class_name.split() or "debug" in element_id.lower()
+
+
 def _without_html_comments(source: str) -> str:
     return re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
 
@@ -77,6 +142,12 @@ def _visible_html(html_text: str) -> tuple[str, list[str], str]:
     parser = _VisibleTextParser()
     parser.feed(_without_html_comments(html_text))
     return "\n".join(parser.text), parser.links, parser.body_classes
+
+
+def _primary_visible_html(html_text: str) -> str:
+    parser = _PrimaryVisibleTextParser()
+    parser.feed(_without_html_comments(html_text))
+    return "\n".join(parser.text)
 
 
 def _js_string_literals(source: str) -> list[str]:
@@ -139,9 +210,23 @@ def _js_visible_text(html_text: str) -> list[str]:
     return lines
 
 
+def _js_primary_visible_text(html_text: str) -> list[str]:
+    return [line for line in _js_visible_text(html_text) if not _is_machine_detail_fragment(line)]
+
+
+def _is_machine_detail_fragment(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in ("data-raw-contract", "data-debug"))
+
+
 def _user_visible_text(html_text: str) -> str:
     visible_text, _, _ = _visible_html(html_text)
     return "\n".join([visible_text, *_js_visible_text(html_text)])
+
+
+def _primary_user_visible_text(html_text: str) -> str:
+    visible_text = _primary_visible_html(html_text)
+    return "\n".join([visible_text, *_js_primary_visible_text(html_text)])
 
 
 def _has_all(text: str, needles: tuple[str, ...]) -> bool:
@@ -187,6 +272,7 @@ def report(root: Path | None = None) -> dict:
 
     visible_text, stylesheet_links, body_classes = _visible_html(html_text)
     user_visible = _user_visible_text(html_text)
+    primary_user_visible = _primary_user_visible_text(html_text)
 
     internal_hits: dict[str, list[str]] = {}
     for word in INTERNAL_WORDING:
@@ -304,9 +390,8 @@ def report(root: Path | None = None) -> dict:
             )
         )
 
-    englishish = ("Source hash", "stale")
-    for word in englishish:
-        contexts = _context(user_visible, word)
+    for word in TECHNICAL_PROVENANCE_WARNING_TERMS:
+        contexts = _context(primary_user_visible, word)
         if contexts:
             warnings.append(
                 _block(
@@ -336,6 +421,11 @@ def report(root: Path | None = None) -> dict:
             },
             "workflow_anchors": {"required": list(workflow_needles), "missing": missing_workflow},
             "internal_wording": {"forbidden": list(INTERNAL_WORDING), "hits": internal_hits},
+            "technical_provenance_warning_policy": {
+                "prefer": "Romanian user-facing labels",
+                "warning_terms": list(TECHNICAL_PROVENANCE_WARNING_TERMS),
+                "allowed_machine_detail_areas": list(TECHNICAL_PROVENANCE_ALLOWED_AREAS),
+            },
         },
         "visible_in": {
             "docs": "docs/UX_ACCEPTANCE.md",
