@@ -57,10 +57,13 @@ def test_project_source_coverage_groups_required_public_sources(tmp_path):
     by_group = {group["key"]: group for group in out["groups"]}
     assert by_group["parliament"]["state"] == "present"
     assert by_group["consultations"]["state"] == "present"
+    assert by_group["consultations"]["freshness_state"] == "partial"
     assert by_group["eu"]["state"] == "missing"
+    assert by_group["eu"]["freshness"]["missing"] == ["ue_cellar"]
     assert by_group["monitor"]["state"] == "missing"
     assert out["summary"]["events"] == 1
     assert out["summary"]["sources"] == 1
+    assert out["summary"]["freshness_states"]["partial"] >= 1
     assert out["status"] == "missing"
 
 
@@ -94,6 +97,7 @@ def test_project_source_coverage_marks_attention_sources_for_review(tmp_path):
 
     parliament = next(group for group in out["groups"] if group["key"] == "parliament")
     assert parliament["state"] == "needs_review"
+    assert parliament["freshness_state"] == "needs_review"
     assert out["status"] == "needs_review"
     assert "Revizuiește sursele schimbate" in " ".join(out["next_actions"])
 

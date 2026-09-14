@@ -206,6 +206,25 @@ Tests therefore assert the concrete API contracts above: registration/sync write
 the source state, tracker writes make events visible by project and dossier, and
 manual notes are counted conservatively as direct source references.
 
+## Freshness and completeness states
+
+Source, tracker and lifecycle views now expose the same bounded user-facing
+freshness contract: `missing`, `stale`, `partial`, `current`, `unavailable` and
+`needs_review`.
+
+- `missing`: no local source read or tracker event exists for a required family.
+- `stale`: the latest retained read is older than the configured stale threshold.
+- `partial`: some required source families or lifecycle evidence exist, but not all.
+- `current`: local source/tracker evidence exists and has no open alert.
+- `unavailable`: the official source is unsupported, removed or inaccessible locally.
+- `needs_review`: source hash/state changed, failed, was rate limited, or a tracker
+  event still requires human review.
+
+The app must show these as coverage states, not legal conclusions. A `missing`
+or `partial` state means the local workspace cannot prove completeness yet; it
+does not prove that a consultation, aviz, vote or Monitorul Oficial reference
+does not exist.
+
 ## Bounded public tracking replay
 
 `data/public_tracking_snapshot.json` and `scripts.public_tracking` define the

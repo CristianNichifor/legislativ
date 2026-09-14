@@ -85,17 +85,34 @@ def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
     assert listed["total"] == 1
     assert listed["families"]["ue_cellar"].startswith("Drept UE")
     assert listed["sources"][0]["identifier"] == "32014L0024"
-    assert listed["sources"][0]["sync_status"] == {
+    sync_status = listed["sources"][0]["sync_status"]
+    assert {
+        key: sync_status[key]
+        for key in (
+            "state",
+            "label",
+            "severity",
+            "freshness",
+            "freshness_label",
+            "freshness_state",
+            "can_queue",
+            "can_sync",
+            "can_review",
+            "next_action",
+        )
+    } == {
         "state": "discovered",
         "label": "Source known by URL or public identifier; no fetch attempted in this queue.",
         "severity": "ready",
         "freshness": "never_synced",
         "freshness_label": "Nesincronizată; nu există încă o citire locală.",
+        "freshness_state": "missing",
         "can_queue": True,
         "can_sync": True,
         "can_review": False,
         "next_action": "Pune sursa în coadă sau sincronizeaz-o explicit.",
     }
+    assert sync_status["freshness_status"]["state"] == "missing"
     selected = registry.lista(stare, {"id": [row["id"]]})
     assert selected["total"] == 1
     assert selected["sources"][0]["id"] == row["id"]
