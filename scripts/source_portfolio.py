@@ -177,6 +177,12 @@ SOURCE_FAMILIES: tuple[SourceFamily, ...] = (
 
 TRACKER_EVENTS: tuple[TrackerEvent, ...] = (
     TrackerEvent(
+        "public_consultation_announced",
+        "public consultation announced",
+        "consultare_econsultare/consultare_minister",
+        ("authority", "project_url", "status", "published_at"),
+    ),
+    TrackerEvent(
         "public_consultation_opened",
         "public consultation opened",
         "consultare_econsultare",
@@ -187,6 +193,30 @@ TRACKER_EVENTS: tuple[TrackerEvent, ...] = (
         "public consultation closed",
         "consultare_econsultare",
         ("authority", "closed_at", "project_url"),
+    ),
+    TrackerEvent(
+        "public_consultation_deadline_changed",
+        "public consultation deadline changed",
+        "consultare_econsultare/consultare_minister",
+        ("authority", "previous_deadline", "deadline", "project_url"),
+    ),
+    TrackerEvent(
+        "public_consultation_document_added",
+        "public consultation document added",
+        "consultare_econsultare/consultare_minister",
+        ("authority", "project_url", "documents", "attachment_hashes"),
+    ),
+    TrackerEvent(
+        "public_consultation_source_unavailable",
+        "public consultation source unavailable",
+        "consultare_econsultare/consultare_minister",
+        ("authority", "project_url", "reason", "missing"),
+    ),
+    TrackerEvent(
+        "public_consultation_metadata_review",
+        "public consultation metadata needs review",
+        "consultare_econsultare/consultare_minister",
+        ("authority", "deadline", "status", "project_url", "missing"),
     ),
     TrackerEvent(
         "committee_assignment",

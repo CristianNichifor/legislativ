@@ -253,23 +253,27 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
         "/api/tracker-evenimente?source_family=consultare_econsultare&reviewed=0",
     )
     assert code == 200
-    assert review_queue["total"] == 1
-    event_id = review_queue["events"][0]["id"]
-    assert review_queue["events"][0]["event_type"] == "public_consultation_opened"
+    assert review_queue["total"] == 2
+    opened_event = next(
+        event
+        for event in review_queue["events"]
+        if event["event_type"] == "public_consultation_opened"
+    )
+    event_id = opened_event["id"]
 
     code, evidence_pack = request(
         stare,
         "GET",
         "/api/project-evidence-pack?"
         + "project_id="
-        + review_queue["events"][0]["project_id"]
+        + opened_event["project_id"]
         + "&dossier_id="
         + DOSSIER_ID,
     )
     assert code == 200
     assert evidence_pack["contract"] == "project-evidence-pack-v1"
-    assert evidence_pack["summary"]["events"] == 1
-    assert evidence_pack["summary"]["open_events"] == 1
+    assert evidence_pack["summary"]["events"] == 2
+    assert evidence_pack["summary"]["open_events"] == 2
     assert evidence_pack["evidence"][0]["source_id"] == synced["id"]
     assert evidence_pack["next_actions"] == [
         "Revizuiește evenimentele tracker nerevizuite înainte de redactare.",
@@ -281,15 +285,15 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
         "GET",
         "/api/project-cockpit?"
         + "project_id="
-        + review_queue["events"][0]["project_id"]
+        + opened_event["project_id"]
         + "&dossier_id="
         + DOSSIER_ID,
     )
     assert code == 200
     assert cockpit["contract"] == "project-cockpit-summary-v1"
-    assert cockpit["tracker"]["unreviewed"] == 1
+    assert cockpit["tracker"]["unreviewed"] == 2
     assert cockpit["evidence_pack"]["available"] is True
-    assert cockpit["evidence_pack"]["open_events"] == 1
+    assert cockpit["evidence_pack"]["open_events"] == 2
     assert cockpit["source_attention"]["attention_state"] in {
         "changed",
         "unknown",
@@ -300,23 +304,23 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     code, draft = request(
         stare,
         "GET",
-        "/api/project-draft-seed?project_id=" + review_queue["events"][0]["project_id"],
+        "/api/project-draft-seed?project_id=" + opened_event["project_id"],
     )
     assert code == 200
     assert draft["contract"] == "project-draft-seed-v1"
-    assert draft["summary"]["events"] == 1
-    assert "Proiect urmărit: " + review_queue["events"][0]["project_id"] in draft["text"]
+    assert draft["summary"]["events"] == 2
+    assert "Proiect urmărit: " + opened_event["project_id"] in draft["text"]
     assert "Consultare publică deschisă" in draft["text"]
     assert "nu verdict juridic" in draft["text"]
 
-    save_promoted_rule(dosare.cale(stare), project_id=review_queue["events"][0]["project_id"])
+    save_promoted_rule(dosare.cale(stare), project_id=opened_event["project_id"])
     code, rule_check = request(
         stare,
         "POST",
         "/api/dosare/rule-drafts/execute-draft",
         {
             "id": DOSSIER_ID,
-            "act": review_queue["events"][0]["project_id"],
+            "act": opened_event["project_id"],
             "text": (
                 draft["text"]
                 + "\nMinisterul publică raportul consultării publice în termen de 10 zile."
@@ -336,14 +340,14 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     )
     assert code == 200
     assert note["note"]["dosar_id"] == DOSSIER_ID
-    assert note["note"]["act_id"] == review_queue["events"][0]["project_id"]
+    assert note["note"]["act_id"] == opened_event["project_id"]
 
     code, evidence_pack_after_note = request(
         stare,
         "GET",
         "/api/project-evidence-pack?"
         + "project_id="
-        + review_queue["events"][0]["project_id"]
+        + opened_event["project_id"]
         + "&dossier_id="
         + DOSSIER_ID,
     )
@@ -365,11 +369,11 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
                 "context": "Smoke flow local pentru redactare cu dovezi selectate.",
                 "evidence": [
                     {
-                        "label": review_queue["events"][0]["title"],
-                        "act_id": review_queue["events"][0]["project_id"],
+                        "label": opened_event["title"],
+                        "act_id": opened_event["project_id"],
                         "locator": "consultare",
-                        "source_url": review_queue["events"][0]["source_url"],
-                        "source_hash": review_queue["events"][0]["content_hash"],
+                        "source_url": opened_event["source_url"],
+                        "source_hash": opened_event["content_hash"],
                         "quote": "Consultare publică deschisă pentru proiect urmărit.",
                     }
                 ],
@@ -396,18 +400,33 @@ def test_public_consultation_sync_to_review_queue_and_dossier_note_acceptance(
     )
     assert code == 200
     assert reviewed["event"]["review"]["reviewed"] is True
+    for event in review_queue["events"]:
+        if event["id"] != event_id:
+            code, reviewed = request(
+                stare,
+                "POST",
+                "/api/tracker-evenimente",
+                {
+                    "action": "review",
+                    "id": event["id"],
+                    "reviewer": "acceptance",
+                    "note": "Eveniment consultare corelat în fluxul de acceptare.",
+                },
+            )
+            assert code == 200
+            assert reviewed["event"]["review"]["reviewed"] is True
 
     code, evidence_pack_after_review = request(
         stare,
         "GET",
         "/api/project-evidence-pack?"
         + "project_id="
-        + review_queue["events"][0]["project_id"]
+        + opened_event["project_id"]
         + "&dossier_id="
         + DOSSIER_ID,
     )
     assert code == 200
-    assert evidence_pack_after_review["summary"]["reviewed_events"] == 1
+    assert evidence_pack_after_review["summary"]["reviewed_events"] == 2
     assert evidence_pack_after_review["summary"]["open_events"] == 0
     assert evidence_pack_after_review["next_actions"] == []
 

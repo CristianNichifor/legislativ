@@ -38,8 +38,16 @@ LIFECYCLE_STAGES = (
 STAGE_LABELS = dict(LIFECYCLE_STAGES)
 STAGE_INDEX = {key: index for index, (key, _) in enumerate(LIFECYCLE_STAGES)}
 EVENT_NORMALIZATION = {
+    "public_consultation_announced": ("Consultare publică anunțată", "consultation_open"),
     "public_consultation_opened": ("Consultare publică deschisă", "consultation_open"),
     "public_consultation_closed": ("Consultare publică închisă", "consultation_closed"),
+    "public_consultation_deadline_changed": ("Termen consultare schimbat", "consultation_open"),
+    "public_consultation_document_added": ("Document consultare adăugat", "consultation_open"),
+    "public_consultation_source_unavailable": (
+        "Sursă consultare indisponibilă",
+        "consultation_open",
+    ),
+    "public_consultation_metadata_review": ("Metadata consultare de revizuit", "consultation_open"),
     "committee_assignment": ("Trimis la comisii", "committee"),
     "opinion_received": ("Aviz primit", "drafting"),
     "report_filed": ("Raport depus", "report"),
