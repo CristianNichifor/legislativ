@@ -485,6 +485,51 @@ def _attention(
     }
 
 
+def _project_filter_buckets(stage_data: dict, canonical: dict, deadline: dict) -> list[str]:
+    """Return user-facing lifecycle queues where this project should appear."""
+    buckets = []
+    stage_key = stage_data.get("key")
+    canonical_key = canonical.get("key")
+    if deadline.get("state") in {"deadline_soon", "overdue"}:
+        buckets.append("deadline")
+    if stage_key in {"committee", "report"} or canonical_key == "committee":
+        buckets.append("committee")
+    if stage_key in {"plenary_scheduled", "adopted"} or canonical_key == "plenary":
+        buckets.append("vote")
+    if stage_key == "published" or canonical_key == "published":
+        buckets.append("published")
+    return buckets
+
+
+def _filter_bucket_counts(projects: list[dict]) -> dict:
+    buckets = {
+        "attention": 0,
+        "deadline": 0,
+        "committee": 0,
+        "vote": 0,
+        "published": 0,
+        "stale": 0,
+        "unknown": 0,
+        "unavailable": 0,
+        "affected": 0,
+    }
+    for project in projects:
+        if project.get("needs_attention"):
+            buckets["attention"] += 1
+        if project.get("stale"):
+            buckets["stale"] += 1
+        if project.get("unavailable"):
+            buckets["unavailable"] += 1
+        if project.get("stage", {}).get("key") == "unknown":
+            buckets["unknown"] += 1
+        if int(project.get("affected_dossiers") or 0) > 0:
+            buckets["affected"] += 1
+        for bucket in project.get("filter_buckets") or []:
+            if bucket in buckets:
+                buckets[bucket] += 1
+    return buckets
+
+
 def _unknown_stage_queue(projects: list[dict]) -> list[dict]:
     grouped: dict[str, dict] = {}
     for project in projects:
@@ -573,6 +618,7 @@ def project_lifecycle_item(
         "last_updated": row.get("data_inreg") or last_seen,
         "consultation_deadline": row.get("consultation_deadline"),
         "deadline_attention": deadline,
+        "filter_buckets": _project_filter_buckets(lifecycle, canonical, deadline),
         "stage_change_attention": stage_change,
         "attention": attention,
         "attention_reasons": attention["reasons"],
@@ -703,6 +749,7 @@ def project_lifecycle_summary(
         "stale": 0,
         "unknown_stage": 0,
         "unavailable": 0,
+        "filter_buckets": {},
         "limitari": [],
     }
     try:
@@ -759,6 +806,7 @@ def project_lifecycle_summary(
     base["unknown_stage"] = sum(1 for project in projects if project["stage"]["key"] == "unknown")
     base["unknown_stage_review_queue"] = _unknown_stage_queue(projects)
     base["unavailable"] = sum(1 for project in projects if project["unavailable"])
+    base["filter_buckets"] = _filter_bucket_counts(projects)
     if projects:
         if base["unavailable"]:
             base["source_status"] = "partial"

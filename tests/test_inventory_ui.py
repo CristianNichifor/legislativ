@@ -659,14 +659,22 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         "source_state:'stale',needs_attention:true,stale:true,registry_needs_attention:true,"
         "affected_dossiers:1},{...base,project_id:'PL-x 3',source_state:'unavailable',"
         "needs_attention:true,unavailable:true}]}),{watched:1,attention:2,stale:1,"
-        "unknown:0,unavailable:1,registry:1,affected:1});"
+        "deadline:0,committee:3,vote:0,published:0,unknown:0,unavailable:1,registry:1,"
+        "affected:1});"
         "const overview=lifecycleOverviewHtml({returned:3,total:9,projects:[base,{...base,"
         "project_id:'PL-x 2',source_state:'stale',needs_attention:true,stale:true,"
         "registry_needs_attention:true,registry_source_state:'changed',uncertainty:{level:'medium',"
         "reasons:['tracked_source_needs_review'],message:'Verifică sursa oficială.'}}],"
+        "filter_buckets:{attention:1,deadline:2,committee:3,vote:4,published:5,stale:1,"
+        "unknown:0,unavailable:0,affected:0},"
         "unknown_stage_review_queue:[{raw_label:'Etapă <nouă>',count:2,projects:[{"
         "project_id:'PL-x 9',title:'Titlu <x>'}],next_action:'Mapează <x>'}]});"
         "assert.ok(overview.includes('Necesită atenție'));"
+        "assert.ok(overview.includes('Cozi de lucru'));"
+        "assert.ok(overview.includes('2 termene'));"
+        "assert.ok(overview.includes('3 comisii/rapoarte'));"
+        "assert.ok(overview.includes('4 plen/vot'));"
+        "assert.ok(overview.includes('5 publicate'));"
         "assert.ok(overview.includes('PL-x 2'));"
         "assert.ok(overview.includes('tracked_source_needs_review'));"
         "assert.ok(overview.includes('Etape necunoscute'));"
@@ -679,6 +687,62 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         "projectWatchSave(['PL-x 2','PL-x 3']);"
         "lifecycleWatchedData().then(d=>{assert.equal(d.projects.length,2);"
         "assert.equal(d.projects[1].source_state,'unavailable');}).catch(e=>{throw e;});"
+    )
+    try:
+        subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
+    except subprocess.CalledProcessError as exc:
+        raise AssertionError(exc.stderr.decode() or exc.stdout.decode()) from exc
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_lifecycle_renderer_exposes_phase_b_work_buckets():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    assert '<option value="deadline">Termen apropiat/depășit</option>' in html
+    assert '<option value="committee">Comisii și rapoarte</option>' in html
+    assert '<option value="vote">Plen, vot sau adoptare</option>' in html
+    assert '<option value="published">Publicate</option>' in html
+    source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "const SOURCE_STATE_LABELS={};"
+        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
+        "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
+        + source
+        + "const base={project_id:'PL-x 0',title:'Control',source_name:'Camera',"
+        "source_state:'ok',needs_attention:false,last_seen:'2026-09-10',"
+        "last_updated:'2026-09-10',url:'https://www.cdep.ro/p',filter_buckets:[],"
+        "stage:{key:'registered',label:'Înregistrat'},canonical_status:{key:'parliamentary'},"
+        "latest_event:{},uncertainty:{level:'low',reasons:[],message:''}};"
+        "const deadline={...base,project_id:'PL-x 4',filter_buckets:['deadline'],"
+        "deadline_attention:{state:'deadline_soon'}};"
+        "const committee={...base,project_id:'PL-x 5',filter_buckets:['committee'],"
+        "stage:{key:'report',label:'Raport'}};"
+        "const vote={...base,project_id:'PL-x 6',filter_buckets:['vote'],"
+        "stage:{key:'plenary_scheduled',label:'Plen'}};"
+        "const published={...base,project_id:'PL-x 7',filter_buckets:['published'],"
+        "stage:{key:'published',label:'Publicat'}};"
+        "let h=lifecycleListHtml({projects:[base,deadline]},'deadline');"
+        "assert.ok(h.includes('PL-x 4')&&!h.includes('PL-x 0'));"
+        "h=lifecycleListHtml({projects:[base,committee]},'committee');"
+        "assert.ok(h.includes('PL-x 5')&&!h.includes('PL-x 0'));"
+        "h=lifecycleListHtml({projects:[base,vote]},'vote');"
+        "assert.ok(h.includes('PL-x 6')&&!h.includes('PL-x 0'));"
+        "h=lifecycleListHtml({projects:[base,published]},'published');"
+        "assert.ok(h.includes('PL-x 7')&&!h.includes('PL-x 0'));"
+        "assert.deepEqual(lifecycleCounts({projects:[base,deadline,committee,vote,published]}),"
+        "{watched:0,attention:0,deadline:1,committee:1,vote:1,published:1,stale:0,"
+        "unknown:0,unavailable:0,registry:0,affected:0});"
+        "const overview=lifecycleOverviewHtml({returned:5,total:5,projects:[base],"
+        "filter_buckets:{attention:0,deadline:2,committee:3,vote:4,published:5,stale:0,"
+        "unknown:0,unavailable:0,affected:0}});"
+        "assert.ok(overview.includes('Cozi de lucru'));"
+        "assert.ok(overview.includes('2 termene'));"
+        "assert.ok(overview.includes('3 comisii/rapoarte'));"
+        "assert.ok(overview.includes('4 plen/vot'));"
+        "assert.ok(overview.includes('5 publicate'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
