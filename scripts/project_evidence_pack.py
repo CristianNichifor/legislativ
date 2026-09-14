@@ -10,6 +10,9 @@ from scripts import dosare, note_manuale, tracker_events
 
 CONTRACT = "project-evidence-pack-v1"
 TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
+CONSULTATION_FAMILIES = frozenset(
+    {"consultare_guvern", "consultare_econsultare", "consultare_minister", "avize"}
+)
 
 
 def _text(value: object, *, limit: int = 200, required: bool = False) -> str:
@@ -102,6 +105,21 @@ def build(stare, query: dict | None = None) -> dict:
         }
         for event in events
     ]
+    consultation_rows = [
+        {
+            "event_id": event["id"],
+            "event_type": event["event_type"],
+            "source_family": event["source_family"],
+            "title": event["title"],
+            "authority": (event.get("payload") or {}).get("authority", ""),
+            "deadline": (event.get("payload") or {}).get("deadline", ""),
+            "status": (event.get("payload") or {}).get("status", ""),
+            "source_url": event.get("source_url", ""),
+            "reviewed": bool(event.get("review", {}).get("reviewed")),
+        }
+        for event in events
+        if event.get("source_family") in CONSULTATION_FAMILIES
+    ]
 
     limitations = [
         "Pachetul este o sinteză locală pentru redactare și verificare, nu verdict juridic.",
@@ -130,10 +148,13 @@ def build(stare, query: dict | None = None) -> dict:
             "open_events": len(events) - reviewed,
             "notes": len(notes),
             "lifecycle_matches": len(lifecycle["projects"]),
+            "consultations": len(consultation_rows),
+            "open_consultations": sum(1 for row in consultation_rows if not row["reviewed"]),
         },
         "lifecycle": lifecycle,
         "events": events,
         "evidence": evidence_rows,
+        "consultations": consultation_rows,
         "dossier_notes": notes,
         "next_actions": next_actions,
         "limitari": limitations,

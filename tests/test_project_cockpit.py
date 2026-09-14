@@ -67,6 +67,15 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     create(stare)
     add_project(stare)
     add_event(stare)
+    add_event(
+        stare,
+        event_type="public_consultation_opened",
+        source_family="consultare_guvern",
+        source_url="https://sgg.gov.ro/1/transparenta-decizionala/proiect-hg-test/",
+        title="Consultare Guvern",
+        payload={"authority": "Guvernul României", "deadline": "15.10.2026", "status": "open"},
+        content_hash="c" * 64,
+    )
     add_attention_source(stare)
     note_manuale.salveaza(
         dosare.cale(stare),
@@ -92,10 +101,15 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
 
     assert out["contract"] == "project-cockpit-summary-v1"
     assert out["lifecycle"]["project"]["project_id"] == "PL-x 10/2026"
-    assert out["tracker"]["total"] == 1
-    assert out["tracker"]["unreviewed"] == 1
+    assert out["tracker"]["total"] == 2
+    assert out["tracker"]["unreviewed"] == 2
     assert out["tracker"]["by_stage"]["report"]["count"] == 1
-    assert out["tracker"]["latest_event"]["event_type"] == "report_filed"
+    assert out["tracker"]["by_type"]["report_filed"] == 1
+    assert out["tracker"]["by_type"]["public_consultation_opened"] == 1
+    assert out["consultations"]["total"] == 1
+    assert out["consultations"]["unreviewed"] == 1
+    assert out["consultations"]["items"][0]["source_family"] == "consultare_guvern"
+    assert out["consultations"]["items"][0]["authority"] == "Guvernul României"
     assert out["source_attention"]["needs_attention"] is True
     assert out["source_attention"]["registry_source_state"] == "changed"
     assert out["source_attention"]["source_family"] == "camera"
@@ -104,6 +118,7 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     assert out["source_attention"]["next_action"] == "Revizuiește schimbarea sursei urmărite."
     assert out["evidence_pack"]["notes"] == 1
     assert {action["key"] for action in out["next_actions"]} >= {
+        "review_consultations",
         "review_tracker_events",
         "sync_attention_sources",
         "open_evidence_pack",

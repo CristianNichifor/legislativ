@@ -7773,6 +7773,15 @@ function projectCockpitEvidenceHtml(evidence={}){
   const reviewed=Number(evidence.reviewed_events||0);
   return `<section class="lifecycle-overview-card"><span class="hint">Pachet dovezi</span><strong>${esc(ready)}</strong><span class="hint">${esc(evidence.events||0)} evenimente · ${esc(evidence.notes||0)} note · ${esc(evidence.evidence_rows||0)} dovezi</span><br><span class="hint">${esc(reviewed)} revizuite · ${esc(open)} deschise · contract ${esc(evidence.contract||'necunoscut')}</span></section>`;
 }
+function projectCockpitConsultationsHtml(consultations={}){
+  const items=consultations.items||[];
+  const rows=items.slice(0,5).map(item=>{
+    const url=urlSigur(item.source_url);
+    const meta=[item.source_family_label||item.source_family,item.authority,item.deadline&&`termen ${item.deadline}`,item.status].filter(Boolean).join(' · ');
+    return `<li><strong>${esc(item.title||item.event_type||'Consultare')}</strong><br><span class="hint">${esc(meta||'sursă de consultare')}</span>${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}</li>`;
+  }).join('');
+  return `<section class="lifecycle-overview-card"><span class="hint">Consultări / avize</span><strong>${esc(consultations.total||0)}</strong><span class="hint">${esc(consultations.unreviewed||0)} nerevizuite</span>${rows?`<ol>${rows}</ol>`:'<br><span class="hint">Nicio consultare locală legată de proiect.</span>'}</section>`;
+}
 function projectCockpitStatusHtml(data){
   const project=data.lifecycle?.project||{};
   const stage=project.stage?.label||project.status||'Stadiu necunoscut';
@@ -7791,7 +7800,7 @@ function projectCockpitActionsHtml(actions=[]){
 function projectCockpitHtml(data){
   return `<section class="source-review"><h4>Cockpit · ${esc(data.project_id||'proiect')}</h4>`
     +`<p class="hint">Sumar local-only pentru urmărire și redactare. Datele pot fi incomplete și nu reprezintă verdict juridic.</p>`
-    +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
+    +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitConsultationsHtml(data.consultations||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
     +`<h5>Următoarele acțiuni</h5>${projectCockpitActionsHtml(data.next_actions||[])}`
     +(data.limitari?.length?`<h5>Limitări</h5><ul>${data.limitari.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
     +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-writing>Redactare</button><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-watch-dossier>Urmărește în dosar</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;
@@ -7856,6 +7865,14 @@ function projectWorkbenchEvidenceHtml(rows=[]){
     return `<dt>${esc(row.source_family||'sursă')} · ${esc(dossierTime(row.occurred_at))}</dt><dd>${esc(row.title||row.event_type)}${row.content_hash?`<br>SHA-256: ${esc(row.content_hash)}`:''}${source?`<br><a href="${esc(source)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}</dd>`;
   }).join('')+'</dl>';
 }
+function projectWorkbenchConsultationsHtml(rows=[]){
+  if(!rows.length)return '<p>Nicio consultare sau aviz legat local de proiect.</p>';
+  return '<ol class="tracker-timeline-events">'+rows.slice(0,10).map(row=>{
+    const url=urlSigur(row.source_url);
+    const meta=[row.source_family,row.authority,row.deadline&&`termen ${row.deadline}`,row.status].filter(Boolean).join(' · ');
+    return `<li><strong>${esc(row.title||row.event_type)}</strong><br><span class="hint">${esc(meta)}</span>${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Deschide sursa oficială</a>`:''}</li>`;
+  }).join('')+'</ol>';
+}
 function projectWorkbenchNotesHtml(notes=[]){
   if(!notes.length)return '<p>Nicio notă de dosar legată de proiect.</p>';
   return notes.map(note=>`<article class="source-affected-run"><h5>${esc(note.title)}</h5><p class="hint">${esc(note.type)} · ${esc(note.status)} · ${esc(note.locator||'fără locator')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('');
@@ -7897,6 +7914,13 @@ function projectWorkbenchMarkdown(project,pack){
     if(event.content_hash)lines.push(`  SHA-256: ${event.content_hash}`);
   }
   if(!(pack.events||[]).length)lines.push('- Niciun eveniment tracker.');
+  lines.push('', '## Consultări și avize');
+  for(const item of pack.consultations||[]){
+    lines.push(`- ${item.title||item.event_type} · ${item.source_family || 'sursă'} · ${item.authority || ''}`);
+    if(item.deadline)lines.push(`  Termen: ${item.deadline}`);
+    if(item.source_url)lines.push(`  Sursă: ${item.source_url}`);
+  }
+  if(!(pack.consultations||[]).length)lines.push('- Nicio consultare sau aviz legat local.');
   lines.push('', '## Note dosar');
   for(const note of pack.dossier_notes||[]){
     if(note.export_markdown){
@@ -8028,6 +8052,7 @@ function projectWorkbenchHtml(project,pack){
     +`<div class="lifecycle-overview"><section class="lifecycle-overview-card"><span class="hint">Evenimente</span><strong>${esc(summary.events||0)}</strong><span class="hint">${esc(summary.open_events||0)} nerevizuite</span></section><section class="lifecycle-overview-card"><span class="hint">Note dosar</span><strong>${esc(summary.notes||0)}</strong><span class="hint">${pack.dossier_id?esc(pack.dossier_id):'fără dosar ales'}</span></section><section class="lifecycle-overview-card"><span class="hint">Potriviri lifecycle</span><strong>${esc(summary.lifecycle_matches||0)}</strong><span class="hint">${esc(pack.source_status||'necunoscut')}</span></section></div>`
     +(warnings.length?`<h5>Atenție</h5><ul>${warnings.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:'')
     +(actions.length?`<h5>Următorul pas</h5><ul>${actions.map(a=>`<li>${esc(a)}</li>`).join('')}</ul>`:'')
+    +`<h5>Consultări / avize</h5>${projectWorkbenchConsultationsHtml(pack.consultations||[])}`
     +`<h5>Evenimente</h5>${projectWorkbenchEventsHtml(pack.events||[])}`
     +`<h5>Dovezi</h5>${projectWorkbenchEvidenceHtml(pack.evidence||[])}`
     +`<h5>Note</h5>${projectWorkbenchNotesHtml(pack.dossier_notes||[])}`
