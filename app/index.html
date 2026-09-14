@@ -1449,7 +1449,7 @@
               <label>Termen<input name="deadline" maxlength="80" placeholder="15.10.2026"></label>
               <button type="submit" class="ghost mini">Adaugă consultare Guvern</button>
             </form>
-            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-bootstrap">Adaugă sursele oficiale de bază</button><button type="button" class="ghost mini" id="source-registry-sync-bootstrap">Verifică sursele oficiale</button><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
+            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-bootstrap">Adaugă sursele oficiale de bază</button><button type="button" class="ghost mini" id="source-registry-sync-bootstrap">Verifică sursele oficiale</button><button type="button" class="ghost mini" id="source-registry-refresh">Actualizează vederea</button></div>
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
             <div id="source-registry-detail"></div>
@@ -1458,7 +1458,7 @@
         </section>
         <details class="dossier-library" id="source-coverage">
           <summary>Acoperire surse · Calitatea urmăririi</summary>
-          <div class="dossier-actions"><button type="button" id="source-workbench-refresh" class="ghost mini">Workbench surse</button><button type="button" id="source-coverage-refresh" class="ghost mini">Reîncarcă acoperirea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Gate produs</button><button type="button" id="needs-attention-refresh" class="ghost mini">Ce necesită atenție</button><button type="button" id="monitor-reconciliation-refresh" class="ghost mini">Reconciliere MO</button><button type="button" id="monitor-replay-tracker" class="ghost mini">Trimite MO în tracker</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
+          <div class="dossier-actions"><button type="button" id="source-workbench-refresh" class="ghost mini">Workbench surse</button><button type="button" id="source-coverage-refresh" class="ghost mini">Actualizează vederea</button><button type="button" id="acceptance-dashboard-refresh" class="ghost mini">Gate produs</button><button type="button" id="needs-attention-refresh" class="ghost mini">Ce necesită atenție</button><button type="button" id="monitor-reconciliation-refresh" class="ghost mini">Reconciliere MO</button><button type="button" id="monitor-replay-tracker" class="ghost mini">Trimite MO în tracker</button><button type="button" id="source-coverage-open-registry" class="ghost mini">Deschide registrul surselor</button><button type="button" id="source-coverage-open-lifecycle" class="ghost mini">Deschide stadiile proiectelor</button></div>
           <p id="source-coverage-status" class="hint" role="status">Acoperire neîncărcată.</p>
           <div id="source-workbench-result"></div>
           <div id="source-coverage-result"></div>
@@ -6784,7 +6784,7 @@ $('#source-export').onclick=()=>{
     $('#source-status').textContent='Export JSON inițiat.';
   }catch{$('#source-status').textContent='Exportul nu a reușit.';}
 };
-const SOURCE_REGISTRY={offset:0,families:null,states:null};
+const SOURCE_REGISTRY={offset:0,families:null,states:null,family:''};
 const SOURCE_STATE_LABELS={
   discovered:'Descoperită',queued:'În coadă',fetched:'Preluată',unchanged:'Neschimbată',
   changed:'Schimbată',failed:'Eșuată',unavailable:'Indisponibilă',
@@ -7019,16 +7019,19 @@ async function inspectSourceRegistryRow(id){
     status.textContent=sourceRegistryOutcome(row,'Sursă selectată');
   }catch(err){status.textContent=err.message;}
 }
-async function loadSourceRegistry(offset=0,notice=''){
+async function loadSourceRegistry(offset=0,notice='',family=SOURCE_REGISTRY.family||''){
   const status=$('#source-registry-status'), list=$('#source-registry-list');
+  SOURCE_REGISTRY.family=family||'';
   const params=new URLSearchParams({offset:String(offset)});
+  if(SOURCE_REGISTRY.family)params.set('family',SOURCE_REGISTRY.family);
   const state=$('#source-registry-state').value;if(state==='_attention')params.set('attention','1');else if(state)params.set('state',state);
   status.textContent='Încarc registrul surselor…';list.textContent='';
   try{
     const data=await sourceRegistryApi(null,params);sourceRegistryConfigure(data);SOURCE_REGISTRY.offset=offset;
     list.innerHTML=data.sources.map((row,i)=>sourceRegistryRowHtml(row,data.families,i)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
     $('#source-registry-prev').disabled=offset===0;$('#source-registry-next').disabled=!data.more;
-    status.textContent=notice||`${data.total} surse urmărite. Sync-ul este explicit, câte o sursă, fără rebuild.`;
+    const scope=SOURCE_REGISTRY.family?` în ${data.families?.[SOURCE_REGISTRY.family]||SOURCE_REGISTRY.family}`:'';
+    status.textContent=notice||`${data.total} surse urmărite${scope}. Sincronizarea este explicită, câte o sursă.`;
     list.querySelectorAll('[data-source-inspect]').forEach(button=>button.onclick=()=>inspectSourceRegistryRow(button.dataset.sourceInspect));
     list.querySelectorAll('[data-source-tracker]').forEach(button=>button.onclick=()=>{
       const row=data.sources[Number(button.dataset.sourceTracker)];if(!row)return;
@@ -7057,6 +7060,11 @@ async function loadSourceRegistry(offset=0,notice=''){
     list.querySelectorAll('[data-source-open-eu]').forEach(button=>button.onclick=()=>openEuSource(button.dataset.sourceOpenEu));
   }catch(err){status.textContent=err.message;}
 }
+function openSourceRegistryFamily(family,attention=false){
+  $('#source-registry').open=true;
+  $('#source-registry-state').value=attention?'_attention':'';
+  loadSourceRegistry(0,'',family);
+}
 $('#source-registry').ontoggle=()=>{if($('#source-registry').open) loadSourceRegistry(0);};
 $('#source-registry-refresh').onclick=()=>loadSourceRegistry(SOURCE_REGISTRY.offset);
 $('#source-registry-state').onchange=()=>loadSourceRegistry(0);
@@ -7065,7 +7073,7 @@ $('#source-registry-bootstrap').onclick=async()=>{
   button.disabled=true;status.textContent='Adaug sursele oficiale de bază în registru…';
   try{
     const data=await sourceRegistryApi({action:'bootstrap'});
-    await loadSourceRegistry(0,`Surse oficiale de bază: ${data.created||0} adăugate, ${data.updated||0} actualizate. Următorul pas: verifică disponibilitatea entrypointurilor oficiale.`);
+    await loadSourceRegistry(0,`Surse oficiale de bază: ${data.created||0} adăugate, ${data.updated||0} actualizate. Următorul pas: verifică disponibilitatea entrypointurilor oficiale.`,'');
     await loadSourceCoverage();
   }catch(err){status.textContent=err.message;}
   finally{button.disabled=false;}
@@ -7075,7 +7083,7 @@ $('#source-registry-sync-bootstrap').onclick=async()=>{
   button.disabled=true;status.textContent='Verific sursele oficiale de bază…';
   try{
     const data=await sourceRegistryApi({action:'sync_bootstrap'});
-    await loadSourceRegistry(0,`Verificare surse oficiale: ${data.total||0} încercări · ${Object.entries(data.counts||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără rezultat'}.`);
+    await loadSourceRegistry(0,`Verificare surse oficiale: ${data.total||0} încercări · ${Object.entries(data.counts||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără rezultat'}.`,'');
     await loadSourceCoverage();
   }catch(err){status.textContent=err.message;}
   finally{button.disabled=false;}
@@ -7100,7 +7108,12 @@ function sourceCoverageFamilyHtml(row){
   const states=Object.entries(row.states||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără surse';
   const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':row.status==='unsynced'?'Nesincronizată':'Acoperită';
   const duty=row.required?'sursă necesară':'sursă opțională';
-  return `<article class="coverage-card coverage-${esc(row.status||'ok')}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4><p>${esc(duty)} · ${row.total} surse · ${row.attention} cu atenție · ${row.incomplete||0} fără sync final</p><p class="hint">${esc(states)}</p></article>`;
+  const checked=row.last_checked?dossierTime(row.last_checked):'niciodată';
+  return `<article class="coverage-card coverage-${esc(row.status||'ok')}" data-source-control-family="${esc(row.family)}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4>`
+    +`<p>${esc(duty)} · ${row.total||0} surse · ${row.fetched||0} citite · ${row.changed||0} schimbate · ${row.failed||0} eșuate/indisponibile · ${row.incomplete||0} fără stare finală</p>`
+    +`<p class="hint">Ultima verificare: ${esc(checked)}<br>${esc(states)}</p>`
+    +`<p class="source-next">Următorul pas: ${esc(row.next_action||'Verifică registrul surselor.')}</p>`
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-source-control-open="${esc(row.family)}">Deschide familia</button>${row.attention?`<button type="button" class="ghost mini" data-source-control-attention="${esc(row.family)}">Doar atenționări</button>`:''}</div></article>`;
 }
 const SOURCE_PORTFOLIO_TIERS={required:'Necesar acum',planned:'Planificat',deferred:'Amânat / opt-in'};
 const SOURCE_PORTFOLIO_POLICIES={
@@ -7177,7 +7190,7 @@ function acceptanceDashboardHtml(data){
 function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
   const stages=Object.entries(data.projects?.stages||{}).map(([,v])=>`<li>${esc(v.label)}: ${v.total}</li>`).join('');
-  return `<div class="coverage-grid">${(data.families||[]).map(sourceCoverageFamilyHtml).join('')}</div>`
+  return `<section class="source-inventory"><h4>Control center surse</h4><p class="hint">Acoperire operațională pentru redactare: arată ce surse sunt urmărite, ce a fost citit local și ce trebuie verificat înainte de concluzii.</p><div class="coverage-grid">${(data.families||[]).map(sourceCoverageFamilyHtml).join('')}</div></section>`
     +`<p><strong>${esc(data.status==='ok'?'Acoperire operațională':'Acoperire incompletă')}</strong> · ${data.missing_required||0} familii lipsă · ${data.unsynced_required||0} familii nesincronizate · ${data.attention_sources||0} surse cu atenție · ${data.projects?.total||0} proiecte urmărite în registrul local.</p>`
     +sourceCoverageActionHtml(data)
     +(blockers?`<details open><summary>Blocaje pentru analiză fiabilă</summary><ul>${blockers}</ul></details>`:'')
@@ -7193,6 +7206,8 @@ async function loadSourceCoverage(){
     const data=await response.json().catch(()=>({error:'Acoperirea surselor nu este disponibilă.'}));
     if(!response.ok||data.error)throw Error(data.error||'Acoperirea surselor nu este disponibilă.');
     out.innerHTML=sourceCoverageHtml(data);
+    out.querySelectorAll('[data-source-control-open]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlOpen,false));
+    out.querySelectorAll('[data-source-control-attention]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlAttention,true));
     status.textContent=`${data.status==='ok'?'Acoperire completă':'Acoperire incompletă'} · ${data.blockers?.length||0} blocaje.`;
   }catch(err){status.textContent=err.message;out.innerHTML='';}
 }
@@ -7376,7 +7391,7 @@ $('#acceptance-dashboard-refresh').onclick=loadAcceptanceDashboard;
 $('#needs-attention-refresh').onclick=loadNeedsAttention;
 $('#monitor-reconciliation-refresh').onclick=loadMonitorReconciliation;
 $('#monitor-replay-tracker').onclick=replayMonitorToTracker;
-$('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
+$('#source-coverage-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0,'','');};
 $('#source-coverage-open-lifecycle').onclick=()=>{$('#lifecycle-tracker').open=true;loadLifecycleList();};
 $('#econsultare-feed').ontoggle=e=>{if(e.currentTarget.open)loadEconsultareFeed();};
 $('#econsultare-feed-discover').onclick=async()=>{
