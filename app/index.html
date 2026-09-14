@@ -674,6 +674,12 @@
     background:transparent;border:0;border-bottom:2px solid transparent;color:var(--ink-mute)}
   .tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
   .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .workflow-nav{display:flex;flex-wrap:wrap;gap:.35rem;margin:-.35rem 0 1rem;font-family:var(--sans)}
+  .workflow-nav button{font-size:.76rem;font-weight:600;min-height:2rem;padding:.35rem .65rem;
+    border:1px solid var(--rule);border-left:3px solid var(--rule);border-radius:var(--r1);
+    background:var(--surface);color:var(--ink-mid);cursor:pointer;white-space:normal}
+  .workflow-nav button:hover{border-color:var(--accent);background:var(--accent-wash);color:var(--ink)}
+  .workflow-nav button[aria-current="true"]{border-left-color:var(--accent);color:var(--ink)}
   /* pinned to the top-right of the tab strip, so it never orphans onto its own line when the tabs
      wrap on a narrow viewport */
   .tema{position:absolute;top:0;right:0;background:transparent;border:1px solid var(--rule);
@@ -784,6 +790,22 @@
   button.ghost:active{background:color-mix(in srgb,var(--accent) 16%,transparent)}
   button.ghost:disabled{opacity:.5;cursor:default;background:transparent}
   .hint{font-family:var(--sans);font-size:.76rem;color:var(--ink-mute)}
+  .first-run{border-block:1px solid var(--rule);padding:1rem 0;margin:.2rem 0 1rem}
+  .first-run h2{font-size:1.35rem;margin:0 0 .35rem}
+  .first-run-lead{max-width:54rem;margin:.2rem 0 .85rem;color:var(--ink-mid)}
+  .first-run-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr));
+    gap:.6rem;margin:.8rem 0}
+  .first-run-step{border-left:3px solid var(--rule);background:var(--surface);padding:.65rem .75rem;
+    min-width:0}
+  .first-run-step strong{display:block;font-family:var(--sans);font-size:.85rem;margin-bottom:.2rem}
+  .first-run-step span{display:block;font-family:var(--sans);font-size:.76rem;color:var(--ink-mute);
+    line-height:1.45}
+  .first-run-step.current{border-left-color:var(--accent)}
+  .first-run-step.blocked{border-left-color:var(--material)}
+  .first-run-actions{display:flex;flex-wrap:wrap;gap:.45rem;margin:.75rem 0}
+  .state-note{border:1px solid var(--rule-soft);border-left:3px solid var(--material);
+    background:var(--surface);padding:.55rem .65rem;margin:.5rem 0;font-family:var(--sans);
+    font-size:.78rem;color:var(--ink-mid)}
 
   .strip{display:flex;flex-wrap:wrap;gap:.5rem;margin:1.75rem 0 .5rem}
   .chip{font-family:var(--sans);font-size:.76rem;font-weight:600;display:flex;align-items:center;
@@ -1217,7 +1239,8 @@
   <section id="dataset-updates" hidden aria-label="Date legislative locale"></section>
 
   <div class="tabs" role="tablist">
-    <button class="tab" id="tab-lint" role="tab" aria-selected="true" aria-controls="pane-lint">Verifică proiect</button>
+    <button class="tab" id="tab-start" role="tab" aria-selected="true" aria-controls="pane-start">Start</button>
+    <button class="tab" id="tab-lint" role="tab" aria-selected="false" aria-controls="pane-lint">Verifică proiect</button>
     <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
     <button class="tab" id="tab-cauta" role="tab" aria-selected="false" aria-controls="pane-cauta">Caută în legislație</button>
@@ -1229,11 +1252,42 @@
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
+  <nav class="workflow-nav" aria-label="Navigare fluxuri principale">
+    <button type="button" data-main-nav="start" aria-current="true">Start</button>
+    <button type="button" data-main-nav="search">Search</button>
+    <button type="button" data-main-nav="track">Track</button>
+    <button type="button" data-main-nav="matrix">Matrix</button>
+    <button type="button" data-main-nav="dossiers">Dossiers</button>
+    <button type="button" data-main-nav="sources">Sources</button>
+    <button type="button" data-main-nav="ai">AI/MCP</button>
+    <button type="button" data-main-nav="settings">Settings</button>
+  </nav>
 
   <div class="app">
     <div class="main">
 
-      <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint">
+      <div id="pane-start" role="tabpanel" aria-labelledby="tab-start">
+        <section class="first-run" aria-labelledby="first-run-title">
+          <h2 id="first-run-title" tabindex="-1">Pornește o analiză legislativă</h2>
+          <p class="first-run-lead">Alege o sursă publică, păstrează lucrul într-un dosar local, apoi notează lacuna, contradicția sau riscul cu dovadă exactă. Aplicația nu dă verdict juridic.</p>
+          <div class="first-run-grid">
+            <div class="first-run-step current"><strong>1. Sursă</strong><span>Caută o lege, un proiect, o consultare sau un CELEX.</span></div>
+            <div class="first-run-step"><strong>2. Dosar local</strong><span>Salvează contextul privat înainte de note și ciorne.</span></div>
+            <div class="first-run-step"><strong>3. Matrice</strong><span>Vezi lacune, contradicții și surse care cer atenție.</span></div>
+            <div class="first-run-step"><strong>4. Ciornă</strong><span>Scrie propunerea sau folosește AI numai din dovezi selectate.</span></div>
+            <div class="first-run-step blocked"><strong>5. Export</strong><span>Exportă raportul cu limitările și sursele păstrate.</span></div>
+          </div>
+          <div class="first-run-actions">
+            <button type="button" class="go" data-start-action="source">Încep cu o sursă</button>
+            <button type="button" class="ghost" data-start-action="dossier">Creez dosar local</button>
+            <button type="button" class="ghost" data-start-action="matrix">Deschid matricea</button>
+            <button type="button" class="ghost" data-start-action="draft">Verific text proiect</button>
+          </div>
+          <p class="state-note" role="status" id="first-run-status">Datele publice și dosarele private sunt separate. Actualizarea surselor nu suprascrie dosarele locale.</p>
+        </section>
+      </div>
+
+      <div id="pane-lint" role="tabpanel" aria-labelledby="tab-lint" hidden>
         <label for="draft">Textul proiectului</label>
         <div class="draft-split">
           <div class="ta-wrap">
@@ -1429,7 +1483,7 @@
         <section class="source-inventory" aria-labelledby="source-title">
           <div class="source-heading"><h3 id="source-title">Acoperirea surselor</h3><div class="source-actions">
             <button type="button" class="ghost mini" id="source-refresh">Reîncarcă inventarul</button>
-            <button type="button" class="ghost mini" id="source-export" disabled>Exportă JSON</button>
+            <button type="button" class="ghost mini" id="source-export" disabled data-disabled-reason="Exportul devine disponibil după încărcarea inventarului de surse.">Exportă JSON</button>
           </div></div>
           <p id="source-status" class="hint" role="status">Inventar neîncărcat.</p>
           <div id="source-content"></div>
@@ -1462,7 +1516,7 @@
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
             <div id="source-registry-detail"></div>
-            <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled>Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled>Pagina următoare</button></div>
+            <div class="dossier-actions"><button type="button" class="ghost mini" id="source-registry-prev" disabled data-disabled-reason="Nu există pagină anterioară în registrul de surse.">Pagina anterioară</button><button type="button" class="ghost mini" id="source-registry-next" disabled data-disabled-reason="Nu există încă pagină următoare în registrul de surse.">Pagina următoare</button></div>
           </details>
         </section>
         <details class="dossier-library" id="source-coverage">
@@ -1505,7 +1559,7 @@
             </form>
             <p id="tracker-timeline-status" class="hint" role="status">Alege un proiect sau un dosar.</p>
             <div id="tracker-timeline-list"></div>
-            <div class="dossier-actions"><button type="button" id="tracker-timeline-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="tracker-timeline-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
+            <div class="dossier-actions"><button type="button" id="tracker-timeline-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled data-disabled-reason="Încarcă timeline-ul înainte de paginare.">←</button><button type="button" id="tracker-timeline-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled data-disabled-reason="Nu există încă pagină următoare în timeline.">→</button></div>
           </details>
           <details id="tracker-review-queue" class="tracker-timeline">
             <summary>Coada de revizie tracker</summary>
@@ -1530,13 +1584,13 @@
             <div id="project-workbench-body"></div>
           </details>
           <div id="lifecycle-source-review"></div>
-          <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div>
+          <div class="dossier-actions"><button type="button" id="lifecycle-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled data-disabled-reason="Încarcă stadiile înainte de paginare.">←</button><button type="button" id="lifecycle-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled data-disabled-reason="Nu există încă pagină următoare în stadii.">→</button></div>
         </details>
         <details class="dossier-library" id="source-project-manager">
           <summary>Surse parlamentare · Import și actualizări</summary>
           <form id="acquisition-search" class="dossier-actions"><label>Caută inițiativa<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label><button type="submit" class="ghost mini">Caută</button><button type="button" id="acquisition-refresh" class="ghost mini" title="Reîncarcă datele locale" aria-label="Reîncarcă datele locale">↻</button></form>
           <p id="acquisition-status" class="hint" role="status"></p>
-          <div class="acquisition-workspace"><nav aria-label="Surse parlamentare"><div id="acquisition-list"></div><div class="dossier-actions"><button type="button" id="acquisition-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled>←</button><button type="button" id="acquisition-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled>→</button></div></nav><div id="acquisition-detail"></div></div>
+          <div class="acquisition-workspace"><nav aria-label="Surse parlamentare"><div id="acquisition-list"></div><div class="dossier-actions"><button type="button" id="acquisition-prev" class="ghost mini" title="Pagina anterioară" aria-label="Pagina anterioară" disabled data-disabled-reason="Încarcă lista de inițiative înainte de paginare.">←</button><button type="button" id="acquisition-next" class="ghost mini" title="Pagina următoare" aria-label="Pagina următoare" disabled data-disabled-reason="Nu există încă pagină următoare pentru inițiative.">→</button></div></nav><div id="acquisition-detail"></div></div>
         </details>
         <details class="dossier-library" id="dossier-library">
           <summary>Dosare salvate</summary>
@@ -1565,8 +1619,8 @@
               <div><button type="submit" class="ghost mini">Creează dosarul</button></div>
             </form></details>
             <div class="dossier-actions">
-              <button type="button" class="ghost mini" id="dossier-prev" disabled>Pagina anterioară</button>
-              <button type="button" class="ghost mini" id="dossier-next" disabled>Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
+              <button type="button" class="ghost mini" id="dossier-prev" disabled data-disabled-reason="Nu există pagină anterioară de dosare.">Pagina anterioară</button>
+              <button type="button" class="ghost mini" id="dossier-next" disabled data-disabled-reason="Nu există încă pagină următoare de dosare.">Pagina următoare</button><span class="hint" id="dossier-page"></span></div>
             <label>Dosarul de lucru<select id="dossier-select"><option value="">Alege un dosar</option></select></label>
             <div id="dossier-meta"></div><section id="dossier-writing"></section><section id="dossier-watchlist"></section><section id="dossier-notes"></section><section id="dossier-rules"></section><section id="dossier-proposals"></section><div id="dossier-runs"></div><div id="dossier-saved"></div>
           </div>
@@ -1965,7 +2019,7 @@ fetch("/api/rezumat").then(r=>r.json()).then(d=>{
 }).catch(()=>{ $("#stat").textContent="corpus indisponibil"; });
 
 // ---- tabs ----
-const PANES = ["lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","matrice","ue","supraveghere"];
+const PANES = ["start","lint","redacteaza","consolidat","cauta","graf","parlamentari","domenii","matrice","ue","supraveghere"];
 function selectTab(which){
   PANES.forEach(p=>{
     $("#tab-"+p).setAttribute("aria-selected", p===which);
@@ -1975,7 +2029,7 @@ function selectTab(which){
   $(".app").dataset.pane = which;   // Conexiuni panel shows only where it means something (Verifică)
   // #r-nr, not #r-act: the only #r-act in the page is #r-act-info, a hint div. Redactează's first
   // typed field is the number, the same as graf and supraveghere.
-  const focusEl = {lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",matrice:"#m-q",ue:"#ue-text",supraveghere:"#s-nr"}[which];
+  const focusEl = {start:"#first-run-title",lint:"#draft",redacteaza:"#r-nr",consolidat:"#c-act",cauta:"#q",graf:"#g-nr",parlamentari:"#p-q",matrice:"#m-q",ue:"#ue-text",supraveghere:"#s-nr"}[which];
   // Look the element up rather than assuming it exists: when this pointed at a missing id it threw
   // mid-function, and the two loaders below never ran.
   const focusTarget = focusEl && $(focusEl);
@@ -1986,6 +2040,7 @@ function selectTab(which){
   if(which==="domenii") loadDomenii();
   if(which==="matrice") loadMatrice();
   if(which==="supraveghere") renderSupraveghere();
+  updateMainNav(which);
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
 PANES.forEach((p,index)=>{
@@ -1995,7 +2050,80 @@ PANES.forEach((p,index)=>{
     if(next===null)return;e.preventDefault();selectTab(PANES[next]);$('#tab-'+PANES[next]).focus();
   };
 });
-$(".app").dataset.pane = "lint";   // initial tab
+$(".app").dataset.pane = "start";   // initial tab
+function setFirstRunStatus(message){
+  const node=$("#first-run-status");
+  if(node)node.textContent=message;
+}
+function setMainNavCurrent(target){
+  document.querySelectorAll('[data-main-nav]').forEach(button=>{
+    button.setAttribute('aria-current',String(button.dataset.mainNav===target));
+  });
+}
+function updateMainNav(pane){
+  document.querySelectorAll('[data-main-nav]').forEach(button=>{
+    const target=button.dataset.mainNav;
+    const current=(target==='start'&&pane==='start')||(target==='search'&&pane==='cauta')||
+      (target==='matrix'&&pane==='matrice');
+    button.setAttribute('aria-current',String(current));
+  });
+}
+function openWorkflowTarget(target){
+  if(target==='start'){selectTab('start');setMainNavCurrent(target);setFirstRunStatus('Alege sursa publică sau creează dosarul local.');return;}
+  if(target==='search'){selectTab('cauta');setMainNavCurrent(target);setFirstRunStatus('Caută în corpus, apoi deschide fișa pentru sursă și locator.');return;}
+  if(target==='track'){
+    selectTab('matrice');const panel=$("#lifecycle-tracker");if(panel)panel.open=true;
+    $("#lifecycle-search")?.scrollIntoView({block:'start'});
+    setMainNavCurrent(target);
+    setFirstRunStatus('Track deschide stadiile proiectelor, termenele, comisiile, voturile și sursele care cer atenție.');
+    return;
+  }
+  if(target==='matrix'){selectTab('matrice');setMainNavCurrent(target);$("#m-q")?.focus();setFirstRunStatus('Matricea este spațiul principal pentru lacune, contradicții și riscuri urmărite.');return;}
+  if(target==='dossiers'){
+    selectTab('matrice');const panel=$("#dossier-library");if(panel)panel.open=true;
+    panel?.scrollIntoView({block:'start'});
+    setMainNavCurrent(target);
+    setFirstRunStatus('Dossiers deschide dosarele private locale: note, dovezi, ciorne și export.');
+    return;
+  }
+  if(target==='sources'){
+    selectTab('matrice');const panel=$("#source-registry");if(panel)panel.open=true;
+    $("#source-title")?.scrollIntoView({block:'start'});
+    setMainNavCurrent(target);
+    setFirstRunStatus('Sources arată acoperirea surselor și registrul de sincronizare punctuală.');
+    return;
+  }
+  if(target==='ai'){
+    selectTab('consolidat');$("#ai-mode")?.focus();
+    setMainNavCurrent(target);
+    setFirstRunStatus('AI/MCP este explicit: local, BYOK sau handoff aprobat; rezultatele sunt ciorne nerevizuite.');
+    return;
+  }
+  if(target==='settings'){
+    selectTab('consolidat');$("#ai-mode")?.focus();
+    setMainNavCurrent(target);
+    setFirstRunStatus('Settings include tema și setările AI/BYOK. Cheile API rămân doar în sesiunea browserului.');
+  }
+}
+document.querySelectorAll('[data-main-nav]').forEach(button=>{
+  button.onclick=()=>openWorkflowTarget(button.dataset.mainNav);
+});
+document.querySelectorAll('[data-start-action]').forEach(button=>{
+  button.onclick=()=>({
+    source:()=>openWorkflowTarget('search'),
+    dossier:()=>openWorkflowTarget('dossiers'),
+    matrix:()=>openWorkflowTarget('matrix'),
+    draft:()=>selectTab('lint')
+  }[button.dataset.startAction]||(()=>selectTab('start')))();
+});
+function explainDisabledControls(root=document){
+  root.querySelectorAll('button:disabled').forEach(button=>{
+    const reason=button.dataset.disabledReason||'Acțiunea devine disponibilă după ce încarci sau selectezi datele necesare.';
+    if(!button.title)button.title=reason;
+    button.setAttribute('aria-disabled','true');
+  });
+}
+explainDisabledControls();
 function realWorkflowUrl(value){
   try{return new URL(String(value||'').trim());}catch{return null;}
 }

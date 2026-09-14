@@ -174,6 +174,75 @@ def test_daily_workflow_buttons_open_existing_panels():
     run_node(code)
 
 
+def test_first_run_navigation_is_top_level_and_stateful():
+    source = APP.read_text()
+    assert 'id="tab-start"' in source
+    assert 'id="pane-start"' in source
+    assert 'data-main-nav="track"' in source
+    assert 'data-main-nav="dossiers"' in source
+    assert 'data-main-nav="sources"' in source
+    assert 'data-main-nav="ai"' in source
+    assert "Pornește o analiză legislativă" in source
+    assert "Aplicația nu dă verdict juridic" in source
+    assert "Datele publice și dosarele private sunt separate" in source
+    assert "function openWorkflowTarget" in source
+    assert "function explainDisabledControls" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_first_run_shortcuts_reuse_existing_panels_without_duplicate_forms():
+    source = (
+        APP.read_text()
+        .split("function setFirstRunStatus", 1)[1]
+        .split("function realWorkflowUrl", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "const navTargets=['start','search','track','matrix','dossiers','sources','ai','settings'];"
+        "const navs=navTargets.map(target=>({dataset:{mainNav:target},current:'',onclick:null,"
+        "setAttribute(k,v){if(k==='aria-current')this.current=v;}}));"
+        "const startTargets=['source','dossier','matrix','draft'];"
+        "const startActions=startTargets.map(action=>({dataset:{startAction:action},"
+        "onclick:null}));"
+        "const panels={};"
+        "for(const id of ['lifecycle-tracker','dossier-library','source-registry'])"
+        "panels['#'+id]={open:false,scrollIntoView:o=>calls.push(['scroll',id,o.block])};"
+        "panels['#lifecycle-search']={scrollIntoView:o=>calls.push(['scroll','lifecycle-search',o.block])};"
+        "panels['#source-title']={scrollIntoView:o=>calls.push(['scroll','source-title',o.block])};"
+        "panels['#m-q']={focus:()=>calls.push(['focus','m-q'])};"
+        "panels['#ai-mode']={focus:()=>calls.push(['focus','ai-mode'])};"
+        "panels['#first-run-status']={textContent:''};"
+        "function $(sel){return panels[sel]||{setAttribute(){},"
+        "focus(){calls.push(['focus',sel]);}};}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "const document={querySelectorAll(sel){if(sel==='[data-main-nav]')return navs;"
+        "if(sel==='[data-start-action]')return startActions;"
+        "if(sel==='button:disabled')return [];return [];}};"
+        "function setFirstRunStatus" + source + "openWorkflowTarget('track');"
+        "assert.equal(panels['#lifecycle-tracker'].open,true);"
+        "assert.deepEqual(calls.slice(0,2),[['tab','matrice'],['scroll','lifecycle-search','start']]);"
+        "assert.equal(navs.find(n=>n.dataset.mainNav==='track').current,'true');"
+        "openWorkflowTarget('dossiers');assert.equal(panels['#dossier-library'].open,true);"
+        "openWorkflowTarget('sources');assert.equal(panels['#source-registry'].open,true);"
+        "openWorkflowTarget('ai');assert.deepEqual(calls.slice(-2),[['tab','consolidat'],['focus','ai-mode']]);"
+        "assert.ok(panels['#first-run-status'].textContent.includes('ciorne nerevizuite'));"
+        "startActions.find(b=>b.dataset.startAction==='source').onclick();"
+        "assert.deepEqual(calls.slice(-1),[['tab','cauta']]);"
+    )
+    run_node(code)
+
+
+def test_disabled_controls_explain_why_actions_are_unavailable():
+    source = APP.read_text()
+    assert (
+        'data-disabled-reason="Exportul devine disponibil după încărcarea inventarului de surse."'
+        in source
+    )
+    assert 'data-disabled-reason="Încarcă stadiile înainte de paginare."' in source
+    assert 'data-disabled-reason="Nu există pagină anterioară de dosare."' in source
+
+
 def test_dossier_creation_surfaces_source_freshness_warning():
     source = APP.read_text()
     assert 'id="dossier-source-warning"' in source
