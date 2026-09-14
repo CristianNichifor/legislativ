@@ -7,6 +7,7 @@ unknown instead of guessing.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from contextlib import closing
 from dataclasses import asdict, dataclass
@@ -558,13 +559,37 @@ def _filter_bucket_counts(projects: list[dict]) -> dict:
 
 def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) -> dict:
     events = events or []
+    evidence_counts = {
+        "documents": 0,
+        "committees": 0,
+        "reports": 0,
+        "opinions": 0,
+        "votes": 0,
+        "plenary": 0,
+    }
+    document_urls: set[str] = set()
     by_stage: dict[str, list[dict]] = {key: [] for key, _, _ in TIMELINE_COVERAGE_STAGES}
     for event in events:
         event_type = event.get("event_type") or ""
+        payload = event.get("payload") or {}
+        if event_type == "committee_assignment":
+            evidence_counts["committees"] += 1
+        elif event_type == "report_filed":
+            evidence_counts["reports"] += 1
+        elif event_type == "opinion_received":
+            evidence_counts["opinions"] += 1
+        elif event_type == "vote_recorded":
+            evidence_counts["votes"] += 1
+        elif event_type == "plenary_agenda":
+            evidence_counts["plenary"] += 1
+        for document in payload.get("documents") or []:
+            if isinstance(document, dict) and document.get("url"):
+                document_urls.add(document["url"])
         for key, _, event_types in TIMELINE_COVERAGE_STAGES:
             if event_type in event_types:
                 by_stage[key].append(event)
                 break
+    evidence_counts["documents"] = len(document_urls)
     stages = []
     for key, label, required in TIMELINE_COVERAGE_STAGES:
         rows = by_stage[key]
@@ -595,6 +620,8 @@ def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) 
         "contract": "project-timeline-coverage-v1",
         "project_id": project_id,
         "total_events": len(events),
+        "evidence_counts": evidence_counts,
+        "document_urls": sorted(document_urls)[:50],
         "stages": stages,
         "missing": missing,
         "next_missing_stage": next_missing,
@@ -625,9 +652,10 @@ def _project_timeline_coverage(stare, identifiers: list[str]) -> dict[str, dict]
                 return {}
             placeholders = ",".join("?" for _ in identifiers)
             rows = [
-                dict(r)
+                {**dict(r), "payload": json.loads(r["payload_json"] or "{}")}
                 for r in con.execute(
-                    "SELECT project_id,event_type,source_family,occurred_at,observed_at "
+                    "SELECT project_id,event_type,source_family,occurred_at,observed_at,"
+                    "payload_json "
                     "FROM tracker_events WHERE project_id IN ("
                     + placeholders
                     + ") ORDER BY project_id, occurred_at, observed_at, id",

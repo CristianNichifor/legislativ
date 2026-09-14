@@ -109,6 +109,7 @@ def test_detail_exposes_camera_senat_tracker_events_from_local_parcurs(state):
         con.commit()
 
     events = ap.detaliu(state, "plx-000")["tracker_events"]
+    evidence = ap.detaliu(state, "plx-000")["parliamentary_evidence"]
 
     assert [event["key"] for event in events] == [
         "committee_assignment",
@@ -132,6 +133,10 @@ def test_detail_exposes_camera_senat_tracker_events_from_local_parcurs(state):
     assert vote["against"] == 40
     assert vote["abstain"] == 5
     assert vote["nominal_url"].endswith("Nominal?idv=999")
+    assert evidence["counts"]["reports"] == 1
+    assert evidence["counts"]["opinions"] == 1
+    assert evidence["counts"]["votes"] == 1
+    assert evidence["missing"] == []
 
 
 def test_tracker_events_normalize_senat_and_requested_opinions(state):

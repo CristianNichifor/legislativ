@@ -457,6 +457,14 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
             "source_url": "https://www.cdep.ro/raport",
             "occurred_at": "2026-09-08T10:00:00+00:00",
             "title": "Raport depus",
+            "payload": {
+                "documents": [
+                    {
+                        "url": "https://www.cdep.ro/proiecte/raport.pdf",
+                        "label": "Raport favorabil",
+                    }
+                ]
+            },
         },
         {
             "event_type": "vote_recorded",
@@ -485,6 +493,10 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
     assert by_key["vote"]["latest_at"] == "2026-09-09T10:00:00+00:00"
     assert by_key["publication"]["state"] == "missing"
     assert by_key["publication"]["suggested_source_family"] == "monitorul_oficial_pi"
+    assert coverage["evidence_counts"]["documents"] == 1
+    assert coverage["evidence_counts"]["reports"] == 1
+    assert coverage["evidence_counts"]["votes"] == 1
+    assert coverage["document_urls"] == ["https://www.cdep.ro/proiecte/raport.pdf"]
     assert "publication" in coverage["missing"]
     assert coverage["next_missing_stage"]["key"] == "consultation"
     assert coverage["next_source_hint"].startswith("Verifică e-consultare")

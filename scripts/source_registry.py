@@ -675,6 +675,7 @@ def lista(stare, qs: dict | None = None) -> dict:
                             "content_hash": snapshot["content_hash"],
                             "parser_version": snapshot["parser_version"],
                             "summary": payload.get("summary", {}),
+                            "parliamentary_evidence": payload.get("parliamentary_evidence", {}),
                         }
                     )
         counts = {
@@ -1221,7 +1222,11 @@ def _project_local_meta(stare, plx: str) -> dict:
     }
 
 
-def _project_snapshot(row: dict, plx: str, operation: str, result: dict, local_meta: dict) -> dict:
+def _project_snapshot(
+    row: dict, plx: str, operation: str, result: dict, local_meta: dict, events: list[dict]
+) -> dict:
+    from scripts import achizitii_proiecte
+
     documents = [
         {"url": _url(doc.get("url")), "label": _text(doc.get("label", ""), limit=300)}
         for doc in result.get("documente", [])[:100]
@@ -1267,6 +1272,9 @@ def _project_snapshot(row: dict, plx: str, operation: str, result: dict, local_m
         "documents": documents,
         "versions": versions,
         "imported": imported,
+        "parliamentary_evidence": achizitii_proiecte.parliamentary_evidence_summary(
+            documents=[*documents, *versions], events=events
+        ),
         "truncated": bool(result.get("trunchiat")),
     }
 
@@ -1285,6 +1293,7 @@ def _project_content_hash(snapshot: dict) -> str:
             "operation": snapshot["operation"],
             "fisa_url": snapshot["fisa_url"],
             "documents": snapshot["documents"],
+            "parliamentary_evidence": snapshot.get("parliamentary_evidence", {}),
             "truncated": snapshot["truncated"],
         }
     )
@@ -1351,13 +1360,16 @@ def _persist_tracker_event(stare, data: dict) -> dict | None:
         return None
 
 
-def _persist_project_tracker_events(stare, source_id: str, row: dict, plx: str) -> list[dict]:
-    from scripts import achizitii_proiecte
+def _persist_project_tracker_events(
+    stare, source_id: str, row: dict, plx: str, events: list[dict] | None = None
+) -> list[dict]:
+    if events is None:
+        from scripts import achizitii_proiecte
 
-    try:
-        events = achizitii_proiecte.tracker_events(stare, plx)
-    except (ValueError, OSError, sqlite3.Error):
-        return []
+        try:
+            events = achizitii_proiecte.tracker_events(stare, plx)
+        except (ValueError, OSError, sqlite3.Error):
+            return []
     stored = []
     for event in events:
         key = event.get("key")
@@ -1510,10 +1522,19 @@ def sincronizeaza_proiect(stare, source_id: str) -> dict:
                 "note": str(exc)[:500],
             },
         )
-    snapshot = _project_snapshot(row, plx, operation, result, _project_local_meta(stare, plx))
+    local_meta = _project_local_meta(stare, plx)
+    try:
+        candidate_events = achizitii_proiecte.tracker_events(stare, plx)
+    except (ValueError, OSError, sqlite3.Error):
+        candidate_events = []
+    if result.get("documente"):
+        candidate_events = achizitii_proiecte.with_event_documents(
+            candidate_events, result.get("documente", [])
+        )
+    snapshot = _project_snapshot(row, plx, operation, result, local_meta, candidate_events)
     content_hash = _project_content_hash(snapshot)
     _store_snapshot(stare, source_id, content_hash, snapshot, PROJECT_PARSER_VERSION)
-    tracker_sync = _persist_project_tracker_events(stare, source_id, row, plx)
+    tracker_sync = _persist_project_tracker_events(stare, source_id, row, plx, candidate_events)
     inregistreaza(
         stare,
         {

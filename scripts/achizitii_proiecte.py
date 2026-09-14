@@ -133,7 +133,75 @@ def _nominal_url(idv):
     return f"https://www.cdep.ro/ords/pls/steno/evot2015.Nominal?idv={idv}" if idv else None
 
 
-def _tracker_events_from_rows(meta, stages, opinions, votes):
+def _document_matches(document, *needles):
+    folded = _fold((document.get("label") or "") + " " + (document.get("url") or ""))
+    return any(needle in folded for needle in needles)
+
+
+def _event_documents(key, documents):
+    if key == "report_filed":
+        needles = ("raport",)
+    elif key in {"opinion_received", "opinion_requested"}:
+        needles = ("aviz", "punct de vedere")
+    elif key == "vote_recorded":
+        needles = ("vot", "voturi")
+    elif key == "plenary_agenda":
+        needles = ("ordine de zi", "ordinea de zi", "plen")
+    else:
+        needles = ()
+    if not needles:
+        return []
+    return [doc for doc in documents if _document_matches(doc, *needles)][:20]
+
+
+def parliamentary_evidence_summary(*, documents=(), events=()):
+    """Summarize parliamentary evidence without treating missing rows as legal absence."""
+    documents = [doc for doc in documents if isinstance(doc, dict)]
+    events = [event for event in events if isinstance(event, dict)]
+    counts = {
+        "documents": len(documents),
+        "committees": sum(1 for event in events if event.get("key") == "committee_assignment"),
+        "reports": sum(1 for event in events if event.get("key") == "report_filed"),
+        "opinions": sum(
+            1 for event in events if event.get("key") in {"opinion_received", "opinion_requested"}
+        ),
+        "votes": sum(1 for event in events if event.get("key") == "vote_recorded"),
+        "plenary": sum(1 for event in events if event.get("key") == "plenary_agenda"),
+    }
+    available_links = sum(1 for doc in documents if doc.get("url"))
+    missing = [key for key, value in counts.items() if key != "documents" and not value]
+    return {
+        "contract": "parliamentary-project-evidence-summary-v1",
+        "counts": counts,
+        "available_document_links": available_links,
+        "missing": missing,
+        "complete": not missing,
+        "next_action": (
+            "Verifică fișa parlamentară pentru: " + ", ".join(missing[:4]) + "."
+            if missing
+            else "Dovezile parlamentare principale există în trackerul local."
+        ),
+        "limitari": [
+            "Rezumatul folosește numai date locale deja extrase.",
+            "Lipsa unui rând local înseamnă dovadă neîncărcată, nu absență juridică.",
+        ],
+    }
+
+
+def with_event_documents(events, documents):
+    """Attach matching document links to already-normalized parliamentary events."""
+    documents = [doc for doc in documents if isinstance(doc, dict)]
+    enriched = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        linked = event.get("documents") or _event_documents(event.get("key"), documents)
+        enriched.append({**event, "documents": linked})
+    return enriched
+
+
+def _tracker_events_from_rows(meta, stages, opinions, votes, documents=()):
+    documents = [doc for doc in documents if isinstance(doc, dict)]
     events = []
     project_id = meta.get("plx_id") or ""
     for row in stages:
@@ -166,6 +234,7 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                 }
             )
         if _is_report_filed(action):
+            event_docs = _event_documents("report_filed", documents)
             events.append(
                 {
                     **base,
@@ -174,21 +243,26 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                     "committees": committees,
                     "position": _report_position(action),
                     "document_hash": None,
+                    "documents": event_docs,
                     "filed_at": row.get("data"),
                 }
             )
         if _is_plenary_agenda(action, row):
+            event_docs = _event_documents("plenary_agenda", documents)
             events.append(
                 {
                     **base,
                     "key": "plenary_agenda",
                     "agenda_date": row.get("data"),
+                    "documents": event_docs,
                 }
             )
     for row in opinions:
+        key = "opinion_received" if row.get("primit") else "opinion_requested"
+        event_docs = _event_documents(key, documents)
         events.append(
             {
-                "key": "opinion_received" if row.get("primit") else "opinion_requested",
+                "key": key,
                 "project_id": project_id,
                 "date": row.get("data"),
                 "source_family": "avize",
@@ -197,9 +271,11 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                 "position": row.get("sens"),
                 "number": row.get("numar"),
                 "received": bool(row.get("primit")),
+                "documents": event_docs,
             }
         )
     for row in votes:
+        event_docs = _event_documents("vote_recorded", documents)
         events.append(
             {
                 "key": "vote_recorded",
@@ -216,6 +292,7 @@ def _tracker_events_from_rows(meta, stages, opinions, votes):
                 "abstain": row.get("abtineri"),
                 "absent": row.get("absenti"),
                 "nominal_url": _nominal_url(row.get("idv")),
+                "documents": event_docs,
             }
         )
     return sorted(
@@ -277,7 +354,8 @@ def tracker_events(stare, plx, *, limit=MAX_TRACKER_EVENTS):
                     (plx, limit),
                 )
             ]
-    return _tracker_events_from_rows(meta, stages, opinions, votes)[:limit]
+    documents = documente.versiuni(stare, plx)
+    return _tracker_events_from_rows(meta, stages, opinions, votes, documents)[:limit]
 
 
 def _local(stare, plx, detail=False):
@@ -355,7 +433,17 @@ def lista(stare, query="", offset=0):
 
 def detaliu(stare, plx):
     meta = _metadata(_initiative(stare, plx))
-    return {**meta, **_local(stare, plx, detail=True), "tracker_events": tracker_events(stare, plx)}
+    local = _local(stare, plx, detail=True)
+    events = tracker_events(stare, plx)
+    documents = [*local.get("versiuni", [])]
+    return {
+        **meta,
+        **local,
+        "tracker_events": events,
+        "parliamentary_evidence": parliamentary_evidence_summary(
+            documents=documents, events=events
+        ),
+    }
 
 
 def _record(stare, plx, operation, url, version, error=None):
