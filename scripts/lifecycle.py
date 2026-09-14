@@ -485,6 +485,37 @@ def _attention(
     }
 
 
+def _unknown_stage_queue(projects: list[dict]) -> list[dict]:
+    grouped: dict[str, dict] = {}
+    for project in projects:
+        stage_data = project.get("stage") or {}
+        raw = str(stage_data.get("raw") or project.get("status") or "").strip()
+        if stage_data.get("key") != "unknown" or not raw:
+            continue
+        item = grouped.setdefault(
+            raw,
+            {
+                "raw_label": raw,
+                "count": 0,
+                "projects": [],
+                "next_action": (
+                    "Mapează eticheta în lifecycle.py sau marchează sursa ca nesuportată."
+                ),
+            },
+        )
+        item["count"] += 1
+        if len(item["projects"]) < 5:
+            item["projects"].append(
+                {
+                    "project_id": project.get("project_id") or "",
+                    "title": project.get("title") or "",
+                    "source_url": project.get("url") or "",
+                    "last_seen": project.get("last_seen") or "",
+                }
+            )
+    return sorted(grouped.values(), key=lambda row: (-row["count"], row["raw_label"]))[:20]
+
+
 def project_lifecycle_item(
     row: dict,
     *,
@@ -726,6 +757,7 @@ def project_lifecycle_summary(
     base["mai_multe"] = len(rows) > limit
     base["stale"] = sum(1 for project in projects if project["stale"])
     base["unknown_stage"] = sum(1 for project in projects if project["stage"]["key"] == "unknown")
+    base["unknown_stage_review_queue"] = _unknown_stage_queue(projects)
     base["unavailable"] = sum(1 for project in projects if project["unavailable"])
     if projects:
         if base["unavailable"]:

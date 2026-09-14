@@ -172,7 +172,8 @@ class LocalLaunchTests(unittest.TestCase):
                     command = ["cmd", "/d", "/c", "ruleaza.cmd", *args]
                 else:
                     command = ["bash", str(extracted / "ruleaza.sh"), *args]
-                with (base / "output.log").open("w+") as output:
+                output_log = base / "output.log"
+                with output_log.open("w+") as output:
                     proc = subprocess.Popen(
                         command,
                         cwd=extracted,
@@ -186,7 +187,7 @@ class LocalLaunchTests(unittest.TestCase):
                         body = None
                         last_probe_error = None
                         while time.monotonic() < deadline and proc.poll() is None:
-                            text = (base / "output.log").read_text()
+                            text = output_log.read_text()
                             if "Pornesc pe http://127.0.0.1:" in text:
                                 port = int(text.split("Pornesc pe http://127.0.0.1:")[1].split()[0])
                                 self.assertNotEqual(port, preferred)
@@ -205,9 +206,9 @@ class LocalLaunchTests(unittest.TestCase):
                                     connection.close()
                             time.sleep(0.1)
                         if body is None:
-                            diagnostic = (
-                                base / "output.log"
-                            ).read_text() + f"\nLast HTTP probe error: {last_probe_error}"
+                            diagnostic = output_log.read_text() + (
+                                f"\nLast HTTP probe error: {last_probe_error}"
+                            )
                             print(diagnostic, file=sys.stderr, flush=True)
                             self.fail(diagnostic)
                         self.assertIn(b"<html", body.lower())
@@ -225,6 +226,16 @@ class LocalLaunchTests(unittest.TestCase):
                             with suppress(ProcessLookupError):
                                 os.killpg(proc.pid, signal.SIGTERM)
                         proc.wait(timeout=10)
+                if os.name == "nt":
+                    deadline = time.monotonic() + 5
+                    while output_log.exists():
+                        try:
+                            output_log.unlink()
+                            break
+                        except PermissionError:
+                            if time.monotonic() >= deadline:
+                                raise
+                            time.sleep(0.1)
 
     def test_packaged_cold_start_contract(self):
         self.smoke(stub=True)
