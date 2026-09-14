@@ -1992,6 +1992,23 @@ function realWorkflowGuess(value,family='auto'){
   const identifier=detected==='ue_cellar'&&celex?celex:projectId||raw;
   return {family:detected,identifier,url:url?raw:'',project_id:projectId||identifier,celex};
 }
+function realWorkflowDossierWatch(guessed,source){
+  const label=(source?.label||guessed.identifier||guessed.url||'Sursă publică').slice(0,300);
+  if(guessed.family==='ue_cellar')return {tip:'celex',valoare:guessed.celex||guessed.identifier,eticheta:label};
+  if(['camera','senat','parlament'].includes(guessed.family))return {tip:'project',valoare:guessed.project_id,eticheta:label};
+  if(guessed.family.startsWith('consultare_'))return {tip:'keyword',valoare:guessed.identifier,eticheta:label};
+  return {tip:'keyword',valoare:guessed.identifier,eticheta:label};
+}
+async function realWorkflowAttachToDossier(guessed,source,status){
+  const dossierId=DOSARE_UI.selected?.id;
+  if(!dossierId)return false;
+  const payload=realWorkflowDossierWatch(guessed,source);
+  if(!payload.valoare)return false;
+  await dossierApi('/api/dosare/watchlist',{action:'add',id:crypto.randomUUID().replaceAll('-',''),dosar_id:dossierId,...payload});
+  await loadDossierWatchlist(dossierId,0);
+  if(status)status.textContent+=' Sursa este urmărită și în dosarul curent.';
+  return true;
+}
 async function startRealWorkflow(form){
   const status=$('#real-workflow-status'), fields=Object.fromEntries(new FormData(form));
   const guessed=realWorkflowGuess(fields.identifier,fields.family);
@@ -2011,6 +2028,7 @@ async function startRealWorkflow(form){
     if(guessed.family==='ue_cellar'){
       await openEuSource(guessed.celex||guessed.identifier);
       status.textContent='CELEX importat/verificat. Alege articolul și creează nota UE în dosarul local.';
+      await realWorkflowAttachToDossier(guessed,synced,status);
       return;
     }
     if(['camera','senat','parlament'].includes(guessed.family)){
@@ -2020,6 +2038,7 @@ async function startRealWorkflow(form){
       await loadLifecycleList(0);
       await openProjectCockpit({project_id:guessed.project_id,dossier_id:DOSARE_UI.selected?.id||''});
       status.textContent='Proiectul este înregistrat. Verifică stadiul, pachetul de dovezi și dosarul local.';
+      await realWorkflowAttachToDossier(guessed,synced,status);
       return;
     }
     if(guessed.family==='consultare_econsultare'){
@@ -2027,10 +2046,12 @@ async function startRealWorkflow(form){
       await loadEconsultareFeed();
       await loadSourceWorkbench();
       status.textContent='Consultarea este înregistrată în surse/tracker. Leag-o la dosar și urmărește termenul.';
+      await realWorkflowAttachToDossier(guessed,synced,status);
       return;
     }
     await loadSourceWorkbench();
     status.textContent='Sursa este înregistrată metadata-first. Completează metadata necesară și urmărește în registru.';
+    await realWorkflowAttachToDossier(guessed,synced,status);
   }catch(err){status.textContent=err.message;}
 }
 function bindDailyWorkflow(){

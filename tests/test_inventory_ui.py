@@ -17,8 +17,10 @@ def test_daily_workflow_exposes_start_real_project_action():
     assert "Pornește fluxul" in html
     assert "Pilot real achiziții publice" not in html
     assert "function startRealWorkflow" in html
+    assert "function realWorkflowAttachToDossier" in html
     assert "sourceRegistryApi({action:'discover'" in html
     assert "sourceRegistryApi({action:'sync'" in html
+    assert "/api/dosare/watchlist" in html
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -43,6 +45,14 @@ def test_real_workflow_guess_routes_public_sources():
         "g=realWorkflowGuess('https://minister.gov.ro/transparenta/proiect','consultare_minister');"
         "assert.equal(g.family,'consultare_minister');"
         "assert.equal(g.url,'https://minister.gov.ro/transparenta/proiect');"
+        "assert.deepEqual(realWorkflowDossierWatch({family:'ue_cellar',celex:'32014L0024',"
+        "identifier:'32014L0024'},{label:'Directivă'}),"
+        "{tip:'celex',valoare:'32014L0024',eticheta:'Directivă'});"
+        "assert.deepEqual(realWorkflowDossierWatch({family:'camera',project_id:'PL-x 1/2026',"
+        "identifier:'PL-x 1/2026'},{label:'Proiect'}),"
+        "{tip:'project',valoare:'PL-x 1/2026',eticheta:'Proiect'});"
+        "assert.equal(realWorkflowDossierWatch({family:'consultare_econsultare',"
+        "identifier:'https://e-consultare.gov.ro/x'},{}).tip,'keyword');"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
