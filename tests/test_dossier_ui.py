@@ -682,6 +682,7 @@ def test_unified_ai_panel_exposes_all_tasks_and_manifest_actions():
         "assert.ok(html.includes('compară două prevederi'));"
         "assert.ok(html.includes('extrage candidat law-as-code'));"
         "assert.ok(html.includes('data-ai-boundary-summary'));"
+        "assert.ok(html.includes('data-ai-guardrail-output'));"
         "assert.ok(html.includes('data-ai-send-note'));"
         "assert.ok(html.includes('data-ai-copy-prompt'));"
         "assert.ok(html.includes('data-mcp-ai-draft'));"
@@ -699,6 +700,50 @@ def test_unified_ai_panel_is_mounted_on_dossier_proposal_and_matrix_surfaces():
     assert "data-matrix-ai-evidence" in html
     assert "startManualNote({" in html
     assert "data-unified-ai-draft" in html
+    assert "data-ai-guardrail-output" in html
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_guardrail_summary_renders_ok_review_blocked_and_failure_states():
+    source = (
+        APP.read_text()
+        .split("function aiGuardrailSummaryHtml", 1)[1]
+        .split("async function aiRunEvidenceDraft", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiGuardrailSummaryHtml"
+        + source
+        + "const ok=aiGuardrailSummaryHtml({insert_allowed:true,"
+        "guardrail_summary:{status:'ok',selected_evidence_only:true},"
+        "claim_support:{unsupported_claims:0,claims:[]}});"
+        "assert.ok(ok.includes('data-ai-guardrail-status=\"ok\"'));"
+        "assert.ok(ok.includes('Guardrails OK'));"
+        "const review=aiGuardrailSummaryHtml({insert_allowed:true,"
+        "guardrail_summary:{status:'needs_review',selected_evidence_only:true},"
+        "claim_support:{unsupported_claims:1,claims:[{status:'unsupported_labeled',"
+        "reason:'missing_citation',text:'Text <unsafe>'}]}});"
+        "assert.ok(review.includes('data-ai-guardrail-status=\"needs_review\"'));"
+        "assert.ok(review.includes('Necesită revizie'));"
+        "assert.ok(review.includes('&lt;unsafe&gt;'));"
+        "const blocked=aiGuardrailSummaryHtml({insert_allowed:false,"
+        "guardrail_summary:{status:'blocked',selected_evidence_only:true},"
+        "claim_support:{unsupported_claims:1,claims:[{status:'unsupported_blocked',"
+        "reason:'citation_outside_selected_evidence'}]}});"
+        "assert.ok(blocked.includes('data-ai-guardrail-status=\"blocked\"'));"
+        "assert.ok(blocked.includes('Inserare: nu'));"
+        "assert.ok(blocked.includes('<details open>'));"
+        "const failed=aiGuardrailSummaryHtml({status:'failed',failure:{label:'timeout',"
+        "user_message:'Furnizorul nu a răspuns. Nu s-a creat nicio ciornă.',"
+        "retryable:true,creates_draft:false,result_imported:false}});"
+        "assert.ok(failed.includes('data-ai-guardrail-status=\"failed\"'));"
+        "assert.ok(failed.includes('AI oprit'));"
+        "assert.ok(failed.includes('ciornă creată: nu'));"
+        "assert.ok(failed.includes('Cheia API nu este trimisă'));"
+    )
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
