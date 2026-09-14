@@ -57,14 +57,20 @@ def test_mcp_ai_draft_requires_approval_and_reuses_source_grounded_prompt():
     assert out["ai_contract"] == "ai-evidence-draft-v1"
     assert out["mcp"]["status"] == "requires_user_approval"
     assert out["mcp"]["audit_event"]["approved"] is False
+    assert out["approval_state"] == "preview_created"
     assert out["mcp"]["approval"]["server"] == "desktop-claude"
     assert out["mcp"]["approval"]["data_sha256"] == out["mcp"]["audit_event"]["data_sha256"]
+    assert out["mcp"]["audit_event"]["payload_hash"] == out["mcp"]["approval"]["data_sha256"]
+    assert out["mcp"]["audit_event"]["result_hash"] is None
+    assert out["mcp"]["audit_event"]["user_action"] == "previewed"
+    assert out["mcp"]["audit_event"]["selected_evidence_ids"] == ["lege-1-2026:art3"]
     assert out["approval"]["required"] is True
     assert out["approval"]["server_calls_model"] is False
     assert out["approval"]["mcp_executes_now"] is False
     assert out["audit"]["approved_external_send"] is False
     assert out["audit"]["model_invoked_by_server"] is False
     assert out["audit"]["mcp_data_sha256"] == out["mcp"]["approval"]["data_sha256"]
+    assert out["audit"]["selected_evidence_ids"] == ["lege-1-2026:art3"]
     assert out["cost_estimate"]["server_cost"] == "none"
     assert out["cost_estimate"]["cost_owner"] == "user_if_sent_to_external_tool"
     assert out["evidence_manifest"][0]["quote_sha256"]

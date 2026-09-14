@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 
 from scripts import dosare, mcp_boundary
@@ -71,12 +72,16 @@ def preview(request: dict) -> dict:
             "data": markdown,
         }
     )
+    selected_evidence_ids = _selected_evidence_ids(export)
+    approval = copy.deepcopy(approval)
+    approval["audit_event"]["selected_evidence_ids"] = selected_evidence_ids
     return {
         "contract": "mcp-dossier-export-v1",
         "status": "requires_user_approval",
+        "approval_state": "preview_created",
         "markdown": markdown,
         "markdown_sha256": hashlib.sha256(markdown.encode()).hexdigest(),
-        "selected_evidence_ids": _selected_evidence_ids(export),
+        "selected_evidence_ids": selected_evidence_ids,
         "mcp": approval,
         "approval": {
             "required": True,
@@ -89,7 +94,7 @@ def preview(request: dict) -> dict:
             "contract": "mcp-export-audit-v1",
             "mcp_data_sha256": approval["approval"]["data_sha256"],
             "approved_external_send": False,
-            "selected_evidence_ids": _selected_evidence_ids(export),
+            "selected_evidence_ids": selected_evidence_ids,
         },
         "cost_estimate": {
             "contract": "mcp-export-cost-estimate-v1",

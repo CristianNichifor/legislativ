@@ -86,11 +86,16 @@ def test_export_preview_requires_approval_and_hashes_exact_markdown():
 
     assert out["contract"] == "mcp-dossier-export-v1"
     assert out["status"] == "requires_user_approval"
+    assert out["approval_state"] == "preview_created"
     assert out["approval"]["required"] is True
     assert out["approval"]["mcp_executes_now"] is False
     assert out["mcp"]["approval"]["capability"] == "document_export"
     assert out["mcp"]["approval"]["requires_user_approval"] is True
     assert out["mcp"]["approval"]["hidden_external_calls"] is False
+    assert out["mcp"]["audit_event"]["payload_hash"] == out["mcp"]["approval"]["data_sha256"]
+    assert out["mcp"]["audit_event"]["result_hash"] is None
+    assert out["mcp"]["audit_event"]["user_action"] == "previewed"
+    assert out["mcp"]["audit_event"]["selected_evidence_ids"] == ["lege-10-2026:art1"]
     assert out["selected_evidence_ids"] == ["lege-10-2026:art1"]
     assert "Pragurile se aplică diferit" in out["markdown"]
     assert out["markdown_sha256"]
@@ -132,7 +137,11 @@ def test_export_execute_requires_local_origin_approval_and_stores_audit(state):
     assert executed["workflow"] == "document_export"
     assert executed["output_status"] == "export_unreviewed"
     assert executed["audit_event"]["event"] == "mcp_document_export_executed"
+    assert executed["audit_event"]["server"] == "local-mock"
+    assert executed["audit_event"]["tool"] == "document.export"
     assert executed["audit_event"]["payload_hash"] == executed["approved_data_sha256"]
     assert executed["audit_event"]["selected_evidence_ids"] == ["lege-10-2026:art1"]
+    assert executed["audit_event"]["approval_state"] == "approved_and_executed"
+    assert executed["approval_state"] == "approved_and_executed"
     assert executed["external_calls"] is False
     assert executed["credentials_stored"] is False

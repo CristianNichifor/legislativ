@@ -171,11 +171,18 @@ def preview(request: dict) -> dict:
     return {
         "contract": "mcp-boundary-v1",
         "status": "requires_user_approval",
+        "approval_state": "preview_created",
         "approval": approval,
         "audit_event": {
             **payload,
             "contract": "mcp-audit-event-v1",
             "event": "mcp_preview_created",
+            "timestamp": created_at,
+            "payload_hash": data_sha256,
+            "selected_evidence_ids": [],
+            "result_hash": None,
+            "user_action": "previewed",
+            "approval_state": "preview_created",
             "approved": False,
             "requires_user_approval": True,
             "cost_owner": "user_account_or_user_key",
