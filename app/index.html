@@ -1633,6 +1633,31 @@
             <option value="reviewable">revizuibile</option>
             <option value="unknown">registru indisponibil</option>
           </select>
+          <select id="m-review-state" title="Filtrează după starea notelor locale">
+            <option value="">toate reviziile</option>
+            <option value="needs_evidence">necesită dovezi</option>
+            <option value="ready_for_review">gata de revizie</option>
+            <option value="reviewed">revizuit</option>
+            <option value="unreviewed">nerevizuit</option>
+          </select>
+          <select id="m-source-family" title="Filtrează sumarul după familia sursei">
+            <option value="">toate familiile</option>
+            <option value="legislatie_ro">legislație română</option>
+            <option value="camera">Camera Deputaților</option>
+            <option value="senat">Senat</option>
+            <option value="consultare_econsultare">e-consultare</option>
+            <option value="consultare_guvern">consultări Guvern</option>
+            <option value="consultare_minister">consultări ministere</option>
+            <option value="ue_cellar">UE CELEX/Cellar</option>
+            <option value="monitorul_oficial_pi">Monitorul Oficial I</option>
+          </select>
+          <select id="m-lifecycle-state" title="Filtrează sumarul după etapa procedurală">
+            <option value="">toate etapele</option>
+            <option value="tracker_unreviewed">tracker nerevizuit</option>
+            <option value="published_monitor">publicare Monitor</option>
+            <option value="consultation">consultări</option>
+            <option value="parliament">procedură parlamentară</option>
+          </select>
           <select id="m-sort" title="Ordonează matricea">
             <option value="semnale">semnale</option>
             <option value="viduri">lacune</option>
@@ -1642,6 +1667,7 @@
             <option value="acte">acte</option>
           </select>
         </div>
+        <div id="m-workspace"></div>
         <div id="m-rezumat"></div>
         <div id="m-lista"><span class="spin"></span> încarc…</div>
         <div id="m-detalii" class="matrix-detail"></div>
@@ -8636,6 +8662,8 @@ async function loadMatrice(forta){
   const tip=$("#m-tip")?.value||"", rang=$("#m-rang")?.value||"",
         domeniu=$("#m-domeniu")?.value||"", problema=$("#m-problema")?.value||"",
         sourceQuality=$("#m-source-quality")?.value||"",
+        reviewState=$("#m-review-state")?.value||"", sourceFamily=$("#m-source-family")?.value||"",
+        lifecycleState=$("#m-lifecycle-state")?.value||"",
         sort=$("#m-sort")?.value||"semnale";
   $("#m-lista").innerHTML=`<span class="spin"></span> încarc…`;
   $("#m-detalii").innerHTML="";
@@ -8645,6 +8673,9 @@ async function loadMatrice(forta){
   if(domeniu) qs.set("domeniu",domeniu);
   if(problema) qs.set("problema",problema);
   if(sourceQuality) qs.set("source_quality",sourceQuality);
+  if(reviewState) qs.set("review_state",reviewState);
+  if(sourceFamily) qs.set("source_family",sourceFamily);
+  if(lifecycleState) qs.set("lifecycle_state",lifecycleState);
   MATRICE=await fetch("/api/matrice?"+qs.toString()).then(r=>r.json()).catch(()=>null);
   renderMatrice();
 }
@@ -8697,7 +8728,49 @@ function mFiltreCurente(){
     domeniu: $("#m-domeniu")?.value||"",
     problema: $("#m-problema")?.value||"",
     source_quality: $("#m-source-quality")?.value||"",
+    review_state: $("#m-review-state")?.value||"",
+    source_family: $("#m-source-family")?.value||"",
+    lifecycle_state: $("#m-lifecycle-state")?.value||"",
   };
+}
+function mWorkspacePanelHtml(workspace){
+  if(!workspace) return "";
+  const s=workspace.summary||{}, filters=workspace.active_filters||{};
+  const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
+  const filterBits=[
+    filters.review_state?`revizie: ${filters.review_state}`:"",
+    filters.source_family?`sursă: ${filters.source_family}`:"",
+    filters.lifecycle_state?`etapă: ${filters.lifecycle_state}`:"",
+  ].filter(Boolean).join(" · ")||"toate filtrele de lucru";
+  const actions=(workspace.actions||[]).map(a=>
+    `<button type="button" class="ghost mini" data-matrix-workspace-action="${esc(a.kind||"")}" ${a.enabled?"":"disabled"}>${esc(a.label||a.kind||"acțiune")}</button>`
+  ).join("");
+  return `<div class="matrix-workspace" data-law-matrix-workspace-v1>`
+    +`<div class="matrix-workspace-head"><div><div class="parc-h">Spațiu de lucru matrice</div>`
+    +`<p class="hint">${esc(workspace.contract||"law-matrix-workspace-v1")} · ${esc(workspace.status||"needs_sources")} · ${esc(filterBits)}</p></div>`
+    +`<span class="matrix-workspace-badge">candidați, nu verdict juridic</span></div>`
+    +`<div class="matrix-stats">${stat("rânduri de lucru",s.ready_rows||s.rows)}${stat("surse lipsă",s.missing_source_rows)}${stat("note manuale",s.manual_notes)}${stat("candidați reguli",s.rule_candidates)}${stat("tracker nerevizuit",s.tracker_unreviewed)}${stat("surse cu atenție",s.source_attention)}</div>`
+    +`<div class="matrix-drilldown-actions">${actions}</div>`
+    +((workspace.next_actions||[]).length?`<ol class="matrix-workspace-next">${workspace.next_actions.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:"")
+    +`</div>`;
+}
+function bindMatrixWorkspacePanel(){
+  const host=$("#m-workspace"); if(!host) return;
+  host.querySelectorAll("[data-matrix-workspace-action]").forEach(button=>button.onclick=()=>{
+    const action=button.dataset.matrixWorkspaceAction;
+    if(action==="open_first_row"){
+      const first=$("#m-lista .matrix-row"); if(first){first.click();first.scrollIntoView({block:"nearest"});}
+    }else if(action==="filter_missing_sources"){
+      $("#m-source-quality").value="missing";MATRICE=null;loadMatrice(true);
+    }else if(action==="filter_review_notes"){
+      $("#m-review-state").value=$("#m-review-state").value||"ready_for_review";MATRICE=null;loadMatrice(true);
+      reveal("#dossier-library","Deschide un dosar pentru notele locale de revizie.");
+    }else if(action==="filter_tracker"){
+      selectTab("supraveghere");openTrackerTimeline();
+      const timeline=$("#tracker-timeline-search");if(timeline)timeline.elements.reviewed.value="0";
+      loadTrackerTimeline(0);
+    }
+  });
 }
 function mActeHtml(d){
   const acte=(d&&d.acte)||[];
@@ -9292,8 +9365,10 @@ async function mPrevedere(buton){
   }
 }
 function renderMatrice(){
-  const gazda=$("#m-lista"), rez=$("#m-rezumat"), det=$("#m-detalii");
+  const gazda=$("#m-lista"), rez=$("#m-rezumat"), det=$("#m-detalii"), workspace=$("#m-workspace");
   const d=MATRICE||{}, rr=d.rezumat||{};
+  workspace.innerHTML=mWorkspacePanelHtml(d.workspace);
+  bindMatrixWorkspacePanel();
   rez.innerHTML=`<div class="matrix-stats">`
     +`<div class="matrix-stat"><b>${nf(rr.emitenti)}</b><span>emitenți / arii</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.acte)}</b><span>acte în filtru</span></div>`
@@ -9393,6 +9468,9 @@ $("#m-rang").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-domeniu").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-problema").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-source-quality").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-review-state").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-source-family").onchange=()=>{ MATRICE=null; loadMatrice(true); };
+$("#m-lifecycle-state").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 $("#m-sort").onchange=()=>{ MATRICE=null; loadMatrice(true); };
 
 // ---- Drept UE: candidate CELEX provisions for the draft text ----

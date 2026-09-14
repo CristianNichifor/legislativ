@@ -945,10 +945,222 @@ PROBLEME_MATRICE = (
     {"cheie": "initiative", "eticheta": "inițiative pendinte"},
     {"cheie": "amendamente", "eticheta": "amendări primite"},
 )
+MATRIX_REVIEW_STATES = {
+    "needs_evidence": "necesită dovezi",
+    "ready_for_review": "gata de revizie",
+    "reviewed": "revizuit",
+    "unreviewed": "nerevizuit",
+}
+MATRIX_LIFECYCLE_FILTERS = {
+    "tracker_unreviewed": "evenimente tracker nerevizuite",
+    "published_monitor": "publicare Monitor",
+    "consultation": "consultări",
+    "parliament": "procedură parlamentară",
+}
 
 
 def _probleme_matrice() -> list[dict]:
     return [dict(p) for p in PROBLEME_MATRICE]
+
+
+def _matrix_private_summary(stare: Stare, review_state: str | None) -> dict:
+    from scripts import dosare
+
+    path = dosare.cale(stare)
+    empty = {
+        "available": False,
+        "dossiers": 0,
+        "notes_total": 0,
+        "notes_by_type": {},
+        "notes_by_status": {},
+        "rule_candidates": 0,
+        "rule_candidates_by_status": {},
+    }
+    if not Path(path).exists():
+        return empty
+    with dosare._open(path) as con:
+        tables = {
+            row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        out = {**empty, "available": True}
+        out["dossiers"] = con.execute("SELECT count(*) FROM dosare").fetchone()[0]
+        if "note_manuale" in tables:
+            where = ""
+            params: list[str] = []
+            if review_state:
+                where = " WHERE stare=?"
+                params.append(review_state)
+            out["notes_total"] = con.execute(
+                "SELECT count(*) FROM note_manuale" + where, params
+            ).fetchone()[0]
+            out["notes_by_type"] = {
+                row["tip"]: row["total"]
+                for row in con.execute(
+                    "SELECT tip,count(*) total FROM note_manuale" + where + " GROUP BY tip",
+                    params,
+                )
+            }
+            out["notes_by_status"] = {
+                row["stare"]: row["total"]
+                for row in con.execute(
+                    "SELECT stare,count(*) total FROM note_manuale GROUP BY stare"
+                )
+            }
+        if "rule_candidate_queue" in tables:
+            out["rule_candidates"] = con.execute(
+                "SELECT count(*) FROM rule_candidate_queue"
+            ).fetchone()[0]
+            out["rule_candidates_by_status"] = {
+                f"{row['status']}:{row['review_state']}": row["total"]
+                for row in con.execute(
+                    "SELECT status,review_state,count(*) total FROM rule_candidate_queue "
+                    "GROUP BY status,review_state"
+                )
+            }
+        return out
+
+
+def _matrix_tracker_summary(
+    stare: Stare, source_family: str | None, lifecycle_state: str | None
+) -> dict:
+    from scripts import tracker_events
+
+    query = {"limit": ["200"]}
+    if source_family:
+        query["source_family"] = [source_family]
+    if lifecycle_state == "tracker_unreviewed":
+        query["reviewed"] = ["0"]
+    try:
+        out = tracker_events.lista(stare, query)
+    except ValueError:
+        return {"available": False, "total": 0, "unreviewed": 0, "by_type": {}}
+    events = out.get("events") or []
+    if lifecycle_state == "published_monitor":
+        events = [e for e in events if e.get("event_type") == "published_in_monitor"]
+    elif lifecycle_state == "consultation":
+        events = [e for e in events if str(e.get("event_type", "")).startswith("consultation_")]
+    elif lifecycle_state == "parliament":
+        events = [
+            e
+            for e in events
+            if str(e.get("source_family", "")) in {"camera", "senat", "parlament"}
+            or str(e.get("event_type", "")).startswith(("committee_", "vote_", "report_"))
+        ]
+    by_type: dict[str, int] = {}
+    unreviewed = 0
+    for event in events:
+        by_type[event.get("event_type") or "unknown"] = (
+            by_type.get(event.get("event_type") or "unknown", 0) + 1
+        )
+        unreviewed += int(not (event.get("review") or {}).get("reviewed"))
+    return {
+        "available": out.get("source_status") == "ok",
+        "total": len(events),
+        "unreviewed": unreviewed,
+        "by_type": by_type,
+    }
+
+
+def _matrix_source_summary(stare: Stare, source_family: str | None) -> dict:
+    from scripts import source_registry
+
+    query = {"family": [source_family]} if source_family else {}
+    try:
+        out = source_registry.lista(stare, query)
+    except ValueError:
+        return {"available": False, "total": 0, "attention": 0, "by_state": {}, "families": {}}
+    by_state: dict[str, int] = {}
+    families: dict[str, int] = {}
+    for row in out.get("sources") or []:
+        by_state[row.get("state") or "unknown"] = by_state.get(row.get("state") or "unknown", 0) + 1
+        families[row.get("family") or "unknown"] = (
+            families.get(row.get("family") or "unknown", 0) + 1
+        )
+    attention = sum(
+        by_state.get(state, 0) for state in ("changed", "failed", "needs_review", "rate_limited")
+    )
+    return {
+        "available": True,
+        "total": out.get("total", 0),
+        "attention": attention,
+        "by_state": by_state,
+        "families": families,
+    }
+
+
+def _matrix_workspace_summary(
+    rows: list[dict],
+    rezumat: dict,
+    stare: Stare,
+    filters: dict,
+) -> dict:
+    review_state = filters.get("review_state")
+    source_family = filters.get("source_family")
+    lifecycle_state = filters.get("lifecycle_state")
+    private = _matrix_private_summary(stare, review_state)
+    tracker = _matrix_tracker_summary(stare, source_family, lifecycle_state)
+    sources = _matrix_source_summary(stare, source_family)
+    ready_rows = sum(1 for row in rows if row.get("nivel") in {"blocking", "material", "note"})
+    missing_source_rows = sum(1 for row in rows if (row.get("source_quality") or {}).get("missing"))
+    actions = [
+        {
+            "kind": "open_first_row",
+            "label": "Deschide primul rând cu semnale",
+            "enabled": bool(rows),
+        },
+        {
+            "kind": "filter_missing_sources",
+            "label": "Vezi sursele lipsă",
+            "enabled": bool(rezumat.get("surse_lipsa")),
+        },
+        {
+            "kind": "filter_review_notes",
+            "label": "Vezi notele de revizuit",
+            "enabled": bool(private.get("notes_total")),
+        },
+        {
+            "kind": "filter_tracker",
+            "label": "Vezi trackerul nerevizuit",
+            "enabled": bool(tracker.get("unreviewed")),
+        },
+    ]
+    return {
+        "contract": "law-matrix-workspace-v1",
+        "status": "work_ready" if ready_rows or private.get("notes_total") else "needs_sources",
+        "active_filters": {
+            "review_state": review_state or "",
+            "source_family": source_family or "",
+            "lifecycle_state": lifecycle_state or "",
+        },
+        "supported_filters": {
+            "review_states": [
+                {"cheie": key, "eticheta": label} for key, label in MATRIX_REVIEW_STATES.items()
+            ],
+            "lifecycle_states": [
+                {"cheie": key, "eticheta": label} for key, label in MATRIX_LIFECYCLE_FILTERS.items()
+            ],
+        },
+        "summary": {
+            "rows": len(rows),
+            "ready_rows": ready_rows,
+            "missing_source_rows": missing_source_rows,
+            "manual_notes": private.get("notes_total", 0),
+            "rule_candidates": private.get("rule_candidates", 0),
+            "tracker_events": tracker.get("total", 0),
+            "tracker_unreviewed": tracker.get("unreviewed", 0),
+            "source_attention": sources.get("attention", 0),
+        },
+        "manual_notes": private,
+        "tracker": tracker,
+        "sources": sources,
+        "actions": actions,
+        "next_actions": [
+            "Alege un domeniu sau o problemă, apoi deschide rândul cu cele mai multe semnale.",
+            "Pentru fiecare rând, pornește din dovezi și salvează o notă înainte de draft.",
+            "Dacă sursele sunt lipsă sau schimbate, tratează rândul ca incomplet.",
+        ],
+        "not_legal_verdict": True,
+    }
 
 
 def _filtru_problema_matrice(rand: dict, problema: str | None) -> bool:
@@ -990,6 +1202,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     domeniu = (qs.get("domeniu", [""])[0] or "").strip() or None
     problema = (qs.get("problema", [""])[0] or "").strip() or None
     source_quality = (qs.get("source_quality", [""])[0] or "").strip() or None
+    review_state = (qs.get("review_state", [""])[0] or "").strip() or None
+    source_family = (qs.get("source_family", [""])[0] or "").strip() or None
+    lifecycle_state = (qs.get("lifecycle_state", [""])[0] or "").strip() or None
     limita = max(1, min(_numar_qs(qs, "limita", 80), 200))
     viduri = _raport_lista(stare.vid)
     neconst = _raport_lista(stare.neconstitutional)
@@ -1010,6 +1225,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
     probleme_valide = {p["cheie"] for p in PROBLEME_MATRICE}
     problema_filtru = problema if problema in probleme_valide else None
     quality_filtru = _source_quality_filter(source_quality)
+    review_filtru = review_state if review_state in MATRIX_REVIEW_STATES else None
+    lifecycle_filtru = lifecycle_state if lifecycle_state in MATRIX_LIFECYCLE_FILTERS else None
+    source_family_filtru = re.sub(r"[^a-z0-9_:-]", "", source_family or "")[:80] or None
     registry_available, by_identifier, by_url = _source_registry_index(stare)
 
     def tip_acceptat(tip_act: str | None) -> bool:
@@ -1138,6 +1356,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
             "domenii": domenii_juridice.optiuni(),
             "problema": problema_filtru,
             "source_quality": quality_filtru,
+            "review_state": review_filtru,
+            "source_family": source_family_filtru,
+            "lifecycle_state": lifecycle_filtru,
             "source_quality_states": list(SOURCE_QUALITY_STATES.values()),
             "probleme": _probleme_matrice(),
             "sort": sortare,
@@ -1152,6 +1373,17 @@ def _matrice(qs: dict, stare: Stare) -> dict:
                 "initiative_in_lucru": 0,
             },
             "randuri": [],
+            "workspace": {
+                "contract": "law-matrix-workspace-v1",
+                "status": "blocked_no_corpus",
+                "summary": {},
+                "active_filters": {
+                    "review_state": review_filtru or "",
+                    "source_family": source_family_filtru or "",
+                    "lifecycle_state": lifecycle_filtru or "",
+                },
+                "not_legal_verdict": True,
+            },
             "limitari": ["Corpusul nu este disponibil; matricea nu poate grupa pe emitent."],
         }
 
@@ -1315,6 +1547,9 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "domenii": domenii_juridice.optiuni(),
         "problema": problema_filtru,
         "source_quality": quality_filtru,
+        "review_state": review_filtru,
+        "source_family": source_family_filtru,
+        "lifecycle_state": lifecycle_filtru,
         "source_quality_states": list(SOURCE_QUALITY_STATES.values()),
         "probleme": _probleme_matrice(),
         "sort": sortare,
@@ -1322,6 +1557,16 @@ def _matrice(qs: dict, stare: Stare) -> dict:
         "total": len(iesire),
         "rezumat": rez,
         "randuri": iesire[:limita],
+        "workspace": _matrix_workspace_summary(
+            iesire,
+            rez,
+            stare,
+            {
+                "review_state": review_filtru,
+                "source_family": source_family_filtru,
+                "lifecycle_state": lifecycle_filtru,
+            },
+        ),
         "limitari": [
             "Axa «arie» este emitentul scris pe document, nu o clasificare materială inventată.",
             (
