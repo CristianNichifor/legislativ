@@ -419,6 +419,15 @@ def face_handler(stare: Stare, *, runtime=None):
                     self._json(build(stare, parse_qs(ruta.query)))
                 except (ValueError, OSError, sqlite3.Error) as exc:
                     self._json({"error": str(exc)}, 400)
+            elif ruta.path == "/api/project-source-coverage":
+                from scripts.lifecycle_source_coverage import build
+
+                if not self._dosare_permis():
+                    return
+                try:
+                    self._json(build(stare, parse_qs(ruta.query)))
+                except (ValueError, OSError, sqlite3.Error) as exc:
+                    self._json({"error": str(exc)}, 400)
             elif ruta.path == "/api/project-draft-seed":
                 from scripts.project_draft_seed import build
 
