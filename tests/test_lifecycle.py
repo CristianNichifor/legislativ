@@ -2,7 +2,7 @@ import io
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from scripts import depozit, dosare, source_registry
+from scripts import depozit, dosare, source_registry, tracker_events
 from scripts.lifecycle import (
     ACTIVE_STAGE_KEYS,
     CANONICAL_PROJECT_STATUSES,
@@ -430,6 +430,62 @@ def test_project_lifecycle_summary_counts_user_work_buckets(tmp_path):
     assert out["filter_buckets"]["committee"] == 1
     assert out["filter_buckets"]["vote"] == 1
     assert out["filter_buckets"]["published"] == 1
+
+
+def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url) "
+            "VALUES ('PL-x 40/2026',2,'40','Lege dovezi','Raport depus',"
+            "'2026-09-10T10:00:00+00:00','2026-09-01','https://www.cdep.ro/proiect40')"
+        )
+        con.commit()
+    for event in (
+        {
+            "event_type": "committee_assignment",
+            "project_id": "PL-x 40/2026",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/comisie",
+            "occurred_at": "2026-09-02T10:00:00+00:00",
+            "title": "Comisie sesizată",
+        },
+        {
+            "event_type": "report_filed",
+            "project_id": "PL-x 40/2026",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/raport",
+            "occurred_at": "2026-09-08T10:00:00+00:00",
+            "title": "Raport depus",
+        },
+        {
+            "event_type": "vote_recorded",
+            "project_id": "PL-x 40/2026",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/vot",
+            "occurred_at": "2026-09-09T10:00:00+00:00",
+            "title": "Vot final",
+        },
+    ):
+        tracker_events.adauga(state, event)
+
+    out = project_lifecycle_summary(
+        state, query="PL-x 40/2026", now=datetime(2026, 9, 11, tzinfo=UTC)
+    )
+
+    coverage = out["projects"][0]["timeline_coverage"]
+    by_key = {stage["key"]: stage for stage in coverage["stages"]}
+    assert coverage["contract"] == "project-timeline-coverage-v1"
+    assert coverage["project_id"] == "PL-x 40/2026"
+    assert coverage["total_events"] == 3
+    assert by_key["committee"]["state"] == "present"
+    assert by_key["committee"]["event_types"] == ["committee_assignment"]
+    assert by_key["report"]["count"] == 1
+    assert by_key["vote"]["latest_at"] == "2026-09-09T10:00:00+00:00"
+    assert by_key["publication"]["state"] == "missing"
+    assert "publication" in coverage["missing"]
+    assert coverage["complete"] is False
+    assert "Completează dovezile lipsă" in coverage["next_action"]
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):

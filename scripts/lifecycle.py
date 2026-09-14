@@ -69,6 +69,13 @@ DEFAULT_STAGE_CHANGE_DAYS = 7
 MAX_PROJECTS = 100
 REGISTRY_ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
 PROJECT_REGISTRY_FAMILIES = frozenset({"parlament", "camera", "senat"})
+TIMELINE_COVERAGE_STAGES = (
+    ("consultation", "Consultare", {"public_consultation_opened", "public_consultation_closed"}),
+    ("committee", "Comisie", {"committee_assignment", "opinion_received"}),
+    ("report", "Raport", {"report_filed"}),
+    ("vote", "Vot", {"plenary_agenda", "vote_recorded"}),
+    ("publication", "Monitorul Oficial", {"published_in_monitor"}),
+)
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -530,6 +537,90 @@ def _filter_bucket_counts(projects: list[dict]) -> dict:
     return buckets
 
 
+def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) -> dict:
+    events = events or []
+    by_stage: dict[str, list[dict]] = {key: [] for key, _, _ in TIMELINE_COVERAGE_STAGES}
+    for event in events:
+        event_type = event.get("event_type") or ""
+        for key, _, event_types in TIMELINE_COVERAGE_STAGES:
+            if event_type in event_types:
+                by_stage[key].append(event)
+                break
+    stages = []
+    for key, label, required in TIMELINE_COVERAGE_STAGES:
+        rows = by_stage[key]
+        latest = max(
+            (row.get("occurred_at") or row.get("observed_at") or "" for row in rows), default=""
+        )
+        stages.append(
+            {
+                "key": key,
+                "label": label,
+                "state": "present" if rows else "missing",
+                "count": len(rows),
+                "event_types": sorted(
+                    {row.get("event_type", "") for row in rows if row.get("event_type")}
+                ),
+                "required_any": sorted(required),
+                "latest_at": latest,
+                "source_families": sorted(
+                    {row.get("source_family", "") for row in rows if row.get("source_family")}
+                ),
+            }
+        )
+    missing = [stage["key"] for stage in stages if stage["state"] == "missing"]
+    return {
+        "contract": "project-timeline-coverage-v1",
+        "project_id": project_id,
+        "total_events": len(events),
+        "stages": stages,
+        "missing": missing,
+        "complete": not missing,
+        "next_action": (
+            "Completează dovezile lipsă din timeline înainte de concluzii juridice."
+            if missing
+            else "Timeline-ul local are dovezi pentru traseul public urmărit."
+        ),
+    }
+
+
+def _project_timeline_coverage(stare, identifiers: list[str]) -> dict[str, dict]:
+    if not identifiers:
+        return {}
+    try:
+        from scripts import tracker_events
+
+        path = tracker_events.cale(stare)
+        if not path.exists():
+            return {}
+        with closing(_readonly(path)) as con:
+            tables = {
+                r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if "tracker_events" not in tables:
+                return {}
+            placeholders = ",".join("?" for _ in identifiers)
+            rows = [
+                dict(r)
+                for r in con.execute(
+                    "SELECT project_id,event_type,source_family,occurred_at,observed_at "
+                    "FROM tracker_events WHERE project_id IN ("
+                    + placeholders
+                    + ") ORDER BY project_id, occurred_at, observed_at, id",
+                    identifiers,
+                )
+            ]
+    except (OSError, ValueError, sqlite3.Error):
+        return {}
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["project_id"], []).append(row)
+    return {
+        project_id: _empty_timeline_coverage(project_id, grouped.get(project_id, []))
+        for project_id in identifiers
+    }
+
+
 def _unknown_stage_queue(projects: list[dict]) -> list[dict]:
     grouped: dict[str, dict] = {}
     for project in projects:
@@ -566,6 +657,7 @@ def project_lifecycle_item(
     *,
     registry: dict | None = None,
     latest_event: dict | None = None,
+    timeline_coverage: dict | None = None,
     affected_dossiers: int = 0,
     now: datetime | None = None,
     stale_days: int = DEFAULT_STALE_DAYS,
@@ -613,6 +705,7 @@ def project_lifecycle_item(
         "canonical_status": canonical,
         "stage_date": latest["date"],
         "latest_event": latest,
+        "timeline_coverage": timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or ""),
         "uncertainty": uncertainty,
         "last_seen": last_seen,
         "last_updated": row.get("data_inreg") or last_seen,
@@ -787,12 +880,15 @@ def project_lifecycle_summary(
     identifiers = [row.get("plx_id", "") for row in visible_rows]
     registry = _project_registry_sources(stare, identifiers)
     latest_events = _latest_project_events(stare.initiative, identifiers)
+    timeline_coverage = _project_timeline_coverage(stare, identifiers)
     affected = _affected_dossier_counts(stare, identifiers)
     projects = [
         project_lifecycle_item(
             row,
             registry=registry.get(row.get("plx_id", "")),
             latest_event=latest_events.get(row.get("plx_id", "")),
+            timeline_coverage=timeline_coverage.get(row.get("plx_id", ""))
+            or _empty_timeline_coverage(row.get("plx_id", "")),
             affected_dossiers=affected.get(row.get("plx_id", ""), 0),
             now=now,
             stale_days=stale_days,
