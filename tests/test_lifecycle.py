@@ -239,6 +239,21 @@ def test_project_lifecycle_summary_reads_local_store_and_bounds_results(tmp_path
     assert second["source_status"] == "needs_review"
     assert second["unknown_stage"] == 1
     assert second["projects"][0]["source_state"] == "unknown"
+    assert second["unknown_stage_review_queue"] == [
+        {
+            "raw_label": "Etapă nouă",
+            "count": 1,
+            "projects": [
+                {
+                    "project_id": "plx-2-2026",
+                    "title": "Lege muncă",
+                    "source_url": "https://www.cdep.ro/proiect2",
+                    "last_seen": "2026-08-01T10:00:00+00:00",
+                }
+            ],
+            "next_action": "Mapează eticheta în lifecycle.py sau marchează sursa ca nesuportată.",
+        }
+    ]
 
 
 def test_project_lifecycle_summary_includes_registry_attention(tmp_path):

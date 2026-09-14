@@ -7479,12 +7479,20 @@ function lifecycleAttentionFeedHtml(data){
     return `<li><strong>${esc(p.project_id||'Fără id')}</strong> · ${esc(lifecycleStateLabel(p))} · ${esc(reason)}</li>`;
   }).join('')+'</ol></div>';
 }
+function lifecycleUnknownReviewQueueHtml(data){
+  const rows=data.unknown_stage_review_queue||[];
+  if(!rows.length)return '';
+  return '<div class="lifecycle-attention-feed"><h4>Etape necunoscute · de mapat</h4><ol>'+rows.map(row=>{
+    const samples=(row.projects||[]).map(p=>[p.project_id,p.title].filter(Boolean).join(' · ')).filter(Boolean).join('; ');
+    return `<li><strong>${esc(row.raw_label)}</strong> · ${esc(row.count)} proiect(e)${samples?' · '+esc(samples):''}<br><span class="hint">${esc(row.next_action||'Mapează eticheta înainte de rapoarte de parcurs.')}</span></li>`;
+  }).join('')+'</ol></div>';
+}
 function lifecycleOverviewHtml(data){
   const counts=lifecycleCounts(data);
   return `<section class="lifecycle-overview-card"><span class="hint">Afișate</span><strong>${esc(data.returned||0)}</strong><span class="hint">din ${esc(data.total||0)} proiecte locale</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Necesită atenție</span><strong>${esc(counts.attention)}</strong><span class="hint">${esc(counts.registry)} surse urmărite schimbate</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Calitate stadii</span><strong>${esc(counts.unknown+counts.unavailable)}</strong><span class="hint">${esc(counts.stale)} surse vechi</span></section>`
-    +lifecycleAttentionFeedHtml(data);
+    +lifecycleAttentionFeedHtml(data)+lifecycleUnknownReviewQueueHtml(data);
 }
 function lifecycleStatusSummaryHtml(project){
   const missing=[];
