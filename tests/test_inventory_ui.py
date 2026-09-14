@@ -7,6 +7,15 @@ from pathlib import Path
 import pytest
 
 
+def test_daily_workflow_exposes_start_real_project_action():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+
+    assert 'id="start-real-project"' in html
+    assert "Start proiect real" in html
+    assert "PL-x 33/2025" in html
+    assert "openProjectCockpit(project)" in html
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_inventory_renderer_states_and_escaping():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()

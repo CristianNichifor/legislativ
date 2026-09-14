@@ -1407,6 +1407,7 @@
             <button type="button" class="ghost mini" data-workflow-open-dossier>Dosar local</button>
             <button type="button" class="ghost mini" data-workflow-open-note>Notă gap/UE</button>
             <button type="button" class="ghost mini" data-workflow-open-draft>Ciornă amendament</button>
+            <button type="button" class="ghost mini" id="start-real-project">Start proiect real</button>
             <button type="button" class="ghost mini" data-workflow-open-export>Export</button>
           </div>
         </section>
@@ -1964,6 +1965,20 @@ function bindDailyWorkflow(){
   };
   root.querySelector('[data-workflow-open-search]').onclick=()=>{mark('source');selectTab('cauta');status.textContent='Caută sursa oficială, apoi deschide fișa actului/proiectului pentru URL, locator și context.';$('#q')?.focus();};
   root.querySelector('[data-workflow-open-matrix]').onclick=()=>{mark('source');selectTab('matrice');status.textContent='Filtrează matricea și deschide un rând cu sursă verificabilă înainte de notă.';$('#m-q')?.focus();};
+  const startRealProject=root.querySelector('#start-real-project');
+  if(startRealProject)startRealProject.onclick=()=>{
+    mark('source');
+    selectTab('matrice');
+    $('#lifecycle-tracker').open=true;
+    LIFECYCLE.filter='toate';LIFECYCLE.query='PL-x 33/2025';
+    $('#lifecycle-filter').value='toate';
+    $('#lifecycle-search').elements.q.value='PL-x 33/2025';
+    status.textContent='Deschid proiectul pilot real PL-x 33/2025 în tracker, cockpit și pachetul de dovezi.';
+    loadLifecycleList(0).then(()=>{
+      const project=(LIFECYCLE.last?.projects||[]).find(p=>p.project_id==='PL-x 33/2025')||{project_id:'PL-x 33/2025',title:'Pilot real achiziții publice'};
+      openProjectCockpit(project);
+    }).catch(err=>{status.textContent=err.message;});
+  };
   root.querySelector('[data-workflow-open-dossier]').onclick=()=>{mark('note');reveal('#dossier-library','Alege sau creează dosarul local care va ține nota, dovezile, ciorna și exportul.');};
   root.querySelector('[data-workflow-open-note]').onclick=()=>{
     mark('note');
