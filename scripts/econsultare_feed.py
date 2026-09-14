@@ -59,6 +59,7 @@ def _feed_row(source: sqlite3.Row, snapshot: sqlite3.Row | None) -> dict:
         "snapshot_hash": snapshot["content_hash"] if snapshot else "",
         "needs_attention": source["state"] in source_registry.ATTENTION_STATES
         or status == "unknown",
+        "can_review": source["state"] in {"changed", "needs_review"},
     }
 
 
@@ -107,11 +108,13 @@ def lista(stare, query: dict | None = None) -> dict:
         items = [item for item in items if item["status"] == status_filter]
     items.sort(key=_sort_key)
     counts = {status: sum(1 for item in items if item["status"] == status) for status in STATUSES}
+    attention = sum(1 for item in items if item["needs_attention"])
     return {
         "contract": CONTRACT,
         "items": items[:limit],
         "total": len(items),
         "counts": counts,
+        "attention": attention,
         "source_status": "ok",
         "limitari": [
             "Feed-ul citește registrul local și instantaneele păstrate; "

@@ -173,6 +173,8 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     assert "https://e-consultare.gov.ro/consultare/" in html
     assert "econsultare-feed-discover" in html
     assert "discover_econsultare" in html
+    assert "data-econsultare-review" in html
+    assert "Revizuită din feed-ul e-consultare." in html
     assert "o singură pagină" in html
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split(
         "async function inspectSourceRegistryRow", 1

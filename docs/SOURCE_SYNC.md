@@ -104,6 +104,9 @@ the official ActionGrid listing. That registers bounded consultation rows as
 normal `consultare_econsultare` sources, stores their listing snapshots and emits
 tracker events. It does not download attachments; each discovered consultation
 remains an individual source that can be inspected or synced separately.
+Rows marked `changed` or `needs_review` can be cleared directly from the
+e-consultare feed after inspection; the registry records the review as another
+source attempt and moves the row back to `unchanged`.
 
 The real pilot fixture is narrower: it keeps one official ActionGrid row from
 `https://e-consultare.gov.ro/Consultare-publică`, normalizes it with
