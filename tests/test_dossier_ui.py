@@ -65,6 +65,19 @@ def test_saved_finding_review_exposes_manual_note_action():
     assert "Notă + draft" in source
 
 
+def test_mcp_runtime_surface_is_visible_in_ai_panel():
+    source = APP.read_text()
+    assert "function mcpRuntimePanelHtml" in source
+    assert "data-mcp-runtime-surface" in source
+    assert "data-mcp-discover" in source
+    assert "data-mcp-test" in source
+    assert "api('/api/mcp/runtime')" in source
+    assert "dossierApi('/api/mcp/test'" in source
+    assert "payload preview obligatoriu" in source
+    assert "aplicația rămâne utilizabilă fără MCP" in source
+    assert "Nu există transfer ascuns" in source
+
+
 def test_provision_detail_panels_expose_identity_metadata():
     source = APP.read_text()
     assert "function provisionIdentityMeta" in source

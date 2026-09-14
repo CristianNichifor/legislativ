@@ -118,9 +118,15 @@ def test_execute_runs_local_mock_and_stores_append_only_audit(dossier_db):
     assert out["hidden_external_calls"] is False
     assert out["credentials_stored"] is False
     assert out["app_paid_ai"] is False
+    assert out["selected_evidence_ids"] == ["lege-10-2026:art1"]
+    assert out["user_action"] == "approved_and_executed"
     assert "Ciornă MCP locală" in out["draft_text"]
     assert "Nu verdict juridic" in out["draft_text"]
     assert out["audit_event"]["approved"] is True
+    assert out["audit_event"]["payload_hash"] == out["approved_data_sha256"]
+    assert out["audit_event"]["selected_evidence_ids"] == ["lege-10-2026:art1"]
+    assert out["audit_event"]["result_hash"] == out["result_sha256"]
+    assert out["audit_event"]["user_action"] == "approved_and_executed"
     assert len(out["audit_event"]["result_sha256"]) == 64
 
     with (

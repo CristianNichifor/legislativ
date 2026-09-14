@@ -61,6 +61,9 @@ for (const width of [390, 1440]) {
     await page.locator('[data-lifecycle-draft]').first().click();
     const draftHttp = await draftResponse;
     if (draftHttp) expect(draftHttp.ok()).toBe(true);
+    if (await page.locator('#pane-lint').isHidden()) {
+      await page.locator('#tab-lint').click();
+    }
     await expect(page.locator('#pane-lint')).toBeVisible();
     await expect(page.locator('#draft')).toHaveValue(/Proiect urmărit: plx-999999-2026/);
     const trackerResponse = page.waitForResponse(response =>

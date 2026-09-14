@@ -423,6 +423,11 @@ def _raspunde(path, query, body, method='GET'):
     elif path == '/api/mcp/capabilities':
         from scripts.mcp_boundary import capabilities
         out = capabilities()
+    elif path == '/api/mcp/runtime':
+        from scripts.mcp_runtime import registry
+        out = registry()
+    elif path == '/api/mcp/test':
+        out = {'mod': 'static', 'error': 'Testarea MCP este disponibilă numai în aplicația locală.'}
     elif path == '/api/mcp/preview':
         out = {'mod': 'static', 'error': 'MCP este disponibil doar printr-un executor local aprobat explicit.'}
     elif path in ('/api/documente-proiect', '/api/importa-proiect',

@@ -6,6 +6,8 @@ send legal text to a connected tool until the user sees and approves the exact p
 The first contract is `mcp-boundary-v1`:
 
 - `GET /api/mcp/capabilities` lists supported intent classes.
+- `GET /api/mcp/runtime` lists visible MCP servers/tools, approval schema and failure states.
+- `POST /api/mcp/test` tests the selected server/tool without credentials or external calls.
 - `POST /api/mcp/preview` validates one intended call and returns an approval payload plus an audit
   event.
 - `POST /api/dosare/ai-draft/mcp-preview` builds the existing evidence-grounded AI draft prompt,
@@ -67,6 +69,8 @@ Executor rules:
 - `execute(path, request)` recomputes the MCP preview from selected evidence, compares the approved
   payload hash, runs the deterministic local mock adapter and stores an audit event in the private
   dossier database.
+- Executor audit events include server, tool, timestamp, payload hash, selected evidence ids, result
+  hash and the explicit user action.
 
 The execute request must include only:
 
@@ -81,6 +85,16 @@ The execute request must include only:
 The returned draft is labeled `draft_unreviewed`, includes a non-verdict notice and may be inserted
 into a note through the ordinary note workflow. The executor never accepts API keys, never stores
 credentials and never sends legal text to an external MCP server in v1.
+
+## Runtime surface v1
+
+`scripts.mcp_runtime` implements `mcp-runtime-surface-v1`:
+
+- lists the local `local-mock/ai.draft` server/tool;
+- exposes the approval/audit schema the UI must show before execution;
+- exposes retry/failure states for unavailable MCP, unknown server/tool, missing approval, payload
+  mismatch and executor failure;
+- keeps the app usable when MCP is unavailable.
 
 ## Bounded local tools v1
 
