@@ -90,6 +90,7 @@ test(`real worker, Pagefind and warm offline at ${path}`, async ({ page, context
   // A reload loses the live worker. The service worker does not own the CDN runtime.
   await context.route('https://cdn.jsdelivr.net/**', route => route.abort());
   await page.reload();
+  await page.locator('#tab-lint').click();
   await expect(page.locator('#draft')).toBeVisible();
   const unavailable = await page.evaluate(async () => {
     const response = await fetch('/api/rezumat');
