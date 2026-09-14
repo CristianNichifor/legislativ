@@ -16,6 +16,8 @@ SCHEMA_VERSION = 14
 ENGINE_VERSION = "matrice-dosar-v2"
 LAW_WORKBENCH_ENGINE_VERSION = "fisa-act-v1"
 MAX_REPORT_BYTES = 4_000_000
+COCKPIT_CONTRACT = "dossier-workflow-cockpit-v1"
+EVIDENCE_WORKFLOW_CONTRACT = "dossier-evidence-workflow-v1"
 
 
 def cale(stare):
@@ -767,6 +769,302 @@ def salveaza_rulare(stare, request):
                 (parent, run_id, datetime.now(UTC).isoformat()),
             )
     return rulari(path, ident, run_id)
+
+
+def _count(con, sql, params=()):
+    return con.execute(sql, params).fetchone()[0]
+
+
+def _sample_rows(con, sql, params=()):
+    return [dict(row) for row in con.execute(sql, params).fetchall()]
+
+
+def cockpit(path, ident):
+    """Read-only dossier cockpit summary for the end-to-end writing flow."""
+    ident = _id(ident)
+    meta = metadata(path, ident)
+    with _open(path) as con:
+        version = con.execute("PRAGMA user_version").fetchone()[0]
+        counts = {
+            "runs": _count(con, "SELECT count(*) FROM rulari WHERE dosar_id=?", (ident,)),
+            "notes": (
+                _count(con, "SELECT count(*) FROM note_manuale WHERE dosar_id=?", (ident,))
+                if version >= 10
+                else 0
+            ),
+            "proposals": (
+                _count(
+                    con,
+                    "SELECT count(*) FROM propuneri p "
+                    "JOIN rulari r ON r.id=p.rulare_id WHERE r.dosar_id=?",
+                    (ident,),
+                )
+                if version >= 5
+                else 0
+            ),
+            "rule_candidates": (
+                _count(con, "SELECT count(*) FROM rule_candidate_queue WHERE dosar_id=?", (ident,))
+                if version >= 12
+                else 0
+            ),
+            "rule_drafts": (
+                _count(con, "SELECT count(*) FROM law_rule_drafts WHERE dosar_id=?", (ident,))
+                if version >= 13
+                else 0
+            ),
+            "draft_recovery_items": (
+                _count(
+                    con,
+                    "SELECT count(*) FROM ciorne WHERE dosar_id=? AND continut_json != 'null'",
+                    (ident,),
+                )
+                if version >= 8
+                else 0
+            ),
+        }
+        recent_notes = (
+            _sample_rows(
+                con,
+                "SELECT id,titlu AS title,tip AS type,stare AS status,act_id,locator,"
+                "sursa_sha256 AS source_hash,modificat_la "
+                "FROM note_manuale WHERE dosar_id=? ORDER BY modificat_la DESC,id LIMIT 5",
+                (ident,),
+            )
+            if version >= 10
+            else []
+        )
+        recent_proposals = (
+            _sample_rows(
+                con,
+                "SELECT p.id,p.rulare_id,p.constatare_id,p.revizie,p.titlu AS title,"
+                "p.creat_la,p.raport_sha256 FROM propuneri p "
+                "JOIN rulari r ON r.id=p.rulare_id WHERE r.dosar_id=? "
+                "ORDER BY p.creat_la DESC,p.id LIMIT 5",
+                (ident,),
+            )
+            if version >= 5
+            else []
+        )
+        recent_rules = (
+            _sample_rows(
+                con,
+                "SELECT id,candidate_id,provision_id,act_id,locator,status,review_state,"
+                "modality,source_hash,creat_la FROM rule_candidate_queue "
+                "WHERE dosar_id=? ORDER BY creat_la DESC,id LIMIT 5",
+                (ident,),
+            )
+            if version >= 12
+            else []
+        )
+    active = not meta["arhivat"]
+    return {
+        "contract": COCKPIT_CONTRACT,
+        "dosar": meta,
+        "counts": counts,
+        "recent": {
+            "notes": recent_notes,
+            "proposals": recent_proposals,
+            "rule_candidates": recent_rules,
+        },
+        "actions": {
+            "save_evidence": {"enabled": active, "route": "/api/dosare/note"},
+            "draft_proposal": {"enabled": active, "route": "/api/dosare/propuneri"},
+            "queue_rule_candidate": {"enabled": active, "route": "/api/dosare/reguli"},
+            "promote_rule": {"enabled": active, "route": "/api/dosare/rule-drafts"},
+            "backup_export": {
+                "enabled": True,
+                "explicit_user_action_required": True,
+                "contains_private_dossier_data": True,
+            },
+            "restore_backup": {
+                "enabled": True,
+                "route": "/api/browser-workspace",
+                "validates_schema_before_replace": True,
+            },
+            "source_update": {
+                "enabled": True,
+                "private_work_survives": True,
+                "uploads_private_data": False,
+            },
+        },
+        "privacy": {
+            "storage": "local_private_dossier_database",
+            "server_uploads_private_data": False,
+            "source_updates_include_private_content": False,
+            "summary_omits_note_body_and_proposal_text": True,
+        },
+        "limitari": [
+            "Cockpitul listeaza referinte si stari de lucru, nu verdict juridic.",
+            "Exportul backup contine date private numai la actiunea explicita a utilizatorului.",
+            "Actualizarile de surse nu includ continutul privat al dosarului.",
+        ],
+    }
+
+
+def _evidence_text(value, limit, required=False):
+    return _text(value if value is not None else "", limit, required)
+
+
+def _valid_source_hash(value):
+    value = _evidence_text(value, 64)
+    return len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+def _workflow_id(kind, dossier_id, evidence):
+    return hashlib.sha256(
+        _json({"kind": kind, "dosar_id": dossier_id, "evidence": evidence}).encode()
+    ).hexdigest()[:32]
+
+
+def evidence_workflow(path, request):
+    """Convert one selected matrix/evidence item into local dossier action payloads."""
+    allowed = {
+        "dosar_id",
+        "source",
+        "run_id",
+        "finding_id",
+        "rule",
+    }
+    if (
+        not isinstance(request, dict)
+        or not {"dosar_id", "source"} <= set(request)
+        or set(request) - allowed
+    ):
+        raise ValueError("Cerere workflow dovezi invalidă.")
+    dossier_id = _id(request["dosar_id"])
+    meta = metadata(path, dossier_id)
+    source = request["source"]
+    if not isinstance(source, dict):
+        raise ValueError("Dovadă invalidă.")
+    normalized_source = {
+        "kind": _evidence_text(source.get("kind", "matrix"), 80) or "matrix",
+        "title": _evidence_text(source.get("title", "Dovadă din matrice"), 200, True),
+        "type": _evidence_text(source.get("type", "lacuna"), 80) or "lacuna",
+        "act_id": _evidence_text(source.get("act_id"), 200),
+        "locator": _evidence_text(source.get("locator"), 120),
+        "quote": _evidence_text(source.get("quote"), 4000),
+        "source_url": _evidence_text(source.get("source_url"), 1000),
+        "source_hash": _evidence_text(source.get("source_hash"), 64),
+        "reasoning": _evidence_text(source.get("reasoning"), 60000),
+        "status": _evidence_text(source.get("status", "needs_evidence"), 80) or "needs_evidence",
+    }
+    if normalized_source["source_url"] and not normalized_source["source_url"].startswith(
+        ("https://", "http://")
+    ):
+        raise ValueError("URL sursa invalid.")
+    note_payload = {
+        "id": _workflow_id("note", dossier_id, normalized_source),
+        "dosar_id": dossier_id,
+        "revizie": 0,
+        "title": normalized_source["title"],
+        "type": normalized_source["type"],
+        "act_id": normalized_source["act_id"],
+        "locator": normalized_source["locator"],
+        "evidence_quote": normalized_source["quote"],
+        "source_url": normalized_source["source_url"],
+        "source_hash": normalized_source["source_hash"],
+        "reasoning": normalized_source["reasoning"],
+        "status": normalized_source["status"],
+    }
+    from scripts import note_manuale
+
+    note_manuale._normalize(note_payload)
+    run_id = request.get("run_id")
+    finding_id = request.get("finding_id")
+    proposal_reference = {"enabled": False, "reason": "missing_saved_run_or_finding"}
+    if run_id or finding_id:
+        run_id, finding_id = _id(run_id), _id(finding_id)
+        from scripts import propuneri
+
+        basis = propuneri.citeste(path, dossier_id, run_id, finding_id)["baza"]
+        proposal_reference = {
+            "enabled": not meta["arhivat"],
+            "route": "/api/dosare/propuneri",
+            "basis": basis,
+            "required_fields": ["id", "titlu", "text", "motiv"],
+        }
+    rule_payload = None
+    rule = request.get("rule") or {}
+    if rule is not None and not isinstance(rule, dict):
+        raise ValueError("Regulă invalidă.")
+    rule_text = _evidence_text(rule.get("text") or normalized_source["quote"], 12000)
+    if (
+        normalized_source["act_id"]
+        and normalized_source["locator"]
+        and rule_text
+        and _valid_source_hash(normalized_source["source_hash"])
+    ):
+        rule_payload = {
+            "id": _workflow_id("rule", dossier_id, {**normalized_source, **rule}),
+            "dosar_id": dossier_id,
+            "candidate": {
+                "provision_id": _evidence_text(
+                    rule.get("provision_id")
+                    or f"{normalized_source['act_id']}#{normalized_source['locator']}",
+                    240,
+                    True,
+                ),
+                "act_id": normalized_source["act_id"],
+                "locator": normalized_source["locator"],
+                "source_hash": normalized_source["source_hash"],
+                "source_url": normalized_source["source_url"],
+                "text": rule_text,
+                "modality": _evidence_text(rule.get("modality", "obligation"), 80, True),
+                "review_state": _evidence_text(
+                    rule.get("review_state", "machine_detected"), 80, True
+                ),
+                "actor": _evidence_text(rule.get("actor"), 300),
+                "condition": _evidence_text(rule.get("condition"), 1200),
+                "action": _evidence_text(rule.get("action"), 1200),
+                "deadline": _evidence_text(rule.get("deadline"), 300),
+                "exceptions": rule.get("exceptions", []),
+                "effect": _evidence_text(rule.get("effect"), 1200),
+                "applicability_scope": _evidence_text(rule.get("applicability_scope"), 1200),
+                "confidence": _evidence_text(rule.get("confidence", "unknown"), 80, True),
+                "extraction_method": "matrix",
+                "origin_kind": normalized_source["kind"],
+                "origin_id": note_payload["id"],
+                "reviewer": _evidence_text(rule.get("reviewer"), 160),
+            },
+        }
+        from scripts import rule_candidates
+
+        rule_candidates.validate(rule_payload["candidate"])
+    return {
+        "contract": EVIDENCE_WORKFLOW_CONTRACT,
+        "dosar_id": dossier_id,
+        "source": normalized_source,
+        "actions": {
+            "save_evidence": {
+                "enabled": not meta["arhivat"],
+                "route": "/api/dosare/note",
+                "payload": note_payload,
+            },
+            "draft_proposal": proposal_reference,
+            "queue_rule_candidate": {
+                "enabled": bool(rule_payload) and not meta["arhivat"],
+                "route": "/api/dosare/reguli",
+                "payload": {"action": "save", **rule_payload} if rule_payload else None,
+                "reason": "" if rule_payload else "missing_act_locator_text_or_source_hash",
+            },
+            "backup_export": {
+                "enabled": True,
+                "explicit_user_action_required": True,
+                "contains_private_dossier_data": True,
+            },
+            "source_update": {"private_work_survives": True, "uploads_private_data": False},
+        },
+        "privacy": {
+            "persists_only_after_explicit_local_post": True,
+            "server_uploads_private_data": False,
+            "source_update_payload_contains_private_content": False,
+        },
+        "limitari": [
+            "Payloadul pregateste lucru local in dosar; nu valideaza juridic continutul.",
+            "Propunerile cer o constatare salvata intr-o rulare imutabila.",
+            "Candidatul de regula ramane revizuibil si neexecutat automat.",
+        ],
+    }
 
 
 def backup(path, destination):

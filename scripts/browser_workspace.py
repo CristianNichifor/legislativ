@@ -115,6 +115,7 @@ def route(stare, route, qs, body, method="GET"):
             "": lambda: dosare.creeaza(path, body),
             "/metadate": lambda: dosare.modifica(path, body),
             "/ciorne": lambda: dosare.salveaza_ciorna(path, body),
+            "/cockpit/evidence": lambda: dosare.evidence_workflow(path, body),
             "/rulari": lambda: dosare.salveaza_rulare(stare, body),
             "/revizuiri": lambda: revizuiri.salveaza(path, body),
             "/verificari": lambda: verificari_dovezi.salveaza(stare, body),
@@ -148,6 +149,7 @@ def route(stare, route, qs, body, method="GET"):
             "/ciorne": lambda: (
                 dosare.citeste_ciorna(path, ident) if ident else dosare.lista_ciorne(path, offset)
             ),
+            "/cockpit": lambda: dosare.cockpit(path, ident),
             "/rulari": lambda: dosare.rulari(path, ident, run),
             "/revizuiri": lambda: (
                 revizuiri.istoric(path, ident, run, get("constatare_id"), offset)
