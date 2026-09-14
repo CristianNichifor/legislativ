@@ -43,10 +43,12 @@ def test_econsultare_feed_lists_registered_sources_by_deadline(monkeypatch, tmp_
     assert out["contract"] == "econsultare-feed-v1"
     assert out["source_status"] == "ok"
     assert out["total"] == 2
+    assert out["attention"] == 2
     assert [item["deadline"] for item in out["items"]] == ["2026-10-01", "2026-10-20"]
     assert out["items"][0]["authority"] == "Ministerul Dezvoltării"
     assert out["items"][0]["documents"] == 2
     assert out["items"][0]["state"] == "changed"
+    assert out["items"][0]["can_review"] is True
 
 
 def test_econsultare_feed_filters_and_reports_missing_registry(monkeypatch, tmp_path):
@@ -77,3 +79,22 @@ def test_econsultare_feed_http_endpoint(monkeypatch, tmp_path):
 
     assert result[0][0] == 200
     assert result[0][1]["items"][0]["status"] == "open"
+    assert result[0][1]["attention"] == 1
+
+
+def test_econsultare_feed_review_action_clears_attention(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    row = add_source(stare, monkeypatch, "https://e-consultare.gov.ro/consultare/123")
+    before = econsultare_feed.lista(stare)
+
+    source_registry.executa(
+        stare,
+        {"action": "review", "id": row["id"], "note": "Revizuită din feed-ul e-consultare."},
+    )
+    after = econsultare_feed.lista(stare)
+
+    assert before["attention"] == 1
+    assert before["items"][0]["can_review"] is True
+    assert after["attention"] == 0
+    assert after["items"][0]["state"] == "unchanged"
+    assert after["items"][0]["can_review"] is False

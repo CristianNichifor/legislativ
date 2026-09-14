@@ -7050,10 +7050,11 @@ function econsultareFeedHtml(data){
     const url=urlSigur(item.url);
     const deadline=item.deadline||item.deadline_raw||'termen necunoscut';
     const attention=item.needs_attention?' · necesită atenție':'';
+    const review=item.can_review?`<button type="button" class="ghost mini" data-econsultare-review="${esc(item.source_id)}">Marchează revizuită</button>`:'';
     return `<article class="source-registry-row" data-source-severity="${item.needs_attention?'attention':'ready'}"><h4>${esc(item.title||item.label)} · ${esc(econsultareFeedStatus(item.status))}</h4>`
       +`<p>${esc(item.authority||'Autoritate neextrasă')} · termen ${esc(deadline)} · ${esc(item.documents||0)} atașamente${esc(attention)}</p>`
       +`<p class="hint">Registru: ${esc(item.state)} · captură ${esc(dossierTime(item.snapshot_at||item.updated_at))}${item.last_error?` · ${esc(item.last_error)}`:''}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Sursa oficială</a>`:''}</p>`
-      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-econsultare-source="${esc(item.source_id)}">Deschide sursa</button><button type="button" class="ghost mini" data-econsultare-sync="${esc(item.source_id)}">Sincronizează sursa</button><button type="button" class="ghost mini" data-econsultare-timeline>Timeline consultări</button></div></article>`;
+      +`<div class="dossier-actions"><button type="button" class="ghost mini" data-econsultare-source="${esc(item.source_id)}">Deschide sursa</button><button type="button" class="ghost mini" data-econsultare-sync="${esc(item.source_id)}">Sincronizează sursa</button>${review}<button type="button" class="ghost mini" data-econsultare-timeline>Timeline consultări</button></div></article>`;
   }).join('');
 }
 async function loadEconsultareFeed(){
@@ -7066,13 +7067,18 @@ async function loadEconsultareFeed(){
     const data=await response.json().catch(()=>({error:'Feed-ul e-consultare nu este disponibil.'}));
     if(!response.ok||data.error)throw Error(data.error||'Feed-ul e-consultare nu este disponibil.');
     list.innerHTML=econsultareFeedHtml(data);
-    status.textContent=`${data.total||0} consultări în feed-ul local.`;
+    status.textContent=`${data.total||0} consultări în feed-ul local · ${data.attention||0} necesită atenție.`;
     list.querySelectorAll('[data-econsultare-source]').forEach(button=>button.onclick=()=>{
       $('#source-registry').open=true;inspectSourceRegistryRow(button.dataset.econsultareSource);
     });
     list.querySelectorAll('[data-econsultare-sync]').forEach(button=>button.onclick=async()=>{
       button.disabled=true;status.textContent='Sincronizez consultarea selectată…';
       try{await sourceRegistryApi({action:'sync',id:button.dataset.econsultareSync});await loadEconsultareFeed();}
+      catch(err){status.textContent=err.message;button.disabled=false;}
+    });
+    list.querySelectorAll('[data-econsultare-review]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;status.textContent='Marchez consultarea ca revizuită…';
+      try{await sourceRegistryApi({action:'review',id:button.dataset.econsultareReview,note:'Revizuită din feed-ul e-consultare.'});await loadEconsultareFeed();}
       catch(err){status.textContent=err.message;button.disabled=false;}
     });
     list.querySelectorAll('[data-econsultare-timeline]').forEach(button=>button.onclick=()=>{
