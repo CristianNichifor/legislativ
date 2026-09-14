@@ -98,6 +98,13 @@ bounded official attachment links. It does not crawl the whole consultation
 portal, follow ministry pages, translate documents, run AI or decide whether the
 draft is legally compatible with existing law. Pages without a clear title or
 document links are retained as `needs_review`, not treated as empty results.
+
+The registry can also run `{"action":"discover_econsultare","limit":50}` against
+the official ActionGrid listing. That registers bounded consultation rows as
+normal `consultare_econsultare` sources, stores their listing snapshots and emits
+tracker events. It does not download attachments; each discovered consultation
+remains an individual source that can be inspected or synced separately.
+
 The real pilot fixture is narrower: it keeps one official ActionGrid row from
 `https://e-consultare.gov.ro/Consultare-publică`, normalizes it with
 `scripts.real_public_consultation`, and proves URL, institution, open stage,

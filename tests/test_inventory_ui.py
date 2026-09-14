@@ -171,6 +171,8 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     assert "URL e-consultare" in html
     assert "https://e-consultare.gov.ro/consultare/" in html
+    assert "econsultare-feed-discover" in html
+    assert "discover_econsultare" in html
     assert "o singură pagină" in html
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split(
         "async function inspectSourceRegistryRow", 1

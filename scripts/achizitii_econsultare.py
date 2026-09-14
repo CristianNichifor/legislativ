@@ -18,6 +18,13 @@ from scripts.cdep import USER_AGENT
 PARSER_VERSION = "achizitii_econsultare.v1"
 MAX_BYTES = 2 * 1024 * 1024
 HOSTS = {"e-consultare.gov.ro", "www.e-consultare.gov.ro"}
+LISTING_URL = "https://e-consultare.gov.ro/Consultare-public%C4%83"
+ACTIONGRID_URL = (
+    "https://e-consultare.gov.ro/DesktopModules/DnnSharp/ActionGrid/Api.ashx?"
+    "TabId=155&language=en-US&_url=https%3a%2f%2fe-consultare.gov.ro%2f"
+    "Default.aspx%3fTabId%3d155%26language%3den-US&referrer=&_aliasid=3"
+    "&_mid=883&_tabid=155&method=GetData"
+)
 DATE = re.compile(r"\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b")
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HREF = re.compile(r'href=["\']([^"\']+)["\']', re.I)
@@ -45,6 +52,10 @@ def descarca(url: str, limita: int = MAX_BYTES) -> tuple[bytes, int]:
     if len(data) > limita:
         raise ValueError("Pagina e-consultare depășește limita de descărcare.")
     return data, status
+
+
+def descarca_actiongrid(url: str = ACTIONGRID_URL, limita: int = MAX_BYTES) -> tuple[bytes, int]:
+    return descarca(url, limita)
 
 
 @dataclass
@@ -274,6 +285,26 @@ def parseaza_actiongrid(data: bytes, *, listing_url: str) -> list[dict]:
     if not isinstance(rows, list):
         raise ValueError("Răspuns ActionGrid e-consultare invalid.")
     return [snapshot_din_actiongrid(row, listing_url=listing_url) for row in rows]
+
+
+def descopera_actiongrid(*, limit: int = 50) -> dict:
+    if not 1 <= limit <= 300:
+        raise ValueError("Limită e-consultare invalidă.")
+    data, http_status = descarca_actiongrid()
+    snapshots = parseaza_actiongrid(data, listing_url=LISTING_URL)[:limit]
+    return {
+        "contract": "econsultare-actiongrid-discovery-v1",
+        "listing_url": url_oficial(LISTING_URL),
+        "endpoint_url": url_oficial(ACTIONGRID_URL),
+        "http_status": http_status,
+        "snapshots": snapshots,
+        "total": len(snapshots),
+        "limit": limit,
+        "limitations": [
+            "Descoperă rânduri din lista oficială e-consultare; nu descarcă atașamente.",
+            "Fiecare rând devine sursă punctuală ce poate fi urmărită și sincronizată separat.",
+        ],
+    }
 
 
 def snapshot_hash(snapshot: dict) -> str:
