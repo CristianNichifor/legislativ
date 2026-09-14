@@ -250,6 +250,8 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     assert "source-registry-guvern" in html
     assert "discover_guvern" in html
     assert "Adaugă consultare Guvern" in html
+    assert "source-registry-monitor" in html
+    assert "monitorul_oficial_local" in html
     assert "source-registry-sync-bootstrap" in html
     assert "sync_bootstrap" in html
     assert "data-econsultare-review" in html
@@ -314,6 +316,18 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "assert.ok(h.includes('Consultare Guvern parsată'));"
         "h=sourceRegistryDetailHtml(row,families);"
         "assert.ok(h.includes('Date parsate Consultare Guvern'));"
+        "row.family='monitorul_oficial_pi';"
+        "families.monitorul_oficial_pi='Monitorul Oficial · Partea I';"
+        "row.snapshots=[{captured_at:'2026',content_hash:'b'.repeat(64),"
+        "parser_version:'manual',summary:{title:'Publicare <x>',part:'I',number:'390',"
+        "date:'2016-05-23',documents:0,source_policy:'publication_tracker',"
+        "unsupported_full_text:false}}];"
+        "h=sourceRegistryDetailHtml(row,families);"
+        "assert.ok(h.includes('Referință Monitorul Oficial'));"
+        "assert.ok(h.includes('Număr Monitor'));"
+        "assert.ok(h.includes('390'));"
+        "assert.ok(h.includes('publication_tracker'));"
+        "assert.ok(!h.includes('<x>'));"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr.decode()

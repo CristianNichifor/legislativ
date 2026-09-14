@@ -44,7 +44,12 @@ HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
-MANUAL_METADATA_FAMILIES = frozenset({"consultare_guvern", "consultare_minister", "avize"})
+MONITOR_METADATA_FAMILIES = frozenset(
+    {"monitorul_oficial_pi", "monitorul_oficial_local", "monitorul_oficial_other_parts"}
+)
+MANUAL_METADATA_FAMILIES = (
+    frozenset({"consultare_guvern", "consultare_minister", "avize"}) | MONITOR_METADATA_FAMILIES
+)
 SYNC_FAMILIES = (
     PROJECT_FAMILIES | MANUAL_METADATA_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
 )
@@ -105,6 +110,18 @@ BOOTSTRAP_SOURCES = (
         "identifier": "family:monitorul_oficial_pi",
         "url": "https://monitoruloficial.ro/",
         "label": "Monitorul Oficial Partea I",
+    },
+    {
+        "family": "monitorul_oficial_local",
+        "identifier": "family:monitorul_oficial_local",
+        "url": "https://www.mdlpa.ro/pages/monitoruloficiallocal",
+        "label": "Monitorul Oficial Local - metadate la cerere",
+    },
+    {
+        "family": "monitorul_oficial_other_parts",
+        "identifier": "family:monitorul_oficial_other_parts",
+        "url": "https://monitoruloficial.ro/",
+        "label": "Monitorul Oficial Partile II-VII - metadate/selectiv",
     },
     {
         "family": "ccr",
@@ -1139,6 +1156,35 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
                 isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
             ),
         }
+    elif family in MONITOR_METADATA_FAMILIES:
+        part = _text(
+            metadata.get("part")
+            or metadata.get("partea")
+            or ("I" if family == "monitorul_oficial_pi" else ""),
+            limit=20,
+        )
+        number = _text(metadata.get("number") or metadata.get("monitor"), limit=20)
+        publication_date = _text(metadata.get("date") or metadata.get("publicat"), limit=80)
+        source_policy = (
+            "publication_tracker"
+            if family == "monitorul_oficial_pi"
+            else "metadata_only_manual_document"
+        )
+        if number and not number.isdigit():
+            raise ValueError("Număr Monitor invalid.")
+        summary = {
+            "title": title,
+            "authority": authority,
+            "part": part,
+            "number": number,
+            "date": publication_date,
+            "documents": len(documents),
+            "source_policy": source_policy,
+            "unsupported_full_text": family != "monitorul_oficial_pi",
+            "truncated": bool(
+                isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
+            ),
+        }
     else:
         issuer = _text(metadata.get("issuer") or authority, limit=300)
         position = _text(metadata.get("position", ""), limit=120)
@@ -1168,6 +1214,9 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
         "observations": _text(metadata.get("observations", ""), limit=500),
         "status": status or ("received" if family == "avize" else "unknown"),
         "deadline": deadline,
+        "monitor": summary.get("number", ""),
+        "monitor_part": summary.get("part", ""),
+        "publication_date": summary.get("date", ""),
         "project_id": project_id,
         "occurred_at": occurred_at,
         "documents": documents,
@@ -1421,6 +1470,45 @@ def _persist_manual_metadata_tracker_event(
 ) -> list[dict]:
     family = snapshot.get("family")
     observed_at = now()
+    if family in MONITOR_METADATA_FAMILIES:
+        if family != "monitorul_oficial_pi":
+            return []
+        if not (
+            snapshot.get("project_id")
+            and snapshot.get("monitor")
+            and snapshot.get("publication_date")
+        ):
+            return []
+        from scripts import monitor_tracker
+
+        event = monitor_tracker.event_from_project_row(
+            {
+                "plx_id": snapshot.get("project_id", ""),
+                "monitor": snapshot.get("monitor", ""),
+                "publicat": snapshot.get("publication_date", ""),
+                "part": snapshot.get("monitor_part") or "I",
+                "act_id": snapshot.get("project_id", ""),
+                "source_id": source_id,
+                "source_url": snapshot.get("url", ""),
+                "source_hash": content_hash,
+                "republicare": False,
+                "citit_la": observed_at,
+            },
+            observed_at=observed_at,
+        )
+        if not event:
+            return []
+        saved = _persist_tracker_event(
+            stare,
+            {
+                **event,
+                "source_id": source_id,
+                "source_url": snapshot.get("url", ""),
+                "title": snapshot.get("title") or event["title"],
+                "content_hash": content_hash,
+            },
+        )
+        return [saved] if saved else []
     if family in {"consultare_guvern", "consultare_minister"}:
         status = (snapshot.get("status") or "unknown").strip().lower()
         event_type = (
@@ -1753,6 +1841,10 @@ def sincronizeaza_manual_metadata(stare, source_id: str, metadata: dict | None =
     needs_review = not snapshot.get("project_id") or (
         row["family"] == "avize" and not snapshot.get("issuer")
     )
+    if row["family"] == "monitorul_oficial_pi":
+        needs_review = needs_review or not (
+            snapshot.get("monitor") and snapshot.get("publication_date")
+        )
     final_state = (
         "needs_review" if needs_review else _sync_state(row.get("last_hash", ""), content_hash)
     )

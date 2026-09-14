@@ -155,7 +155,7 @@ def test_registry_names_precise_public_source_families():
     assert "consultare_guvern" in registry.SYNC_FAMILIES
     assert "consultare_minister" in registry.SYNC_FAMILIES
     assert "avize" in registry.SYNC_FAMILIES
-    assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
+    assert "monitorul_oficial_pi" in registry.SYNC_FAMILIES
     assert "monitorul_oficial_pi" in registry.ANCHOR_SYNC_FAMILIES
 
 
@@ -166,15 +166,19 @@ def test_registry_bootstraps_required_official_source_anchors(tmp_path):
     again = registry.executa(stare, {"action": "bootstrap"})
 
     assert out["contract"] == "source-bootstrap-v1"
-    assert out["created"] == 12
+    assert out["created"] == 14
     assert again["created"] == 0
-    assert again["updated"] == 12
+    assert again["updated"] == 14
     listed = registry.lista(stare)
     by_family = {row["family"]: row for row in listed["sources"]}
-    assert len(by_family) == 12
+    assert len(by_family) == 14
     assert by_family["legislatie_ro"]["url"] == "https://legislatie.just.ro/"
     assert by_family["consultare_econsultare"]["url"].startswith("https://e-consultare.gov.ro/")
     assert by_family["ue_cellar"]["url"].startswith("https://op.europa.eu/")
+    assert by_family["monitorul_oficial_local"]["url"].startswith("https://www.mdlpa.ro/")
+    assert by_family["monitorul_oficial_other_parts"]["url"].startswith(
+        "https://monitoruloficial.ro/"
+    )
     assert by_family["camera"]["sync_status"]["can_sync"] is True
     assert by_family["consultare_guvern"]["sync_status"]["freshness"] == "family_anchor"
     assert (
@@ -230,8 +234,8 @@ def test_registry_syncs_all_bootstrap_anchors(monkeypatch, tmp_path):
     synced = registry.executa(stare, {"action": "sync_bootstrap"})
 
     assert synced["contract"] == "source-bootstrap-anchor-sync-v1"
-    assert synced["total"] == 12
-    assert synced["counts"] == {"unchanged": 12}
+    assert synced["total"] == 14
+    assert synced["counts"] == {"unchanged": 14}
     listed = registry.lista(stare)
     assert {row["state"] for row in listed["sources"]} == {"unchanged"}
 
@@ -760,6 +764,88 @@ def test_registry_syncs_avize_metadata_to_opinion_tracker_event(tmp_path):
     assert events["events"][0]["project_id"] == "PL-x 10/2026"
     assert events["events"][0]["payload"]["issuer"] == "Consiliul Legislativ"
     assert events["events"][0]["payload"]["document_hash"] == "f" * 64
+
+
+def test_registry_syncs_monitor_part_i_metadata_to_publication_tracker_event(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "monitorul_oficial_pi",
+            "identifier": "lege-98-2016",
+            "url": "https://monitoruloficial.ro/Monitorul-Oficial--PI--390--2016.html",
+            "label": "Publicare Legea 98/2016",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "title": "Legea 98/2016 publicată",
+                "project_id": "lege-98-2016",
+                "number": "390",
+                "date": "2016-05-23",
+                "part": "I",
+            },
+        },
+    )
+
+    assert synced["state"] == "changed"
+    assert synced["parser_version"] == registry.MANUAL_METADATA_PARSER_VERSION
+    assert synced["tracker_sync"]["event_types"] == {"published_in_monitor": 1}
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"] == {
+        "title": "Legea 98/2016 publicată",
+        "authority": "",
+        "part": "I",
+        "number": "390",
+        "date": "2016-05-23",
+        "documents": 0,
+        "source_policy": "publication_tracker",
+        "unsupported_full_text": False,
+        "truncated": False,
+    }
+    events = tracker_events.lista(stare, {"source_family": ["monitorul_oficial_pi"]})
+    assert events["total"] == 1
+    assert events["events"][0]["event_type"] == "published_in_monitor"
+    assert events["events"][0]["project_id"] == "lege-98-2016"
+    assert events["events"][0]["payload"]["number"] == 390
+    assert events["events"][0]["payload"]["date"] == "2016-05-23"
+
+
+def test_registry_syncs_monitor_local_metadata_without_tracker_event(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "monitorul_oficial_local",
+            "identifier": "cluj-hcl-1-2026",
+            "url": "https://www.mdlpa.ro/pages/monitoruloficiallocal",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "title": "HCL locală",
+                "project_id": "cluj-hcl-1-2026",
+                "number": "12",
+                "date": "2026-02-01",
+            },
+        },
+    )
+
+    assert synced["state"] == "changed"
+    assert synced["tracker_sync"]["stored"] == 0
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"]["source_policy"] == "metadata_only_manual_document"
+    assert selected["snapshots"][0]["summary"]["unsupported_full_text"] is True
 
 
 def test_registry_manual_metadata_needs_review_when_tracker_fields_are_missing(tmp_path):
