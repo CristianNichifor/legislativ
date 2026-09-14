@@ -1095,6 +1095,8 @@ def _matrix_workspace_summary(
     stare: Stare,
     filters: dict,
 ) -> dict:
+    from scripts import matrice, source_registry
+
     review_state = filters.get("review_state")
     source_family = filters.get("source_family")
     lifecycle_state = filters.get("lifecycle_state")
@@ -1125,9 +1127,34 @@ def _matrix_workspace_summary(
             "enabled": bool(tracker.get("unreviewed")),
         },
     ]
+    status = "work_ready" if ready_rows or private.get("notes_total") else "needs_sources"
+    private_path = None
+    tracker_path = None
+    try:
+        from scripts import dosare
+
+        private_path = dosare.cale(stare)
+    except ValueError:
+        pass
+    try:
+        from scripts import tracker_events
+
+        tracker_path = tracker_events.cale(stare)
+    except ValueError:
+        pass
+    payload = matrice.build_workspace(
+        rows=rows,
+        summary=rezumat,
+        filters=filters,
+        private_path=private_path,
+        source_registry_path=source_registry.cale(stare),
+        tracker_path=tracker_path,
+        status=status,
+    )
     return {
         "contract": "law-matrix-workspace-v1",
-        "status": "work_ready" if ready_rows or private.get("notes_total") else "needs_sources",
+        "status": status,
+        "payload": payload,
         "active_filters": {
             "review_state": review_state or "",
             "source_family": source_family or "",
@@ -2553,6 +2580,8 @@ def _matrix_related_items(
 
 
 def _drilldown_dosar_matrice(stare: Stare, dosar: dict, proiecte: dict) -> dict:
+    from scripts import matrice, source_registry
+
     rand = dosar.get("rand") or {}
     semnale = rand.get("semnale") or {}
     exemple = rand.get("exemple") or {}
@@ -2656,8 +2685,38 @@ def _drilldown_dosar_matrice(stare: Stare, dosar: dict, proiecte: dict) -> dict:
         and (ready_checks["exact_provisions"] or ready_checks["source_snapshots"])
         else "needs_evidence"
     )
+    private_path = None
+    tracker_path = None
+    try:
+        from scripts import dosare
+
+        private_path = dosare.cale(stare)
+    except ValueError:
+        pass
+    try:
+        from scripts import tracker_events
+
+        tracker_path = tracker_events.cale(stare)
+    except ValueError:
+        pass
+    workspace_payload = matrice.build_workspace(
+        rows=[rand] if rand else [],
+        summary={},
+        filters={
+            "review_state": "",
+            "source_family": "",
+            "lifecycle_state": "",
+        },
+        private_path=private_path,
+        source_registry_path=source_registry.cale(stare),
+        tracker_path=tracker_path,
+        eu_references=dosar.get("referinte_ue") or [],
+        eu_scope=dosar.get("emitent") or "matrix-row",
+        status=readiness_status,
+    )
     return {
         "contract": "matrice-drilldown-v1",
+        "workspace_payload": workspace_payload,
         "workspace": _matrix_workspace_row(
             rand,
             ready_checks,
