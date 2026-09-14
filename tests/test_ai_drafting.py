@@ -95,6 +95,9 @@ def test_ai_drafting_preview_is_source_grounded_and_client_side():
         ("issue_note", "notă de constatare"),
         ("draft_amendment", "ciornă amendament"),
         ("review_checklist", "listă de verificare"),
+        ("summarize_source_change", "rezumat schimbare sursă"),
+        ("compare_provisions", "compară două prevederi citate"),
+        ("extract_rule_candidate", "extrage candidat law-as-code"),
         ("amendment_rationale", "ciornă amendament"),
     ],
 )

@@ -74,6 +74,8 @@ const bindProposalHistory=()=>{};
 const bindProposalAnalysis=()=>{};
 const bindEuProposalLinks=()=>{};
 const bindStructuredProposal=()=>{};
+const aiUnifiedDraftPanelHtml=()=>'<details data-unified-ai-draft></details>';
+const bindUnifiedAiDraft=()=>{};
 const proposalSeed=()=>null;
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 class FormData { constructor(form){return Object.entries(form.fields).map(([k,v])=>[k,v.value]);} }

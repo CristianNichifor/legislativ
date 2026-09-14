@@ -3310,14 +3310,27 @@ function aiSettingsStatusHtml(s){
   return `${esc(mode)} · fără furnizor plătit al platformei · ${esc(s.online_byok.provider_label)} ${esc(s.online_byok.model||'model necompletat')} · ${esc(key)}`;
 }
 const AI_NOTE_SETTINGS_KEY='ai_note_settings_v1';
+const AI_DRAFT_TASK_LABELS={
+  explain_issue:'explică problema',
+  issue_note:'notă de constatare',
+  draft_amendment:'ciornă amendament',
+  review_checklist:'listă de verificare reviewer',
+  summarize_source_change:'rezumă schimbare sursă',
+  compare_provisions:'compară două prevederi',
+  extract_rule_candidate:'extrage candidat law-as-code'
+};
+function aiDraftTaskOptions(current='issue_note'){
+  return Object.entries(AI_DRAFT_TASK_LABELS).map(([key,label])=>`<option value="${key}" ${key===current?'selected':''}>${label}</option>`).join('');
+}
 function aiNoteSettings(){
   let saved={};try{saved=JSON.parse(localStorage.getItem(AI_NOTE_SETTINGS_KEY)||'{}')||{};}catch(e){saved={};}
   const boundary=['local_ai','online_byok','mcp_handoff'].includes(saved.boundary)?saved.boundary:'local_ai';
+  const task=AI_DRAFT_TASK_LABELS[saved.task]?saved.task:'issue_note';
   const settings=aiSettings();
   return {
     contract:'ai-note-settings-v1',
     boundary,
-    task:['explain_issue','issue_note','draft_amendment','review_checklist'].includes(saved.task)?saved.task:'issue_note',
+    task,
     provider:settings.online_byok.provider,
     online_model:settings.online_byok.model,
     endpoint:settings.online_byok.endpoint,
@@ -3355,6 +3368,16 @@ function aiNoteSettingsSummaryHtml(s){
     +`<p class="hint">Cost: server zero, fără furnizor plătit implicit al platformei; online BYOK/MCP se plătește în contul utilizatorului. Guardrail: ${esc(s.drafting_guardrail?.output_notice||'ciornă nerevizuită numai din dovezi selectate')}.</p>`
     +(s.boundary==='online_byok'?`<p class="hint">Model: ${esc(s.online_model||'necompletat')} · endpoint: ${esc(s.endpoint||'necompletat')}</p>`:'')
     +(s.boundary==='mcp_handoff'?`<p class="hint">MCP: ${esc([s.mcp_server,s.mcp_tool].filter(Boolean).join(' / ')||'necompletat')}</p>`:'');
+}
+function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
+  return '<details data-ai-note-draft data-unified-ai-draft><summary>AI din '+esc(label)+'</summary>'
+    +'<p class="hint">Panou unic pentru dossier, notă, propunere și matrice. Construiește prompt numai din dovezile selectate, cu manifest și cost înainte de rulare. Nu verdict juridic.</p>'
+    +'<div data-ai-note-settings></div><div class="dossier-actions">'
+    +`<label>Sarcină AI<select name="ai_task">${aiDraftTaskOptions()}</select></label>`
+    +'<label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label>'
+    +'<button type="button" class="ghost mini" data-ai-settings-save>Salvează implicit</button><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează ciorna</button></div>'
+    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details>'
+    +'<p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>';
 }
 let _onlineOk=false;
 // online sends text off the device; confirm once before doing that with the user's OWN text
@@ -5066,7 +5089,7 @@ function manualNoteFormHtml(editing=null){
       act_id:editing?.act_id||'',locator:editing?.locator||'',source_hash:editing?.source_hash||'',
       text:editing?.evidence_quote||'',provision_id:''
     })
-    +'<details data-ai-note-draft><summary>Ciornă AI din dovezi selectate</summary><p class="hint">Alege sarcina, pregătește promptul și verifică manifestul/costul înainte de orice trimitere. Serverul nu cheamă modele. Local rulează în browser; online BYOK/MCP pleacă numai după acțiunea ta explicită și costă în contul tău.</p><div data-ai-note-settings></div><div class="dossier-actions"><label>Sarcină AI<select name="ai_task"><option value="explain_issue">explică problema</option><option value="issue_note">notă de constatare</option><option value="draft_amendment">ciornă amendament</option><option value="review_checklist">listă de verificare reviewer</option></select></label><label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label><button type="button" class="ghost mini" data-ai-settings-save>Salvează implicit</button><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează în raționament</button></div><div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary><p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="desktop-claude"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="claude.chat"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details><p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>'
+    +aiUnifiedDraftPanelHtml('dovezi selectate')
     +'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează nota</button><button type="button" class="ghost mini" data-note-clear>Notă nouă</button><p class="hint" role="status" data-note-save-status></p></div></form>';
 }
 function manualNoteSelfReviewMissing(form){
@@ -5453,6 +5476,47 @@ function bindManualNoteMcpDraft(form,section){
     field.dispatchEvent(new Event('input',{bubbles:true}));
     insert.disabled=true;status.textContent='Rezultatul MCP a fost inserat cu audit; salvează nota când ești gata.';
   };
+}
+function bindUnifiedAiDraft(root,draftPayloadBuilder,insertDraft){
+  const section=root.querySelector('[data-unified-ai-draft]');if(!section)return;
+  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]'),settings=section.querySelector('[data-ai-note-settings]'),saveSettings=section.querySelector('[data-ai-settings-save]');
+  const mcp=section.querySelector('[data-mcp-ai-draft]');if(mcp)mcp.hidden=true;
+  aiNoteSettingsApply(root);
+  if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(aiNoteSettings());
+  if(saveSettings)saveSettings.onclick=()=>{const saved=aiNoteSettingsSave(root);if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(saved);status.textContent='Setările AI implicite au fost salvate local, fără cheie API.';};
+  let draft='',plan=null;
+  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';};
+  root.addEventListener('input',e=>{if(e.target.closest('[data-unified-ai-draft]'))return;clearPlan();});
+  root.elements?.ai_task?.addEventListener('change',clearPlan);
+  root.elements?.ai_boundary?.addEventListener('change',()=>{if(plan)summary.innerHTML=aiDraftBoundaryHtml(plan,root.elements.ai_boundary.value);});
+  run.onclick=async()=>{
+    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi selectate…';result.textContent='';summary.innerHTML='';
+    try{
+      const draftPayload=draftPayloadBuilder();
+      plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
+      plan.draft_request=draftPayload;
+      const boundary=root.elements.ai_boundary.value,total=plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens;
+      summary.innerHTML=aiDraftBoundaryHtml(plan,boundary);
+      copy.disabled=false;send.disabled=boundary==='mcp_handoff';
+      status.textContent=`Prompt verificat: ${plan.evidence_count} dovezi · ~${total} tokeni · cost server zero.`;
+    }catch(err){status.textContent=err.message;}
+    finally{run.disabled=false;}
+  };
+  copy.onclick=async()=>{if(!plan)return;try{await navigator.clipboard.writeText(plan.prompt);status.textContent='Prompt copiat. Trimite-l extern numai după aprobare explicită.';}catch{status.textContent='Copierea nu a reușit.';}};
+  send.onclick=async()=>{
+    if(!plan){status.textContent='Pregătește promptul înainte de rulare.';return;}
+    const boundary=root.elements.ai_boundary.value;
+    send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
+    try{
+      const executed=await aiRunEvidenceDraft(plan,boundary,p=>{status.textContent=p?.text||'Rulează AI…';});
+      draft=`${executed.insert_header}\nAudit: ${executed.audit.contract} · ${executed.audit.boundary} · server_calls_model=false · status=${executed.status}\n\n${executed.text}`;
+      result.textContent=draft;
+      insert.disabled=executed.insert_allowed===false;
+      status.textContent=executed.insert_allowed===false?'Ciorna este blocată: are citări în afara dovezilor selectate.':'Ciornă generată și audit salvat. Verifică înainte de inserare.';
+    }catch(err){status.textContent=err.message;}
+    finally{send.disabled=false;}
+  };
+  insert.onclick=()=>{if(!draft)return;insertDraft(draft);insert.disabled=true;status.textContent='Ciorna a fost inserată în câmpul de lucru; salvează când ești gata.';};
 }
 
 const EU_BLOCKER_LABELS={
@@ -6271,7 +6335,7 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       const previous=drafts.get(key),saved=data.propunere,seed=proposalSeed(f);
       const initial=previous?.initial||{titlu:saved?.titlu||seed?.titlu||'',text:saved?.text||'',motiv:saved?.motiv||seed?.motiv||''};
       const revision=previous?.revision??saved?.revizie??0;
-      host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label><div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
+      host.innerHTML='<form><label>Titlu<input type="text" name="titlu" maxlength="200" required></label><label>Text propus<textarea name="text" rows="10" maxlength="12000"></textarea></label><label>Motivare<textarea name="motiv" rows="5" maxlength="4000"></textarea></label>'+aiUnifiedDraftPanelHtml('dovada propunerii')+'<div class="dossier-actions"><button type="submit" class="ghost mini">Salvează propunerea</button><button type="button" class="ghost mini" data-proposal-cancel>Renunță la modificări</button><button type="button" class="ghost mini" data-proposal-latest>Compară versiunea salvată</button></div></form><p class="hint" data-proposal-status role="status"></p><div data-proposal-comparison></div><details><summary>Baza propunerii</summary><pre data-proposal-basis></pre></details>';
       host.querySelector('[data-proposal-basis]').textContent='Rulare: '+data.baza.rulare_id+'\nConstatare: '+data.baza.constatare_id+'\nSHA-256: '+data.baza.raport_sha256;
       bindProposalHistory(host,query,saved,alive);
       bindProposalAnalysis(host,panel,saved,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
@@ -6313,6 +6377,28 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
         }catch(err){record.error=err.message;}
         finally{record.saving=false;if(valid())render();}
       };
+      bindUnifiedAiDraft(form,()=>{
+        const note=manualNoteFromFinding(f);
+        return {
+          task:form.elements.ai_task?.value||'draft_amendment',
+          type:note.type||'lacuna',
+          title:form.elements.titlu?.value||note.title||'Propunere din dovadă',
+          context:[form.elements.motiv?.value,note.reasoning].filter(Boolean).join('\n\n'),
+          evidence:[{
+            label:note.title||'Dovada propunerii',
+            act_id:note.act_id||'',
+            locator:note.locator||'',
+            source_url:note.source_url||'',
+            source_hash:note.source_hash||'',
+            quote:note.evidence_quote||'',
+            language:'RON'
+          }]
+        };
+      },draft=>{
+        const field=form.elements.text;
+        field.value=(field.value?field.value.trim()+'\n\n':'')+draft;
+        field.dispatchEvent(new Event('input',{bubbles:true}));
+      });
       bindStructuredProposal(form,saved,f,drafts,key,revision,initial,{dosar_id:dossierId,rulare_id:runId,constatare_id:f.id},alive);
     }catch(err){if(alive()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă';retry.onclick=()=>{loaded=false;load();};host.append(retry);}}
   };
@@ -8378,7 +8464,21 @@ function writingWorkspaceHtml(dossier){
   return `<details class="leg-writing" open><summary>Spațiu de redactare legislativă</summary>`
     +'<p class="hint">Lucrează cu textul proiectului, pachetul de dovezi și verificări deterministe în același loc. Rezultatele sunt semnale de lucru, nu verdict juridic.</p>'
     +`<form data-writing-project-form class="dossier-actions"><label>Project ID<input name="project_id" maxlength="200" value="${esc(dossier.project_id||'')}"></label><button type="submit" class="ghost mini">Încarcă context proiect</button><button type="button" class="ghost mini" data-writing-open-workbench>Workbench</button><p class="hint" role="status" data-writing-status></p></form>`
-    +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
+    +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><form data-writing-ai-form>'+aiUnifiedDraftPanelHtml('pachetul dosarului')+'</form><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
+}
+function aiEvidenceFromPack(pack){
+  return (pack?.evidence||[]).slice(0,8).map((item,index)=>{
+    const source=manualNoteSource(item);
+    return {
+      label:item.label||item.title||item.event_type||`Dovada ${index+1}`,
+      act_id:item.act_id||item.project_id||pack.project_id||'',
+      locator:item.locator||item.stage||item.event_type||'',
+      source_url:item.source_url||item.url||source.source_url||'',
+      source_hash:item.source_hash||item.content_hash||item.sha256||source.source_hash||'',
+      quote:manualNoteText(item.quote||item.text||item.summary||item.title||''),
+      language:item.language||'RON'
+    };
+  }).filter(item=>item.quote&&(item.source_url||item.source_hash));
 }
 function bindWritingWorkspace(dossier){
   const host=$('#dossier-writing');
@@ -8417,6 +8517,14 @@ function bindWritingWorkspace(dossier){
       status.textContent=`Verificare terminată: ${result.possible_matches||0} potriviri posibile, ${result.partial_matches||0} parțiale.`;
     }catch(err){status.textContent=err.message;}
   };
+  const aiForm=host.querySelector('[data-writing-ai-form]');
+  bindUnifiedAiDraft(aiForm,()=>({
+    task:aiForm.elements.ai_task?.value||'issue_note',
+    type:'necorelare',
+    title:`AI dossier · ${project.project_id||dossier.titlu||'dosar'}`,
+    context:[notesBox.value,matrixWorkspaceNoteContext(pack?.workspace)].filter(Boolean).join('\n\n'),
+    evidence:aiEvidenceFromPack(pack)
+  }),draft=>{notesBox.value=(notesBox.value?notesBox.value.trim()+'\n\n':'')+draft;});
   if(form.elements.project_id.value)loadPack();
 }
 function projectWritingSourceContext(project={},cockpit=null,seed=null){
@@ -8897,6 +9005,7 @@ function mEvidenceRecordHtml(row){
     +`<div class="matrix-graph-meta">${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">sursă oficială</a> · `:""}${hash}${parser} · ${esc(row.uncertainty||"incertitudine neprecizată")}</div>`
     +(row.quote?`<blockquote class="source-text">${esc(row.quote)}</blockquote>`:`<p class="hint">Citatul exact lipsește din dovada locală.</p>`)
     +(row.not_legal_verdict?`<p class="hint">Dovadă pentru analiză; nu verdict juridic.</p>`:"")
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
     +`</article>`;
 }
 function mRelatedItemsHtml(related){
@@ -9314,6 +9423,22 @@ function mDosarHtml(d){
 }
 
 function bindMatrixNoteButtons(host,d){
+  host.querySelectorAll('[data-matrix-ai-evidence]').forEach(button=>button.onclick=()=>{
+    const row=(d.drilldown?.evidence_records||[]).find(item=>item.id===button.dataset.matrixAiEvidence);
+    if(!row)return;
+    startManualNote({
+      title:`AI matrice · ${row.label||row.kind||'dovadă'}`,
+      type:row.kind==='constitutionalitate'?'constitutionalitate':'lacuna',
+      act_id:row.act_id||'',
+      locator:row.locator||'',
+      evidence_quote:row.quote||'',
+      source_url:row.source_url||'',
+      source_hash:row.source_hash||'',
+      reasoning:['Dovadă selectată din drilldown matrice.',row.uncertainty?`Incertitudine: ${row.uncertainty}.`:'','Nu verdict juridic.'].filter(Boolean).join('\n'),
+      status:row.quote&&(row.source_url||row.source_hash)?'ready_for_review':'needs_evidence',
+      revizie:0
+    },{draft:true});
+  });
   host.querySelectorAll('[data-matrix-note]').forEach(button=>button.onclick=()=>{
     const kind=button.dataset.matrixNote, index=Number(button.dataset.matrixIndex);
     const row=kind==='lacuna'?(d.rand?.exemple?.viduri||d.exemple?.viduri||[])[index]
