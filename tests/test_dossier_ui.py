@@ -247,6 +247,9 @@ const escapes={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
 const esc=s=>(s==null?'':String(s)).replace(/[&<>"']/g,c=>escapes[c]);
 const dossierTime=s=>s;
 const crypto={randomUUID:()=>"11111111-2222-4333-8444-555555555555"};
+function aiUnifiedDraftPanelHtml(label){
+  return '<details data-unified-ai-draft>'+label+'</details>';
+}
 const MANUAL_NOTE_TYPES="""
         + source
         + r"""
@@ -447,23 +450,13 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "const MANUAL_NOTE_TYPES={lacuna:'Lacună'};"
         "const MANUAL_NOTE_STATUS={draft:'Ciornă'};"
         "function ruleCandidateControlsHtml(){return '<details data-rule-candidate></details>';}"
+        "function aiUnifiedDraftPanelHtml(label){return "
+        "'<details data-unified-ai-draft>'+label+'</details>';}"
         "const esc=s=>String(s);function manualNoteFormHtml"
         + html
         + "const form=manualNoteFormHtml();"
         "assert.ok(form.includes('data-rule-candidate'));"
-        "assert.ok(form.includes('data-ai-boundary-summary'));"
-        "assert.ok(form.includes('data-ai-note-settings'));"
-        "assert.ok(form.includes('data-ai-settings-save'));"
-        "assert.ok(form.includes('data-ai-send-note'));"
-        "assert.ok(form.includes('data-ai-copy-prompt'));"
-        "assert.ok(form.includes('explică problema'));"
-        "assert.ok(form.includes('ciornă amendament'));"
-        "assert.ok(form.includes('online BYOK'));"
-        "assert.ok(form.includes('costă în contul tău'));"
-        "assert.ok(form.includes('data-mcp-ai-draft'));"
-        "assert.ok(form.includes('data-mcp-preview'));"
-        "assert.ok(form.includes('data-mcp-copy'));"
-        "assert.ok(form.includes('data-mcp-insert'));"
+        "assert.ok(form.includes('data-unified-ai-draft'));"
     )
     run_node(code)
 
@@ -505,6 +498,50 @@ def test_ai_note_settings_persist_only_safe_defaults():
         "assert.ok(html.includes('cheia API: nepăstrată'));"
     )
     run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_unified_ai_panel_exposes_all_tasks_and_manifest_actions():
+    source = (
+        APP.read_text().split("const AI_NOTE_SETTINGS_KEY=", 1)[1].split("let _onlineOk=", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiSettings(){return {online_byok:{provider:'openai',model:'gpt-test',"
+        "endpoint:'https://api.test'},platform_paid_default:false,app_paid_provider:false,"
+        "key_storage:'sessionStorage_only',cost_warning:{server_cost:'none'},"
+        "drafting_guardrail:{output_notice:'ciornă nerevizuită'},stores_api_key:false};}"
+        "const AI_NOTE_SETTINGS_KEY="
+        + source
+        + "const html=aiUnifiedDraftPanelHtml('matrice <x>');"
+        "assert.ok(html.includes('data-unified-ai-draft'));"
+        "assert.ok(html.includes('explică problema'));"
+        "assert.ok(html.includes('notă de constatare'));"
+        "assert.ok(html.includes('ciornă amendament'));"
+        "assert.ok(html.includes('listă de verificare reviewer'));"
+        "assert.ok(html.includes('rezumă schimbare sursă'));"
+        "assert.ok(html.includes('compară două prevederi'));"
+        "assert.ok(html.includes('extrage candidat law-as-code'));"
+        "assert.ok(html.includes('data-ai-boundary-summary'));"
+        "assert.ok(html.includes('data-ai-send-note'));"
+        "assert.ok(html.includes('data-ai-copy-prompt'));"
+        "assert.ok(html.includes('data-mcp-ai-draft'));"
+        "assert.ok(html.includes('Nu verdict juridic'));"
+        "assert.ok(!html.includes('<x>'));"
+    )
+    run_node(code)
+
+
+def test_unified_ai_panel_is_mounted_on_dossier_proposal_and_matrix_surfaces():
+    html = APP.read_text()
+
+    assert "aiUnifiedDraftPanelHtml('pachetul dosarului')" in html
+    assert "aiUnifiedDraftPanelHtml('dovada propunerii')" in html
+    assert "data-matrix-ai-evidence" in html
+    assert "startManualNote({" in html
+    assert "data-unified-ai-draft" in html
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -809,6 +846,8 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "const projectWorkbenchEventsHtml=events=>events.map(e=>"
         "'<p>'+esc(e.title)+'</p>').join('');"
         "const ruleDraftTextExecutionHtml=()=>'<p>rule draft placeholder</p>';"
+        "function aiUnifiedDraftPanelHtml(label){return "
+        "'<details data-unified-ai-draft>'+label+'</details>';}"
         "function projectWorkbenchMarkdown"
         + source
         + "const pack={project_id:'PL-x-1',source_status:'current',"
@@ -837,6 +876,8 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "assert.ok(html.includes('data-writing-notes'));"
         "assert.ok(html.includes('data-writing-insert-evidence'));"
         "assert.ok(html.includes('data-writing-run-rules'));"
+        "assert.ok(html.includes('data-writing-ai-form'));"
+        "assert.ok(html.includes('data-unified-ai-draft'));"
         "assert.ok(html.includes('Trimite în Verifică'));"
         "assert.ok(!html.includes('<x>'));"
     )

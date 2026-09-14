@@ -942,6 +942,8 @@ def test_matrix_drilldown_renderer_exposes_sources_and_authoring_actions():
         "assert.ok(h.includes('Sursă lipsă'));"
         "assert.ok(h.includes('Dovezi citabile'));"
         "assert.ok(h.includes('Text citat'));"
+        "assert.ok(h.includes('AI din această dovadă'));"
+        "assert.ok(h.includes('data-matrix-ai-evidence=\"ev-1\"'));"
         "assert.ok(h.includes('SHA-256 aaaaaaaaaaaaaaaa'));"
         "assert.ok(h.includes('completă pentru revizie locală'));"
         "assert.ok(h.includes('Legături relevante'));"

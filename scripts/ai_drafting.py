@@ -61,6 +61,9 @@ TASKS = {
     "issue_note": "notă de constatare",
     "draft_amendment": "ciornă amendament",
     "review_checklist": "listă de verificare",
+    "summarize_source_change": "rezumat schimbare sursă",
+    "compare_provisions": "compară două prevederi citate",
+    "extract_rule_candidate": "extrage candidat law-as-code",
 }
 TASK_ALIASES = {"amendment_rationale": "draft_amendment"}
 
