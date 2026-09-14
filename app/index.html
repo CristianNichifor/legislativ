@@ -582,6 +582,13 @@
   .matrix-drilldown-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:.45rem;margin:.55rem 0}
   .matrix-drilldown-item{border-top:1px solid var(--rule-soft);padding:.45rem 0;overflow-wrap:anywhere}
   .matrix-drilldown-actions{display:flex;flex-wrap:wrap;gap:.35rem;margin:.45rem 0}
+  .matrix-workspace{border:1px solid var(--rule);border-radius:var(--r1);padding:.6rem .7rem;margin:.55rem 0;background:var(--surface)}
+  .matrix-workspace-head{display:flex;flex-wrap:wrap;gap:.4rem .65rem;align-items:baseline;justify-content:space-between}
+  .matrix-workspace-badge{font-family:var(--mono);font-size:.68rem;color:var(--ink);background:var(--sunk);border:1px solid var(--rule-soft);border-radius:999px;padding:.12rem .45rem}
+  .matrix-workspace-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,9.5rem),1fr));gap:.4rem;margin:.5rem 0}
+  .matrix-workspace-axis{font-size:.75rem;overflow-wrap:anywhere}
+  .matrix-workspace-axis b{display:block;font-family:var(--sans);font-size:.64rem;text-transform:uppercase;color:var(--ink-mute)}
+  .matrix-workspace-next{margin:.35rem 0 0;padding-left:1rem;font-size:.76rem}
   .matrix-ready{border:1px solid var(--rule-soft);border-radius:var(--r1);padding:.55rem .65rem;margin:.55rem 0;background:var(--sunk)}
   .matrix-ready-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr));gap:.35rem;margin:.45rem 0}
   .matrix-ready-axis{font-size:.75rem;overflow-wrap:anywhere}
@@ -8454,12 +8461,32 @@ function mReadinessHtml(readiness){
     +(readiness.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("")
     +`</div>`;
 }
+function mWorkspaceHtml(workspace){
+  if(!workspace) return "";
+  const problem=workspace.primary_problem||{}, source=workspace.source_state||{};
+  const counts=workspace.evidence_counts||{};
+  const stat=(label,value)=>`<div class="matrix-workspace-axis"><b>${esc(label)}</b>${nf(value||0)}</div>`;
+  const actions=(workspace.actions||[]).map(a=>esc(a.label||a.kind)).join(" · ")||"deschide drilldown";
+  const next=(workspace.next_actions||[]).slice(0,4);
+  return `<div class="matrix-workspace" data-law-matrix-workspace>`
+    +`<div class="matrix-workspace-head"><div><div class="parc-h">${esc(problem.eticheta||"Rând de lucru")}</div>`
+    +`<p class="hint">${esc(workspace.contract||"law-matrix-workspace-row-v1")} · ${esc(workspace.stage||workspace.status||"necesită triere")}</p></div>`
+    +`<span class="matrix-workspace-badge">${esc(source.eticheta||"surse necunoscute")}</span></div>`
+    +`<div class="matrix-workspace-grid">`
+    +stat("prevederi",counts.prevederi)+stat("surse",counts.surse)+stat("proiecte",counts.proiecte)
+    +stat("referințe UE",counts.referinte_ue)+stat("surse lipsă",counts.surse_lipsa)+stat("surse stale/parțiale",(counts.surse_stale||0)+(counts.surse_partiale||0))
+    +`<div class="matrix-workspace-axis"><b>Acțiuni</b>${actions}</div></div>`
+    +(next.length?`<ol class="matrix-workspace-next">${next.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:"")
+    +(workspace.not_legal_verdict?`<p class="hint">Spațiu de lucru pentru analiză; nu verdict juridic.</p>`:"")
+    +`</div>`;
+}
 function mDrilldownHtml(d){
   if(!d||!d.gasit) return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.");
   const drill=d.drilldown||{}, summary=drill.summary||{}, ex=(d.rand&&d.rand.exemple)||{};
   const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
   let h=`<div class="matrix-drilldown"><div class="parc-h">Drilldown matrice · ${esc(d.emitent||"")}</div>`
     +`<p class="hint">${esc(drill.contract||"matrice-drilldown-v1")} · dovezi locale și intrări de lucru pentru rândul selectat.</p>`
+    +mWorkspaceHtml(drill.workspace)
     +mReadinessHtml(drill.readiness)
     +`<div class="matrix-stats">`
     +stat("prevederi suport",summary.prevederi)+stat("proiecte pendinte",summary.proiecte)

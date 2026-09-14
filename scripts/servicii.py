@@ -1977,6 +1977,106 @@ def _markdown_dosar_matrice(dosar: dict) -> str:
     return "\n".join(linii).strip()
 
 
+def _matrix_workspace_row(
+    rand: dict,
+    ready_checks: dict,
+    readiness_status: str,
+    issue_types: list[dict],
+    provision_pointers: list[dict],
+    source_pointers: list[dict],
+    proiecte: dict,
+    referinte_ue: list[dict],
+) -> dict:
+    semnale = rand.get("semnale") or {}
+    surse = rand.get("source_quality") or {}
+    source_flags = [
+        {"cheie": "missing", "eticheta": "surse lipsă", "numar": surse.get("missing", 0)},
+        {"cheie": "stale", "eticheta": "surse vechi", "numar": surse.get("stale", 0)},
+        {"cheie": "partial", "eticheta": "surse parțiale", "numar": surse.get("partial", 0)},
+        {
+            "cheie": "attention",
+            "eticheta": "surse cu atenționări",
+            "numar": surse.get("attention", 0),
+        },
+    ]
+    active_source_flags = [flag for flag in source_flags if flag["numar"]]
+    if active_source_flags:
+        source_state = "needs_source_work"
+        source_label = ", ".join(f"{f['numar']} {f['eticheta']}" for f in active_source_flags)
+    elif surse.get("reviewable") or any(p.get("content_hash") for p in source_pointers):
+        source_state = "source_backed"
+        source_label = f"{surse.get('reviewable') or len(source_pointers)} surse revizuibile"
+    elif surse.get("loaded"):
+        source_state = "loaded"
+        source_label = f"{surse.get('loaded', 0)} surse încărcate"
+    else:
+        source_state = "unknown"
+        source_label = "surse locale necunoscute"
+
+    problem_order = [
+        ("lacuna", semnale.get("viduri", 0), "Lacună normativă"),
+        ("constitutionalitate", semnale.get("neconstitutionale", 0), "CCR nereparat"),
+        ("contradictii", semnale.get("contradictii", 0), "Contradicție candidată"),
+        ("ue", len(referinte_ue), "Risc UE"),
+        ("initiative", semnale.get("initiative_in_lucru", 0), "Proiect în procedură"),
+        ("amendamente", semnale.get("amendamente_primite", 0), "Presiune de amendare"),
+    ]
+    primary = next(
+        (
+            {"cheie": key, "eticheta": label, "numar": count}
+            for key, count, label in problem_order
+            if count
+        ),
+        {"cheie": "revizuire", "eticheta": "Rând de revizuit", "numar": 0},
+    )
+    if readiness_status == "reviewable_candidate":
+        stage = "gata de lucru juridic"
+    elif ready_checks.get("issue_type") and not ready_checks.get("source_quality"):
+        stage = "lipsește verificarea sursei"
+    elif ready_checks.get("issue_type"):
+        stage = "necesită dovezi exacte"
+    else:
+        stage = "necesită triere"
+
+    next_actions = [
+        "Deschide prevederile suport și confirmă citatele exacte.",
+        "Creează notă pe lacună, CCR, UE sau contradicție, apoi pornește draftul.",
+    ]
+    if active_source_flags:
+        next_actions.insert(0, "Actualizează sau completează sursele marcate înainte de concluzie.")
+    if (proiecte or {}).get("initiative"):
+        next_actions.append("Verifică proiectele pendinte înainte de text nou.")
+    if any(not ref.get("importat") for ref in referinte_ue):
+        next_actions.append("Importă CELEX-urile lipsă pentru comparație UE.")
+
+    return {
+        "contract": "law-matrix-workspace-row-v1",
+        "status": readiness_status,
+        "stage": stage,
+        "primary_problem": primary,
+        "issue_types": issue_types,
+        "source_state": {"cheie": source_state, "eticheta": source_label},
+        "evidence_counts": {
+            "acte": rand.get("acte", 0),
+            "prevederi": len(provision_pointers),
+            "surse": len(source_pointers),
+            "proiecte": len((proiecte or {}).get("initiative") or []),
+            "referinte_ue": len(referinte_ue),
+            "surse_lipsa": surse.get("missing", 0),
+            "surse_stale": surse.get("stale", 0),
+            "surse_partiale": surse.get("partial", 0),
+        },
+        "actions": [
+            {"kind": "open_evidence", "label": "Dovezi"},
+            {"kind": "create_note", "label": "Notă"},
+            {"kind": "draft_amendment", "label": "Draft"},
+            {"kind": "open_graph", "label": "Graf"},
+        ],
+        "next_actions": next_actions,
+        "not_legal_verdict": True,
+    }
+
+
 def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
     rand = dosar.get("rand") or {}
     semnale = rand.get("semnale") or {}
@@ -2073,6 +2173,16 @@ def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
     )
     return {
         "contract": "matrice-drilldown-v1",
+        "workspace": _matrix_workspace_row(
+            rand,
+            ready_checks,
+            readiness_status,
+            issue_types,
+            provision_pointers,
+            source_pointers,
+            proiecte,
+            dosar.get("referinte_ue") or [],
+        ),
         "readiness": {
             "contract": "matrice-readiness-v1",
             "status": readiness_status,

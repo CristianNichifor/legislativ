@@ -907,6 +907,21 @@ def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     assert out["drilldown"]["proiecte"][0]["plx_id"] == "plx-1-2024"
     assert out["drilldown"]["referinte_ue"][0]["celex"] == "32014L0024"
     assert out["drilldown"]["surse"][0]["act_id"] == "lege-98-2016"
+    workspace = out["drilldown"]["workspace"]
+    assert workspace["contract"] == "law-matrix-workspace-row-v1"
+    assert workspace["status"] == "reviewable_candidate"
+    assert workspace["stage"] == "gata de lucru juridic"
+    assert workspace["primary_problem"]["cheie"] == "lacuna"
+    assert workspace["source_state"]["cheie"] == "source_backed"
+    assert workspace["evidence_counts"]["prevederi"] == 2
+    assert workspace["evidence_counts"]["referinte_ue"] == 1
+    assert {a["kind"] for a in workspace["actions"]} >= {
+        "create_note",
+        "draft_amendment",
+        "open_graph",
+    }
+    assert workspace["not_legal_verdict"] is True
+    assert any("proiectele pendinte" in action for action in workspace["next_actions"])
     readiness = out["drilldown"]["readiness"]
     assert readiness["contract"] == "matrice-readiness-v1"
     assert readiness["status"] == "reviewable_candidate"
