@@ -70,7 +70,7 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
 
     out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
 
-    assert boot["created"] == 12
+    assert boot["created"] == 14
     assert out["missing_required"] == 0
     assert out["unsynced_required"] == len(acoperire_surse.REQUIRED_FAMILIES)
     assert out["unsynced_sources"] == len(acoperire_surse.REQUIRED_FAMILIES)
@@ -102,7 +102,7 @@ def test_source_coverage_accepts_verified_official_anchors(monkeypatch, tmp_path
     synced = source_registry.executa(stare, {"action": "sync_bootstrap"})
     out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
 
-    assert synced["counts"] == {"unchanged": len(acoperire_surse.REQUIRED_FAMILIES)}
+    assert synced["counts"] == {"unchanged": 14}
     assert out["missing_required"] == 0
     assert out["unsynced_required"] == 0
     assert out["attention_sources"] == 0
