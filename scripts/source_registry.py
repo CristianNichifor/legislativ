@@ -778,6 +778,46 @@ def descopera_econsultare(stare, data: dict | None = None) -> dict:
     }
 
 
+def descopera_consultare_guvern(stare, data: dict | None = None) -> dict:
+    """Register and sync one official government consultation metadata record."""
+    data = data or {}
+    url = _url(data.get("url"))
+    if not url or urlparse(url).hostname not in {"sgg.gov.ro", "www.sgg.gov.ro"}:
+        raise ValueError("Consultarea Guvern trebuie să folosească URL oficial sgg.gov.ro.")
+    identifier = _identifier(data.get("identifier")) or url
+    title = _text(data.get("title") or data.get("label"), limit=300, required=True)
+    project_id = _text(data.get("project_id") or identifier, limit=200, required=True)
+    source = descopera(
+        stare,
+        {
+            "family": "consultare_guvern",
+            "identifier": identifier,
+            "url": url,
+            "label": title,
+        },
+    )
+    synced = sincronizeaza_manual_metadata(
+        stare,
+        source["id"],
+        {
+            "title": title,
+            "authority": _text(data.get("authority"), limit=300) or "Guvernul României",
+            "deadline": _text(data.get("deadline"), limit=80),
+            "status": _text(data.get("status"), limit=40) or "unknown",
+            "project_id": project_id,
+            "documents": data.get("documents") or [],
+            "tags": data.get("tags") or ["guvern", "transparenta decizionala"],
+        },
+    )
+    return {
+        "contract": "source-registry-guvern-consultation-discovery-v1",
+        "source": synced,
+        "created": int(source["state"] == "discovered" and not source.get("last_hash")),
+        "tracker_events": int((synced.get("tracker_sync") or {}).get("stored") or 0),
+        "next_action": "Revizuiește consultarea în tracker și leag-o la dosarul afectat.",
+    }
+
+
 def pune_in_coada(stare, source_id: str) -> dict:
     source_id = _token(source_id, required=True)
     stamp = now()
@@ -1605,4 +1645,6 @@ def executa(stare, data: dict) -> dict:
         return bootstrap(stare)
     if action == "discover_econsultare":
         return descopera_econsultare(stare, data)
+    if action == "discover_guvern":
+        return descopera_consultare_guvern(stare, data)
     raise ValueError("Acțiune registru necunoscută.")

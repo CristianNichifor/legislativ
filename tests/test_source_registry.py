@@ -612,6 +612,46 @@ def test_registry_syncs_government_consultation_metadata_to_tracker(tmp_path):
     assert events["events"][0]["payload"]["attachment_hashes"] == ["f" * 64]
 
 
+def test_registry_discovers_government_consultation_metadata(tmp_path):
+    stare = state(tmp_path)
+
+    out = registry.executa(
+        stare,
+        {
+            "action": "discover_guvern",
+            "title": "Proiect HG privind serviciile publice",
+            "url": "https://sgg.gov.ro/1/transparenta-decizionala/proiect-hg-test/",
+            "project_id": "HG servicii publice",
+            "deadline": "15.10.2026",
+            "status": "open",
+        },
+    )
+
+    assert out["contract"] == "source-registry-guvern-consultation-discovery-v1"
+    assert out["tracker_events"] == 1
+    assert out["source"]["family"] == "consultare_guvern"
+    assert out["source"]["state"] == "changed"
+    assert out["source"]["tracker_sync"]["event_types"] == {"public_consultation_opened": 1}
+    events = tracker_events.lista(stare, {"source_family": ["consultare_guvern"]})
+    assert events["total"] == 1
+    assert events["events"][0]["project_id"] == "HG servicii publice"
+
+
+def test_registry_discovers_government_consultation_rejects_non_sgg(tmp_path):
+    stare = state(tmp_path)
+
+    with pytest.raises(ValueError, match="sgg.gov.ro"):
+        registry.executa(
+            stare,
+            {
+                "action": "discover_guvern",
+                "title": "Proiect HG",
+                "url": "https://example.test/proiect-hg",
+                "project_id": "HG 1",
+            },
+        )
+
+
 def test_registry_syncs_avize_metadata_to_opinion_tracker_event(tmp_path):
     stare = state(tmp_path)
     row = registry.executa(
