@@ -25,7 +25,7 @@ def test_grounded_fixture_scores_above_loose_fixture():
     assert good["comparison"][0]["provider"] == "fixture"
     assert good["comparison"][0]["model"] == "grounded"
     assert good["comparison"][0]["overall"] >= 0.70
-    assert good["comparison"][0]["accepted_cases"] >= 4
+    assert good["comparison"][0]["accepted_cases"] >= 5
     assert bad["comparison"][0]["overall"] < good["comparison"][0]["overall"]
     assert bad["comparison"][0]["overall"] <= 0.45
     assert good["live_provider_calls"] is False
@@ -79,8 +79,8 @@ def test_cli_outputs_json_comparison():
     payload = json.loads(completed.stdout)
     assert payload["schema_version"] == 1
     assert payload["run_id"] == "fixture-good"
-    assert len(payload["results"]) == 5
-    assert payload["comparison"][0]["cases"] == 5
+    assert len(payload["results"]) == 6
+    assert payload["comparison"][0]["cases"] == 6
     assert len(payload["task_summary"]) == 5
     assert {row["task_type"] for row in payload["task_summary"]} == {
         "issue_explanation",
@@ -122,9 +122,81 @@ def test_byok_template_command_writes_secret_free_run(tmp_path):
     written = json.loads(output.read_text(encoding="utf-8"))
     assert payload == written
     assert written["stores_api_key"] is False
-    assert len(written["candidates"]) == 5
+    assert len(written["candidates"]) == 6
     assert "API" in written["candidates"][0]["output"]
     assert "SECRET" not in output.read_text(encoding="utf-8")
+
+
+def test_guardrails_block_verdicts_invented_sources_and_bad_structure():
+    result = evaluari_ai.evaluate_run(_load("cases.json"), _load("run_bad.json"))
+    blocked = {
+        row["case_id"]: set(row["guardrails"]["failed"])
+        for row in result["results"]
+        if row["guardrails"]["failed"]
+    }
+
+    assert "no_legal_verdict" in blocked["issue-explanation-consultation-deadline"]
+    assert "no_invented_source" in blocked["issue-explanation-consultation-deadline"]
+    assert "structured_output_parseable" in blocked["rule-extraction-notification"]
+    assert result["report_summary"]["status"] == "needs_review"
+    assert result["report_summary"]["failed_guardrails"]["no_legal_verdict"] >= 1
+    assert result["report_summary"]["ui"]["severity"] == "warning"
+
+
+def test_missing_evidence_case_must_refuse_without_legal_claims():
+    good = evaluari_ai.evaluate_run(_load("cases.json"), _load("run_good.json"))
+    missing = next(
+        row for row in good["results"] if row["case_id"] == "issue-explanation-missing-evidence"
+    )
+
+    assert missing["guardrails"]["passed"]["refuses_missing_evidence"] is True
+    assert missing["guardrails"]["failed"] == []
+    assert missing["accepted"] is True
+
+    bad_run = {
+        "schema_version": 1,
+        "run_id": "bad-missing-evidence",
+        "candidates": [
+            {
+                "case_id": "issue-explanation-missing-evidence",
+                "provider": "fixture",
+                "model": "loose",
+                "output": (
+                    "Surse: [MISSING-SOURCE]\nConstatare: obligatie certa si sanctiune aplicabila."
+                ),
+            }
+        ],
+    }
+    bad = evaluari_ai.evaluate_run(_load("cases.json"), bad_run)
+    bad_missing = bad["results"][0]
+    assert "refuses_missing_evidence" in bad_missing["guardrails"]["failed"]
+    assert bad_missing["accepted"] is False
+
+
+def test_cli_can_write_json_report(tmp_path):
+    report = tmp_path / "ai-eval-report.json"
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "scripts.evaluari_ai",
+            "--cases",
+            str(FIXTURES / "cases.json"),
+            "--run",
+            str(FIXTURES / "run_good.json"),
+            "--write-report",
+            str(report),
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+    stdout_payload = json.loads(completed.stdout)
+    written_payload = json.loads(report.read_text(encoding="utf-8"))
+    assert written_payload == stdout_payload
+    assert written_payload["report_summary"]["contract"] == "ai-eval-report-summary-v1"
+    assert written_payload["report_summary"]["ui"]["server_calls_model"] is False
 
 
 def test_schema_accepts_case_and_run_fixtures():

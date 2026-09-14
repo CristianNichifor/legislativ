@@ -111,6 +111,9 @@ def test_local_mock_generates_gap_proposal_checklist_and_append_only_audit(dossi
     assert "Propunere de lucru" in out["draft_text"]
     assert "Checklist reviewer" in out["draft_text"]
     assert out["claim_support"]["unsupported_claims"] == 0
+    assert out["guardrail_summary"]["contract"] == "ai-workflow-guardrail-summary-v1"
+    assert out["guardrail_summary"]["status"] == "ok"
+    assert out["guardrail_summary"]["not_legal_verdict"] is True
     assert len(out["result_sha256"]) == 64
 
     with (
@@ -136,6 +139,8 @@ def test_online_byok_result_is_stored_without_secret_and_labels_uncited_claim(do
     assert out["output_status"] == "draft_labeled_unsupported_claims"
     assert out["insert_allowed"] is True
     assert out["claim_support"]["unsupported_claims"] == 1
+    assert out["guardrail_summary"]["status"] == "needs_review"
+    assert out["guardrail_summary"]["insert_allowed"] is True
     assert out["claim_support"]["claims"][0]["status"] == "unsupported_labeled"
     assert "SECRET" not in json.dumps(out)
 
@@ -148,6 +153,8 @@ def test_citation_outside_selected_evidence_blocks_insertion(dossier_db):
 
     assert out["output_status"] == "blocked_unsupported_claims"
     assert out["insert_allowed"] is False
+    assert out["guardrail_summary"]["status"] == "blocked"
+    assert out["guardrail_summary"]["insert_allowed"] is False
     assert out["claim_support"]["blocks_insertion"] is True
     assert out["claim_support"]["claims"][0]["reason"] == "citation_outside_selected_evidence"
 

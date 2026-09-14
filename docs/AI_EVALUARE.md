@@ -16,6 +16,13 @@ The supported v1 task set is:
 The harness scores source faithfulness, citation correctness, hallucinated legal
 claims, useful structure, structured-output parseability, Romanian drafting
 quality and uncertainty. The scores are review signals, not legal conclusions.
+Each case also emits explicit guardrails:
+
+- cite only selected evidence;
+- refuse when selected evidence is missing;
+- avoid hard legal verdicts;
+- do not invent or cite unselected sources;
+- return the expected structured format.
 
 ## Input contract
 
@@ -27,13 +34,15 @@ forbidden claims. Runs contain saved candidate outputs with `provider` and
 uv run python -m scripts.evaluari_ai \
   --cases tests/fixtures/ai_eval/cases.json \
   --run tests/fixtures/ai_eval/run_good.json \
+  --write-report /tmp/legislativ-ai-eval-report.json \
   --pretty
 ```
 
 The output includes per-case scores and a provider/model comparison summary.
-It also includes task-level acceptability gates so the UI can show which tasks
-are acceptable for a provider/model and which are not recommended. Future
-provider adapters should only write run JSON files into this contract.
+It also includes task-level acceptability gates and a
+`ai-eval-report-summary-v1` block so the UI can show which cases are acceptable,
+which are blocked for review, and which guardrail failed. Future provider
+adapters should only write run JSON files into this contract.
 Paid calls and keys stay outside this deterministic evaluator: the app first
 creates an `ai-external-send-approval-v1` payload with evidence hashes, prompt
 hash, token estimate and server cost `none`; the user then sends the prompt
@@ -77,3 +86,6 @@ secrets, request IDs or account details.
   diacritics and obvious English leakage.
 - Uncertainty rewards explicit limitation language because the app must not
   present AI text as a legal verdict.
+- Refusal checks are deterministic: if a fixture marks selected evidence as
+  missing, an acceptable output must say that the evidence is missing and must
+  not make legal claims from an empty source.

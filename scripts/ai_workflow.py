@@ -118,6 +118,28 @@ def claim_support(plan: dict, text: str) -> dict:
     }
 
 
+def guardrail_summary(support: dict) -> dict:
+    failed = []
+    if support.get("blocks_insertion"):
+        failed.append("cites_selected_evidence")
+    if support.get("unsupported_claims", 0):
+        failed.append("claim_requires_review")
+    return {
+        "contract": "ai-workflow-guardrail-summary-v1",
+        "status": "blocked"
+        if support.get("blocks_insertion")
+        else "needs_review"
+        if failed
+        else "ok",
+        "failed": failed,
+        "insert_allowed": not support.get("blocks_insertion", False),
+        "not_legal_verdict": True,
+        "selected_evidence_only": True,
+        "server_calls_model": False,
+        "stores_api_key": False,
+    }
+
+
 def _mock_gap_draft(plan: dict) -> str:
     evidence = plan.get("evidence", [])
     first = evidence[0] if evidence else {}
@@ -190,6 +212,7 @@ def execute(path: Path | str, request: dict) -> dict:
     if not result_text:
         raise ValueError("Rezultat AI lipsă.")
     support = claim_support(plan, result_text)
+    guardrails = guardrail_summary(support)
     output_status = (
         "blocked_unsupported_claims"
         if support["blocks_insertion"]
@@ -219,6 +242,7 @@ def execute(path: Path | str, request: dict) -> dict:
         "insert_allowed": output_status != "blocked_unsupported_claims",
         "draft_text": result_text,
         "claim_support": support,
+        "guardrail_summary": guardrails,
         "cost_estimate": plan["cost_estimate"],
         "evidence_manifest": plan["evidence_manifest"],
         "created_at": created_at,

@@ -31,6 +31,12 @@
       "provider": "fixture",
       "model": "grounded",
       "output": "{\"provision_id\":\"RO-LAW-DOMAIN:art-3\",\"source_id\":\"RO-LAW-DOMAIN\",\"actor\":\"Furnizorul\",\"action\":\"notifica incidentele catre autoritatea competenta\",\"modality\":\"obligation\",\"condition\":\"incident constatat in domeniul serviciilor digitale\",\"deadline\":\"24 de ore de la constatare\",\"effect\":\"obligatie de notificare\",\"confidence\":0.82,\"not_legal_verdict\":true,\"limitations\":[\"candidat extras dintr-un fragment selectat\",\"necesita verificare umana\"]}"
+    },
+    {
+      "case_id": "issue-explanation-missing-evidence",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: MISSING-SOURCE este selectata, dar textul sursei lipseste.\nLimitari: lipsesc dovezile necesare, deci nu pot formula o explicatie juridica sau o concluzie. Este posibil sa fie nevoie de incarcare manuala ori verificare la sursa oficiala."
     }
   ]
 }
