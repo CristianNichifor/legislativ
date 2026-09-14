@@ -185,6 +185,8 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     assert "source-registry-guvern" in html
     assert "discover_guvern" in html
     assert "Adaugă consultare Guvern" in html
+    assert "source-registry-sync-bootstrap" in html
+    assert "sync_bootstrap" in html
     assert "data-econsultare-review" in html
     assert "Revizuită din feed-ul e-consultare." in html
     assert "o singură pagină" in html

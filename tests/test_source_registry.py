@@ -156,6 +156,7 @@ def test_registry_names_precise_public_source_families():
     assert "consultare_minister" in registry.SYNC_FAMILIES
     assert "avize" in registry.SYNC_FAMILIES
     assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
+    assert "monitorul_oficial_pi" in registry.ANCHOR_SYNC_FAMILIES
 
 
 def test_registry_bootstraps_required_official_source_anchors(tmp_path):
@@ -174,15 +175,65 @@ def test_registry_bootstraps_required_official_source_anchors(tmp_path):
     assert by_family["legislatie_ro"]["url"] == "https://legislatie.just.ro/"
     assert by_family["consultare_econsultare"]["url"].startswith("https://e-consultare.gov.ro/")
     assert by_family["ue_cellar"]["url"].startswith("https://op.europa.eu/")
-    assert by_family["camera"]["sync_status"]["can_sync"] is False
+    assert by_family["camera"]["sync_status"]["can_sync"] is True
     assert by_family["consultare_guvern"]["sync_status"]["freshness"] == "family_anchor"
     assert (
-        "ancora nu se sincronizează direct"
+        "Verifică sursa oficială de bază"
         in by_family["consultare_guvern"]["sync_status"]["next_action"]
     )
 
-    with pytest.raises(ValueError, match="Ancora de familie"):
-        registry.executa(stare, {"action": "sync", "id": by_family["camera"]["id"]})
+
+def test_registry_syncs_bootstrap_anchor_with_bounded_official_snapshot(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    boot = registry.executa(stare, {"action": "bootstrap"})
+    camera = next(row for row in boot["sources"] if row["family"] == "camera")
+    monkeypatch.setattr(
+        registry,
+        "_fetch_official_anchor",
+        lambda url: {
+            "http_status": 200,
+            "content_hash": "b" * 64,
+            "title": "Camera Deputaților",
+            "content_type": "text/html",
+            "bytes": 128,
+            "truncated": False,
+            "error": "",
+        },
+    )
+
+    synced = registry.executa(stare, {"action": "sync", "id": camera["id"]})
+
+    assert synced["state"] == "unchanged"
+    assert synced["last_hash"] == "b" * 64
+    assert synced["parser_version"] == registry.ANCHOR_PARSER_VERSION
+    selected = registry.lista(stare, {"id": [camera["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"]["title"] == "Camera Deputaților"
+    assert selected["attempts"][0]["state"] == "unchanged"
+
+
+def test_registry_syncs_all_bootstrap_anchors(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    monkeypatch.setattr(
+        registry,
+        "_fetch_official_anchor",
+        lambda url: {
+            "http_status": 200,
+            "content_hash": registry._stable_hash({"url": url}),
+            "title": "Official source",
+            "content_type": "text/html",
+            "bytes": 64,
+            "truncated": False,
+            "error": "",
+        },
+    )
+
+    synced = registry.executa(stare, {"action": "sync_bootstrap"})
+
+    assert synced["contract"] == "source-bootstrap-anchor-sync-v1"
+    assert synced["total"] == 12
+    assert synced["counts"] == {"unchanged": 12}
+    listed = registry.lista(stare)
+    assert {row["state"] for row in listed["sources"]} == {"unchanged"}
 
 
 def test_registry_discovers_econsultare_listing_sources(monkeypatch, tmp_path):

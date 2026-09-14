@@ -6,10 +6,14 @@ import hashlib
 import json
 import re
 import sqlite3
-from contextlib import closing
+from collections import Counter
+from contextlib import closing, suppress
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from scripts import cellar
 from scripts.source_change_detection import detect_changes
@@ -44,6 +48,8 @@ MANUAL_METADATA_FAMILIES = frozenset({"consultare_guvern", "consultare_minister"
 SYNC_FAMILIES = (
     PROJECT_FAMILIES | MANUAL_METADATA_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
 )
+ANCHOR_PARSER_VERSION = "official-anchor-availability.v1"
+ANCHOR_MAX_BYTES = 256 * 1024
 BOOTSTRAP_ANCHOR_PREFIX = "family:"
 BOOTSTRAP_SOURCES = (
     {
@@ -119,6 +125,7 @@ BOOTSTRAP_SOURCES = (
         "label": "EU Cellar knowledge graph / EUR-Lex",
     },
 )
+ANCHOR_SYNC_FAMILIES = frozenset(item["family"] for item in BOOTSTRAP_SOURCES)
 
 
 def cale(stare) -> Path:
@@ -127,6 +134,29 @@ def cale(stare) -> Path:
 
 def now() -> str:
     return datetime.now(UTC).isoformat()
+
+
+class _TitleParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self._in_title = False
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "title":
+            self._in_title = True
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "title":
+            self._in_title = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title:
+            self.parts.append(data.strip())
+
+    @property
+    def title(self) -> str:
+        return " ".join(part for part in self.parts if part)[:300]
 
 
 def _text(value, *, limit=MAX_TEXT, required=False) -> str:
@@ -245,6 +275,8 @@ def _sync_status(row: dict) -> dict:
     state = normalize_state(row["state"])
     is_anchor = str(row.get("identifier", "")).startswith(BOOTSTRAP_ANCHOR_PREFIX)
     can_sync = row["family"] in SYNC_FAMILIES and not is_anchor
+    if is_anchor:
+        can_sync = row["family"] in ANCHOR_SYNC_FAMILIES and bool(row.get("url"))
     can_queue = state != "queued" and can_sync and can_transition(state, "queued")
     can_review = state in {"changed", "needs_review"}
     severity = {
@@ -277,9 +309,9 @@ def _sync_status(row: dict) -> dict:
     freshness_label = "Sincronizată local."
     if is_anchor:
         freshness = "family_anchor"
-        freshness_label = "Ancoră de familie; adaugă surse punctuale înainte de sync."
+        freshness_label = "Ancoră de familie; verifică disponibilitatea sursei oficiale."
         next_actions["discovered"] = (
-            "Adaugă o sursă punctuală din această familie; ancora nu se sincronizează direct."
+            "Verifică sursa oficială de bază sau adaugă o sursă punctuală pentru analiză."
         )
     elif not row.get("last_attempt_at"):
         freshness = "never_synced"
@@ -960,6 +992,96 @@ def _sync_state(previous_hash: str, content_hash: str) -> str:
     return "unchanged" if previous_hash and previous_hash == content_hash else "changed"
 
 
+def _is_bootstrap_anchor(row: dict) -> bool:
+    return str(row.get("identifier", "")).startswith(BOOTSTRAP_ANCHOR_PREFIX)
+
+
+def _fetch_official_anchor(url: str) -> dict:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "legislativ-source-verifier/1.0 (+https://github.com/CristianNichifor/legislativ)",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            body = response.read(ANCHOR_MAX_BYTES + 1)
+            truncated = len(body) > ANCHOR_MAX_BYTES
+            body = body[:ANCHOR_MAX_BYTES]
+            http_status = int(getattr(response, "status", 200))
+            content_type = response.headers.get("content-type", "")
+    except HTTPError as exc:
+        body = exc.read(min(4096, ANCHOR_MAX_BYTES))
+        return {
+            "http_status": int(exc.code),
+            "content_hash": "",
+            "title": "",
+            "content_type": exc.headers.get("content-type", ""),
+            "bytes": len(body),
+            "truncated": False,
+            "error": "http_error",
+        }
+    except (OSError, TimeoutError, URLError) as exc:
+        return {
+            "http_status": None,
+            "content_hash": "",
+            "title": "",
+            "content_type": "",
+            "bytes": 0,
+            "truncated": False,
+            "error": type(exc).__name__.lower(),
+        }
+    parser = _TitleParser()
+    with suppress(ValueError):
+        parser.feed(body.decode("utf-8", "ignore"))
+    return {
+        "http_status": http_status,
+        "content_hash": hashlib.sha256(body).hexdigest(),
+        "title": parser.title,
+        "content_type": content_type[:120],
+        "bytes": len(body),
+        "truncated": truncated,
+        "error": "",
+    }
+
+
+def _anchor_snapshot(row: dict, fetched: dict) -> dict:
+    host = urlparse(row.get("url", "")).hostname or ""
+    return {
+        "contract": "official-source-anchor-availability-v1",
+        "family": row["family"],
+        "identifier": row.get("identifier", ""),
+        "url": row.get("url", ""),
+        "label": row.get("label", ""),
+        "summary": {
+            "host": host,
+            "http_status": fetched.get("http_status"),
+            "title": fetched.get("title", ""),
+            "content_type": fetched.get("content_type", ""),
+            "bytes_sampled": fetched.get("bytes", 0),
+            "truncated": bool(fetched.get("truncated")),
+        },
+        "limitations": [
+            "Verifică disponibilitatea entrypointului oficial; nu descarcă tot portalul.",
+            "Nu clasifică acoperirea juridică și nu actualizează concluzii salvate.",
+        ],
+    }
+
+
+def _anchor_state(fetched: dict, previous_hash: str) -> str:
+    status = fetched.get("http_status")
+    if status == 429:
+        return "rate_limited"
+    if status in {404, 410, 451}:
+        return "unavailable"
+    if fetched.get("error") or not fetched.get("content_hash"):
+        return "failed"
+    if not previous_hash:
+        return "unchanged"
+    return _sync_state(previous_hash, fetched["content_hash"])
+
+
 def _list_of_text(value, *, limit: int = 20, item_limit: int = 300) -> list[str]:
     if value is None:
         return []
@@ -1631,6 +1753,80 @@ def sincronizeaza_manual_metadata(stare, source_id: str, metadata: dict | None =
     )
 
 
+def sincronizeaza_ancora_oficiala(stare, source_id: str) -> dict:
+    """Verify one required official family entrypoint without crawling the portal."""
+    row = _source(stare, source_id)
+    if not _is_bootstrap_anchor(row):
+        raise ValueError("Doar ancorele oficiale de familie folosesc acest verifier.")
+    if row["family"] not in ANCHOR_SYNC_FAMILIES or not row.get("url"):
+        raise ValueError("Ancora oficială nu are URL verificabil.")
+    if row["state"] != "queued":
+        row = pune_in_coada(stare, source_id)
+    fetched = _fetch_official_anchor(row["url"])
+    final_state = _anchor_state(fetched, row.get("last_hash", ""))
+    http_status = fetched.get("http_status")
+    if final_state in {"failed", "rate_limited", "unavailable"}:
+        return inregistreaza(
+            stare,
+            {
+                "id": source_id,
+                "state": final_state,
+                "http_status": http_status,
+                "error_category": fetched.get("error") or final_state,
+                "parser_version": ANCHOR_PARSER_VERSION,
+                "note": "Verificarea entrypointului oficial nu a reușit.",
+            },
+        )
+    snapshot = _anchor_snapshot(row, fetched)
+    content_hash = fetched["content_hash"]
+    _store_snapshot(stare, source_id, content_hash, snapshot, ANCHOR_PARSER_VERSION)
+    inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": "fetched",
+            "http_status": http_status,
+            "content_hash": content_hash,
+            "parser_version": ANCHOR_PARSER_VERSION,
+            "note": "Entrypoint oficial verificat cu citire limitată.",
+        },
+    )
+    return inregistreaza(
+        stare,
+        {
+            "id": source_id,
+            "state": final_state,
+            "http_status": http_status,
+            "content_hash": content_hash,
+            "parser_version": ANCHOR_PARSER_VERSION,
+        },
+    )
+
+
+def sincronizeaza_ancore_bootstrap(stare) -> dict:
+    """Verify all required official source-family anchors as one bounded batch."""
+    bootstrap(stare)
+    rows = lista(stare, {"limit": ["50"]})["sources"]
+    anchors = [
+        row
+        for row in rows
+        if _is_bootstrap_anchor(row) and row["family"] in ANCHOR_SYNC_FAMILIES and row.get("url")
+    ]
+    results = []
+    counts: Counter[str] = Counter()
+    for row in anchors:
+        result = sincronizeaza_ancora_oficiala(stare, row["id"])
+        counts[result["state"]] += 1
+        results.append(result)
+    return {
+        "contract": "source-bootstrap-anchor-sync-v1",
+        "total": len(results),
+        "counts": dict(counts),
+        "sources": results,
+        "next_action": "Adaugă surse punctuale pentru proiectele sau actele pe care le analizezi.",
+    }
+
+
 def executa(stare, data: dict) -> dict:
     action = _text(data.get("action", "discover"), limit=40) or "discover"
     if action == "discover":
@@ -1645,10 +1841,8 @@ def executa(stare, data: dict) -> dict:
         )
     if action == "sync":
         row = _source(stare, data.get("id", ""))
-        if str(row.get("identifier", "")).startswith(BOOTSTRAP_ANCHOR_PREFIX):
-            raise ValueError(
-                "Ancora de familie nu se sincronizeaza direct; adauga o sursa punctuala."
-            )
+        if _is_bootstrap_anchor(row):
+            return _with_impact(stare, sincronizeaza_ancora_oficiala(stare, row["id"]))
         if row["family"] == "consultare_econsultare":
             return _with_impact(stare, sincronizeaza_econsultare(stare, row["id"]))
         if row["family"] == "ue_cellar":
@@ -1662,6 +1856,8 @@ def executa(stare, data: dict) -> dict:
         raise ValueError("Familia de surse nu are sincronizare directă.")
     if action == "bootstrap":
         return bootstrap(stare)
+    if action == "sync_bootstrap":
+        return sincronizeaza_ancore_bootstrap(stare)
     if action == "discover_econsultare":
         return descopera_econsultare(stare, data)
     if action == "discover_guvern":
