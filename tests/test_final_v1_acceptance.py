@@ -17,6 +17,9 @@ def test_final_v1_acceptance_runs_one_vertical_flow(tmp_path):
     assert out["summary"]["matrix_entries"]["prevederi"] >= 1
     assert out["summary"]["evidence_events"] >= 2
     assert out["summary"]["evidence_notes"] == 1
+    assert out["summary"]["mcp_audit_events"] == 1
+    assert out["summary"]["rule_candidates"] == 1
+    assert out["summary"]["law_rule_drafts"] == 1
     assert out["summary"]["mcp_timeline_events"] >= 2
     assert out["summary"]["draft_tokens"] > 0
 
@@ -49,4 +52,8 @@ def test_final_v1_acceptance_cli_outputs_json(tmp_path):
 
     assert out["contract"] == "final-v1-vertical-acceptance-flow-v1"
     assert out["status"] == "passed"
+    assert out["checks"]["mcp_executor_records_approved_audit"] is True
+    assert out["checks"]["rule_candidate_is_source_bound"] is True
+    assert out["checks"]["rule_draft_is_promoted_not_verdict"] is True
+    assert out["checks"]["private_backup_restores_ai_rules_and_audit"] is True
     assert out["checks"]["mcp_uses_same_project"] is True

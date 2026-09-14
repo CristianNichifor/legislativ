@@ -16,9 +16,13 @@ from scripts import (
     ai_drafting,
     depozit,
     dosare,
+    law_rule_drafts,
+    mcp_ai_draft,
+    mcp_executor,
     mcp_tools,
     note_manuale,
     project_evidence_pack,
+    rule_candidate_queue,
     source_registry,
     source_tracker_workbench,
     tracker_events,
@@ -31,6 +35,9 @@ CONTRACT = "final-v1-vertical-acceptance-flow-v1"
 PROJECT_ID = "PL-x acceptance-procurement-001"
 DOSSIER_ID = "f" * 32
 NOTE_ID = "e" * 32
+RULE_QUEUE_ID = "c" * 32
+RULE_DRAFT_ID = "d" * 32
+MCP_AUDIT_ID = "a" * 32
 SOURCE_HASH = "9" * 64
 
 
@@ -263,15 +270,73 @@ def run(root: Path) -> dict:
         "quote": "Guvernul aprobă normele metodologice privind achizițiile publice.",
         "language": "RON",
     }
-    draft = ai_drafting.preview(
-        {
-            "task": "issue_note",
-            "type": "lacuna",
-            "title": "Notă acceptanță v1",
-            "context": f"Proiect {PROJECT_ID}; verifică și CELEX {celex['identifier']}.",
-            "evidence": [selected],
-        }
+    draft_request = {
+        "task": "issue_note",
+        "type": "lacuna",
+        "title": "Notă acceptanță v1",
+        "context": f"Proiect {PROJECT_ID}; verifică și CELEX {celex['identifier']}.",
+        "evidence": [selected],
+    }
+    draft = ai_drafting.preview(draft_request)
+    mcp_plan = mcp_ai_draft.preview(
+        {"server": "local-mock", "tool": "ai.draft", "draft": draft_request}
     )
+    mcp_execution = mcp_executor.execute(
+        dosare.cale(stare),
+        {
+            "id": MCP_AUDIT_ID,
+            "dosar_id": DOSSIER_ID,
+            "server": "local-mock",
+            "tool": "ai.draft",
+            "draft": draft_request,
+            "approved": True,
+            "approved_data_sha256": mcp_plan["mcp"]["approval"]["data_sha256"],
+        },
+    )
+    queued_rule = rule_candidate_queue.salveaza(
+        dosare.cale(stare),
+        {
+            "id": RULE_QUEUE_ID,
+            "dosar_id": DOSSIER_ID,
+            "candidate": {
+                "provision_id": f"ro:{law['identifier']}#art7",
+                "act_id": law["identifier"],
+                "locator": "art7",
+                "source_url": law.get("official_url") or "",
+                "source_hash": law["sha256"],
+                "text": selected["quote"],
+                "modality": "obligation",
+                "review_state": "human_reviewed",
+                "actor": "Guvernul",
+                "condition": "legea achizițiilor publice cere norme metodologice",
+                "action": "aprobă normele metodologice privind achizițiile publice",
+                "deadline": "",
+                "exceptions": [],
+                "effect": "redactarea proiectului trebuie verificată împotriva actelor subsecvente",
+                "applicability_scope": "achiziții publice",
+                "confidence": "medium",
+                "extraction_method": "mcp_draft",
+                "origin_kind": "mcp_audit_event",
+                "origin_id": MCP_AUDIT_ID,
+                "reviewer": "acceptance",
+            },
+        },
+    )
+    rule_draft = law_rule_drafts.promoveaza(
+        dosare.cale(stare),
+        {
+            "id": RULE_DRAFT_ID,
+            "dosar_id": DOSSIER_ID,
+            "queue_id": RULE_QUEUE_ID,
+            "accepted_by": "acceptance",
+            "acceptance_note": "Candidatul păstrează sursa și rămâne ciornă, nu verdict juridic.",
+        },
+    )
+    backup = root / "final-v1-private-backup.db"
+    dosare.backup(dosare.cale(stare), backup)
+    restored_queue = rule_candidate_queue.lista(backup, DOSSIER_ID)
+    restored_rules = law_rule_drafts.lista(backup, DOSSIER_ID)
+    restored_audit = mcp_executor.read(backup, DOSSIER_ID, MCP_AUDIT_ID)
     mcp_timeline = mcp_tools.call_tool(stare, "get_project_timeline", {"project_id": PROJECT_ID})
     mcp_bundle = mcp_tools.call_tool(
         stare, "get_evidence_bundle", {"project_id": PROJECT_ID, "dossier_id": DOSSIER_ID}
@@ -303,6 +368,22 @@ def run(root: Path) -> dict:
         "draft_is_evidence_bound": draft["contract"] == "ai-evidence-draft-v1"
         and draft["approval"]["server_calls_model"] is False
         and draft["evidence_count"] == 1,
+        "mcp_executor_records_approved_audit": mcp_execution["contract"]
+        == "mcp-executor-boundary-v1"
+        and mcp_execution["audit_event"]["approved"] is True
+        and mcp_execution["output_status"] == "draft_unreviewed"
+        and mcp_execution["selected_evidence_ids"] == [f"{law['identifier']}:art7"],
+        "rule_candidate_is_source_bound": queued_rule["candidate"]["contract"]
+        == "rule-candidate-v1"
+        and queued_rule["bucket"] == "human_reviewed"
+        and queued_rule["candidate"]["origin_id"] == MCP_AUDIT_ID
+        and queued_rule["candidate"]["source_hash"] == law["sha256"],
+        "rule_draft_is_promoted_not_verdict": rule_draft["contract"] == "law-rule-draft-v1"
+        and rule_draft["status"] == "draft_rule_not_legal_verdict"
+        and rule_draft["queue_id"] == RULE_QUEUE_ID,
+        "private_backup_restores_ai_rules_and_audit": restored_queue["total"] == 1
+        and restored_rules["total"] == 1
+        and restored_audit["approved_data_sha256"] == mcp_execution["approved_data_sha256"],
         "mcp_uses_same_project": mcp_timeline["project_id"] == PROJECT_ID
         and mcp_bundle["summary"]["notes"] == 1
         and mcp_draft["approval"]["server_calls_model"] is False,
@@ -329,6 +410,9 @@ def run(root: Path) -> dict:
             "evidence_events": evidence["summary"]["events"],
             "evidence_notes": evidence["summary"]["notes"],
             "draft_tokens": draft["estimated_tokens"],
+            "mcp_audit_events": 1,
+            "rule_candidates": restored_queue["total"],
+            "law_rule_drafts": restored_rules["total"],
             "mcp_timeline_events": len(mcp_timeline["events"]),
         },
         "next_actions": [
