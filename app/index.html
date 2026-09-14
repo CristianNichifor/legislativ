@@ -3380,6 +3380,7 @@ function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
     +'<p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>';
 }
 let _onlineOk=false;
+const AI_BYOK_TIMEOUT_MS=45000;
 // online sends text off the device; confirm once before doing that with the user's OWN text
 function okOnlinePrivat(){
   if(_onlineOk) return true;
@@ -3389,15 +3390,38 @@ function okOnlinePrivat(){
   if(da){ _onlineOk=true; try{ localStorage.setItem("ai_online_ok","1"); }catch(e){} }
   return da;
 }
-async function aiJson(ep, init){
-  let rasp;
-  try{ rasp=await fetch(ep,init); }
-  catch(e){ throw new Error("Nu pot contacta endpointul online; verifică URL-ul, CORS/CSP și conexiunea."); }
+function aiByokTimeoutError(ms){
+  const e=new Error("Furnizorul BYOK nu a răspuns în "+Math.round(ms/1000)+" secunde.");
+  e.name="AbortError"; e.code="AI_BYOK_TIMEOUT"; e.timeout_ms=ms; return e;
+}
+function aiRequestTimeoutMs(opt){
+  const n=Number(opt&&opt.timeout_ms||AI_BYOK_TIMEOUT_MS);
+  return Math.max(5000,Math.min(120000,Number.isFinite(n)?n:AI_BYOK_TIMEOUT_MS));
+}
+async function aiJson(ep, init, opt){
+  opt=opt||{};
+  const ms=aiRequestTimeoutMs(opt);
+  let timer=null,ctrl=null,rasp;
+  const request={...(init||{})};
+  if(globalThis.AbortController){
+    ctrl=new AbortController();
+    timer=setTimeout(()=>ctrl.abort(aiByokTimeoutError(ms)),ms);
+    request.signal=ctrl.signal;
+  }
+  try{ rasp=await fetch(ep,request); }
+  catch(e){
+    const aborted=e?.code==="AI_BYOK_TIMEOUT"||e?.name==="AbortError"||ctrl?.signal?.aborted;
+    if(aborted)throw aiByokTimeoutError(ms);
+    const err=new Error("Nu pot contacta endpointul online; verifică URL-ul, CORS/CSP și conexiunea.");
+    err.code="AI_BYOK_NETWORK"; throw err;
+  }
+  finally{ if(timer)clearTimeout(timer); }
   const brut=await rasp.text();
   let d={}; try{ d=brut?JSON.parse(brut):{}; }catch(e){ d={_raw:brut}; }
   if(!rasp.ok){
     const msg=(d.error&&d.error.message)||d.error||d.message||brut||("HTTP "+rasp.status);
-    throw new Error(String(msg).slice(0,180));
+    const err=new Error(String(msg).slice(0,180));
+    err.status=rasp.status; err.statusCode=rasp.status; throw err;
   }
   return d;
 }
@@ -3420,7 +3444,7 @@ async function aiRescrieOnline(text, sistem, norma, opt){
     const body={text, stil:norma};
     if(model) body.model=model;
     if(opt.act) body.act=opt.act; if(opt.loc) body.loc=opt.loc;
-    const d=await aiJson(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const d=await aiJson(ep,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)},opt);
     const out=aiText(d); if(!out) throw new Error("Endpointul nu a întors o rescriere.");
     return {text:out, nota:d.cached?"online BYOK · cache":"online BYOK · "+cfg.et};
   }
@@ -3428,13 +3452,13 @@ async function aiRescrieOnline(text, sistem, norma, opt){
     const d=await aiJson(ep,{method:"POST",headers:{"Content-Type":"application/json",
       "x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
       body:JSON.stringify({model,max_tokens:1200,temperature:0.2,system:sistem,
-        messages:[{role:"user",content:text}]})});
+        messages:[{role:"user",content:text}]})},opt);
     const out=aiText(d); if(!out) throw new Error("Furnizorul nu a întors text.");
     return {text:out, nota:"online BYOK · "+cfg.et};
   }
   const d=await aiJson(ep,{method:"POST",headers:{"Content-Type":"application/json",
     "Authorization":"Bearer "+key},
-    body:JSON.stringify({model,temperature:0.2,messages:[{role:"system",content:sistem},{role:"user",content:text}]})});
+    body:JSON.stringify({model,temperature:0.2,messages:[{role:"system",content:sistem},{role:"user",content:text}]})},opt);
   const out=aiText(d); if(!out) throw new Error("Furnizorul nu a întors text.");
   return {text:out, nota:"online BYOK · "+cfg.et};
 }
@@ -5191,6 +5215,14 @@ function confirmAiExternalApproval(packet){
     +"Output: ciornă AI nerevizuită, nu verdict juridic\n\n"
     +"Prompt SHA-256: "+(packet.input_sha256||""));
 }
+function aiByokRetryPolicy(){
+  return {
+    contract:'ai-byok-retry-policy-v1',
+    retryable_failures:['timeout','quota','provider_unavailable'],
+    creates_draft_on_failure:false,
+    result_imported_on_failure:false
+  };
+}
 function aiDraftExecutionRequest(plan,boundary){
   const settings=aiSettings();
   const provider=settings.online_byok||{};
@@ -5211,6 +5243,9 @@ function aiDraftExecutionRequest(plan,boundary){
     stores_api_key:false,
     key_storage:settings.key_storage,
     prompt_scope:'selected_evidence_only',
+    timeout_ms:AI_BYOK_TIMEOUT_MS,
+    retry_policy:aiByokRetryPolicy(),
+    provider_failure_contract:'ai-byok-provider-failure-v1',
     requires_explicit_user_action:true,
     output_status:'draft_unreviewed',
     non_verdict_notice:'Ciornă de lucru; nu verdict juridic.'
@@ -5251,7 +5286,7 @@ function aiByokFailure(code){
   const canonical=AI_BYOK_FAILURES[code]?code:'provider_unavailable',f=AI_BYOK_FAILURES[canonical];
   return {contract:'ai-byok-provider-failure-v1',failure_code:canonical,label:f[0],
     retryable:!!f[1],user_message:f[2]+' Nu s-a creat nicio ciornă.',server_calls_model:false,
-    stores_api_key:false,output_status:'no_draft_created'};
+    stores_api_key:false,creates_draft:false,result_imported:false,output_status:'no_draft_created'};
 }
 function aiByokFailureResult(plan,boundary,request,error,response){
   const failure=aiByokFailure(aiByokFailureCode(error,response));
@@ -5274,7 +5309,9 @@ function aiByokFailureResult(plan,boundary,request,error,response){
       stores_api_key:false,
       output_status:'no_draft_created',
       failure_code:failure.failure_code,
-      retryable:failure.retryable
+      retryable:failure.retryable,
+      creates_draft:false,
+      result_imported:false
     }
   };
 }
@@ -5302,7 +5339,7 @@ async function aiRunEvidenceDraft(plan,boundary,prog){
     };
   }
   let answer;
-  try{answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog});}
+  try{answer=await aiComplete(plan.prompt,plan.system,{privat:false,prog,timeout_ms:AI_BYOK_TIMEOUT_MS});}
   catch(err){return aiByokFailureResult(plan,boundary,request,err,null);}
   if(answer?.failure_code||answer?.error||answer?.refusal||answer?.safety_refusal){
     return aiByokFailureResult(plan,boundary,request,null,answer);

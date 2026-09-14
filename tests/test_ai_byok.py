@@ -93,3 +93,91 @@ def test_browser_byok_settings_contract_persists_no_secret():
         "assert.ok(summary.includes('Ciornă AI nerevizuită'));"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_browser_byok_requests_are_timeout_bound_and_secret_safe():
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        return
+
+    html = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
+    source = (
+        "let _onlineOk=false;"
+        + html.split("let _onlineOk=false;", 1)[1].split(
+            "// the single door every rewrite goes through", 1
+        )[0]
+    )
+    program = (
+        "const assert=require('node:assert/strict');"
+        "let timerMs=null,clearCalled=false;"
+        "globalThis.setTimeout=(fn,ms)=>{timerMs=ms;return 1;};"
+        "globalThis.clearTimeout=(id)=>{clearCalled=id===1;};"
+        "class AbortController{constructor(){this.signal={aborted:false};}"
+        "abort(reason){this.signal.aborted=true;this.signal.reason=reason;}}"
+        "globalThis.AbortController=AbortController;"
+        "globalThis.fetch=async(ep,init)=>{assert.equal(timerMs,9000);"
+        "assert.ok(init.signal);throw Object.assign(new Error('SECRET fetch failed'),"
+        "{name:'AbortError'});};"
+        + source
+        + "(async()=>{try{await aiJson('https://api.openai.test',{method:'POST'},"
+        "{timeout_ms:9000});assert.fail('expected timeout');}catch(err){"
+        "assert.equal(err.code,'AI_BYOK_TIMEOUT');"
+        "assert.equal(err.name,'AbortError');"
+        "assert.equal(err.timeout_ms,9000);"
+        "assert.ok(!err.message.includes('SECRET'));"
+        "assert.equal(clearCalled,true);}})().catch(e=>{console.error(e);process.exit(1);});"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, text=True, timeout=10)
+
+
+def test_browser_byok_provider_calls_use_user_key_and_timeout_signal():
+    import shutil
+    import subprocess
+
+    if not shutil.which("node"):
+        return
+
+    html = (ROOT / "app" / "index.html").read_text(encoding="utf-8")
+    source = (
+        "let _onlineOk=false;"
+        + html.split("let _onlineOk=false;", 1)[1].split(
+            "// the single door every rewrite goes through", 1
+        )[0]
+    )
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "globalThis.setTimeout=()=>1;globalThis.clearTimeout=()=>{};"
+        "class AbortController{constructor(){this.signal={aborted:false};}"
+        "abort(){this.signal.aborted=true;}}"
+        "globalThis.AbortController=AbortController;"
+        "globalThis.fetch=async(ep,init)=>{calls.push({ep,init});"
+        "return {ok:true,status:200,text:async()=>JSON.stringify({choices:[{message:"
+        "{content:'ok'}}],"
+        "content:[{type:'text',text:'ok'}]})};};"
+        "let provider='openai';"
+        "function aiProvider(){return provider;}"
+        "function aiProv(p){return {openai:{et:'OpenAI',cheie:true},"
+        "anthropic:{et:'Anthropic',cheie:true}}[p||provider];}"
+        "function aiEndpoint(p){return p==='anthropic'?'https://api.anthropic.test/v1/messages':"
+        "'https://api.openai.test/v1/chat/completions';}"
+        "function aiModelOnline(p){return p==='anthropic'?'claude-test':'gpt-test';}"
+        "function aiKey(){return 'SECRET-USER-KEY';}"
+        + source
+        + "(async()=>{await aiRescrieOnline('text','system','nou',{timeout_ms:12000});"
+        "provider='anthropic';await aiRescrieOnline('text','system','nou',{timeout_ms:12000});"
+        "const openai=calls[0],anthropic=calls[1];"
+        "assert.equal(openai.ep,'https://api.openai.test/v1/chat/completions');"
+        "assert.equal(openai.init.headers.Authorization,'Bearer SECRET-USER-KEY');"
+        "assert.ok(openai.init.signal);"
+        "assert.deepEqual(JSON.parse(openai.init.body).messages.map(m=>m.role),['system','user']);"
+        "assert.equal(anthropic.ep,'https://api.anthropic.test/v1/messages');"
+        "assert.equal(anthropic.init.headers['x-api-key'],'SECRET-USER-KEY');"
+        "assert.equal(anthropic.init.headers['anthropic-version'],'2023-06-01');"
+        "assert.ok(anthropic.init.signal);"
+        "assert.equal(JSON.parse(anthropic.init.body).model,'claude-test');"
+        "})().catch(e=>{console.error(e);process.exit(1);});"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, text=True, timeout=10)
