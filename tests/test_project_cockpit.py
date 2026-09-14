@@ -106,6 +106,11 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     assert out["tracker"]["by_stage"]["report"]["count"] == 1
     assert out["tracker"]["by_type"]["report_filed"] == 1
     assert out["tracker"]["by_type"]["public_consultation_opened"] == 1
+    assert out["timeline"]["contract"] == "project-tracker-timeline-summary-v1"
+    assert out["timeline"]["current_stage"]["key"] == "report"
+    assert out["timeline"]["coverage"]["covered"] == ["consultation_open", "report"]
+    assert "published" in out["timeline"]["coverage"]["missing"]
+    assert len(out["timeline"]["source_links"]) == 2
     assert out["consultations"]["total"] == 1
     assert out["consultations"]["unreviewed"] == 1
     assert out["consultations"]["items"][0]["source_family"] == "consultare_guvern"
@@ -120,6 +125,7 @@ def test_project_cockpit_combines_lifecycle_tracker_source_and_evidence(tmp_path
     assert {action["key"] for action in out["next_actions"]} >= {
         "review_consultations",
         "review_tracker_events",
+        "complete_timeline_coverage",
         "sync_attention_sources",
         "open_evidence_pack",
     }

@@ -179,6 +179,7 @@ def _consultation_context(events: list[dict]) -> dict:
 def _next_actions(
     *,
     tracker_summary: dict,
+    timeline_summary: dict,
     source_attention: dict,
     evidence_summary: dict,
     evidence_pack: dict,
@@ -235,6 +236,16 @@ def _next_actions(
                 "reason": "Fără dosar, observațiile de redactare rămân separate de proiect.",
             }
         )
+    if (timeline_summary.get("coverage") or {}).get("missing"):
+        missing = timeline_summary["coverage"]["missing"]
+        actions.append(
+            {
+                "key": "complete_timeline_coverage",
+                "label": "Completează etapele lipsă din timeline.",
+                "reason": "Lipsesc evenimente locale pentru: " + ", ".join(missing[:5]) + ".",
+                "count": len(missing),
+            }
+        )
     if evidence_summary["available"]:
         actions.append(
             {
@@ -277,6 +288,7 @@ def build(stare, query: dict | None = None) -> dict:
     tracker = tracker_events.lista(
         stare, {"project_id": [project_id], "limit": [str(event_limit)], "offset": ["0"]}
     )
+    timeline = tracker_events.project_timeline_summary(stare, project_id, limit=event_limit)
     evidence_pack = {}
     with suppress(Exception):
         evidence_pack = project_evidence_pack.build(
@@ -300,6 +312,7 @@ def build(stare, query: dict | None = None) -> dict:
         "Rezultatele sunt pentru redactare și revizie legislativă; nu reprezintă verdict juridic.",
         "Sursele publice nesincronizate, indisponibile sau schimbate pot lipsi din sumar.",
         *lifecycle.get("limitari", []),
+        *timeline.get("limitari", []),
         *tracker.get("limitari", []),
         *evidence_pack.get("limitari", []),
     ]
@@ -316,11 +329,13 @@ def build(stare, query: dict | None = None) -> dict:
             "project": project or None,
         },
         "tracker": tracker_info,
+        "timeline": timeline,
         "consultations": consultation_info,
         "source_attention": source_info,
         "evidence_pack": evidence_info,
         "next_actions": _next_actions(
             tracker_summary=tracker_info,
+            timeline_summary=timeline,
             source_attention=source_info,
             evidence_summary=evidence_info,
             evidence_pack=evidence_pack,
