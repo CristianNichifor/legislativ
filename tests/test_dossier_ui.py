@@ -137,6 +137,18 @@ def test_matrix_tab_exposes_daily_legislative_workflow():
     assert "candidați, nu verdict juridic" in source
 
 
+def test_matrix_is_default_product_workspace():
+    source = APP.read_text()
+    assert 'id="tab-start" role="tab" aria-selected="false"' in source
+    assert 'id="tab-matrice" role="tab" aria-selected="true"' in source
+    assert 'data-main-nav="start" aria-current="false"' in source
+    assert 'data-main-nav="matrix" aria-current="true"' in source
+    assert 'id="pane-start" role="tabpanel" aria-labelledby="tab-start" hidden' in source
+    assert 'id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice">' in source
+    assert '$(".app").dataset.pane = "matrice";' in source
+    assert 'selectTab("matrice");' in source
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_daily_workflow_buttons_open_existing_panels():
     source = APP.read_text().split("function bindDailyWorkflow", 1)[1].split("// ---- theme:", 1)[0]

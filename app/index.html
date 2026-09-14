@@ -1251,7 +1251,7 @@
   <section id="dataset-updates" hidden aria-label="Date legislative locale"></section>
 
   <div class="tabs" role="tablist">
-    <button class="tab" id="tab-start" role="tab" aria-selected="true" aria-controls="pane-start">Start</button>
+    <button class="tab" id="tab-start" role="tab" aria-selected="false" aria-controls="pane-start">Start</button>
     <button class="tab" id="tab-lint" role="tab" aria-selected="false" aria-controls="pane-lint">Verifică proiect</button>
     <button class="tab" id="tab-redacteaza" role="tab" aria-selected="false" aria-controls="pane-redacteaza">Redactează</button>
     <button class="tab" id="tab-consolidat" role="tab" aria-selected="false" aria-controls="pane-consolidat">Consolidat</button>
@@ -1259,16 +1259,16 @@
     <button class="tab" id="tab-graf" role="tab" aria-selected="false" aria-controls="pane-graf">Conexiuni</button>
     <button class="tab" id="tab-parlamentari" role="tab" aria-selected="false" aria-controls="pane-parlamentari">Parlamentari</button>
     <button class="tab" id="tab-domenii" role="tab" aria-selected="false" aria-controls="pane-domenii">Cine face legea</button>
-    <button class="tab" id="tab-matrice" role="tab" aria-selected="false" aria-controls="pane-matrice">Matrice</button>
+    <button class="tab" id="tab-matrice" role="tab" aria-selected="true" aria-controls="pane-matrice">Matrice</button>
     <button class="tab" id="tab-ue" role="tab" aria-selected="false" aria-controls="pane-ue">Drept UE</button>
     <button class="tab" id="tab-supraveghere" role="tab" aria-selected="false" aria-controls="pane-supraveghere">Supraveghere</button>
     <button class="tema" id="tema-btn" type="button" title="Schimbă tema (auto / luminos / întunecat)" aria-label="Schimbă tema">tema: auto</button>
   </div>
   <nav class="workflow-nav" aria-label="Navigare spații de lucru">
-    <button type="button" data-main-nav="start" aria-current="true">Start<small>alege fluxul</small></button>
+    <button type="button" data-main-nav="start" aria-current="false">Start<small>alege fluxul</small></button>
     <button type="button" data-main-nav="search">Surse<small>lege, proiect, consultare, CELEX</small></button>
     <button type="button" data-main-nav="track">Urmărire<small>stadii, comisii, avize, voturi</small></button>
-    <button type="button" data-main-nav="matrix">Matrice<small>lacune și contradicții</small></button>
+    <button type="button" data-main-nav="matrix" aria-current="true">Matrice<small>lacune și contradicții</small></button>
     <button type="button" data-main-nav="dossiers">Dosare<small>lucru privat local</small></button>
     <button type="button" data-main-nav="ai">Redactare<small>ciorne, AI/BYOK/MCP</small></button>
     <button type="button" data-main-nav="rules">Reguli<small>law-as-code revizuibil</small></button>
@@ -1285,7 +1285,7 @@
   <div class="app">
     <div class="main">
 
-      <div id="pane-start" role="tabpanel" aria-labelledby="tab-start">
+      <div id="pane-start" role="tabpanel" aria-labelledby="tab-start" hidden>
         <section class="first-run" aria-labelledby="first-run-title">
           <h2 id="first-run-title" tabindex="-1">Pornește o analiză legislativă</h2>
           <p class="first-run-lead">Alege o sursă publică, păstrează lucrul într-un dosar local, apoi notează lacuna, contradicția sau riscul cu dovadă exactă. Aplicația nu dă verdict juridic.</p>
@@ -1468,7 +1468,7 @@
         <div id="dom-acte"></div>
       </div>
 
-      <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice" hidden>
+      <div id="pane-matrice" role="tabpanel" aria-labelledby="tab-matrice">
         <section class="daily-workflow" id="legislative-workflow" aria-labelledby="legislative-workflow-title">
           <h3 id="legislative-workflow-title">Flux zilnic pentru lacune și contradicții</h3>
           <p class="daily-workflow-status" id="legislative-workflow-status" role="status">
@@ -2069,7 +2069,7 @@ PANES.forEach((p,index)=>{
     if(next===null)return;e.preventDefault();selectTab(PANES[next]);$('#tab-'+PANES[next]).focus();
   };
 });
-$(".app").dataset.pane = "start";   // initial tab
+$(".app").dataset.pane = "matrice";   // initial tab
 function setFirstRunStatus(message){
   const node=$("#first-run-status");
   if(node)node.textContent=message;
@@ -10622,6 +10622,7 @@ $("#ue-limba").onchange=()=>{ if(($("#ue-text").value||"").trim()) cautaUE(); };
 
 $("#s-add").onclick=sAdd;
 ["s-nr","s-an"].forEach(id=>$("#"+id).addEventListener("keydown",e=>{ if(e.key==="Enter") sAdd(); }));
+selectTab("matrice");
 </script>
 <script src="dataset-updates.js" defer></script>
 </body>
