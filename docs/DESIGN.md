@@ -8,6 +8,11 @@ Everything lives in one place: the `:root` block at the top of `app/index.html`,
 (light, `prefers-color-scheme: dark`, and an explicit `[data-theme="dark"]`). `web/index.html` is
 generated from it and must not be edited.
 
+`app/civic-ui-adapter.css` is the only layer allowed to map those document tokens onto reusable
+Civic UI primitives. It may define scoped classes for the shell — workspace navigation, status
+strips, source/evidence/review/candidate badges and cards — but it must stay under
+`.civic-legislativ` and must not introduce a second palette beside the tokens below.
+
 ## Where the brand values come from
 
 Read off the stylesheet usr.ro serves (`_next/static/chunks/*.css`), not sampled from screenshots:

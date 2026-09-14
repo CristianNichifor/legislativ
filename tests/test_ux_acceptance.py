@@ -82,6 +82,30 @@ def test_current_ui_reports_the_actual_checked_in_status():
     assert out["visible_in"]["inputs"] == ["app/index.html", "app/civic-ui-adapter.css"]
 
 
+def test_civic_adapter_exposes_workspace_and_review_primitives():
+    adapter = (Path(__file__).parents[1] / "app/civic-ui-adapter.css").read_text(encoding="utf-8")
+
+    for selector in (
+        ".civic-legislativ .civic-workspace-nav",
+        ".civic-legislativ .civic-status-strip",
+        ".civic-legislativ .civic-badge--source",
+        ".civic-legislativ .civic-badge--evidence",
+        ".civic-legislativ .civic-badge--review",
+        ".civic-legislativ .civic-badge--candidate",
+        ".civic-legislativ .civic-card--source",
+        ".civic-legislativ .civic-card--evidence",
+        ".civic-legislativ .civic-card--review",
+        ".civic-legislativ .civic-card--candidate",
+    ):
+        assert selector in adapter
+
+    assert "min-height: 44px" in adapter
+    assert "var(--accent)" in adapter
+    assert "var(--material)" in adapter
+    assert "var(--blocking)" in adapter
+    assert "var(--good)" in adapter
+
+
 def test_missing_civic_adapter_blocks(tmp_path):
     write_fixture(tmp_path, minimal_html(), adapter=None)
 
