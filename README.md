@@ -228,6 +228,7 @@ makes the drift loud.
 | [`RELEASE_V1.md`](docs/RELEASE_V1.md) | v1 scope, milestone by milestone, with acceptance evidence |
 | [`APP_COMPLETENESS.md`](docs/APP_COMPLETENESS.md) | The release-blocking product gate and how to run it |
 | [`ROADMAP_100_PERCENT.md`](docs/ROADMAP_100_PERCENT.md) | The ten-phase product roadmap behind the PR sequence |
+| [`UX_UI_BIBLE.md`](docs/UX_UI_BIBLE.md) | The v1 UX/UI contract: target UX, phase gates, Civic UI extraction and no-verdict rules |
 | [`LOCAL_FIRST.md`](docs/LOCAL_FIRST.md) | Update, activation, rollback, and the public/private storage boundary |
 | [`INVENTAR_SURSE.md`](docs/INVENTAR_SURSE.md) | What is actually in the local databases — populations and limitations |
 | [`CORPUS_NOTES.md`](docs/CORPUS_NOTES.md) · [`MODULE.md`](docs/MODULE.md) | Field notes from collecting the corpus · what each module does |
