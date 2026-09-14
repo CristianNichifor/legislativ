@@ -5500,21 +5500,55 @@ function manualNoteSource(d){
   const hash=[d.sursa_sha256,d.sha256,d.text_sha256].find(x=>typeof x==='string'&&/^[a-f0-9]{64}$/.test(x));
   return {source_url:source||'',source_hash:hash||''};
 }
-function manualNoteFromMatrix(kind,row){
-  if(kind==='ue')return {title:`Risc UE · ${row.celex||''}`,type:'risc_ue',act_id:row.celex||'',locator:'',
+function matrixWorkspaceNoteContext(workspace){
+  if(!workspace)return '';
+  const problem=workspace.primary_problem||{},source=workspace.source_state||{},counts=workspace.evidence_counts||{};
+  const count=n=>String(n||0);
+  const evidence=[
+    counts.prevederi?`${count(counts.prevederi)} prevederi`:'',
+    counts.surse?`${count(counts.surse)} surse`:'',
+    counts.proiecte?`${count(counts.proiecte)} proiecte`:'',
+    counts.referinte_ue?`${count(counts.referinte_ue)} referințe UE`:''
+  ].filter(Boolean).join(', ')||'dovezi locale insuficiente';
+  const next=(workspace.next_actions||[]).slice(0,3).map(x=>`- ${x}`).join('\n');
+  return [
+    `Context matrice: ${workspace.contract||'law-matrix-workspace-row-v1'} · ${workspace.stage||workspace.status||'necesită triere'}.`,
+    `Problemă principală: ${problem.eticheta||problem.cheie||'rând de revizuit'}.`,
+    `Stare surse: ${source.eticheta||source.cheie||'necunoscută'}.`,
+    `Dovezi disponibile: ${evidence}.`,
+    next?`Pași următori:\n${next}`:'',
+    workspace.not_legal_verdict?'Nu este verdict juridic.':''
+  ].filter(Boolean).join('\n');
+}
+function matrixRowSourceFallback(row,context){
+  const direct=manualNoteSource(row);
+  if(direct.source_url||direct.source_hash)return direct;
+  const pointers=context?.drilldown?.readiness?.drilldown_pointers?.sources||context?.readiness?.drilldown_pointers?.sources||[];
+  const match=pointers.find(p=>p.act_id&&p.act_id===(row.act_id||row.celex))
+    ||pointers.find(p=>p.cheie_citare&&p.cheie_citare===(row.cheie_citare||row.act_id));
+  return {source_url:match?.url||'',source_hash:match?.content_hash||''};
+}
+function withMatrixWorkspaceReasoning(note,workspace,baseReasoning){
+  const context=matrixWorkspaceNoteContext(workspace);
+  return {...note,reasoning:[baseReasoning,context].filter(Boolean).join('\n\n')};
+}
+function manualNoteFromMatrix(kind,row,context={}){
+  const workspace=context?.drilldown?.workspace||context?.workspace||null;
+  const source=matrixRowSourceFallback(row,context);
+  if(kind==='ue')return withMatrixWorkspaceReasoning({title:`Risc UE · ${row.celex||''}`,type:'risc_ue',act_id:row.celex||'',locator:'',
     evidence_quote:(row.exemple||[]).map(e=>[e.id, e.locator, e.fragment||e.titlu].filter(Boolean).join(' · ')).join('\n'),
-    source_url:row.item_url||row.sursa_url||'',source_hash:row.sha256||row.text_sha256||'',
-    reasoning:row.importat?'Referință UE cu text local disponibil.':'Referință CELEX fără text local importat.',status:'needs_evidence',revizie:0};
-  if(kind==='constitutionalitate')return {title:`CCR · ${row.act_id||''} ${row.locator||''}`.trim(),type:'constitutionalitate',act_id:row.act_id||'',locator:row.locator||'',
-    evidence_quote:row.text||row.norma||'',source_url:row.sursa_url||'',source_hash:row.sha256||'',
-    reasoning:row.decizie?`Prevedere lovită: ${row.decizie}`:'Prevedere lovită de CCR rămasă de verificat.',status:'ready_for_review',revizie:0};
-  if(kind==='contradictie')return {title:`Contradicție candidată · ${row.termen||row.tip||''}`,type:'contradictie',act_id:row.tinta?.act_id||row.a?.act_id||'',locator:row.tinta?.locator||row.a?.locator||'',
+    source_url:row.item_url||row.sursa_url||source.source_url,source_hash:row.sha256||row.text_sha256||source.source_hash,
+    status:'needs_evidence',revizie:0},workspace,row.importat?'Referință UE cu text local disponibil.':'Referință CELEX fără text local importat.');
+  if(kind==='constitutionalitate')return withMatrixWorkspaceReasoning({title:`CCR · ${row.act_id||''} ${row.locator||''}`.trim(),type:'constitutionalitate',act_id:row.act_id||'',locator:row.locator||'',
+    evidence_quote:row.text||row.norma||'',source_url:row.sursa_url||source.source_url,source_hash:row.sha256||source.source_hash,
+    status:'ready_for_review',revizie:0},workspace,row.decizie?`Prevedere lovită: ${row.decizie}`:'Prevedere lovită de CCR rămasă de verificat.');
+  if(kind==='contradictie')return withMatrixWorkspaceReasoning({title:`Contradicție candidată · ${row.termen||row.tip||''}`,type:'contradictie',act_id:row.tinta?.act_id||row.a?.act_id||'',locator:row.tinta?.locator||row.a?.locator||'',
     evidence_quote:[row.a,row.b].map(x=>manualNoteText(x?.text||x?.definitie||x?.termen_text)).filter(Boolean).join('\n\n---\n\n'),
-    source_url:row.a?.sursa_url||row.b?.sursa_url||'',source_hash:row.a?.sha256||row.b?.sha256||'',
-    reasoning:row.tinta?'Conflict între proiecte pe aceeași țintă.':`Candidat: ${row.tip||'contradicție'}.`,status:'ready_for_review',revizie:0};
-  return {title:`Lacună · ${row.act_id||''} ${row.locator||''}`.trim(),type:'lacuna',act_id:row.act_id||'',locator:row.locator||'',
-    evidence_quote:row.text||'',source_url:row.sursa_url||'',source_hash:row.sha256||'',
-    reasoning:row.instrument?`Normă de tip ${row.instrument} negăsită în corpus.`:'Lacună de verificat manual.',status:'ready_for_review',revizie:0};
+    source_url:row.a?.sursa_url||row.b?.sursa_url||source.source_url,source_hash:row.a?.sha256||row.b?.sha256||source.source_hash,
+    status:'ready_for_review',revizie:0},workspace,row.tinta?'Conflict între proiecte pe aceeași țintă.':`Candidat: ${row.tip||'contradicție'}.`);
+  return withMatrixWorkspaceReasoning({title:`Lacună · ${row.act_id||''} ${row.locator||''}`.trim(),type:'lacuna',act_id:row.act_id||'',locator:row.locator||'',
+    evidence_quote:row.text||'',source_url:row.sursa_url||source.source_url,source_hash:row.sha256||source.source_hash,
+    status:'ready_for_review',revizie:0},workspace,row.instrument?`Normă de tip ${row.instrument} negăsită în corpus.`:'Lacună de verificat manual.');
 }
 function manualNoteFromFinding(f){
   const d=f.dovada||{}, type=MANUAL_NOTE_TYPES[f.tip]?f.tip:String(f.tip||'').includes('ue')?'risc_ue':String(f.tip||'').includes('constit')?'constitutionalitate':String(f.tip||'').includes('contrad')?'contradictie':'lacuna';
@@ -8873,7 +8907,7 @@ function bindMatrixNoteButtons(host,d){
       :kind==='constitutionalitate'?(d.rand?.exemple?.neconstitutionale||d.exemple?.neconstitutionale||[])[index]
       :kind==='ue'?(d.referinte_ue||[])[index]
       :(button.dataset.matrixGroup==='conflicte_proiecte'?d.conflicte_proiecte?.candidati:d.candidati||d.contradictii?.candidati||[])[index];
-    if(row)startManualNote(manualNoteFromMatrix(kind,row),{draft:button.dataset.matrixDraft==='1'});
+    if(row)startManualNote(manualNoteFromMatrix(kind,row,d),{draft:button.dataset.matrixDraft==='1'});
   });
 }
 async function mArataDosar(buton){

@@ -289,6 +289,20 @@ const lacuna=manualNoteFromMatrix('lacuna',{
   sursa_url:'https://source.test/lege-1',sha256:'c'.repeat(64)});
 assert.equal(lacuna.type,'lacuna');
 assert.ok(lacuna.reasoning.includes('hotărâre'));
+const contextual=manualNoteFromMatrix('lacuna',{
+  act_id:'lege-2',locator:'art. 5',text:'missing rule',instrument:'ordin'},{
+  drilldown:{
+    workspace:{contract:'law-matrix-workspace-row-v1',stage:'gata de lucru juridic',
+      primary_problem:{eticheta:'Lacună normativă'},source_state:{eticheta:'sursă verificată'},
+      evidence_counts:{prevederi:2,surse:1,proiecte:1,referinte_ue:1},
+      next_actions:['Confirmă citatul exact','Pornește draftul'],not_legal_verdict:true},
+    readiness:{drilldown_pointers:{sources:[{act_id:'lege-2',
+      url:'https://source.test/lege-2',content_hash:'d'.repeat(64)}]}}}});
+assert.equal(contextual.source_url,'https://source.test/lege-2');
+assert.equal(contextual.source_hash,'d'.repeat(64));
+assert.ok(contextual.reasoning.includes('law-matrix-workspace-row-v1'));
+assert.ok(contextual.reasoning.includes('Confirmă citatul exact'));
+assert.ok(contextual.reasoning.includes('Nu este verdict juridic'));
 const values={title:'Titlu',type:'lacuna',act_id:'A',locator:'art1',
   evidence_quote:'citat',source_url:'https://x.test',source_hash:'b'.repeat(64),
   reasoning:'motiv',status:'draft'};
