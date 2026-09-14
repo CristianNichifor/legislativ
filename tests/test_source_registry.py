@@ -814,7 +814,9 @@ def test_registry_syncs_monitor_part_i_metadata_to_publication_tracker_event(tmp
     assert synced["parser_version"] == registry.MANUAL_METADATA_PARSER_VERSION
     assert synced["tracker_sync"]["event_types"] == {"published_in_monitor": 1}
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
-    assert selected["snapshots"][0]["summary"] == {
+    summary = selected["snapshots"][0]["summary"]
+    publication_reference = summary.pop("publication_reference")
+    assert summary == {
         "title": "Legea 98/2016 publicată",
         "authority": "",
         "part": "I",
@@ -825,12 +827,17 @@ def test_registry_syncs_monitor_part_i_metadata_to_publication_tracker_event(tmp
         "unsupported_full_text": False,
         "truncated": False,
     }
+    assert publication_reference["contract"] == "monitor-publication-reference-v1"
+    assert publication_reference["lifecycle_state"] == "published_monitor"
+    assert publication_reference["status"] == "published_reference"
+    assert publication_reference["full_text"]["state"] == "not_loaded"
     events = tracker_events.lista(stare, {"source_family": ["monitorul_oficial_pi"]})
     assert events["total"] == 1
     assert events["events"][0]["event_type"] == "published_in_monitor"
     assert events["events"][0]["project_id"] == "lege-98-2016"
     assert events["events"][0]["payload"]["number"] == 390
     assert events["events"][0]["payload"]["date"] == "2016-05-23"
+    assert events["events"][0]["payload"]["lifecycle_state"] == "published_monitor"
 
 
 def test_registry_syncs_monitor_local_metadata_without_tracker_event(tmp_path):
@@ -861,8 +868,12 @@ def test_registry_syncs_monitor_local_metadata_without_tracker_event(tmp_path):
     assert synced["state"] == "changed"
     assert synced["tracker_sync"]["stored"] == 0
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
-    assert selected["snapshots"][0]["summary"]["source_policy"] == "metadata_only_manual_document"
-    assert selected["snapshots"][0]["summary"]["unsupported_full_text"] is True
+    summary = selected["snapshots"][0]["summary"]
+    assert summary["source_policy"] == "metadata_only_manual_document"
+    assert summary["unsupported_full_text"] is True
+    assert summary["publication_reference"]["contract"] == "monitor-publication-reference-v1"
+    assert summary["publication_reference"]["lifecycle_state"] == "publication_reference_pending"
+    assert summary["publication_reference"]["full_text"]["state"] == "manual_or_on_demand"
 
 
 def test_registry_manual_metadata_needs_review_when_tracker_fields_are_missing(tmp_path):

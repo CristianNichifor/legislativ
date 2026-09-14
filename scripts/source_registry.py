@@ -1161,10 +1161,18 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
             ),
         }
     elif family in MONITOR_METADATA_FAMILIES:
+        from scripts import monitor_tracker
+
         part = _text(
             metadata.get("part")
             or metadata.get("partea")
-            or ("I" if family == "monitorul_oficial_pi" else ""),
+            or (
+                "I"
+                if family == "monitorul_oficial_pi"
+                else "local"
+                if family == "monitorul_oficial_local"
+                else "II-VII"
+            ),
             limit=20,
         )
         number = _text(metadata.get("number") or metadata.get("monitor"), limit=20)
@@ -1189,6 +1197,15 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
                 isinstance(metadata.get("documents"), list) and len(metadata["documents"]) > 100
             ),
         }
+        summary["publication_reference"] = monitor_tracker.publication_reference(
+            project_id=project_id,
+            part=part,
+            number=number,
+            when=publication_date,
+            source_url=row.get("url", ""),
+            title=title,
+            manual_only=family != "monitorul_oficial_pi",
+        )
     else:
         issuer = _text(metadata.get("issuer") or authority, limit=300)
         position = _text(metadata.get("position", ""), limit=120)

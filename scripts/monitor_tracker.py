@@ -25,6 +25,7 @@ SOURCE_FAMILY = "monitorul_oficial_pi"
 DEFAULT_PART = "I"
 MAX_LOCAL_ROWS = 5000
 RECONCILIATION_CONTRACT = "monitor-publication-reconciliation-v1"
+PUBLICATION_REFERENCE_CONTRACT = "monitor-publication-reference-v1"
 
 
 def _text(value: Any) -> str:
@@ -75,6 +76,57 @@ def _content_hash(*parts: Any) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def publication_reference(
+    *,
+    project_id: str,
+    part: str,
+    number: int | str | None,
+    when: str,
+    source_url: str = "",
+    source_hash: str = "",
+    title: str = "",
+    local_full_text: bool = False,
+    manual_only: bool = False,
+) -> dict:
+    """Return the metadata-first Monitor publication reference shown in UI/export surfaces."""
+    parsed_number = _number(number)
+    parsed_date = _date(when)
+    normalized_part = _part(part)
+    part_i = normalized_part == DEFAULT_PART
+    complete = bool(project_id and part_i and parsed_number and parsed_date)
+    full_text_state = (
+        "loaded"
+        if local_full_text
+        else "manual_or_on_demand"
+        if manual_only or not part_i
+        else "not_loaded"
+    )
+    return {
+        "contract": PUBLICATION_REFERENCE_CONTRACT,
+        "project_id": _text(project_id),
+        "title": _text(title),
+        "part": normalized_part,
+        "number": parsed_number,
+        "date": parsed_date,
+        "source_url": _text(source_url),
+        "source_hash": _text(source_hash),
+        "lifecycle_state": "published_monitor" if complete else "publication_reference_pending",
+        "status": "published_reference" if complete else "metadata_incomplete",
+        "full_text": {
+            "state": full_text_state,
+            "label": {
+                "loaded": "Text local disponibil",
+                "not_loaded": "Text Monitor nelocalizat",
+                "manual_or_on_demand": "Document manual/la cerere",
+            }[full_text_state],
+        },
+        "limitations": [
+            "Referința este metadata-first; nu descarcă Monitorul Oficial.",
+            "Absența textului Monitor local nu înseamnă absența publicării.",
+        ],
+    }
+
+
 def _title(row: dict, *, number: int, when: str, republication: bool) -> str:
     act_id = _text(row.get("act_id") or row.get("cheie_act") or row.get("id") or row.get("plx_id"))
     prefix = "Republicat" if republication else "Publicat"
@@ -98,6 +150,7 @@ def _event(
         return None
     act_id = _text(row.get("act_id") or row.get("cheie_act") or row.get("id"))
     source_hash = _source_hash(row, parsed)
+    source_url = _text(row.get("source_url") or row.get("sursa_url"))
     republication = bool(parsed.republicare if parsed else row.get("republicare"))
     payload = {
         "part": part,
@@ -106,8 +159,18 @@ def _event(
         "act_id": act_id,
         "source_hash": source_hash,
         "republication": republication,
+        "lifecycle_state": "published_monitor",
+        "publication_reference": publication_reference(
+            project_id=project_id,
+            part=part,
+            number=number,
+            when=when,
+            source_url=source_url,
+            source_hash=source_hash,
+            title=_title(row, number=number, when=when, republication=republication),
+            local_full_text=bool(row.get("text") or (parsed and parsed.text)),
+        ),
     }
-    source_url = _text(row.get("source_url") or row.get("sursa_url"))
     if source_url:
         payload["source_url"] = source_url
     raw_status = _text(row.get("stadiu") or row.get("actiune"))
