@@ -76,6 +76,13 @@ TIMELINE_COVERAGE_STAGES = (
     ("vote", "Vot", {"plenary_agenda", "vote_recorded"}),
     ("publication", "Monitorul Oficial", {"published_in_monitor"}),
 )
+TIMELINE_COVERAGE_SOURCE_HINTS = {
+    "consultation": "Verifică e-consultare sau pagina de transparență decizională a autorității.",
+    "committee": "Verifică fișa Camerei/Senatului pentru comisii sesizate și avize.",
+    "report": "Verifică raportul comisiei sesizate în fond.",
+    "vote": "Verifică ordinea de zi și votul din plen.",
+    "publication": "Verifică Monitorul Oficial după adoptare/promulgare.",
+}
 
 ACTIVE_STAGE_KEYS = frozenset(
     stage.key for stage in STAGES if stage.available and stage.known and not stage.terminal
@@ -492,7 +499,9 @@ def _attention(
     }
 
 
-def _project_filter_buckets(stage_data: dict, canonical: dict, deadline: dict) -> list[str]:
+def _project_filter_buckets(
+    stage_data: dict, canonical: dict, deadline: dict, timeline_coverage: dict
+) -> list[str]:
     """Return user-facing lifecycle queues where this project should appear."""
     buckets = []
     stage_key = stage_data.get("key")
@@ -505,6 +514,8 @@ def _project_filter_buckets(stage_data: dict, canonical: dict, deadline: dict) -
         buckets.append("vote")
     if stage_key == "published" or canonical_key == "published":
         buckets.append("published")
+    if (timeline_coverage.get("missing") or []) and timeline_coverage.get("total_events", 0):
+        buckets.append("evidence")
     return buckets
 
 
@@ -515,6 +526,7 @@ def _filter_bucket_counts(projects: list[dict]) -> dict:
         "committee": 0,
         "vote": 0,
         "published": 0,
+        "evidence": 0,
         "stale": 0,
         "unknown": 0,
         "unavailable": 0,
@@ -563,24 +575,28 @@ def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) 
                 ),
                 "required_any": sorted(required),
                 "latest_at": latest,
+                "source_hint": TIMELINE_COVERAGE_SOURCE_HINTS.get(key, ""),
                 "source_families": sorted(
                     {row.get("source_family", "") for row in rows if row.get("source_family")}
                 ),
             }
         )
     missing = [stage["key"] for stage in stages if stage["state"] == "missing"]
+    next_missing = next((stage for stage in stages if stage["state"] == "missing"), None)
     return {
         "contract": "project-timeline-coverage-v1",
         "project_id": project_id,
         "total_events": len(events),
         "stages": stages,
         "missing": missing,
+        "next_missing_stage": next_missing,
         "complete": not missing,
         "next_action": (
-            "Completează dovezile lipsă din timeline înainte de concluzii juridice."
-            if missing
+            f"Completează următoarea dovadă: {next_missing['label']}."
+            if next_missing
             else "Timeline-ul local are dovezi pentru traseul public urmărit."
         ),
+        "next_source_hint": (next_missing.get("source_hint", "") if missing else ""),
     }
 
 
@@ -696,6 +712,7 @@ def project_lifecycle_item(
         deadline=deadline,
         stage_change=stage_change,
     )
+    timeline_coverage = timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or "")
     return {
         "source_name": row.get("source_name") or "Camera Deputaților",
         "project_id": row.get("plx_id") or "",
@@ -705,13 +722,15 @@ def project_lifecycle_item(
         "canonical_status": canonical,
         "stage_date": latest["date"],
         "latest_event": latest,
-        "timeline_coverage": timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or ""),
+        "timeline_coverage": timeline_coverage,
         "uncertainty": uncertainty,
         "last_seen": last_seen,
         "last_updated": row.get("data_inreg") or last_seen,
         "consultation_deadline": row.get("consultation_deadline"),
         "deadline_attention": deadline,
-        "filter_buckets": _project_filter_buckets(lifecycle, canonical, deadline),
+        "filter_buckets": _project_filter_buckets(
+            lifecycle, canonical, deadline, timeline_coverage
+        ),
         "stage_change_attention": stage_change,
         "attention": attention,
         "attention_reasons": attention["reasons"],

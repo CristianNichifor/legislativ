@@ -484,8 +484,12 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
     assert by_key["vote"]["latest_at"] == "2026-09-09T10:00:00+00:00"
     assert by_key["publication"]["state"] == "missing"
     assert "publication" in coverage["missing"]
+    assert coverage["next_missing_stage"]["key"] == "consultation"
+    assert coverage["next_source_hint"].startswith("Verifică e-consultare")
     assert coverage["complete"] is False
-    assert "Completează dovezile lipsă" in coverage["next_action"]
+    assert coverage["next_action"] == "Completează următoarea dovadă: Consultare."
+    assert "evidence" in out["projects"][0]["filter_buckets"]
+    assert out["filter_buckets"]["evidence"] == 1
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):
