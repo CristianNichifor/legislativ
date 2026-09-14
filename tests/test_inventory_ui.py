@@ -13,11 +13,16 @@ def test_daily_workflow_exposes_start_real_project_action():
     assert 'id="start-real-project"' in html
     assert "Start proiect real" in html
     assert 'id="real-workflow-start"' in html
+    assert 'id="real-workflow-handoff"' in html
     assert "Sursă publică reală" in html
     assert "Pornește fluxul" in html
+    assert "Notează în dosar" in html
+    assert "Export dosar" in html
     assert "Pilot real achiziții publice" not in html
     assert "function startRealWorkflow" in html
     assert "function realWorkflowAttachToDossier" in html
+    assert "function realWorkflowSourceNote" in html
+    assert "function realWorkflowRenderHandoff" in html
     assert "sourceRegistryApi({action:'discover'" in html
     assert "sourceRegistryApi({action:'sync'" in html
     assert "/api/dosare/watchlist" in html
@@ -29,6 +34,8 @@ def test_real_workflow_guess_routes_public_sources():
     source = html.split("function realWorkflowUrl", 1)[1].split("function bindDailyWorkflow", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
+        "const SOURCE_STATE_LABELS={fetched:'citită'};"
+        "const dossierTime=x=>x;"
         "function realWorkflowUrl" + source + "let g=realWorkflowGuess('CELEX:32014L0024');"
         "assert.equal(g.family,'ue_cellar');"
         "assert.equal(g.identifier,'32014L0024');"
@@ -53,6 +60,12 @@ def test_real_workflow_guess_routes_public_sources():
         "{tip:'project',valoare:'PL-x 1/2026',eticheta:'Proiect'});"
         "assert.equal(realWorkflowDossierWatch({family:'consultare_econsultare',"
         "identifier:'https://e-consultare.gov.ro/x'},{}).tip,'keyword');"
+        "const note=realWorkflowSourceNote({family:'ue_cellar',identifier:'32014L0024'},"
+        "{family:'ue_cellar',identifier:'32014L0024',label:'Directivă',state:'fetched',"
+        "url:'https://eur-lex.europa.eu/',last_hash:'a'.repeat(64),last_attempt_at:'2026'});"
+        "assert.equal(note.type,'risc_ue');"
+        "assert.equal(note.source_hash,'a'.repeat(64));"
+        "assert.match(note.evidence_quote,/Stare locală: citită/);"
     )
     subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
