@@ -219,7 +219,9 @@ def report(stare=None) -> dict:
         _capability(
             "lifecycle_tracking",
             "Lifecycle tracking",
-            "partial",
+            "ready"
+            if source_ready and vertical_checks.get("workbench_tracks_project")
+            else "partial",
             (
                 "Local source registry, tracker events and parliamentary lifecycle stages "
                 "exist; full lifecycle coverage depends on complete source availability."
@@ -368,12 +370,53 @@ def assert_complete(data: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Report final app completeness status")
     parser.add_argument(
+        "--data-home",
+        help=(
+            "Persistent local data directory to inspect, matching launcher/server --data-home. "
+            "Without it, the report uses a temporary empty state."
+        ),
+    )
+    parser.add_argument(
+        "--data-channel",
+        help="HTTPS update channel for --data-home runtime inspection.",
+    )
+    parser.add_argument(
+        "--sync-source-anchors",
+        action="store_true",
+        help=(
+            "Before reporting, verify the official source-family anchors in the selected "
+            "--data-home. This is a bounded availability check, not a crawler."
+        ),
+    )
+    parser.add_argument(
         "--require-complete",
         action="store_true",
         help="Exit non-zero when any required capability is partial or missing.",
     )
     args = parser.parse_args(argv)
-    data = report()
+    if args.data_channel and not args.data_home:
+        parser.error("--data-channel necesita --data-home")
+    if args.sync_source_anchors and not args.data_home:
+        parser.error("--sync-source-anchors necesita --data-home")
+    source_sync = None
+    if args.data_home:
+        from scripts.local_runtime import DEFAULT_CHANNEL, open_runtime
+
+        with open_runtime(args.data_home, args.data_channel or DEFAULT_CHANNEL) as runtime:
+            if args.sync_source_anchors:
+                source_sync = source_registry.executa(
+                    runtime.manager.current_state, {"action": "sync_bootstrap"}
+                )
+            data = report(runtime.manager.current_state)
+    else:
+        data = report()
+    if source_sync is not None:
+        data["source_anchor_sync"] = {
+            "contract": source_sync.get("contract"),
+            "total": source_sync.get("total", 0),
+            "counts": source_sync.get("counts", {}),
+            "next_action": source_sync.get("next_action", ""),
+        }
     print(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True))
     if args.require_complete:
         try:
