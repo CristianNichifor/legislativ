@@ -1,6 +1,6 @@
 # Legislativ 100% Implementation Bible
 
-Status date: 2026-09-14, after PR367; PR342 is in progress.
+Status date: 2026-09-15, after PR384.
 
 This document is the implementation bible. Work that does not move one of the
 remaining gates below is drift. The target is a finished, usable Romanian
@@ -45,6 +45,8 @@ Already implemented:
 - Real workflow entry for CDEP/Senate/e-consultare/ministry consultation/CELEX.
 - Source registry with explicit one-source sync, queue, review, retry, source
   impact, changed-source detail and source-to-dossier-note actions.
+- Required source-family anchors are verified on the local runtime: 14 anchors
+  synced, 0 failed/unavailable, 9/9 product-gate capabilities ready.
 - Lifecycle tracker with canonical-ish states, filters, evidence coverage,
   missing-stage actions, unknown-label review and source-backed timeline views.
 - EU/CELEX on-demand import with official Romanian preference and English
@@ -53,19 +55,25 @@ Already implemented:
 - Law-as-code candidates/checks exist as foundations.
 - AI/BYOK/local/MCP concepts exist with bounded prompt/audit preview pieces.
 - Public/local release and real-data acceptance scaffolding exists.
+- Final acceptance evidence exists in `docs/FINAL_ACCEPTANCE.md` and currently
+  reports `completion_claim_allowed: true` for the verified local runtime.
 
 Still not complete:
 
-- Source coverage is still incomplete for public drafting work.
 - Matrix is not yet the main daily workspace.
+- Source coverage is verified at family-anchor level, but source-specific
+  parsers still need deeper evidence extraction for daily drafting work.
 - AI is not yet a single polished user flow.
 - MCP is not yet a real execution surface.
 - Law-as-code is not yet a complete authoring and execution workflow.
-- Public Pages/local install/update acceptance has not been closed end to end.
+- Public Pages/local install/update deployment still needs maintainer-level
+  verification on the public artifact.
 - UX still exposes too many internal words and duplicate panels.
-- Final acceptance evidence is not assembled.
 
-Overall progress estimate: 60-65% of a strict v1.
+Gate status: strict v1 product gate closed on local verified data.
+
+Overall progress estimate: 100% of the current v1 acceptance gate; 75-80% of
+the broader finished product described in this bible.
 
 ## 2. Non-Negotiable Rules
 
@@ -82,9 +90,67 @@ Overall progress estimate: 60-65% of a strict v1.
 - No new backend/account infrastructure until public/local acceptance needs it.
 - If CI fails, fixing CI has priority over new work.
 
-## 3. Remaining PR Sequence
+## 3. Remaining Product Sequence
 
-Target: 18 large PRs maximum from here to final release gate.
+The PR342-PR359 sequence below is historical implementation context. The source
+coverage, lifecycle dependency and final gate closure are now done through PR384.
+Do not restart that sequence.
+
+Current target: finish the broader product through large vertical PRs only.
+
+### Next PR: Matrix-First Daily Workspace
+
+Phase: D.
+
+Goal: make the matrix the normal place a legislative worker starts and finishes
+gap/loophole/contradiction work.
+
+Implement:
+
+- A clearer matrix landing state grouped by legal area/domain.
+- One primary row shape for:
+  - gaps;
+  - loopholes;
+  - contradictions;
+  - EU risks;
+  - source issues;
+  - rule candidates.
+- One evidence drawer that always shows source URL, hash, quote, uncertainty and
+  review state together.
+- Direct actions from each row:
+  - save to dossier;
+  - create/edit note;
+  - draft proposal from selected evidence;
+  - create law-as-code candidate;
+  - open source/lifecycle.
+- Remove duplicate internal/source panels from the normal writing path when the
+  matrix already shows the same state.
+
+Acceptance:
+
+- User can start from a legal area, find one issue candidate, inspect evidence,
+  save it to a dossier and draft from it without leaving the main workspace.
+- Unsupported or missing evidence is shown as an explicit state, never as an
+  empty result.
+- No legal verdict language appears.
+
+### After That
+
+1. Source-specific adapter depth: CDEP/Senate documents, reports, votes, avize;
+   e-consultare/ministry consultation detail; Monitor metadata-first publication
+   references; CELEX evidence labels.
+2. AI/BYOK polish: one drafting panel, explicit provider choice, cost/quality
+   state, faithfulness report and refusal/fallback UX.
+3. MCP runtime UX: connected tool discovery, per-call consent, audit log, dry
+   run, and first safe export workflow.
+4. Law-as-code completion: rule candidate authoring, review/promote workflow and
+   deterministic checks against drafts/proposals.
+5. Deployment finish: public Pages verification, local install/update smoke,
+   privacy/security gate and final release report.
+
+## 3A. Historical PR Sequence
+
+This section remains for traceability only.
 
 ### PR342: Source Coverage Control Center
 
@@ -579,11 +645,14 @@ Acceptance:
 
 Can run in parallel:
 
-- PR342 and PR343 only if they do not edit the same UI section.
-- PR343 and PR344 parser work if adapters stay in separate modules.
-- PR348 and PR350 after the AI prompt manifest contract is stable.
-- PR351 and PR353 after shared audit/rule references are stable.
-- PR355 and PR356 if one owns scripts/tests and the other owns navigation copy.
+- Matrix UX and source-specific adapter parser work if they do not edit the same
+  `app/index.html` sections.
+- AI/BYOK polish and law-as-code authoring if shared evidence manifests stay
+  unchanged.
+- MCP runtime UX and deployment verification if one owns runtime/audit code and
+  the other owns docs/smoke checks.
+- Source-specific adapters can run in separate branches when each owns a
+  separate module and test file.
 
 Must not run in parallel:
 
@@ -595,26 +664,14 @@ Must not run in parallel:
 
 ## 5. Merge Order
 
-Strict order unless a real blocker appears:
+Strict order from the current state unless a real blocker appears:
 
-1. PR342 source coverage control center.
-2. PR343 e-consultare/ministry tracker completion.
-3. PR344 CDEP/Senate documents, votes, reports and avize.
-4. PR345 Monitorul Oficial metadata-first tracking.
-5. PR346 matrix workspace v1.
-6. PR347 matrix evidence drilldown.
-7. PR348 unified AI drafting panel.
-8. PR349 BYOK/local AI execution hardening.
-9. PR350 AI evaluation harness.
-10. PR351 MCP runtime surface.
-11. PR352 MCP workflows.
-12. PR353 law-as-code authoring UX.
-13. PR354 law-as-code deterministic checks.
-14. PR355 public/local acceptance.
-15. PR356 first-run UX/navigation cleanup.
-16. PR357 real-data end-to-end acceptance.
-17. PR358 security/code scanning/privacy gate.
-18. PR359 final release gate.
+1. Matrix-first daily workspace.
+2. Source-specific adapter depth.
+3. Unified AI/BYOK/local drafting UX.
+4. MCP runtime UX and first safe workflow.
+5. Law-as-code authoring and deterministic execution.
+6. Deployment and final public/local release verification.
 
 ## 6. Stop Conditions
 
@@ -630,9 +687,11 @@ Stop new feature work and fix immediately if:
 
 ## 7. Next Action
 
-After PR342 merges, the next implementation PR is PR343:
+Next implementation PR:
 
-`phase-c-econsultare-ministry-tracker-completion`
+`matrix-first-daily-workspace`
 
-It should make e-consultare and ministry consultations first-class trackable
-sources with normalized status, deadlines, attachments and review rows.
+It should make the matrix the app's default working surface for legislative
+gaps, loopholes, contradictions, EU risks and source issues. The source
+verification gate is closed; do not spend the next PR on another gate unless CI
+or a user-reported regression breaks it.
