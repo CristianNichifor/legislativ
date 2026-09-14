@@ -921,7 +921,13 @@ def test_matrix_workspace_summarizes_daily_work_queues(tmp_path):
 
 def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     stare = _stare(tmp_path, graf=True, initiative=True)
-    from scripts import source_registry
+    from scripts import (
+        dosare,
+        note_manuale,
+        rule_candidate_queue,
+        source_registry,
+        tracker_events,
+    )
 
     lege = source_registry.executa(
         stare,
@@ -940,6 +946,63 @@ def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
             "state": "fetched",
             "content_hash": "a" * 64,
             "parser_version": "legislatie_ro.v1",
+        },
+    )
+    dossier = dosare.creeaza(
+        dosare.cale(stare),
+        {"id": "c" * 32, "titlu": "Dosar matrice", "intrebare": "", "domeniu": ""},
+    )
+    note_manuale.salveaza(
+        dosare.cale(stare),
+        {
+            "id": "d" * 32,
+            "dosar_id": dossier["id"],
+            "revizie": 0,
+            "title": "Notă lacună",
+            "type": "lacuna",
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "evidence_quote": "Guvernul aprobă normele metodologice.",
+            "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+            "source_hash": "a" * 64,
+            "reasoning": "Verifică instrumentul lipsă.",
+            "status": "ready_for_review",
+        },
+    )
+    rule_candidate_queue.salveaza(
+        dosare.cale(stare),
+        {
+            "id": "e" * 32,
+            "dosar_id": dossier["id"],
+            "candidate": {
+                "provision_id": "ro:lege-98-2016#art7",
+                "act_id": "lege-98-2016",
+                "locator": "art7",
+                "source_hash": "a" * 64,
+                "text": "Guvernul aprobă normele metodologice.",
+                "modality": "obligation",
+                "review_state": "machine_detected",
+                "actor": "Guvernul",
+                "condition": "",
+                "action": "aprobă normele metodologice",
+                "deadline": "",
+                "exceptions": [],
+                "effect": "",
+                "reviewer": "",
+            },
+        },
+    )
+    tracker_events.adauga(
+        stare,
+        {
+            "event_type": "public_consultation_opened",
+            "project_id": "lege-98-2016",
+            "source_family": "consultare_econsultare",
+            "source_url": "https://e-consultare.gov.ro/consultare/lege-98-2016",
+            "title": "Consultare deschisă",
+            "occurred_at": "2026-01-10",
+            "content_hash": "b" * 64,
+            "payload": {"authority": "Minister"},
         },
     )
     with depozit.deschide(stare.corpus) as con:
@@ -990,6 +1053,24 @@ def test_matrix_dossier_bundles_the_row_evidence(tmp_path):
     assert out["drilldown"]["proiecte"][0]["plx_id"] == "plx-1-2024"
     assert out["drilldown"]["referinte_ue"][0]["celex"] == "32014L0024"
     assert out["drilldown"]["surse"][0]["act_id"] == "lege-98-2016"
+    evidence = out["drilldown"]["evidence_records"][0]
+    assert evidence["act_id"] == "lege-98-2016"
+    assert evidence["locator"] == "art7"
+    assert evidence["quote"] == "Guvernul aprobă normele metodologice."
+    assert evidence["source_url"].startswith("https://legislatie.just.ro/")
+    assert evidence["source_hash"] == "a" * 64
+    assert evidence["parser_version"] == "legislatie_ro.v1"
+    assert evidence["uncertainty"] == "completă pentru revizie locală"
+    assert evidence["not_legal_verdict"] is True
+    related = out["drilldown"]["related_items"]
+    assert related["contract"] == "matrix-related-items-v1"
+    assert related["laws"][0]["act_id"] == "lege-98-2016"
+    assert related["projects"][0]["plx_id"] == "plx-1-2024"
+    assert related["eu"][0]["celex"] == "32014L0024"
+    assert related["consultations"][0]["event_type"] == "public_consultation_opened"
+    assert related["notes"][0]["title"] == "Notă lacună"
+    assert related["rules"][0]["act_id"] == "lege-98-2016"
+    assert related["not_legal_verdict"] is True
     workspace = out["drilldown"]["workspace"]
     assert workspace["contract"] == "law-matrix-workspace-row-v1"
     assert workspace["status"] == "reviewable_candidate"
