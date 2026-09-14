@@ -17,17 +17,18 @@ or hosted service is required.
 
 | | |
 | --- | --- |
-| Phase | v1 in progress — **~60–65% of a strict v1** ([`docs/PROJECT_FINISH_BIBLE.md`](docs/PROJECT_FINISH_BIBLE.md), 2026-09-14) |
+| Phase | v1 product gate closed; full-product finish remains ([`docs/PROJECT_FINISH_BIBLE.md`](docs/PROJECT_FINISH_BIBLE.md), 2026-09-15) |
 | Tests | 1 936 (`uv run pytest -q`) |
-| Product gate | **blocked** — `python -m scripts.app_completeness` stays blocked until public source coverage and lifecycle freshness are proven against real runtime data |
+| Product gate | **ready on verified local data** — `python -m scripts.app_completeness --data-home ~/.local/share/legislativ --sync-source-anchors --require-complete` passed with 9/9 required capabilities ready |
 | Corpus | walked once end to end: 25 156 pages → 205 321 documents; a packed release is ~742 MB |
 | Public deployment | not published. The `date.cnwebify.dev` channel returned 404 on 2026-09-10; the host has since moved to `date.cristian-nichifor.com` and must still be published and verified by a maintainer |
-| Last merged | source coverage control center, and the unified public consultation feed |
-| Next | finish the e-consultare / ministry tracker, then CDEP/Senate documents, votes, reports and avize |
+| Last merged | final source-anchor verification closure and acceptance evidence |
+| Next | full-product finish: matrix-first workspace polish, real MCP execution UX, law-as-code authoring/checking, source-specific adapters and release deployment verification |
 
-Both the local server and the static browser build run. What is unfinished is *coverage* and
-*polish*: source families are registered but largely unsynced, the matrix is not yet the daily
-workspace, and AI/MCP exist as bounded pieces rather than one flow.
+Both the local server and the static browser build run. The v1 gate is closed on the local verified
+runtime, with no unsynced required source families. What is unfinished is the broader product finish:
+matrix-first daily workflow polish, source-specific parsers beyond anchor availability, a real MCP
+execution surface, stronger law-as-code authoring and final deployment verification.
 
 ---
 
@@ -125,8 +126,9 @@ Design limits and measured gaps, not bugs:
 - **Court case law is a working mechanism over a fifth of a percent of the material.** 231
   decisions, all 1992–2004, because the chronological collector has not been run past 2008. Every
   row it emits says `blocking` for that reason.
-- **Source coverage is small and mostly unsynced.** A registered source family is not current legal
-  data, and the completeness gate stays `blocked` until coverage is proven against real runtime data.
+- **Source coverage is verified at family-anchor level, not legally exhaustive.** The local
+  completeness gate can pass because all required official entrypoints are reachable and current, but
+  this is not full legal-domain coverage and not a substitute for source-specific parser validation.
 - **Extraction is measured against too little.** `data/etalon.json` is 36 hand-written cases; the one
   number measured against law this project did not write is **97,2% reference recall** over 822 of
   the portal's own `S_LGI` marks (`scripts.etalon_real`). Neither is a coverage figure for the real
@@ -141,18 +143,20 @@ Design limits and measured gaps, not bugs:
 
 ## Roadmap
 
-Eighteen large PRs from here to the release gate, in strict order unless a real blocker appears. Per-PR
-scope and acceptance: [`docs/PROJECT_FINISH_BIBLE.md`](docs/PROJECT_FINISH_BIBLE.md). The product
-reasoning behind the sequence: [`docs/ROADMAP_100_PERCENT.md`](docs/ROADMAP_100_PERCENT.md).
+The v1 product gate is closed; the remaining work is full-product finish, in large vertical PRs
+unless a real blocker appears. Per-track scope and acceptance:
+[`docs/PROJECT_FINISH_BIBLE.md`](docs/PROJECT_FINISH_BIBLE.md). The product reasoning behind the
+sequence: [`docs/ROADMAP_100_PERCENT.md`](docs/ROADMAP_100_PERCENT.md).
 
 | | Track | What it closes |
 | --- | --- | --- |
-| **Now** | Source coverage | One screen for what is covered and what is stale ✅; e-consultare and ministry trackers; CDEP/Senate documents, votes, reports and avize; Monitorul Oficial metadata-first tracking |
-| | Matrix workspace | Make the matrix the daily workspace — gaps, overlaps and contradictions inside one legal area, with drilldown to the exact provision and source snapshot |
-| | AI, bounded | One drafting panel; BYOK and local execution hardening; an evaluation harness that measures faithfulness instead of asserting it |
-| | MCP | A real runtime surface with per-call consent and an audit log, plus the first end-to-end workflow |
-| | Law as code | Authoring UX for rule candidates, and deterministic checks that return candidates, never verdicts |
-| **Release** | Acceptance | Public Pages and local install/update acceptance, first-run UX cleanup, real-data end-to-end acceptance, security and privacy gate, final release gate |
+| **Closed v1 gate** | Acceptance | Final source-anchor verification, lifecycle dependency and product completeness gate are green on local verified data |
+| **Now** | Matrix workspace | Make the matrix the daily workspace — gaps, overlaps and contradictions inside one legal area, with drilldown to the exact provision and source snapshot |
+| | Source adapters | Move from reachable family anchors to stronger source-specific evidence for CDEP/Senate/e-consultare/Monitor/CELEX flows |
+| | AI, bounded | Polish the single drafting panel, BYOK/local execution choices and the faithfulness evaluation report |
+| | MCP | Turn the bounded preview/audit foundation into a real optional runtime surface with per-call consent |
+| | Law as code | Complete authoring UX for rule candidates and deterministic checks that return candidates, never verdicts |
+| **Release** | Deployment | Verify public Pages, local install/update, first-run UX, privacy/security and final smoke on the shipped artifact |
 
 Explicitly **outside v1**: independently evaluated AI reasoning, hosted collaboration, OCR, broader
 domain coverage, automatic monitoring. They are separate tracks, not v1 requirements.
