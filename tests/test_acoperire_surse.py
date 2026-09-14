@@ -39,7 +39,26 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
     assert camera["failed"] == 1
     assert camera["fetched"] == 0
     assert camera["changed"] == 0
+    assert camera["support"]["state"] == "supported"
+    assert camera["support"]["label"] == "Suportată"
     assert camera["next_action"].startswith("Deschide rândurile eșuate")
+    assert {action["key"] for action in camera["actions"]} >= {
+        "add_source",
+        "open_family",
+        "sync_selected",
+        "retry_failures",
+        "create_note",
+        "parser_details",
+    }
+    local_mo = next(row for row in out["families"] if row["family"] == "monitorul_oficial_local")
+    assert local_mo["required"] is False
+    assert local_mo["status"] == "missing"
+    assert local_mo["support"]["state"] == "metadata_only"
+    other_mo = next(
+        row for row in out["families"] if row["family"] == "monitorul_oficial_other_parts"
+    )
+    assert other_mo["required"] is False
+    assert other_mo["support"]["policy"].startswith("Părțile II-VII")
     assert out["missing_required"] >= 1
     assert out["attention_sources"] == 1
     assert out["unsynced_required"] == 0
@@ -77,6 +96,7 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
     assert out["attention_sources"] == 0
     assert out["status"] == "blocked"
     assert {row["status"] for row in out["families"] if row["required"]} == {"unsynced"}
+    assert {row["status"] for row in out["families"] if not row["required"]} == {"unsynced"}
     assert {row["next_action"] for row in out["families"] if row["required"]} == {
         "Sincronizează rânduri selectate până au stare locală verificată."
     }
