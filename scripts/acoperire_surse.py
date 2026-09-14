@@ -28,6 +28,8 @@ ATTENTION = source_registry.ATTENTION_STATES
 READY_STATES = frozenset({"unchanged"})
 INCOMPLETE_STATES = frozenset({"discovered", "queued", "fetched"})
 BLOCKING_STATES = ATTENTION | frozenset({"unavailable"})
+FETCHED_STATES = frozenset({"fetched", "unchanged", "changed", "needs_review"})
+FAILED_STATES = frozenset({"failed", "unavailable", "rate_limited"})
 
 
 def _portfolio_summary(families: list[dict]) -> dict:
@@ -73,6 +75,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
     labels = source_registry.families()
     counts: Counter[tuple[str, str]] = Counter()
     total_by_family: Counter[str] = Counter()
+    checked_by_family: dict[str, str] = {}
     limitations = []
     path = source_registry.cale(stare)
     if path.exists():
@@ -85,6 +88,12 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
                 for row in rows:
                     counts[(row["family"], row["state"])] = row["c"]
                     total_by_family[row["family"]] += row["c"]
+                for row in con.execute(
+                    "SELECT family,max(last_attempt_at) checked FROM source_registry "
+                    "WHERE last_attempt_at IS NOT NULL AND last_attempt_at != '' "
+                    "GROUP BY family"
+                ):
+                    checked_by_family[row["family"]] = row["checked"] or ""
         except (OSError, sqlite3.Error):
             limitations.append("Registrul surselor nu este disponibil.")
     else:
@@ -100,6 +109,8 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
         attention = sum(counts[(family, state)] for state in BLOCKING_STATES)
         ready = sum(counts[(family, state)] for state in READY_STATES)
         incomplete = sum(counts[(family, state)] for state in INCOMPLETE_STATES)
+        fetched = sum(counts[(family, state)] for state in FETCHED_STATES)
+        failed = sum(counts[(family, state)] for state in FAILED_STATES)
         status = (
             "missing"
             if not total
@@ -118,11 +129,26 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
                 "attention": attention,
                 "ready": ready,
                 "incomplete": incomplete,
+                "fetched": fetched,
+                "changed": counts[(family, "changed")],
+                "failed": failed,
+                "last_checked": checked_by_family.get(family, ""),
+                "next_action": _family_next_action(
+                    status=status,
+                    family=family,
+                    attention=attention,
+                    failed=failed,
+                    incomplete=incomplete,
+                    total=total,
+                ),
                 "states": states,
                 "status": status,
             }
         )
     for family in sorted(set(total_by_family) - set(REQUIRED_FAMILIES)):
+        status = "attention" if sum(counts[(family, state)] for state in BLOCKING_STATES) else "ok"
+        failed = sum(counts[(family, state)] for state in FAILED_STATES)
+        incomplete = sum(counts[(family, state)] for state in INCOMPLETE_STATES)
         families.append(
             {
                 "family": family,
@@ -131,16 +157,52 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
                 "total": total_by_family[family],
                 "attention": sum(counts[(family, state)] for state in BLOCKING_STATES),
                 "ready": sum(counts[(family, state)] for state in READY_STATES),
-                "incomplete": sum(counts[(family, state)] for state in INCOMPLETE_STATES),
+                "incomplete": incomplete,
+                "fetched": sum(counts[(family, state)] for state in FETCHED_STATES),
+                "changed": counts[(family, "changed")],
+                "failed": failed,
+                "last_checked": checked_by_family.get(family, ""),
+                "next_action": _family_next_action(
+                    status=status,
+                    family=family,
+                    attention=sum(counts[(family, state)] for state in BLOCKING_STATES),
+                    failed=failed,
+                    incomplete=incomplete,
+                    total=total_by_family[family],
+                ),
                 "states": {
                     state: counts[(family, state)]
                     for state in sorted(source_registry.SYNC_STATES)
                     if counts[(family, state)]
                 },
-                "status": "ok",
+                "status": status,
             }
         )
     return families, limitations
+
+
+def _family_next_action(
+    *,
+    status: str,
+    family: str,
+    attention: int,
+    failed: int,
+    incomplete: int,
+    total: int,
+) -> str:
+    if status == "missing":
+        return "Adaugă o sursă oficială sau pornește ancorele oficiale de bază."
+    if failed:
+        return "Deschide rândurile eșuate, reîncearcă sursa selectată sau creează notă în dosar."
+    if attention:
+        return "Inspectează rândurile schimbate sau de revizuit înainte de redactare."
+    if incomplete:
+        return "Sincronizează rânduri selectate până au stare locală verificată."
+    if not total:
+        return "Adaugă o sursă când familia devine relevantă pentru dosar."
+    if family in {"monitorul_oficial_local", "monitorul_oficial_other_parts"}:
+        return "Păstrează metadate întâi; documentele se cer explicit de utilizator."
+    return "Acoperirea este utilizabilă local cu limitările afișate."
 
 
 def _project_stage_summary(stare, *, now: datetime, stale_days: int) -> tuple[dict, list[str]]:

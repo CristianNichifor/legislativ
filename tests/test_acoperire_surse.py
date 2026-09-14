@@ -36,6 +36,10 @@ def test_source_coverage_reports_missing_attention_and_project_stage_quality(tmp
     camera = next(row for row in out["families"] if row["family"] == "camera")
     assert camera["status"] == "attention"
     assert camera["attention"] == 1
+    assert camera["failed"] == 1
+    assert camera["fetched"] == 0
+    assert camera["changed"] == 0
+    assert camera["next_action"].startswith("Deschide rândurile eșuate")
     assert out["missing_required"] >= 1
     assert out["attention_sources"] == 1
     assert out["unsynced_required"] == 0
@@ -73,6 +77,9 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
     assert out["attention_sources"] == 0
     assert out["status"] == "blocked"
     assert {row["status"] for row in out["families"] if row["required"]} == {"unsynced"}
+    assert {row["next_action"] for row in out["families"] if row["required"]} == {
+        "Sincronizează rânduri selectate până au stare locală verificată."
+    }
     assert {blocker["kind"] for blocker in out["blockers"]} == {"source_unsynced"}
 
 
@@ -100,6 +107,8 @@ def test_source_coverage_accepts_verified_official_anchors(monkeypatch, tmp_path
     assert out["unsynced_required"] == 0
     assert out["attention_sources"] == 0
     assert {row["status"] for row in out["families"] if row["required"]} == {"ok"}
+    assert {row["fetched"] for row in out["families"] if row["required"]} == {1}
+    assert all(row["last_checked"] for row in out["families"] if row["required"])
 
 
 def test_source_coverage_handles_missing_stores_and_validates_stale_days(tmp_path):
