@@ -445,7 +445,120 @@ def test_matrix_groups_gap_reports_by_issuer(tmp_path):
         "act_id": "lege-98-2016",
         "locator": "art5.alin7",
     }
+    workspace = out["workspace"]["payload"]
+    assert workspace["contract"] == "law-matrix-workspace-v2"
+    assert workspace["counts"]["by_kind"]["deterministic_candidate"] == 2
+    assert workspace["counts"]["by_state"]["unsupported"] == 2
+    assert all(item["not_legal_verdict"] for item in workspace["items"])
+    assert "unsupported înseamnă nesuportat de datele locale" in workspace["limitari"][1]
     assert out["limitari"]
+
+
+def test_matrix_workspace_payload_aggregates_private_source_tracker_and_rules(tmp_path):
+    from scripts import dosare, note_manuale, rule_candidate_queue, source_registry, tracker_events
+
+    stare = _stare(tmp_path)
+    path = dosare.cale(stare)
+    dosar_id = "a" * 32
+    dosare.creeaza(
+        path,
+        {
+            "id": dosar_id,
+            "titlu": "Dosar matrice",
+            "intrebare": "Ce trebuie revizuit?",
+            "domeniu": "achizitii",
+        },
+    )
+    note_manuale.salveaza(
+        path,
+        {
+            "id": "b" * 32,
+            "dosar_id": dosar_id,
+            "revizie": 0,
+            "title": "Notă de lacună",
+            "type": "lacuna",
+            "act_id": "lege-98-2016",
+            "locator": "art7",
+            "evidence_quote": "Guvernul aprobă normele metodologice.",
+            "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+            "source_hash": "a" * 64,
+            "reasoning": "Dovadă locală selectată pentru revizie.",
+            "status": "ready_for_review",
+        },
+    )
+    rule_candidate_queue.salveaza(
+        path,
+        {
+            "id": "c" * 32,
+            "dosar_id": dosar_id,
+            "candidate": {
+                "provision_id": "ro:lege-98-2016#art7",
+                "act_id": "lege-98-2016",
+                "locator": "art7",
+                "source_hash": "a" * 64,
+                "text": "Autoritatea contractantă publică anunțul în SEAP.",
+                "modality": "obligation",
+                "review_state": "human_reviewed",
+                "actor": "autoritatea contractantă",
+                "condition": "procedura este inițiată",
+                "action": "publică anunțul în SEAP",
+                "deadline": "",
+                "exceptions": [],
+                "effect": "",
+                "reviewer": "test",
+            },
+        },
+    )
+    source = source_registry.executa(
+        stare,
+        {
+            "family": "legislatie_ro",
+            "identifier": "lege-98-2016",
+            "url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+            "label": "Legea achizițiilor",
+        },
+    )
+    source_registry.executa(stare, {"action": "queue", "id": source["id"]})
+    source_registry.executa(
+        stare,
+        {
+            "action": "record",
+            "id": source["id"],
+            "state": "failed",
+            "error_category": "source_unavailable",
+        },
+    )
+    event = tracker_events.adauga(
+        stare,
+        {
+            "event_type": "committee_assignment",
+            "project_id": "PL-x 10/2026",
+            "source_family": "camera",
+            "source_url": "https://www.cdep.ro/proiecte/2026/010",
+            "occurred_at": "2026-09-12T10:00:00+00:00",
+            "title": "Trimis la comisie",
+            "content_hash": "d" * 64,
+        },
+    )
+    tracker_events.marcheaza_revizuit(
+        stare,
+        {"id": event["event"]["id"], "reviewer": "test", "note": "verificat"},
+    )
+
+    out = _matrice({}, stare)
+    payload = out["workspace"]["payload"]
+    by_kind = payload["counts"]["by_kind"]
+    by_state = payload["counts"]["by_state"]
+
+    assert by_kind["manual_note"] == 1
+    assert by_kind["rule_candidate"] == 1
+    assert by_kind["lifecycle_source"] >= 2
+    assert by_state["needs-review"] >= 1
+    assert by_state["evidence-backed"] >= 2
+    assert by_state["missing-source"] >= 1
+    assert {item["state"] for item in payload["items"]} <= set(payload["counts"]["by_state"])
+    assert payload["summary"]["matrix_rows"] == out["total"]
+    assert payload["not_legal_verdict"] is True
 
 
 def test_watch_state_exposes_project_targets_and_source_status(tmp_path):
