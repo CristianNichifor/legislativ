@@ -4,6 +4,36 @@ from types import SimpleNamespace
 from scripts import monitor_tracker, tracker_events
 
 
+def test_publication_reference_is_metadata_first_and_links_lifecycle_state():
+    reference = monitor_tracker.publication_reference(
+        project_id="lege-98-2016",
+        part="I",
+        number="390",
+        when="2016-05-23",
+        source_url="https://monitoruloficial.ro/",
+        source_hash="a" * 64,
+        title="Legea 98/2016",
+    )
+
+    assert reference["contract"] == "monitor-publication-reference-v1"
+    assert reference["status"] == "published_reference"
+    assert reference["lifecycle_state"] == "published_monitor"
+    assert reference["full_text"]["state"] == "not_loaded"
+    assert "nu descarcă Monitorul Oficial" in reference["limitations"][0]
+
+    manual = monitor_tracker.publication_reference(
+        project_id="cluj-hcl-1-2026",
+        part="local",
+        number="12",
+        when="2026-02-01",
+        manual_only=True,
+    )
+
+    assert manual["status"] == "metadata_incomplete"
+    assert manual["lifecycle_state"] == "publication_reference_pending"
+    assert manual["full_text"]["state"] == "manual_or_on_demand"
+
+
 def test_act_publication_text_becomes_published_in_monitor_event():
     event = monitor_tracker.event_from_act_row(
         {
@@ -27,6 +57,11 @@ def test_act_publication_text_becomes_published_in_monitor_event():
     assert event["payload"]["date"] == "2016-05-23"
     assert event["payload"]["act_id"] == "lege-98-2016"
     assert event["payload"]["source_hash"]
+    assert event["payload"]["lifecycle_state"] == "published_monitor"
+    assert event["payload"]["publication_reference"]["contract"] == (
+        "monitor-publication-reference-v1"
+    )
+    assert event["payload"]["publication_reference"]["full_text"]["state"] == "loaded"
 
 
 def test_republication_is_carried_in_payload_not_flattened():
