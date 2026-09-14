@@ -1495,12 +1495,12 @@ def _persist_econsultare_tracker_event(
 
     saved = []
     for event in achizitii_econsultare.tracker_event_candidates(
-            snapshot,
-            source_id=source_id,
-            content_hash=content_hash,
-            observed_at=now(),
-            previous_snapshot=previous_snapshot,
-        ):
+        snapshot,
+        source_id=source_id,
+        content_hash=content_hash,
+        observed_at=now(),
+        previous_snapshot=previous_snapshot,
+    ):
         row = _persist_tracker_event(stare, event)
         if row:
             saved.append(row)

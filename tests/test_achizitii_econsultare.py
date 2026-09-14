@@ -175,12 +175,14 @@ def test_econsultare_snapshot_builds_first_class_tracker_events():
         "public_consultation_deadline_changed",
         "public_consultation_document_added",
     }
-    assert by_type["public_consultation_deadline_changed"]["payload"][
-        "previous_deadline"
-    ] == "2026-10-15T00:00:00+00:00"
-    assert by_type["public_consultation_deadline_changed"]["payload"][
-        "deadline"
-    ] == "2026-10-20T00:00:00+00:00"
+    assert (
+        by_type["public_consultation_deadline_changed"]["payload"]["previous_deadline"]
+        == "2026-10-15T00:00:00+00:00"
+    )
+    assert (
+        by_type["public_consultation_deadline_changed"]["payload"]["deadline"]
+        == "2026-10-20T00:00:00+00:00"
+    )
     assert by_type["public_consultation_document_added"]["payload"]["documents"] == [
         {
             "url": "https://e-consultare.gov.ro/upload/impact.pdf",
