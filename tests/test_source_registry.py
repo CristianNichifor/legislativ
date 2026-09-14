@@ -497,6 +497,9 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
         and event["payload"]["nominal_url"].endswith("Nominal?idv=99")
         for event in events["events"]
     )
+    report = next(event for event in events["events"] if event["event_type"] == "report_filed")
+    assert report["payload"]["documents"][0]["label"] == "Raport"
+    assert report["payload"]["documents"][0]["url"] == "https://www.cdep.ro/proiecte/a.pdf"
     selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
     assert selected["snapshots"][0]["content_hash"] == changed["last_hash"]
     assert selected["snapshots"][0]["parser_version"] == "achizitii_proiecte.v1"
@@ -509,6 +512,8 @@ def test_registry_syncs_real_project_sheet_snapshot_history(monkeypatch, tmp_pat
         "imported_status": "",
         "truncated": False,
     }
+    assert selected["snapshots"][0]["parliamentary_evidence"]["counts"]["reports"] == 1
+    assert selected["snapshots"][0]["parliamentary_evidence"]["counts"]["votes"] == 1
 
     unchanged = registry.executa(stare, {"action": "sync", "id": row["id"]})
     assert unchanged["state"] == "unchanged"
