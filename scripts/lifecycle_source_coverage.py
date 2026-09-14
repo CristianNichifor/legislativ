@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from scripts import source_registry, tracker_events
+from scripts import source_freshness, source_registry, tracker_events
 
 CONTRACT = "project-source-coverage-v1"
 TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
@@ -20,6 +20,7 @@ PROJECT_SOURCE_GROUPS = (
     ("monitor", "Monitorul Oficial", ("monitorul_oficial_pi",)),
 )
 ATTENTION_STATES = source_registry.ATTENTION_STATES | frozenset({"unavailable"})
+DEFAULT_STALE_DAYS = 30
 
 
 def _text(value: object, *, required: bool = False) -> str:
@@ -72,7 +73,7 @@ def _registry_sources(stare, project_id: str) -> list[dict]:
     ]
 
 
-def _family_state(family: str, sources: list[dict], events: list[dict]) -> dict:
+def _family_state(family: str, sources: list[dict], events: list[dict], *, stale_days: int) -> dict:
     source_matches = [row for row in sources if row.get("family") == family]
     event_matches = [row for row in events if row.get("source_family") == family]
     attention = [
@@ -87,10 +88,35 @@ def _family_state(family: str, sources: list[dict], events: list[dict]) -> dict:
         state = "present"
     else:
         state = "missing"
+    if attention:
+        freshness = source_freshness.state_payload(
+            "needs_review",
+            reason="Sursa sau evenimentele locale cer revizie înainte de concluzii.",
+            stale_days=stale_days,
+        )
+    elif source_matches:
+        freshness = (source_matches[0].get("sync_status") or {}).get(
+            "freshness_status"
+        ) or source_freshness.for_registry_row(source_matches[0], stale_days=stale_days)
+    elif event_matches:
+        freshness = source_freshness.state_payload(
+            "current",
+            reason="Există cel puțin un eveniment tracker local pentru această familie.",
+            stale_days=stale_days,
+        )
+    else:
+        freshness = source_freshness.state_payload(
+            "missing",
+            reason="Nu există sursă în registru și nici eveniment tracker local.",
+            missing=[family],
+            stale_days=stale_days,
+        )
     return {
         "family": family,
         "label": source_registry.families().get(family, family),
         "state": state,
+        "freshness": freshness,
+        "freshness_state": freshness["state"],
         "sources": len(source_matches),
         "events": len(event_matches),
         "latest_state": source_matches[0].get("state", "") if source_matches else "",
@@ -109,11 +135,14 @@ def build(stare, query: dict | None = None) -> dict:
     query = query or {}
     project_id = _text((query.get("project_id") or query.get("proiect") or [""])[0], required=True)
     event_limit = _limit(query, "event_limit", 100, 200)
+    stale_days = _limit(query, "stale_days", DEFAULT_STALE_DAYS, 3660)
     events = _events(stare, project_id, event_limit)
     sources = _registry_sources(stare, project_id)
     groups = []
     for key, label, families in PROJECT_SOURCE_GROUPS:
-        rows = [_family_state(family, sources, events) for family in families]
+        rows = [
+            _family_state(family, sources, events, stale_days=stale_days) for family in families
+        ]
         state = (
             "needs_review"
             if any(row["state"] == "needs_review" for row in rows)
@@ -121,11 +150,14 @@ def build(stare, query: dict | None = None) -> dict:
             if any(row["state"] == "present" for row in rows)
             else "missing"
         )
+        freshness = source_freshness.for_coverage_group(rows, stale_days=stale_days)
         groups.append(
             {
                 "key": key,
                 "label": label,
                 "state": state,
+                "freshness": freshness,
+                "freshness_state": freshness["state"],
                 "families": rows,
                 "present": sum(1 for row in rows if row["state"] == "present"),
                 "needs_review": sum(1 for row in rows if row["state"] == "needs_review"),
@@ -134,6 +166,9 @@ def build(stare, query: dict | None = None) -> dict:
         )
     missing = sum(group["missing"] for group in groups)
     review = sum(group["needs_review"] for group in groups)
+    freshness_counts = {state: 0 for state in source_freshness.FRESHNESS_STATES}
+    for group in groups:
+        freshness_counts[group["freshness_state"]] += 1
     return {
         "contract": CONTRACT,
         "project_id": project_id,
@@ -142,10 +177,12 @@ def build(stare, query: dict | None = None) -> dict:
             "present_groups": sum(1 for group in groups if group["state"] == "present"),
             "missing_families": missing,
             "needs_review_families": review,
+            "freshness_states": freshness_counts,
             "events": len(events),
             "sources": len(sources),
         },
         "groups": groups,
+        "source_freshness_states": freshness_counts,
         "status": "needs_review" if review else "missing" if missing else "ok",
         "next_actions": [
             "Adaugă sau sincronizează sursele lipsă pentru proiect." if missing else "",

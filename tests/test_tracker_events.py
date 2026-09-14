@@ -41,6 +41,8 @@ def test_tracker_store_adds_lists_and_deduplicates_events(tmp_path):
     assert listed["events"][0]["event_label"] == "committee assignment"
     assert listed["events"][0]["payload"]["committee"] == "Comisia juridică"
     assert listed["source_status"] == "ok"
+    assert listed["source_freshness_state"] == "needs_review"
+    assert listed["source_freshness_status"]["missing"] == ["tracker_review"]
 
 
 def test_tracker_store_filters_by_type_dossier_and_source_family(tmp_path):
@@ -196,6 +198,7 @@ def test_tracker_project_timeline_summary_reports_stage_coverage_and_source_link
     ]
     assert len(out["source_links"]) == 4
     assert "Revizuiește evenimentele tracker nerevizuite." in out["next_actions"]
+    assert out["source_freshness_state"] == "needs_review"
 
 
 def test_tracker_project_timeline_summary_handles_empty_project(tmp_path):
@@ -207,6 +210,7 @@ def test_tracker_project_timeline_summary_handles_empty_project(tmp_path):
     assert out["current_stage"] is None
     assert out["coverage"]["covered"] == []
     assert out["next_actions"][0] == "Sincronizează sursele proiectului înainte de redactare."
+    assert out["source_freshness_state"] == "missing"
 
 
 def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
@@ -221,7 +225,9 @@ def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_pat
     assert reviewed["review"]["reviewed"] is True
     assert reviewed["review"]["reviewer"] == "ana"
     assert tracker_events.lista(stare, {"reviewed": ["0"]})["total"] == 0
-    assert tracker_events.lista(stare, {"reviewed": ["1"]})["events"][0]["id"] == saved["id"]
+    reviewed_list = tracker_events.lista(stare, {"reviewed": ["1"]})
+    assert reviewed_list["events"][0]["id"] == saved["id"]
+    assert reviewed_list["source_freshness_state"] == "current"
 
 
 def test_tracker_event_can_create_manual_dossier_note(tmp_path):
@@ -257,6 +263,7 @@ def test_tracker_store_reports_missing_database_without_creating_file(tmp_path):
     out = tracker_events.lista(stare)
 
     assert out["source_status"] == "missing"
+    assert out["source_freshness_state"] == "missing"
     assert out["events"] == []
     assert not tracker_events.cale(stare).exists()
 

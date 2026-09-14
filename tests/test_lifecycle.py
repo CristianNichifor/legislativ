@@ -156,17 +156,26 @@ def test_project_lifecycle_item_exposes_stale_unknown_and_unavailable_states():
         "message": "Stadiu citit din sursa locală.",
     }
     assert ok["source_state"] == "ok"
+    assert ok["source_freshness_state"] == "partial"
+    assert ok["source_freshness_status"]["label"] == "Parțială"
+    assert {"stage": "consultation", "source_family": "consultare_econsultare"} in [
+        {"stage": row["stage"], "source_family": row["source_family"]}
+        for row in ok["missing_source_states"]
+    ]
     assert ok["needs_attention"] is False
     stale = project_lifecycle_item({**row, "citit_la": "2026-07-01T00:00:00+00:00"}, now=now)
     assert stale["source_state"] == "stale" and stale["needs_attention"]
+    assert stale["source_freshness_state"] == "stale"
     assert stale["uncertainty"]["level"] == "medium"
     assert stale["uncertainty"]["reasons"] == ["stale_source_read"]
     unknown = project_lifecycle_item({**row, "stadiu": "Etapă nouă"}, now=now)
     assert unknown["source_state"] == "unknown"
+    assert unknown["source_freshness_state"] == "needs_review"
     assert unknown["uncertainty"]["level"] == "high"
     assert "unrecognized_stage_label" in unknown["uncertainty"]["reasons"]
     unavailable = project_lifecycle_item({**row, "stadiu": "", "sursa_url": ""}, now=now)
     assert unavailable["source_state"] == "unavailable"
+    assert unavailable["source_freshness_state"] == "unavailable"
     assert unavailable["uncertainty"]["level"] == "high"
 
 
@@ -237,6 +246,7 @@ def test_project_lifecycle_summary_reads_local_store_and_bounds_results(tmp_path
     assert out["projects"][0]["project_id"] == "plx-1-2026"
     second = project_lifecycle_summary(state, query="muncă", limit=10, stale_days=20, now=now)
     assert second["source_status"] == "needs_review"
+    assert second["source_freshness_states"]["needs_review"] == 1
     assert second["unknown_stage"] == 1
     assert second["projects"][0]["source_state"] == "unknown"
     assert second["unknown_stage_review_queue"] == [
@@ -502,6 +512,10 @@ def test_project_lifecycle_summary_exposes_event_backed_timeline_coverage(tmp_pa
     assert coverage["next_source_hint"].startswith("Verifică e-consultare")
     assert coverage["complete"] is False
     assert coverage["next_action"] == "Completează următoarea dovadă: Consultare."
+    assert out["projects"][0]["source_freshness_state"] == "partial"
+    assert out["projects"][0]["missing_source_states"][0]["source_family"] == (
+        "consultare_econsultare"
+    )
     assert "evidence" in out["projects"][0]["filter_buckets"]
     assert out["filter_buckets"]["evidence"] == 1
 

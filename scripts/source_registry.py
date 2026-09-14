@@ -15,7 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from scripts import cellar
+from scripts import cellar, source_freshness
 from scripts.source_change_detection import detect_changes
 from scripts.source_sync import STATE_LABELS, SYNC_STATES, can_transition, normalize_state
 
@@ -40,6 +40,7 @@ PROJECT_PARSER_VERSION = "achizitii_proiecte.v1"
 MANUAL_METADATA_PARSER_VERSION = "manual-source-metadata.v1"
 MAX_TEXT = 1000
 MAX_PAGE = 50
+DEFAULT_STALE_DAYS = 30
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
@@ -339,12 +340,15 @@ def _sync_status(row: dict) -> dict:
     elif state in {"changed", "needs_review"}:
         freshness = "needs_human_review"
         freshness_label = "Citită local, dar așteaptă revizie umană."
+    freshness_status = source_freshness.for_registry_row(row, stale_days=DEFAULT_STALE_DAYS)
     return {
         "state": state,
         "label": STATE_LABELS[state],
         "severity": severity,
         "freshness": freshness,
         "freshness_label": freshness_label,
+        "freshness_state": freshness_status["state"],
+        "freshness_status": freshness_status,
         "can_queue": can_queue,
         "can_sync": can_sync,
         "can_review": can_review,

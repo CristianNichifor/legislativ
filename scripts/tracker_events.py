@@ -12,6 +12,7 @@ from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
+from scripts import source_freshness
 from scripts.source_portfolio import TRACKER_EVENTS
 
 APPLICATION_ID = 0x4C545245
@@ -229,6 +230,12 @@ def _empty(limit: int = 50, offset: int = 0) -> dict:
             for index, (key, label) in enumerate(LIFECYCLE_STAGES)
         ],
         "source_status": "missing",
+        "source_freshness_status": source_freshness.state_payload(
+            "missing",
+            reason="Tracker-ul legislativ nu este inițializat.",
+            missing=["tracker_events_db"],
+        ),
+        "source_freshness_state": "missing",
         "summary": {
             "returned": 0,
             "total": 0,
@@ -281,6 +288,25 @@ def _summary(rows: list[dict], total: int) -> dict:
         },
         "latest_event": rows[0] if rows else None,
     }
+
+
+def _tracker_freshness_status(rows: list[dict], summary: dict) -> dict:
+    if not rows:
+        return source_freshness.state_payload(
+            "missing",
+            reason="Nu există evenimente tracker locale pentru această selecție.",
+            missing=["tracker_events"],
+        )
+    if summary.get("unreviewed"):
+        return source_freshness.state_payload(
+            "needs_review",
+            reason="Există evenimente tracker nerevizuite.",
+            missing=["tracker_review"],
+        )
+    return source_freshness.state_payload(
+        "current",
+        reason="Evenimentele tracker afișate sunt revizuite local.",
+    )
 
 
 def project_timeline_summary(stare, project_id: str, *, limit: int = 200) -> dict:
@@ -336,10 +362,13 @@ def project_timeline_summary(stare, project_id: str, *, limit: int = 200) -> dic
         next_actions.append("Revizuiește evenimentele tracker nerevizuite.")
     if source_links:
         next_actions.append("Deschide linkurile sursă pentru etapele critice înainte de concluzii.")
+    freshness_status = _tracker_freshness_status(events, out["summary"])
     return {
         "contract": "project-tracker-timeline-summary-v1",
         "project_id": project_id,
         "source_status": out["source_status"],
+        "source_freshness_status": freshness_status,
+        "source_freshness_state": freshness_status["state"],
         "total_events": out["total"],
         "returned_events": len(events),
         "latest_event": latest,
@@ -490,6 +519,8 @@ def lista(stare, query: dict | None = None) -> dict:
             )
         ]
         rows = _with_reviews(con, rows)
+    summary = _summary(rows, total)
+    freshness_status = _tracker_freshness_status(rows, summary)
     return {
         "contract": CONTRACT,
         "events": rows,
@@ -502,7 +533,9 @@ def lista(stare, query: dict | None = None) -> dict:
             for index, (key, label) in enumerate(LIFECYCLE_STAGES)
         ],
         "source_status": "ok",
-        "summary": _summary(rows, total),
+        "source_freshness_status": freshness_status,
+        "source_freshness_state": freshness_status["state"],
+        "summary": summary,
         "limitari": [
             "Tracker-ul citește evenimente locale normalizate; nu sincronizează surse publice."
         ],

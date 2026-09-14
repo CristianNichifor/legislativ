@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from scripts import source_freshness
 from scripts.text import cheie
 
 
@@ -557,6 +558,69 @@ def _filter_bucket_counts(projects: list[dict]) -> dict:
     return buckets
 
 
+def _timeline_missing_sources(timeline_coverage: dict) -> list[dict]:
+    missing = []
+    for stage in timeline_coverage.get("stages") or []:
+        if stage.get("state") != "missing":
+            continue
+        missing.append(
+            {
+                "stage": stage.get("key") or "",
+                "label": stage.get("label") or "",
+                "source_family": stage.get("suggested_source_family") or "",
+                "reason": stage.get("source_hint") or "",
+            }
+        )
+    return missing
+
+
+def _project_freshness_status(
+    *,
+    source_state: str,
+    stale: bool,
+    registry_state: str,
+    lifecycle: dict,
+    timeline_coverage: dict,
+    stale_days: int,
+) -> dict:
+    missing_sources = _timeline_missing_sources(timeline_coverage)
+    if source_state == "unavailable":
+        return source_freshness.state_payload(
+            "unavailable",
+            reason="Fișa proiectului sau stadiul oficial nu este disponibil local.",
+            missing=["official_project_source"],
+            stale_days=stale_days,
+        )
+    if lifecycle.get("key") == "unknown" or registry_state in REGISTRY_ATTENTION_STATES:
+        return source_freshness.state_payload(
+            "needs_review",
+            reason="Stadiul sau sursa urmărită cere revizie manuală.",
+            missing=[
+                *(["lifecycle_stage_mapping"] if lifecycle.get("key") == "unknown" else []),
+                *(["tracked_source_review"] if registry_state in REGISTRY_ATTENTION_STATES else []),
+            ],
+            stale_days=stale_days,
+        )
+    if stale:
+        return source_freshness.state_payload(
+            "stale",
+            reason=f"Ultima citire a proiectului depășește pragul de {stale_days} zile.",
+            stale_days=stale_days,
+        )
+    if missing_sources:
+        return source_freshness.state_payload(
+            "partial",
+            reason="Stadiul proiectului există, dar trackerul nu are toate dovezile publice.",
+            missing=[row["source_family"] or row["stage"] for row in missing_sources],
+            stale_days=stale_days,
+        )
+    return source_freshness.state_payload(
+        "current",
+        reason="Stadiul și dovezile tracker locale sunt acoperite fără alertă.",
+        stale_days=stale_days,
+    )
+
+
 def _empty_timeline_coverage(project_id: str, events: list[dict] | None = None) -> dict:
     events = events or []
     evidence_counts = {
@@ -749,6 +813,15 @@ def project_lifecycle_item(
         stage_change=stage_change,
     )
     timeline_coverage = timeline_coverage or _empty_timeline_coverage(row.get("plx_id") or "")
+    freshness_status = _project_freshness_status(
+        source_state=source_state,
+        stale=stale,
+        registry_state=registry_state,
+        lifecycle=lifecycle,
+        timeline_coverage=timeline_coverage,
+        stale_days=stale_days,
+    )
+    missing_sources = _timeline_missing_sources(timeline_coverage)
     return {
         "source_name": row.get("source_name") or "Camera Deputaților",
         "project_id": row.get("plx_id") or "",
@@ -759,6 +832,9 @@ def project_lifecycle_item(
         "stage_date": latest["date"],
         "latest_event": latest,
         "timeline_coverage": timeline_coverage,
+        "missing_source_states": missing_sources,
+        "source_freshness_status": freshness_status,
+        "source_freshness_state": freshness_status["state"],
         "uncertainty": uncertainty,
         "last_seen": last_seen,
         "last_updated": row.get("data_inreg") or last_seen,
@@ -897,6 +973,8 @@ def project_lifecycle_summary(
         "stale": 0,
         "unknown_stage": 0,
         "unavailable": 0,
+        "source_freshness_states": {state: 0 for state in source_freshness.FRESHNESS_STATES},
+        "missing_source_states": [],
         "filter_buckets": {},
         "limitari": [],
     }
@@ -957,6 +1035,20 @@ def project_lifecycle_summary(
     base["unknown_stage"] = sum(1 for project in projects if project["stage"]["key"] == "unknown")
     base["unknown_stage_review_queue"] = _unknown_stage_queue(projects)
     base["unavailable"] = sum(1 for project in projects if project["unavailable"])
+    freshness_counts = {state: 0 for state in source_freshness.FRESHNESS_STATES}
+    for project in projects:
+        freshness_counts[project["source_freshness_state"]] += 1
+    base["source_freshness_states"] = freshness_counts
+    base["missing_source_states"] = [
+        {
+            "project_id": project["project_id"],
+            "title": project["title"],
+            "missing": project["missing_source_states"],
+            "freshness": project["source_freshness_status"],
+        }
+        for project in projects
+        if project["missing_source_states"]
+    ][:20]
     base["filter_buckets"] = _filter_bucket_counts(projects)
     if projects:
         if base["unavailable"]:

@@ -339,6 +339,7 @@
   .source-next{color:var(--ink-mute)}
   .source-freshness{grid-column:1/-1;border-left:3px solid var(--material);padding:.45rem .6rem;background:var(--surface);font-size:.76rem;line-height:1.45}
   .source-freshness-ok{border-color:var(--accent)}
+  .source-freshness-attention{border-left:3px solid var(--material);padding-left:.55rem}
   .source-freshness p{margin:.15rem 0}
   .source-freshness ul{margin:.25rem 0 .15rem 1rem;padding:0}
   .source-inventory .source-total{display:inline-block}
@@ -7242,6 +7243,10 @@ const SOURCE_STATE_HINTS={
   rate_limited:'Sursa oficială cere încetinirea cererilor; reîncearcă mai târziu.',
   needs_review:'Sursa a fost citită, dar rezultatul nu poate actualiza automat date juridice.'
 };
+const SOURCE_FRESHNESS_LABELS={
+  missing:'Lipsește',stale:'Învechită',partial:'Parțială',current:'Curentă',
+  unavailable:'Indisponibilă',needs_review:'Necesită revizie'
+};
 const SOURCE_NOTE_STATES=new Set(['changed','failed','unavailable','rate_limited','needs_review']);
 function sourceRegistryNote(row){
   const family=SOURCE_REGISTRY.families?.[row.family]||row.family||'sursă';
@@ -7278,6 +7283,11 @@ function sourceRegistryOutcome(row,verb='Sync'){
 }
 function sourceRegistryFreshnessHtml(row){
   const status=row.sync_status||{};
+  const canonical=status.freshness_status||row.source_freshness_status;
+  if(canonical?.state){
+    const missing=(canonical.missing||[]).filter(Boolean).join(', ');
+    return `<p class="hint source-freshness-${canonical.severity==='ok'?'ok':'attention'}"><strong>Actualitate: ${esc(canonical.label||SOURCE_FRESHNESS_LABELS[canonical.state]||canonical.state)}</strong> · ${esc(canonical.reason||'Stare de actualitate necunoscută.')}${missing?`<br>Lipsește: ${esc(missing)}`:''}</p>`;
+  }
   const freshness=status.freshness||(!row.last_attempt_at?'never_synced':'current');
   const label=status.freshness_label||(
     freshness==='never_synced'?'Nesincronizată; nu există încă o citire locală.':'Sincronizată local.'
@@ -7882,6 +7892,12 @@ $('#econsultare-feed-status').onchange=loadEconsultareFeed;
 $('#econsultare-feed-family').onchange=loadEconsultareFeed;
 $('#econsultare-feed-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
+function sourceFreshnessLabel(state){
+  return {
+    missing:'Lipsește',stale:'Învechită',partial:'Parțială',current:'Curentă',
+    unavailable:'Indisponibilă',needs_review:'Necesită revizie'
+  }[state]||state||'Necunoscută';
+}
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null,watchIds:new Set(),watchItems:[]};
 const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',evidence:'cu dovezi tracker lipsă',deadline:'termen apropiat/depășit',committee:'comisii și rapoarte',vote:'plen, vot sau adoptare',published:'publicate',stale:'date vechi',unknown:'etapă necunoscută',unavailable:'sursă indisponibilă',toate:'toate proiectele'};
 const LIFECYCLE_STEPS=[
@@ -7989,6 +8005,11 @@ function lifecycleUncertaintyText(project){
 }
 function lifecycleFreshnessBadgeHtml(project){
   const source=project.registry_source||{};
+  const canonical=project.source_freshness_status;
+  if(canonical?.state){
+    const missing=(project.missing_source_states||[]).map(row=>[row.label,row.source_family].filter(Boolean).join(' · ')).filter(Boolean).join('; ')||(canonical.missing||[]).join(', ');
+    return `<p class="hint source-freshness-${canonical.severity==='ok'?'ok':'attention'}"><strong>Actualitate surse: ${esc(canonical.label||sourceFreshnessLabel(canonical.state))}</strong> · ${esc(canonical.reason||'Stare de actualitate necunoscută.')}<br>${missing?`Lipsește: ${esc(missing)}`:'Nu sunt goluri de sursă semnalate în datele locale.'}</p>`;
+  }
   const state=project.registry_source_state||project.source_state||'unknown';
   const label=SOURCE_STATE_LABELS[state]||state;
   const last=source.last_attempt_at||project.last_updated||project.last_seen||'';
@@ -8022,10 +8043,13 @@ function lifecycleUnknownReviewQueueHtml(data){
 }
 function lifecycleOverviewHtml(data){
   const counts=lifecycleCounts(data);
+  const freshness=data.source_freshness_states||{};
+  const freshnessText=['missing','stale','partial','current','unavailable','needs_review'].map(key=>`${sourceFreshnessLabel(key)}: ${freshness[key]||0}`).join(' · ');
   return `<section class="lifecycle-overview-card"><span class="hint">Afișate</span><strong>${esc(data.returned||0)}</strong><span class="hint">din ${esc(data.total||0)} proiecte locale</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Necesită atenție</span><strong>${esc(counts.attention)}</strong><span class="hint">${esc(counts.registry)} surse urmărite schimbate</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Calitate stadii</span><strong>${esc(counts.unknown+counts.unavailable)}</strong><span class="hint">${esc(counts.stale)} surse vechi</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Cozi de lucru</span><strong>${esc(counts.evidence+counts.deadline+counts.committee+counts.vote)}</strong><span class="hint">${esc(counts.evidence)} dovezi lipsă · ${esc(counts.deadline)} termene · ${esc(counts.committee)} comisii/rapoarte · ${esc(counts.vote)} plen/vot · ${esc(counts.published)} publicate</span></section>`
+    +`<section class="lifecycle-overview-card"><span class="hint">Actualitate surse</span><strong>${esc((freshness.missing||0)+(freshness.stale||0)+(freshness.partial||0)+(freshness.unavailable||0)+(freshness.needs_review||0))}</strong><span class="hint">${esc(freshnessText)}</span></section>`
     +lifecycleAttentionFeedHtml(data)+lifecycleUnknownReviewQueueHtml(data);
 }
 function lifecycleStatusSummaryHtml(project){
@@ -8047,12 +8071,17 @@ async function projectSourceCoverageApi(projectId){
 }
 function projectSourceCoverageHtml(data){
   const rows=(data.groups||[]).map(group=>{
-    const families=(group.families||[]).map(row=>`${row.label}: ${row.state}`).join(' · ');
-    return `<li><strong>${esc(group.label)} · ${esc(group.state)}</strong><br><span class="hint">${esc(families)}</span></li>`;
+    const fresh=group.freshness||{};
+    const families=(group.families||[]).map(row=>{
+      const status=row.freshness||{};
+      return `${row.label}: ${status.label||row.state}${status.missing?.length?' (lipsește '+status.missing.join(', ')+')':''}`;
+    }).join(' · ');
+    return `<li><strong>${esc(group.label)} · ${esc(fresh.label||group.state)}</strong><br><span class="hint">${esc(fresh.reason||'Stare acoperire necunoscută.')}</span><br><span class="hint">${esc(families)}</span></li>`;
   }).join('');
   const summary=data.summary||{};
   const actions=(data.next_actions||[]).filter(Boolean);
-  return `<section class="source-review"><h4>Acoperire surse · ${esc(data.project_id||'proiect')}</h4><p class="hint">${esc(summary.sources||0)} surse locale · ${esc(summary.events||0)} evenimente · ${esc(summary.missing_families||0)} familii lipsă · ${esc(summary.needs_review_families||0)} de revizuit.</p>${rows?`<ol>${rows}</ol>`:'<p class="hint">Nu există acoperire locală pentru proiect.</p>'}${actions.length?`<p class="hint">${actions.map(esc).join(' ')}</p>`:''}</section>`;
+  const states=summary.freshness_states||{};
+  return `<section class="source-review"><h4>Acoperire surse · ${esc(data.project_id||'proiect')}</h4><p class="hint">${esc(summary.sources||0)} surse locale · ${esc(summary.events||0)} evenimente · ${esc(summary.missing_families||0)} familii lipsă · ${esc(summary.needs_review_families||0)} de revizuit · ${esc(states.partial||0)} parțiale.</p>${rows?`<ol>${rows}</ol>`:'<p class="hint">Nu există acoperire locală pentru proiect.</p>'}${actions.length?`<p class="hint">${actions.map(esc).join(' ')}</p>`:''}</section>`;
 }
 async function openProjectSourceCoverage(project){
   const status=$('#lifecycle-status'), review=$('#lifecycle-source-review');
@@ -8484,13 +8513,15 @@ function bindTrackerTimelineActions(listSelector='#tracker-timeline-list',status
 function trackerTimelineHtml(data){
   const events=data.events||[];
   if(!events.length)return '<p>Niciun eveniment normalizat pentru selecția curentă.</p>';
+  const fresh=data.source_freshness_status||{};
+  const status=fresh.state?`<p class="hint source-freshness-${fresh.severity==='ok'?'ok':'attention'}"><strong>Actualitate tracker: ${esc(fresh.label||sourceFreshnessLabel(fresh.state))}</strong> · ${esc(fresh.reason||'Stare tracker necunoscută.')}</p>`:'';
   const groups=new Map();
   for(const event of events){
     const key=(event.project_id||'Fără proiect')+'||'+(event.dossier_id||'');
     if(!groups.has(key))groups.set(key,[]);
     groups.get(key).push(event);
   }
-  return [...groups.values()].map(rows=>{
+  return status+[...groups.values()].map(rows=>{
     const first=rows[0], dossier=first.dossier_id?` · dosar ${first.dossier_id}`:'';
     return `<article class="tracker-timeline-project"><h4>${esc(first.project_id||'Fără proiect')}${esc(dossier)}</h4>${trackerCoverageHtml(rows)}<ol class="tracker-timeline-events">${rows.map(trackerEventHtml).join('')}</ol></article>`;
   }).join('')+(data.limitari?.length?`<p class="hint">${data.limitari.map(esc).join(' ')}</p>`:'');
