@@ -67,13 +67,13 @@ BOOTSTRAP_SOURCES = (
     {
         "family": "parlament",
         "identifier": "family:parlament",
-        "url": "https://www.parlament.ro/",
-        "label": "Parlamentul Romaniei - punct de intrare bicameral",
+        "url": "https://www.cdep.ro/ords/pls/dic/site2015.home?idl=1",
+        "label": "Parlamentul Romaniei - punct de intrare Camera Deputatilor",
     },
     {
         "family": "camera",
         "identifier": "family:camera",
-        "url": "https://www.cdep.ro/pls/proiecte/upl_pck2015.proiect",
+        "url": "https://www.cdep.ro/ords/pls/proiecte/upl_pck2015.lista?anp=2025",
         "label": "Camera Deputatilor - proiecte legislative PL-x",
     },
     {
@@ -97,8 +97,8 @@ BOOTSTRAP_SOURCES = (
     {
         "family": "consultare_minister",
         "identifier": "family:consultare_minister",
-        "url": "https://www.gov.ro/ro/transparenta-decizionala",
-        "label": "Ministere - transparenta decizionala",
+        "url": "https://info-transparenta.gov.ro/",
+        "label": "Ministere - tablou transparenta decizionala",
     },
     {
         "family": "monitorul_oficial",
@@ -115,7 +115,7 @@ BOOTSTRAP_SOURCES = (
     {
         "family": "monitorul_oficial_local",
         "identifier": "family:monitorul_oficial_local",
-        "url": "https://www.mdlpa.ro/pages/monitoruloficiallocal",
+        "url": "http://dpfbl.mdlpa.ro/monitorul_oficial_local.html",
         "label": "Monitorul Oficial Local - metadate la cerere",
     },
     {

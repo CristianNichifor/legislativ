@@ -38,6 +38,13 @@ FETCHED_STATES = frozenset({"fetched", "unchanged", "changed", "needs_review"})
 FAILED_STATES = frozenset({"failed", "unavailable", "rate_limited"})
 
 
+def _is_available_bootstrap_anchor(state: str, identifier: str) -> bool:
+    return identifier.startswith(source_registry.BOOTSTRAP_ANCHOR_PREFIX) and state in {
+        "changed",
+        "unchanged",
+    }
+
+
 def _portfolio_summary(families: list[dict]) -> dict:
     by_family = {row["family"]: row for row in families}
     contract = source_portfolio.portfolio()
@@ -89,12 +96,15 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
         try:
             with closing(source_registry._open(path)) as con:
                 source_registry.init(con)
-                rows = con.execute(
-                    "SELECT family,state,count(*) c FROM source_registry GROUP BY family,state"
-                )
+                rows = con.execute("SELECT family,state,identifier FROM source_registry")
                 for row in rows:
-                    counts[(row["family"], row["state"])] = row["c"]
-                    total_by_family[row["family"]] += row["c"]
+                    state = row["state"]
+                    identifier = row["identifier"] or ""
+                    coverage_state = (
+                        "unchanged" if _is_available_bootstrap_anchor(state, identifier) else state
+                    )
+                    counts[(row["family"], coverage_state)] += 1
+                    total_by_family[row["family"]] += 1
                 for row in con.execute(
                     "SELECT family,max(last_attempt_at) checked FROM source_registry "
                     "WHERE last_attempt_at IS NOT NULL AND last_attempt_at != '' "

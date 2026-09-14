@@ -167,6 +167,36 @@ def test_source_coverage_accepts_verified_official_anchors(monkeypatch, tmp_path
     assert all(row["last_checked"] for row in out["families"] if row["required"])
 
 
+def test_source_coverage_treats_changed_bootstrap_anchor_as_available(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    hashes = iter(["a" * 64, "b" * 64])
+    monkeypatch.setattr(
+        source_registry,
+        "_fetch_official_anchor",
+        lambda url: {
+            "http_status": 200,
+            "content_hash": next(hashes),
+            "title": "Official source",
+            "content_type": "text/html",
+            "bytes": 64,
+            "truncated": False,
+            "error": "",
+        },
+    )
+    boot = source_registry.executa(stare, {"action": "bootstrap"})
+    camera = next(row for row in boot["sources"] if row["family"] == "camera")
+
+    source_registry.executa(stare, {"action": "sync", "id": camera["id"]})
+    changed = source_registry.executa(stare, {"action": "sync", "id": camera["id"]})
+    out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
+    camera_coverage = next(row for row in out["families"] if row["family"] == "camera")
+
+    assert changed["state"] == "changed"
+    assert camera_coverage["status"] == "ok"
+    assert camera_coverage["attention"] == 0
+    assert camera_coverage["ready"] == 1
+
+
 def test_source_coverage_handles_missing_stores_and_validates_stale_days(tmp_path):
     stare = state(tmp_path)
     out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))

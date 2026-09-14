@@ -121,6 +121,8 @@ def test_app_completeness_data_home_sync_anchors_can_close_gate(monkeypatch, tmp
     assert out["source_anchor_sync"]["counts"] == {"unchanged": 14}
     lifecycle = next(item for item in out["capabilities"] if item["key"] == "lifecycle_tracking")
     assert lifecycle["state"] == "ready"
+    assert lifecycle["blockers"] == []
+    assert lifecycle["next_action"] == ""
 
 
 def test_app_completeness_default_report_bootstraps_official_source_anchors():

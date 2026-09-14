@@ -1,10 +1,10 @@
 # Final Acceptance
 
-Generated: `2026-09-14T23:03:33.474219+00:00`
+Generated: `2026-09-14T23:33:47.071113+00:00`
 
-Commit: `808fc26255c5`
+Commit: `85bc1f2a3920`
 
-Status: **blocked**
+Status: **passed**
 
 This file is generated from the current product gates. It is not a legal
 accuracy claim and it does not replace human domain review.
@@ -12,20 +12,20 @@ accuracy claim and it does not replace human domain review.
 ## Completeness Gate
 
 - Contract: `app-completeness-gate-v1`.
-- Completion claim allowed: `false`.
-- Summary: `{"missing": 0, "partial": 2, "ready": 7, "total": 9}`.
-- Source status: `blocked`.
+- Completion claim allowed: `true`.
+- Summary: `{"missing": 0, "partial": 0, "ready": 9, "total": 9}`.
+- Source status: `ok`.
 - Missing required source families: `0`.
-- Unsynced required source families: `12`.
+- Unsynced required source families: `0`.
 - Source attention rows: `0`.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Local data separation | ready | Public datasets, private dossier storage and browser-local workspace boundaries are documented and implemented. |
-| Public source data availability | partial | Source portfolio and availability dashboard exist, but the current runtime must have every required source family present and out of attention state. |
+| Public source data availability | ready | Source portfolio and availability dashboard exist, but the current runtime must have every required source family present and out of attention state. |
 | Dossier workflow | ready | The vertical runner creates a dossier, saves a source-backed note and assembles an evidence pack. |
 | Matrix-to-dossier | ready | The final vertical flow proves matrix drilldown can feed the same dossier evidence path. |
-| Lifecycle tracking | partial | Local source registry, tracker events and parliamentary lifecycle stages exist; full lifecycle coverage depends on complete source availability. |
+| Lifecycle tracking | ready | Local source registry, tracker events and parliamentary lifecycle stages exist; full lifecycle coverage depends on complete source availability. |
 | EU issue note | ready | EU issue notes are source-backed, local-only, hash-preserving and explicitly non-verdict. |
 | AI/MCP bounded draft | ready | AI and MCP draft paths produce bounded prompts from selected evidence and require explicit user action. |
 | Export, backup and restore | ready | Dossier SQLite backup, browser export/import/restore and historical export preservation are implemented and tested. |
@@ -33,12 +33,13 @@ accuracy claim and it does not replace human domain review.
 
 ## Current Blockers
 
-- `public_source_data_availability`: partial - 1 surse nu au încă sync reușit în Legislație română.; 1 surse nu au încă sync reușit în Proiecte parlamentare.; 1 surse nu au încă sync reușit în Camera Deputaților.; 1 surse nu au încă sync reușit în Senat.; 1 surse nu au încă sync reușit în Consultări Guvern.; 1 surse nu au încă sync reușit în Consultări publice · e-consultare.; 1 surse nu au încă sync reușit în Consultări ministere.; 1 surse nu au încă sync reușit în Monitorul Oficial.; 1 surse nu au încă sync reușit în Monitorul Oficial · Partea I.; 1 surse nu au încă sync reușit în Decizii CCR.; 1 surse nu au încă sync reușit în Avize și opinii instituționale.; 1 surse nu au încă sync reușit în Drept UE · Cellar/EUR-Lex.
-- `lifecycle_tracking`: partial - Lifecycle tracking is bounded until public-source coverage is complete and current.
+- None.
 
 ## Source Anchor Sync
 
-- Not run in this report.
+- Contract: `source-bootstrap-anchor-sync-v1`.
+- Total anchors: 14.
+- Counts: `{"changed": 5, "unchanged": 9}`.
 
 ## Vertical Acceptance
 
