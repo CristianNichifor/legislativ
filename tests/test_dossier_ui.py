@@ -73,6 +73,10 @@ def test_mcp_runtime_surface_is_visible_in_ai_panel():
     assert "data-mcp-test" in source
     assert "api('/api/mcp/runtime')" in source
     assert "dossierApi('/api/mcp/test'" in source
+    assert "data-mcp-execute" in source
+    assert "data-mcp-export" in source
+    assert "/api/dosare/mcp-export-preview" in source
+    assert "/api/dosare/mcp-export-execute" in source
     assert "payload preview obligatoriu" in source
     assert "aplicația rămâne utilizabilă fără MCP" in source
     assert "Nu există transfer ascuns" in source
@@ -529,6 +533,9 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "const text=mcpDraftInsertText(plan,' rezultat ');"
         "assert.ok(text.includes('MCP audit: 2026-09-12T00:00:00Z · abc'));"
         "assert.ok(text.endsWith('rezultat'));"
+        "const executed={insert_header:'[Ciornă MCP]',output_status:'draft_unreviewed',"
+        "draft_text:'text local',audit_event:{created_at:'2026-09-12',payload_hash:'def'}};"
+        "assert.ok(mcpExecutedDraftInsertText(executed).includes('status=draft_unreviewed'));"
         "const MANUAL_NOTE_TYPES={lacuna:'Lacună'};"
         "const MANUAL_NOTE_STATUS={draft:'Ciornă'};"
         "function ruleCandidateControlsHtml(){return '<details data-rule-candidate></details>';}"

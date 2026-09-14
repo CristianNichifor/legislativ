@@ -3509,7 +3509,7 @@ function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
     +`<label>Sarcină AI<select name="ai_task">${aiDraftTaskOptions()}</select></label>`
     +'<label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label>'
     +'<button type="button" class="ghost mini" data-ai-settings-save>Salvează implicit</button><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează ciorna</button></div>'
-    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary>'+mcpRuntimePanelHtml()+'<p class="hint">Previzualizarea MCP construiește payloadul și auditul. Nu execută unealta și nu trimite textul.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="local-mock"></label><label>Unealtă MCP<input name="mcp_tool" maxlength="160" placeholder="ai.draft"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button></details>'
+    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary>'+mcpRuntimePanelHtml()+'<p class="hint">Previzualizarea MCP construiește payloadul și auditul. Execuția local-mock cere aprobare explicită și nu trimite text extern.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="local-mock"></label><label>Unealtă AI MCP<input name="mcp_tool" maxlength="160" placeholder="ai.draft"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button><label><input type="checkbox" name="mcp_approved"> Aprob execuția local-mock</label><button type="button" class="ghost mini" data-mcp-execute disabled>Execută local-mock</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP extern/manual<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button><details data-mcp-export><summary>Export MCP notă/dosar</summary><div class="dossier-actions"><label>Unealtă export<input name="mcp_export_tool" maxlength="160" value="document.export"></label><button type="button" class="ghost mini" data-mcp-export-preview>Previzualizează export</button><button type="button" class="ghost mini" data-mcp-export-copy disabled>Copiază export</button><label><input type="checkbox" name="mcp_export_approved"> Aprob exportul local-mock</label><button type="button" class="ghost mini" data-mcp-export-execute disabled>Execută export</button></div><p class="hint" role="status" data-mcp-export-status></p><pre data-mcp-export-result></pre></details></details>'
     +'<p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>';
 }
 let _onlineOk=false;
@@ -5663,11 +5663,28 @@ function bindManualNoteAiDraft(form){
 function mcpDraftInsertText(plan,text){
   return `${plan.insert_header}\nMCP audit: ${plan.mcp.audit_event.created_at} · ${plan.mcp.approval.data_sha256}\n\n${text.trim()}`;
 }
+function mcpExecutedDraftInsertText(executed){
+  return `${executed.insert_header}\nMCP audit: ${executed.audit_event.created_at} · ${executed.audit_event.payload_hash} · status=${executed.output_status}\n\n${executed.draft_text}`;
+}
+function manualNoteMcpExport(form){
+  const values=Object.fromEntries(new FormData(form));
+  return {
+    title: values.title||'Dosar legislativ',
+    type: values.type||'lacuna',
+    act_id: values.act_id||'',
+    locator: values.locator||'',
+    source_url: values.source_url||'',
+    source_hash: values.source_hash||'',
+    evidence_quote: values.evidence_quote||'',
+    reasoning: values.reasoning||''
+  };
+}
 function bindManualNoteMcpDraft(form,section){
   const box=section.querySelector('[data-mcp-ai-draft]');if(!box)return;
-  const preview=box.querySelector('[data-mcp-preview]'),copy=box.querySelector('[data-mcp-copy]'),insert=box.querySelector('[data-mcp-insert]'),status=box.querySelector('[data-mcp-status]'),out=box.querySelector('[data-mcp-preview-result]');
+  const preview=box.querySelector('[data-mcp-preview]'),copy=box.querySelector('[data-mcp-copy]'),execute=box.querySelector('[data-mcp-execute]'),insert=box.querySelector('[data-mcp-insert]'),status=box.querySelector('[data-mcp-status]'),out=box.querySelector('[data-mcp-preview-result]');
   const discover=box.querySelector('[data-mcp-discover]'),test=box.querySelector('[data-mcp-test]'),runtimeStatus=box.querySelector('[data-mcp-runtime-status]'),runtimeOut=box.querySelector('[data-mcp-runtime-result]');
-  let plan=null;
+  const exportPreview=box.querySelector('[data-mcp-export-preview]'),exportCopy=box.querySelector('[data-mcp-export-copy]'),exportExecute=box.querySelector('[data-mcp-export-execute]'),exportStatus=box.querySelector('[data-mcp-export-status]'),exportOut=box.querySelector('[data-mcp-export-result]');
+  let plan=null,executedDraft=null,exportPlan=null;
   async function showMcpRuntime(){
     runtimeStatus.textContent='Citesc lista MCP…';runtimeOut.textContent='';
     try{
@@ -5687,28 +5704,67 @@ function bindManualNoteMcpDraft(form,section){
       runtimeStatus.textContent=data.available?'Conexiune locală disponibilă. Urmează previzualizarea și aprobarea payloadului.':'MCP indisponibil: '+(data.failure?.message||data.status);
     }catch(err){runtimeStatus.textContent='Test MCP eșuat: '+err.message;}
   };
-  form.addEventListener('input',e=>{if(e.target.closest('[data-mcp-ai-draft]'))return;plan=null;copy.disabled=true;insert.disabled=true;out.textContent='';});
+  const resetDraft=()=>{plan=null;executedDraft=null;copy.disabled=true;execute.disabled=true;insert.disabled=true;out.textContent='';};
+  const resetExport=()=>{exportPlan=null;if(exportCopy)exportCopy.disabled=true;if(exportExecute)exportExecute.disabled=true;if(exportOut)exportOut.textContent='';};
+  form.elements.mcp_approved?.addEventListener('change',()=>{execute.disabled=!(plan&&form.elements.mcp_approved.checked);});
+  form.elements.mcp_export_approved?.addEventListener('change',()=>{if(exportExecute)exportExecute.disabled=!(exportPlan&&form.elements.mcp_export_approved.checked);});
+  form.addEventListener('input',e=>{if(e.target.closest('[data-mcp-ai-draft]'))return;resetDraft();resetExport();});
   preview.onclick=async()=>{
-    plan=null;copy.disabled=true;insert.disabled=true;preview.disabled=true;status.textContent='Construiesc pachetul MCP din dovezi…';out.textContent='';
+    resetDraft();preview.disabled=true;status.textContent='Construiesc pachetul MCP din dovezi…';out.textContent='';
     try{
-      plan=await dossierApi('/api/dosare/ai-draft/mcp-preview',{server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value,draft:manualNoteAiEvidence(form)});
+      const draftPayload=manualNoteAiEvidence(form);
+      plan=await dossierApi('/api/dosare/ai-draft/mcp-preview',{server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value,draft:draftPayload});
+      plan.draft_request=draftPayload;
       out.textContent=JSON.stringify({approval:plan.mcp.approval,audit:plan.audit,cost_estimate:plan.cost_estimate,system:plan.system,prompt:plan.prompt},null,2);
-      copy.disabled=false;insert.disabled=false;status.textContent=`Aprobarea MCP este pregătită: ${plan.evidence_count} dovezi · ~${plan.estimated_tokens} tokeni.`;
+      copy.disabled=false;insert.disabled=false;execute.disabled=!form.elements.mcp_approved?.checked;status.textContent=`Aprobarea MCP este pregătită: ${plan.evidence_count} dovezi · ~${plan.estimated_tokens} tokeni.`;
     }catch(err){status.textContent=err.message;}
     finally{preview.disabled=false;}
   };
   copy.onclick=async()=>{if(!plan)return;try{await navigator.clipboard.writeText(out.textContent);status.textContent='Payload MCP copiat. Trimite-l numai după aprobare explicită.';}catch{status.textContent='Copierea nu a reușit.';}};
+  execute.onclick=async()=>{
+    if(!plan){status.textContent='Previzualizează payloadul MCP înainte de execuție.';return;}
+    if(!form.elements.mcp_approved?.checked){status.textContent='Bifează aprobarea explicită înainte de execuție.';return;}
+    execute.disabled=true;insert.disabled=true;status.textContent='Execut local-mock și salvez auditul MCP…';
+    try{
+      executedDraft=await dossierApi('/api/dosare/ai-draft/mcp-execute',{id:crypto.randomUUID().replaceAll('-',''),dosar_id:DOSARE_UI.selected?.id||'',server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value,draft:plan.draft_request,approved:true,approved_data_sha256:plan.mcp.approval.data_sha256});
+      out.textContent=JSON.stringify({approval:plan.mcp.approval,audit_event:executedDraft.audit_event,result:executedDraft.draft_text},null,2);
+      insert.disabled=false;status.textContent='MCP local-mock a generat ciorna nerevizuită și a salvat auditul.';
+    }catch(err){status.textContent='Execuție MCP indisponibilă: '+err.message;}
+    finally{execute.disabled=!form.elements.mcp_approved?.checked||!plan;}
+  };
   insert.onclick=()=>{
-    if(!plan)return;
+    if(!plan&&!executedDraft)return;
     const text=form.elements.mcp_result.value.trim();
-    if(!text){status.textContent='Lipește rezultatul MCP înainte de inserare.';return;}
+    if(!executedDraft&&!text){status.textContent='Lipește rezultatul MCP înainte de inserare sau execută local-mock.';return;}
     const field=form.elements.reasoning;
-    field.value=(field.value?field.value.trim()+'\n\n':'')+mcpDraftInsertText(plan,text);
+    const insertText=executedDraft?mcpExecutedDraftInsertText(executedDraft):mcpDraftInsertText(plan,text);
+    field.value=(field.value?field.value.trim()+'\n\n':'')+insertText;
     if(form.elements.rule_extraction_method)form.elements.rule_extraction_method.value='mcp_draft';
     if(form.elements.rule_origin_kind)form.elements.rule_origin_kind.value='mcp_draft';
     if(form.elements.rule_origin_id)form.elements.rule_origin_id.value=plan?.mcp?.approval?.data_sha256||'';
     field.dispatchEvent(new Event('input',{bubbles:true}));
     insert.disabled=true;status.textContent='Rezultatul MCP a fost inserat cu audit; salvează nota când ești gata.';
+  };
+  if(exportPreview)exportPreview.onclick=async()=>{
+    resetExport();exportPreview.disabled=true;exportStatus.textContent='Construiesc exportul MCP din nota curentă…';
+    try{
+      exportPlan=await dossierApi('/api/dosare/mcp-export-preview',{server:form.elements.mcp_server.value,tool:form.elements.mcp_export_tool.value,export:manualNoteMcpExport(form)});
+      exportOut.textContent=JSON.stringify({approval:exportPlan.mcp.approval,audit:exportPlan.audit,markdown:exportPlan.markdown},null,2);
+      exportCopy.disabled=false;exportExecute.disabled=!form.elements.mcp_export_approved?.checked;exportStatus.textContent='Exportul MCP este previzualizat; execuția cere aprobare explicită.';
+    }catch(err){exportStatus.textContent=err.message;}
+    finally{exportPreview.disabled=false;}
+  };
+  if(exportCopy)exportCopy.onclick=async()=>{if(!exportPlan)return;try{await navigator.clipboard.writeText(exportOut.textContent);exportStatus.textContent='Payloadul de export MCP a fost copiat.';}catch{exportStatus.textContent='Copierea exportului nu a reușit.';}};
+  if(exportExecute)exportExecute.onclick=async()=>{
+    if(!exportPlan){exportStatus.textContent='Previzualizează exportul înainte de execuție.';return;}
+    if(!form.elements.mcp_export_approved?.checked){exportStatus.textContent='Bifează aprobarea explicită înainte de export.';return;}
+    exportExecute.disabled=true;exportStatus.textContent='Execut exportul local-mock și salvez auditul MCP…';
+    try{
+      const executed=await dossierApi('/api/dosare/mcp-export-execute',{id:crypto.randomUUID().replaceAll('-',''),dosar_id:DOSARE_UI.selected?.id||'',server:form.elements.mcp_server.value,tool:form.elements.mcp_export_tool.value,export:manualNoteMcpExport(form),approved:true,approved_data_sha256:exportPlan.mcp.approval.data_sha256});
+      exportOut.textContent=JSON.stringify({approval:exportPlan.mcp.approval,audit_event:executed.audit_event,result:executed.result_text,markdown:executed.export_markdown},null,2);
+      exportStatus.textContent='Export MCP local-mock salvat cu audit; nu a existat transfer extern.';
+    }catch(err){exportStatus.textContent='Export MCP indisponibil: '+err.message;}
+    finally{exportExecute.disabled=!form.elements.mcp_export_approved?.checked||!exportPlan;}
   };
 }
 function bindUnifiedAiDraft(root,draftPayloadBuilder,insertDraft){

@@ -122,6 +122,10 @@ def test_runtime_registry_exposes_servers_approval_schema_and_failures():
     assert result["servers"][0]["id"] == "local-mock"
     assert result["servers"][0]["tools"][0]["id"] == "ai.draft"
     assert result["servers"][0]["tools"][0]["requires_user_approval"] is True
+    assert {tool["id"] for tool in result["servers"][0]["tools"]} >= {
+        "ai.draft",
+        "document.export",
+    }
     assert result["approval"]["payload_preview_required"] is True
     assert result["approval"]["audit_schema"]["selected_evidence_ids"] == "array"
     assert result["approval"]["audit_schema"]["result_hash"] == "sha256_or_null"

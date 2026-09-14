@@ -430,6 +430,10 @@ def _raspunde(path, query, body, method='GET'):
         out = {'mod': 'static', 'error': 'Testarea MCP este disponibilă numai în aplicația locală.'}
     elif path == '/api/mcp/preview':
         out = {'mod': 'static', 'error': 'MCP este disponibil doar printr-un executor local aprobat explicit.'}
+    elif path == '/api/dosare/mcp-export-preview':
+        out = {'mod': 'static', 'error': 'Exportul MCP este disponibil numai în aplicația locală.'}
+    elif path == '/api/dosare/mcp-export-execute':
+        out = {'mod': 'static', 'error': 'Execuția MCP este disponibilă numai în aplicația locală.'}
     elif path in ('/api/documente-proiect', '/api/importa-proiect',
                   '/api/diferente-versiuni', '/api/actualizare-proiect'):
         out = {'error': 'Importul oficial este disponibil în aplicația locală.'}
