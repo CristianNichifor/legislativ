@@ -7605,11 +7605,54 @@ function sourceCoverageFamilyHtml(row){
   const status=row.status==='missing'?'Lipsă':row.status==='attention'?'Necesită atenție':row.status==='unsynced'?'Nesincronizată':'Acoperită';
   const duty=row.required?'sursă necesară':'sursă opțională';
   const checked=row.last_checked?dossierTime(row.last_checked):'niciodată';
+  const support=row.support||{};
+  const actionList=(row.actions&&row.actions.length)?row.actions:[
+    {key:'open_family',label:'Deschide familia',target:row.family,enabled:true},
+    ...(row.attention?[{key:'retry_failures',label:'Doar atenționări',target:row.family,enabled:true}]:[])
+  ];
+  const buttons=actionList.map(action=>{
+    if(!action.enabled) return '';
+    const family=esc(action.target||row.family);
+    const label=esc(action.label||action.key);
+    if(action.key==='add_source') return `<button type="button" class="ghost mini" data-source-control-add="${family}">${label}</button>`;
+    if(action.key==='open_family') return `<button type="button" class="ghost mini" data-source-control-open="${family}">${label}</button>`;
+    if(action.key==='sync_selected') return `<button type="button" class="ghost mini" data-source-control-sync="${family}">${label}</button>`;
+    if(action.key==='retry_failures') return `<button type="button" class="ghost mini" data-source-control-attention="${family}">${label}</button>`;
+    if(action.key==='create_note') return `<button type="button" class="ghost mini" data-source-control-note="${family}">${label}</button>`;
+    if(action.key==='parser_details') return `<button type="button" class="ghost mini" data-source-control-parser="${family}">${label}</button>`;
+    return '';
+  }).join('');
   return `<article class="coverage-card coverage-${esc(row.status||'ok')}" data-source-control-family="${esc(row.family)}"><h4>${esc(row.label||row.family)} · ${esc(status)}</h4>`
-    +`<p>${esc(duty)} · ${row.total||0} surse · ${row.fetched||0} citite · ${row.changed||0} schimbate · ${row.failed||0} eșuate/indisponibile · ${row.incomplete||0} fără stare finală</p>`
+    +`<p>${esc(duty)} · ${esc(support.label||'Suport necunoscut')} · ${row.total||0} surse · ${row.fetched||0} citite · ${row.changed||0} schimbate · ${row.failed||0} eșuate/indisponibile · ${row.incomplete||0} fără stare finală</p>`
     +`<p class="hint">Ultima verificare: ${esc(checked)}<br>${esc(states)}</p>`
+    +(support.policy?`<p class="hint">${esc(support.policy)}</p>`:'')
     +`<p class="source-next">Următorul pas: ${esc(row.next_action||'Verifică registrul surselor.')}</p>`
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-source-control-open="${esc(row.family)}">Deschide familia</button>${row.attention?`<button type="button" class="ghost mini" data-source-control-attention="${esc(row.family)}">Doar atenționări</button>`:''}</div></article>`;
+    +`<div class="dossier-actions">${buttons}</div></article>`;
+}
+function sourceCoverageFamilyNote(row){
+  const support=row.support?.label?`Suport: ${row.support.label}`:'';
+  const lines=[
+    `Familie surse: ${row.label||row.family}`,
+    `Stare acoperire: ${row.status||'necunoscută'}`,
+    support,
+    `Surse urmărite: ${row.total||0}`,
+    `Surse citite: ${row.fetched||0}`,
+    `Surse schimbate: ${row.changed||0}`,
+    `Surse eșuate/indisponibile: ${row.failed||0}`,
+    `Fără stare finală: ${row.incomplete||0}`,
+    row.last_checked?`Ultima verificare: ${dossierTime(row.last_checked)}`:'Ultima verificare: niciodată',
+    row.next_action?`Următorul pas: ${row.next_action}`:'',
+    row.support?.policy||''
+  ].filter(Boolean).join('\n');
+  return {title:`Acoperire surse de verificat · ${row.label||row.family}`.slice(0,200),
+    type:row.family==='ue_cellar'?'risc_ue':'necorelare',
+    act_id:row.family||'',locator:'acoperire-surse',
+    evidence_quote:lines,source_url:'',source_hash:'',
+    reasoning:[
+      'Control center-ul surselor arată acoperire incompletă sau o stare care cere verificare înainte de redactare.',
+      'Aceasta este o notă de acoperire/proveniență, nu verdict juridic și nu dovedește absența unei obligații.'
+    ].join('\n'),
+    status:'needs_evidence',revizie:0};
 }
 const SOURCE_PORTFOLIO_TIERS={required:'Necesar acum',planned:'Planificat',deferred:'Amânat / opt-in'};
 const SOURCE_PORTFOLIO_POLICIES={
@@ -7704,6 +7747,18 @@ async function loadSourceCoverage(){
     out.innerHTML=sourceCoverageHtml(data);
     out.querySelectorAll('[data-source-control-open]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlOpen,false));
     out.querySelectorAll('[data-source-control-attention]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlAttention,true));
+    out.querySelectorAll('[data-source-control-sync]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlSync,false));
+    out.querySelectorAll('[data-source-control-parser]').forEach(button=>button.onclick=()=>openSourceRegistryFamily(button.dataset.sourceControlParser,true));
+    out.querySelectorAll('[data-source-control-add]').forEach(button=>button.onclick=()=>{
+      $('#source-registry').open=true;
+      const family=$('#source-registry-add select[name="family"]');
+      if(family&&button.dataset.sourceControlAdd)family.value=button.dataset.sourceControlAdd;
+      loadSourceRegistry(0,'',button.dataset.sourceControlAdd||'');
+    });
+    out.querySelectorAll('[data-source-control-note]').forEach(button=>button.onclick=()=>{
+      const row=(data.families||[]).find(item=>item.family===button.dataset.sourceControlNote);
+      if(row)startManualNote(sourceCoverageFamilyNote(row));
+    });
     status.textContent=`${data.status==='ok'?'Acoperire completă':'Acoperire incompletă'} · ${data.blockers?.length||0} blocaje.`;
   }catch(err){status.textContent=err.message;out.innerHTML='';}
 }

@@ -24,6 +24,11 @@ REQUIRED_FAMILIES = (
     "avize",
     "ue_cellar",
 )
+OPTIONAL_CONTROL_FAMILIES = (
+    "monitorul_oficial_local",
+    "monitorul_oficial_other_parts",
+)
+CONTROL_FAMILIES = REQUIRED_FAMILIES + OPTIONAL_CONTROL_FAMILIES
 ATTENTION = source_registry.ATTENTION_STATES
 READY_STATES = frozenset({"unchanged"})
 INCOMPLETE_STATES = frozenset({"discovered", "queued", "fetched"})
@@ -99,7 +104,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
     else:
         limitations.append("Registrul surselor nu este inițializat.")
     families = []
-    for family in REQUIRED_FAMILIES:
+    for family in CONTROL_FAMILIES:
         states = {
             state: counts[(family, state)]
             for state in sorted(source_registry.SYNC_STATES)
@@ -120,65 +125,150 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             if incomplete and not ready
             else "ok"
         )
-        families.append(
-            {
-                "family": family,
-                "label": labels.get(family, family),
-                "required": True,
-                "total": total,
-                "attention": attention,
-                "ready": ready,
-                "incomplete": incomplete,
-                "fetched": fetched,
-                "changed": counts[(family, "changed")],
-                "failed": failed,
-                "last_checked": checked_by_family.get(family, ""),
-                "next_action": _family_next_action(
-                    status=status,
-                    family=family,
-                    attention=attention,
-                    failed=failed,
-                    incomplete=incomplete,
-                    total=total,
-                ),
-                "states": states,
-                "status": status,
-            }
-        )
-    for family in sorted(set(total_by_family) - set(REQUIRED_FAMILIES)):
+        row = {
+            "family": family,
+            "label": labels.get(family, family),
+            "required": family in REQUIRED_FAMILIES,
+            "support": _family_support(family),
+            "total": total,
+            "attention": attention,
+            "ready": ready,
+            "incomplete": incomplete,
+            "fetched": fetched,
+            "changed": counts[(family, "changed")],
+            "failed": failed,
+            "last_checked": checked_by_family.get(family, ""),
+            "next_action": _family_next_action(
+                status=status,
+                family=family,
+                attention=attention,
+                failed=failed,
+                incomplete=incomplete,
+                total=total,
+            ),
+            "states": states,
+            "status": status,
+        }
+        row["actions"] = _family_actions(row)
+        families.append(row)
+    for family in sorted(set(total_by_family) - set(CONTROL_FAMILIES)):
         status = "attention" if sum(counts[(family, state)] for state in BLOCKING_STATES) else "ok"
         failed = sum(counts[(family, state)] for state in FAILED_STATES)
         incomplete = sum(counts[(family, state)] for state in INCOMPLETE_STATES)
-        families.append(
+        row = {
+            "family": family,
+            "label": labels.get(family, family),
+            "required": False,
+            "support": _family_support(family),
+            "total": total_by_family[family],
+            "attention": sum(counts[(family, state)] for state in BLOCKING_STATES),
+            "ready": sum(counts[(family, state)] for state in READY_STATES),
+            "incomplete": incomplete,
+            "fetched": sum(counts[(family, state)] for state in FETCHED_STATES),
+            "changed": counts[(family, "changed")],
+            "failed": failed,
+            "last_checked": checked_by_family.get(family, ""),
+            "next_action": _family_next_action(
+                status=status,
+                family=family,
+                attention=sum(counts[(family, state)] for state in BLOCKING_STATES),
+                failed=failed,
+                incomplete=incomplete,
+                total=total_by_family[family],
+            ),
+            "states": {
+                state: counts[(family, state)]
+                for state in sorted(source_registry.SYNC_STATES)
+                if counts[(family, state)]
+            },
+            "status": status,
+        }
+        row["actions"] = _family_actions(row)
+        families.append(row)
+    return families, limitations
+
+
+def _family_support(family: str) -> dict:
+    if family == "monitorul_oficial_other_parts":
+        return {
+            "state": "metadata_only",
+            "label": "Metadate/selectiv",
+            "policy": "Părțile II-VII nu sunt ingestate integral implicit.",
+        }
+    if family == "monitorul_oficial_local":
+        return {
+            "state": "metadata_only",
+            "label": "Metadate + pachete opt-in",
+            "policy": (
+                "Monitorul Oficial Local pornește din registru și pachete alese de utilizator."
+            ),
+        }
+    if family in source_registry.FAMILIES:
+        return {
+            "state": "supported",
+            "label": "Suportată",
+            "policy": "Poate fi urmărită incremental în registrul local.",
+        }
+    return {
+        "state": "unsupported",
+        "label": "Nesuportată",
+        "policy": "Familia nu are încă flux local de urmărire.",
+    }
+
+
+def _family_actions(row: dict) -> list[dict]:
+    family = row["family"]
+    actions = [
+        {
+            "key": "add_source",
+            "label": "Adaugă sursă",
+            "target": family,
+            "enabled": True,
+        },
+        {
+            "key": "open_family",
+            "label": "Deschide familia",
+            "target": family,
+            "enabled": True,
+        },
+    ]
+    if row["total"]:
+        actions.append(
             {
-                "family": family,
-                "label": labels.get(family, family),
-                "required": False,
-                "total": total_by_family[family],
-                "attention": sum(counts[(family, state)] for state in BLOCKING_STATES),
-                "ready": sum(counts[(family, state)] for state in READY_STATES),
-                "incomplete": incomplete,
-                "fetched": sum(counts[(family, state)] for state in FETCHED_STATES),
-                "changed": counts[(family, "changed")],
-                "failed": failed,
-                "last_checked": checked_by_family.get(family, ""),
-                "next_action": _family_next_action(
-                    status=status,
-                    family=family,
-                    attention=sum(counts[(family, state)] for state in BLOCKING_STATES),
-                    failed=failed,
-                    incomplete=incomplete,
-                    total=total_by_family[family],
-                ),
-                "states": {
-                    state: counts[(family, state)]
-                    for state in sorted(source_registry.SYNC_STATES)
-                    if counts[(family, state)]
-                },
-                "status": status,
+                "key": "sync_selected",
+                "label": "Sincronizează sursa selectată",
+                "target": family,
+                "enabled": True,
             }
         )
-    return families, limitations
+    if row["failed"]:
+        actions.append(
+            {
+                "key": "retry_failures",
+                "label": "Reîncearcă eșuate",
+                "target": family,
+                "enabled": True,
+            }
+        )
+    if row["attention"] or row["status"] in {"missing", "unsynced"}:
+        actions.append(
+            {
+                "key": "create_note",
+                "label": "Creează notă din lipsă/eșec",
+                "target": family,
+                "enabled": True,
+            }
+        )
+    if row["attention"]:
+        actions.append(
+            {
+                "key": "parser_details",
+                "label": "Detalii parser/eșec",
+                "target": family,
+                "enabled": True,
+            }
+        )
+    return actions
 
 
 def _family_next_action(

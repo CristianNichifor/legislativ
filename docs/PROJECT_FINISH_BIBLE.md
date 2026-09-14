@@ -1,6 +1,6 @@
 # Legislativ 100% Implementation Bible
 
-Status date: 2026-09-14, after PR341.
+Status date: 2026-09-14, after PR367; PR342 is in progress.
 
 This document is the implementation bible. Work that does not move one of the
 remaining gates below is drift. The target is a finished, usable Romanian
@@ -91,6 +91,9 @@ Target: 18 large PRs maximum from here to final release gate.
 Phase: C.
 
 Goal: make source coverage understandable and actionable from one screen.
+
+Implementation status: this PR adds the structured control-center metadata and
+user-facing source-family action cards. After merge, continue with PR343.
 
 Implement:
 
@@ -627,11 +630,9 @@ Stop new feature work and fix immediately if:
 
 ## 7. Next Action
 
-The next implementation PR after this docs PR is PR342:
+After PR342 merges, the next implementation PR is PR343:
 
-`phase-c-source-coverage-control-center`
+`phase-c-econsultare-ministry-tracker-completion`
 
-It should be a user-facing source coverage control center. It should not start
-Monitor bulk ingestion, AI, MCP or law-as-code work. Its purpose is to make the
-existing source registry and coverage useful to a real user before expanding more
-features.
+It should make e-consultare and ministry consultations first-class trackable
+sources with normalized status, deadlines, attachments and review rows.
