@@ -1434,7 +1434,7 @@
               <label>Termen<input name="deadline" maxlength="80" placeholder="15.10.2026"></label>
               <button type="submit" class="ghost mini">Adaugă consultare Guvern</button>
             </form>
-            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-bootstrap">Adaugă sursele oficiale de bază</button><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
+            <div class="dossier-actions"><label>Stare<select id="source-registry-state"><option value="">Toate</option><option value="_attention">Necesită atenție</option></select></label><button type="button" class="ghost mini" id="source-registry-bootstrap">Adaugă sursele oficiale de bază</button><button type="button" class="ghost mini" id="source-registry-sync-bootstrap">Verifică sursele oficiale</button><button type="button" class="ghost mini" id="source-registry-refresh">Reîncarcă</button></div>
             <p id="source-registry-status" class="hint" role="status">Registru neîncărcat.</p>
             <div id="source-registry-list"></div>
             <div id="source-registry-detail"></div>
@@ -6840,7 +6840,17 @@ $('#source-registry-bootstrap').onclick=async()=>{
   button.disabled=true;status.textContent='Adaug sursele oficiale de bază în registru…';
   try{
     const data=await sourceRegistryApi({action:'bootstrap'});
-    await loadSourceRegistry(0,`Surse oficiale de bază: ${data.created||0} adăugate, ${data.updated||0} actualizate. Următorul pas: sync pe surse punctuale.`);
+    await loadSourceRegistry(0,`Surse oficiale de bază: ${data.created||0} adăugate, ${data.updated||0} actualizate. Următorul pas: verifică disponibilitatea entrypointurilor oficiale.`);
+    await loadSourceCoverage();
+  }catch(err){status.textContent=err.message;}
+  finally{button.disabled=false;}
+};
+$('#source-registry-sync-bootstrap').onclick=async()=>{
+  const button=$('#source-registry-sync-bootstrap'),status=$('#source-registry-status');
+  button.disabled=true;status.textContent='Verific sursele oficiale de bază…';
+  try{
+    const data=await sourceRegistryApi({action:'sync_bootstrap'});
+    await loadSourceRegistry(0,`Verificare surse oficiale: ${data.total||0} încercări · ${Object.entries(data.counts||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără rezultat'}.`);
     await loadSourceCoverage();
   }catch(err){status.textContent=err.message;}
   finally{button.disabled=false;}

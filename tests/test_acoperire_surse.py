@@ -76,6 +76,32 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
     assert {blocker["kind"] for blocker in out["blockers"]} == {"source_unsynced"}
 
 
+def test_source_coverage_accepts_verified_official_anchors(monkeypatch, tmp_path):
+    stare = state(tmp_path)
+    monkeypatch.setattr(
+        source_registry,
+        "_fetch_official_anchor",
+        lambda url: {
+            "http_status": 200,
+            "content_hash": source_registry._stable_hash({"url": url}),
+            "title": "Official source",
+            "content_type": "text/html",
+            "bytes": 64,
+            "truncated": False,
+            "error": "",
+        },
+    )
+
+    synced = source_registry.executa(stare, {"action": "sync_bootstrap"})
+    out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
+
+    assert synced["counts"] == {"unchanged": len(acoperire_surse.REQUIRED_FAMILIES)}
+    assert out["missing_required"] == 0
+    assert out["unsynced_required"] == 0
+    assert out["attention_sources"] == 0
+    assert {row["status"] for row in out["families"] if row["required"]} == {"ok"}
+
+
 def test_source_coverage_handles_missing_stores_and_validates_stale_days(tmp_path):
     stare = state(tmp_path)
     out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
