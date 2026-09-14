@@ -267,6 +267,8 @@ def test_operational_tracker_renderers_show_actions_filters_and_public_feed():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     assert "tracker-event-type" in html
     assert "tracker-source-family" in html
+    assert "consultare_guvern" in html
+    assert "Consultări Guvern" in html
     assert "econsultare-feed" in html
     assert "needs-attention-refresh" in html
     assert "monitor-replay-tracker" in html

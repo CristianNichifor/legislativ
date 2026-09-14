@@ -114,9 +114,9 @@ The real pilot fixture is narrower: it keeps one official ActionGrid row from
 deadline and row hash. It does not retain the full 1998-row listing response or
 download attachments.
 
-For `consultare_minister` and `avize`, the first usable slice is metadata-first:
-the caller registers one official URL or public identifier and may pass bounded
-metadata in a `sync` request. The registry stores a
+For `consultare_guvern`, `consultare_minister` and `avize`, the first usable
+slice is metadata-first: the caller registers one official URL or public
+identifier and may pass bounded metadata in a `sync` request. The registry stores a
 `manual-source-metadata-snapshot-v1` record with title/authority/deadline and
 document link/hash metadata for ministry consultations, or issuer/position/
 observations/document-hash metadata for avize. This path intentionally does not
