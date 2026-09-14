@@ -178,11 +178,14 @@ def _events(con, run_id, ident):
     ]
 
 
-def lista(path, dossier_id, run_id):
+def lista(path, dossier_id, run_id, stare=None):
     dosare._id(run_id)
     run = dosare.rulari(path, dossier_id, run_id)
     findings = constatari(run)
     manifest = run["dovezi"].get("manifest")
+    from scripts import watchlist_dosare
+
+    source_manifest = watchlist_dosare.manifest(stare, path, dossier_id)
     with dosare._open(path) as con:
         for finding in findings:
             events = _events(con, run_id, finding["id"])
@@ -241,6 +244,8 @@ def lista(path, dossier_id, run_id):
         dosare._json(manifest)
         if manifest is not None
         else "Manifest necapturat pentru aceasta rulare.",
+        "# Surse urmărite în dosar",
+        dosare._json(source_manifest),
     ]
     lines += limitations + ["# Raportul salvat", run["raport"].get("markdown", "")]
     if run["dovezi"].get("referinte_ue"):
@@ -255,6 +260,7 @@ def lista(path, dossier_id, run_id):
         "rulare_id": run_id,
         "constatari": findings,
         "limitari": limitations,
+        "manifest_surse_dosar": source_manifest,
         "rulare": run,
         "markdown": "\n\n".join(lines),
     }

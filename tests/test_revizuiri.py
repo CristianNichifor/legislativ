@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import dosare, revizuiri
+from scripts import dosare, revizuiri, source_registry, watchlist_dosare
 
 ID = "a" * 32
 
@@ -68,6 +68,49 @@ def test_defaults_append_only_and_export(saved):
         for sql in ("UPDATE revizuiri SET motiv='altered'", "DELETE FROM revizuiri"):
             with pytest.raises(sqlite3.IntegrityError):
                 con.execute(sql)
+
+
+def test_review_export_includes_dossier_source_manifest(saved):
+    path, run, _, state, _ = saved
+    watchlist_dosare.adauga(
+        path,
+        {
+            "dosar_id": ID,
+            "tip": "project",
+            "valoare": "PL-x 1/2026",
+            "eticheta": "Proiect urmărit",
+        },
+    )
+    source = source_registry.descopera(
+        state,
+        {
+            "family": "parlament",
+            "identifier": "PL-x 1/2026",
+            "url": "https://example.test/plx-1-2026",
+            "label": "Proiect urmărit",
+        },
+    )
+    source_registry.pune_in_coada(state, source["id"])
+    source_registry.inregistreaza(
+        state,
+        {
+            "id": source["id"],
+            "state": "fetched",
+            "content_hash": "c" * 64,
+            "parser_version": "test.v1",
+        },
+    )
+
+    out = revizuiri.lista(path, ID, run["id"], state)
+
+    manifest = out["manifest_surse_dosar"]
+    assert manifest["contract"] == "dossier-source-manifest-v1"
+    assert manifest["total"] == 1
+    assert manifest["surse"][0]["source_state"] == "fetched"
+    assert manifest["surse"][0]["source"]["url"] == "https://example.test/plx-1-2026"
+    assert manifest["surse"][0]["source"]["last_hash"] == "c" * 64
+    assert "Surse urmărite în dosar" in out["markdown"]
+    assert "dossier-source-manifest-v1" in out["markdown"]
 
 
 @pytest.mark.parametrize(
