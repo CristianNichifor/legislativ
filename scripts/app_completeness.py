@@ -139,6 +139,7 @@ def report(stare=None) -> dict:
         and unsynced_required == 0
     )
     vertical_ready = bool(vertical) and not vertical_error and all(vertical_checks.values())
+    lifecycle_ready = source_ready and bool(vertical_checks.get("workbench_tracks_project"))
     capabilities = [
         _capability(
             "local_data_separation",
@@ -219,9 +220,7 @@ def report(stare=None) -> dict:
         _capability(
             "lifecycle_tracking",
             "Lifecycle tracking",
-            "ready"
-            if source_ready and vertical_checks.get("workbench_tracks_project")
-            else "partial",
+            "ready" if lifecycle_ready else "partial",
             (
                 "Local source registry, tracker events and parliamentary lifecycle stages "
                 "exist; full lifecycle coverage depends on complete source availability."
@@ -231,11 +230,15 @@ def report(stare=None) -> dict:
                 "lifecycle_ui_available": "source-coverage-open-lifecycle" in app_html,
                 "source_coverage_complete": source_ready,
             },
-            blockers=[
+            blockers=[]
+            if lifecycle_ready
+            else [
                 "Lifecycle tracking is bounded until public-source coverage is complete "
                 "and current."
             ],
-            next_action="Run the public-source coverage gate against the deployed local data set.",
+            next_action=""
+            if lifecycle_ready
+            else "Run the public-source coverage gate against the deployed local data set.",
         ),
         _capability(
             "eu_issue_note",

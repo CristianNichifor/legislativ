@@ -190,9 +190,12 @@ def test_registry_bootstraps_required_official_source_anchors(tmp_path):
     by_family = {row["family"]: row for row in listed["sources"]}
     assert len(by_family) == 14
     assert by_family["legislatie_ro"]["url"] == "https://legislatie.just.ro/"
+    assert by_family["parlament"]["url"].startswith("https://www.cdep.ro/ords/pls/dic/")
+    assert by_family["camera"]["url"].startswith("https://www.cdep.ro/ords/pls/proiecte/")
     assert by_family["consultare_econsultare"]["url"].startswith("https://e-consultare.gov.ro/")
+    assert by_family["consultare_minister"]["url"] == "https://info-transparenta.gov.ro/"
     assert by_family["ue_cellar"]["url"].startswith("https://op.europa.eu/")
-    assert by_family["monitorul_oficial_local"]["url"].startswith("https://www.mdlpa.ro/")
+    assert by_family["monitorul_oficial_local"]["url"].startswith("http://dpfbl.mdlpa.ro/")
     assert by_family["monitorul_oficial_other_parts"]["url"].startswith(
         "https://monitoruloficial.ro/"
     )
