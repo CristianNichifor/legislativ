@@ -283,6 +283,99 @@ def _summary(rows: list[dict], total: int) -> dict:
     }
 
 
+def project_timeline_summary(stare, project_id: str, *, limit: int = 200) -> dict:
+    """Synthesize one project's normalized tracker events into source-backed lifecycle coverage."""
+    project_id = _token(project_id, required=True)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
+        raise ValueError("Limită tracker invalidă.")
+    out = lista(stare, {"project_id": [project_id], "limit": [str(limit)]})
+    events = sorted(
+        out["events"],
+        key=lambda event: (
+            int(event.get("stage_order", 999)),
+            event.get("occurred_at") or "",
+            event.get("observed_at") or "",
+            event.get("id") or "",
+        ),
+    )
+    latest = out["summary"].get("latest_event")
+    most_advanced = max(events, key=lambda event: int(event.get("stage_order", -1)), default=None)
+    by_stage = out["summary"].get("by_stage") or {}
+    covered = set(by_stage)
+    expected = [
+        "consultation_open",
+        "consultation_closed",
+        "committee",
+        "report",
+        "plenary_scheduled",
+        "adopted",
+        "published",
+    ]
+    missing = [stage for stage in expected if stage not in covered]
+    source_families = sorted(
+        {event.get("source_family", "") for event in events if event.get("source_family")}
+    )
+    source_links = [
+        {
+            "source_family": event.get("source_family", ""),
+            "source_url": event.get("source_url", ""),
+            "content_hash": event.get("content_hash", ""),
+            "event_id": event.get("id", ""),
+        }
+        for event in events
+        if event.get("source_url") or event.get("content_hash")
+    ][:50]
+    next_actions = []
+    if not events:
+        next_actions.append("Sincronizează sursele proiectului înainte de redactare.")
+    if missing:
+        next_actions.append(
+            "Completează etapele lipsă din surse oficiale: " + ", ".join(missing[:5])
+        )
+    if out["summary"].get("unreviewed"):
+        next_actions.append("Revizuiește evenimentele tracker nerevizuite.")
+    if source_links:
+        next_actions.append("Deschide linkurile sursă pentru etapele critice înainte de concluzii.")
+    return {
+        "contract": "project-tracker-timeline-summary-v1",
+        "project_id": project_id,
+        "source_status": out["source_status"],
+        "total_events": out["total"],
+        "returned_events": len(events),
+        "latest_event": latest,
+        "current_stage": (
+            {
+                "key": most_advanced.get("stage_key", ""),
+                "label": most_advanced.get("stage_label", ""),
+                "order": most_advanced.get("stage_order", 999),
+                "event_type": most_advanced.get("event_type", ""),
+                "occurred_at": most_advanced.get("occurred_at", ""),
+                "source_family": most_advanced.get("source_family", ""),
+                "source_url": most_advanced.get("source_url", ""),
+            }
+            if most_advanced
+            else None
+        ),
+        "coverage": {
+            "expected": expected,
+            "covered": sorted(covered, key=lambda key: by_stage.get(key, {}).get("order", 999)),
+            "missing": missing,
+            "source_families": source_families,
+        },
+        "by_stage": by_stage,
+        "events": events,
+        "source_links": source_links,
+        "next_actions": next_actions,
+        "limitari": [
+            "Timeline-ul este construit din evenimente locale normalizate.",
+            (
+                "Etapele lipsă înseamnă că nu există încă eveniment local verificat, "
+                "nu că etapa nu s-a produs."
+            ),
+        ],
+    }
+
+
 def adauga(stare, request: dict) -> dict:
     if not isinstance(request, dict) or set(request) - {
         "id",

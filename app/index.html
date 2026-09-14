@@ -7817,6 +7817,17 @@ function projectCockpitTrackerHtml(tracker={}){
   const latestText=latest.event_label||latest.display_label||latest.event_type||'Fără eveniment local';
   return `<section class="lifecycle-overview-card"><span class="hint">Tracker</span><strong>${esc(tracker.total||0)}</strong><span class="hint">${esc(tracker.unreviewed||0)} nerevizuite din ${esc(tracker.returned||0)} afișate</span><br><span class="hint">Ultimul: ${esc(latestText)}${latest.occurred_at?` · ${esc(dossierTime(latest.occurred_at))}`:''}</span><br>${projectCockpitTypeSummaryHtml(tracker.by_type||{})}${trackerCoverageHtml([],tracker.by_type||{})}</section>`;
 }
+function projectCockpitTimelineHtml(timeline={}){
+  const coverage=timeline.coverage||{}, current=timeline.current_stage||{};
+  const stages=(coverage.expected||[]).map(key=>({
+    key,
+    label:(timeline.by_stage||{})[key]?.label||key,
+    count:(timeline.by_stage||{})[key]?.count||0
+  }));
+  const missing=(coverage.missing||[]).slice(0,5).join(', ')||'nicio etapă critică lipsă';
+  const currentText=current.label||current.key||'fără stadiu confirmat din evenimente';
+  return `<section class="lifecycle-overview-card"><span class="hint">Acoperire timeline</span><strong>${esc(currentText)}</strong><span class="hint">${esc(timeline.total_events||0)} evenimente · lipsesc ${esc((coverage.missing||[]).length)}</span><br>${trackerCoverageHtml(stages)}<span class="hint">Etape lipsă: ${esc(missing)}</span></section>`;
+}
 function projectCockpitEvidenceHtml(evidence={}){
   const ready=evidence.available?'Disponibil':'Indisponibil';
   const open=Number(evidence.open_events||0);
@@ -7850,7 +7861,7 @@ function projectCockpitActionsHtml(actions=[]){
 function projectCockpitHtml(data){
   return `<section class="source-review"><h4>Cockpit · ${esc(data.project_id||'proiect')}</h4>`
     +`<p class="hint">Sumar local-only pentru urmărire și redactare. Datele pot fi incomplete și nu reprezintă verdict juridic.</p>`
-    +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitConsultationsHtml(data.consultations||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
+    +`<div class="lifecycle-overview">${projectCockpitStatusHtml(data)}${projectCockpitSourceHtml(data.source_attention||{})}${projectCockpitTrackerHtml(data.tracker||{})}${projectCockpitTimelineHtml(data.timeline||{})}${projectCockpitConsultationsHtml(data.consultations||{})}${projectCockpitEvidenceHtml(data.evidence_pack||{})}</div>`
     +`<h5>Următoarele acțiuni</h5>${projectCockpitActionsHtml(data.next_actions||[])}`
     +(data.limitari?.length?`<h5>Limitări</h5><ul>${data.limitari.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
     +`<div class="dossier-actions"><button type="button" class="ghost mini" data-cockpit-open-writing>Redactare</button><button type="button" class="ghost mini" data-cockpit-open-workbench>Pachet dovezi</button><button type="button" class="ghost mini" data-cockpit-open-timeline>Timeline</button><button type="button" class="ghost mini" data-cockpit-watch-dossier>Urmărește în dosar</button><button type="button" class="ghost mini" data-cockpit-create-dossier>Dosar / notă</button>${data.source_attention?.registry_can_sync&&data.source_attention?.registry_source_id?'<button type="button" class="ghost mini" data-cockpit-sync-source>Sincronizează sursa</button>':''}<button type="button" class="ghost mini" data-cockpit-refresh>Reîncarcă</button></div></section>`;

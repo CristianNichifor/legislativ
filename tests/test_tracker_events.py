@@ -139,6 +139,76 @@ def test_tracker_events_carry_unified_lifecycle_metadata(tmp_path):
     assert out["summary"]["latest_event"]["event_type"] == "published_in_monitor"
 
 
+def test_tracker_project_timeline_summary_reports_stage_coverage_and_source_links(tmp_path):
+    stare = state(tmp_path)
+    rows = [
+        event(
+            event_type="public_consultation_opened",
+            source_family="consultare_econsultare",
+            source_url="https://e-consultare.gov.ro/consultare/1",
+            occurred_at="2026-09-01T10:00:00+00:00",
+            payload={"authority": "MDLPA"},
+            content_hash="a" * 64,
+        ),
+        event(
+            event_type="committee_assignment",
+            source_family="camera",
+            source_url="https://www.cdep.ro/comisii",
+            occurred_at="2026-09-03T10:00:00+00:00",
+            payload={"committee": "Comisia juridică"},
+            content_hash="b" * 64,
+        ),
+        event(
+            event_type="report_filed",
+            source_family="camera",
+            source_url="https://www.cdep.ro/raport",
+            occurred_at="2026-09-05T10:00:00+00:00",
+            payload={"position": "adoptare"},
+            content_hash="c" * 64,
+        ),
+        event(
+            event_type="published_in_monitor",
+            source_family="monitorul_oficial_pi",
+            source_url="https://monitoruloficial.ro/",
+            occurred_at="2026-09-10T10:00:00+00:00",
+            payload={"part": "I", "number": "100"},
+            content_hash="d" * 64,
+        ),
+    ]
+    for row in rows:
+        tracker_events.adauga(stare, row)
+
+    out = tracker_events.project_timeline_summary(stare, "PL-x 10/2026")
+
+    assert out["contract"] == "project-tracker-timeline-summary-v1"
+    assert out["current_stage"]["key"] == "published"
+    assert out["coverage"]["covered"] == [
+        "consultation_open",
+        "committee",
+        "report",
+        "published",
+    ]
+    assert "adopted" in out["coverage"]["missing"]
+    assert out["coverage"]["source_families"] == [
+        "camera",
+        "consultare_econsultare",
+        "monitorul_oficial_pi",
+    ]
+    assert len(out["source_links"]) == 4
+    assert "Revizuiește evenimentele tracker nerevizuite." in out["next_actions"]
+
+
+def test_tracker_project_timeline_summary_handles_empty_project(tmp_path):
+    stare = state(tmp_path)
+
+    out = tracker_events.project_timeline_summary(stare, "PL-x 99/2026")
+
+    assert out["total_events"] == 0
+    assert out["current_stage"] is None
+    assert out["coverage"]["covered"] == []
+    assert out["next_actions"][0] == "Sincronizează sursele proiectului înainte de redactare."
+
+
 def test_tracker_store_marks_events_reviewed_and_filters_by_review_state(tmp_path):
     stare = state(tmp_path)
     saved = tracker_events.adauga(stare, event())["event"]
