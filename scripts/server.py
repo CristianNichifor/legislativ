@@ -600,6 +600,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare",
                 "/api/dosare/metadate",
                 "/api/dosare/ciorne",
+                "/api/dosare/cockpit",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/dovezi",
@@ -641,6 +642,8 @@ def face_handler(stare: Stare, *, runtime=None):
                             if ident
                             else dosare.lista_ciorne(path, int(qs.get("offset", ["0"])[0]))
                         )
+                    elif ruta.path == "/api/dosare/cockpit":
+                        out = dosare.cockpit(path, ident)
                     elif ruta.path == "/api/dosare/propuneri/legaturi-ue/obligatii":
                         from scripts.legaturi_ue import obligatii
 
@@ -815,6 +818,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare",
                 "/api/dosare/metadate",
                 "/api/dosare/ciorne",
+                "/api/dosare/cockpit/evidence",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
@@ -989,6 +993,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare",
                 "/api/dosare/metadate",
                 "/api/dosare/ciorne",
+                "/api/dosare/cockpit/evidence",
                 "/api/dosare/rulari",
                 "/api/dosare/revizuiri",
                 "/api/dosare/verificari",
@@ -1023,6 +1028,8 @@ def face_handler(stare: Stare, *, runtime=None):
                         out = dosare.modifica(path, cerere)
                     elif ruta == "/api/dosare/ciorne":
                         out = dosare.salveaza_ciorna(path, cerere)
+                    elif ruta == "/api/dosare/cockpit/evidence":
+                        out = dosare.evidence_workflow(path, cerere)
                     elif ruta == "/api/dosare/propuneri/legaturi-ue/previzualizare":
                         from scripts.legaturi_ue import preview
 
