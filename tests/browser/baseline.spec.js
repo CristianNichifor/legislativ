@@ -23,7 +23,7 @@ for (const width of [390, 1440]) {
     await expect(page.locator('#f-an-max')).toHaveClass(/civic-select/);
     expect(requests.some(url => url.endsWith('/vendor/civic-ui/styles.css'))).toBe(true);
     await page.locator('#tab-matrice').click();
-    await page.locator('#lifecycle-tracker > summary').click();
+    await page.locator('#lifecycle-tracker').evaluate(panel => { panel.open = true; });
     await page.locator('#lifecycle-filter').selectOption('toate');
     await page.locator('#lifecycle-search input[name="q"]').fill('plx-999999-2026');
     await page.locator('#lifecycle-search').evaluate(form => form.requestSubmit());

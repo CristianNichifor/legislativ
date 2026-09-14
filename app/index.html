@@ -3578,7 +3578,7 @@ function aiUnifiedDraftPanelHtml(label='dovezi selectate'){
     +`<label>Sarcină AI<select name="ai_task">${aiDraftTaskOptions()}</select></label>`
     +'<label>Limită trimitere<select name="ai_boundary"><option value="local_ai">AI local</option><option value="online_byok">online BYOK</option><option value="mcp_handoff">MCP aprobat</option></select></label>'
     +'<button type="button" class="ghost mini" data-ai-settings-save>Salvează implicit</button><button type="button" class="ghost mini" data-ai-draft-note>Pregătește promptul</button><button type="button" class="ghost mini" data-ai-send-note disabled>Rulează local/BYOK</button><button type="button" class="ghost mini" data-ai-copy-prompt disabled>Copiază prompt</button><button type="button" class="ghost mini" data-ai-insert-note disabled>Inserează ciorna</button></div>'
-    +'<div data-ai-boundary-summary></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary>'+mcpRuntimePanelHtml()+'<p class="hint">Previzualizarea MCP construiește payloadul și auditul. Execuția local-mock cere aprobare explicită și nu trimite text extern.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="local-mock"></label><label>Unealtă AI MCP<input name="mcp_tool" maxlength="160" placeholder="ai.draft"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button><label><input type="checkbox" name="mcp_approved"> Aprob execuția local-mock</label><button type="button" class="ghost mini" data-mcp-execute disabled>Execută local-mock</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP extern/manual<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button><details data-mcp-export><summary>Export MCP notă/dosar</summary><div class="dossier-actions"><label>Unealtă export<input name="mcp_export_tool" maxlength="160" value="document.export"></label><button type="button" class="ghost mini" data-mcp-export-preview>Previzualizează export</button><button type="button" class="ghost mini" data-mcp-export-copy disabled>Copiază export</button><label><input type="checkbox" name="mcp_export_approved"> Aprob exportul local-mock</label><button type="button" class="ghost mini" data-mcp-export-execute disabled>Execută export</button></div><p class="hint" role="status" data-mcp-export-status></p><pre data-mcp-export-result></pre></details></details>'
+    +'<div data-ai-boundary-summary></div><div data-ai-guardrail-output></div><details data-mcp-ai-draft><summary>MCP · abonamentul utilizatorului</summary>'+mcpRuntimePanelHtml()+'<p class="hint">Previzualizarea MCP construiește payloadul și auditul. Execuția local-mock cere aprobare explicită și nu trimite text extern.</p><div class="dossier-actions"><label>Server MCP<input name="mcp_server" maxlength="120" placeholder="local-mock"></label><label>Unealtă AI MCP<input name="mcp_tool" maxlength="160" placeholder="ai.draft"></label><button type="button" class="ghost mini" data-mcp-preview>Previzualizează MCP</button><button type="button" class="ghost mini" data-mcp-copy disabled>Copiază payload MCP</button><label><input type="checkbox" name="mcp_approved"> Aprob execuția local-mock</label><button type="button" class="ghost mini" data-mcp-execute disabled>Execută local-mock</button></div><p class="hint" role="status" data-mcp-status></p><pre data-mcp-preview-result></pre><label>Rezultat MCP extern/manual<textarea name="mcp_result" rows="4" maxlength="8000"></textarea></label><button type="button" class="ghost mini" data-mcp-insert disabled>Inserează rezultatul MCP</button><details data-mcp-export><summary>Export MCP notă/dosar</summary><div class="dossier-actions"><label>Unealtă export<input name="mcp_export_tool" maxlength="160" value="document.export"></label><button type="button" class="ghost mini" data-mcp-export-preview>Previzualizează export</button><button type="button" class="ghost mini" data-mcp-export-copy disabled>Copiază export</button><label><input type="checkbox" name="mcp_export_approved"> Aprob exportul local-mock</label><button type="button" class="ghost mini" data-mcp-export-execute disabled>Execută export</button></div><p class="hint" role="status" data-mcp-export-status></p><pre data-mcp-export-result></pre></details></details>'
     +'<p class="hint" role="status" data-ai-draft-status></p><pre data-ai-draft-result></pre></details>';
 }
 let _onlineOk=false;
@@ -5539,6 +5539,26 @@ function aiByokFailureResult(plan,boundary,request,error,response){
     }
   };
 }
+function aiGuardrailSummaryHtml(executed){
+  if(!executed)return '';
+  const failure=executed.failure;
+  if(failure){
+    return `<section data-ai-guardrail-summary data-ai-guardrail-status="failed"><h5>AI oprit · ${esc(failure.label||failure.failure_code||'eroare')}</h5>`
+      +`<p class="hint">${esc(failure.user_message||'Nu s-a creat nicio ciornă.')} Retry: ${failure.retryable?'da':'nu'} · ciornă creată: ${failure.creates_draft?'da':'nu'} · rezultat importat: ${failure.result_imported?'da':'nu'}.</p>`
+      +'<p class="hint">Cheia API nu este trimisă, stocată sau afișată de aplicație.</p></section>';
+  }
+  const guard=executed.guardrail_summary||executed.audit?.guardrail_summary||{};
+  const support=executed.claim_support||executed.audit?.claim_support||{};
+  const status=guard.status||(executed.insert_allowed===false?'blocked':support.unsupported_claims?'needs_review':'ok');
+  const label={ok:'Guardrails OK',needs_review:'Necesită revizie',blocked:'Inserare blocată'}[status]||status;
+  const claims=(support.claims||[]).slice(0,6).map((claim,i)=>
+    `<li>${esc(i+1)}. ${esc(claim.status||'necunoscut')} · ${esc(claim.reason||'fără motiv')} ${claim.text?`<br><span class="hint">${esc(String(claim.text).slice(0,260))}</span>`:''}</li>`
+  ).join('');
+  return `<section data-ai-guardrail-summary data-ai-guardrail-status="${esc(status)}"><h5>${esc(label)}</h5>`
+    +`<p class="hint">Inserare: ${executed.insert_allowed===false?'nu':'da'} · afirmații nesusținute: ${esc(support.unsupported_claims||0)} · doar dovezi selectate: ${guard.selected_evidence_only===false?'nu':'da'} · nu verdict juridic.</p>`
+    +(claims?`<details ${status==='blocked'?'open':''}><summary>Afirmații verificate</summary><ul>${claims}</ul></details>`:'')
+    +'</section>';
+}
 async function aiRunEvidenceDraft(plan,boundary,prog){
   if(!plan)throw new Error('Pregătește promptul înainte de rulare.');
   const mode=aiMode();
@@ -5679,18 +5699,18 @@ function bindManualNoteRuleCandidate(form){
 }
 function bindManualNoteAiDraft(form){
   const section=form.querySelector('[data-ai-note-draft]');if(!section)return;
-  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]'),settings=section.querySelector('[data-ai-note-settings]'),saveSettings=section.querySelector('[data-ai-settings-save]');
+  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]'),guardrail=section.querySelector('[data-ai-guardrail-output]'),settings=section.querySelector('[data-ai-note-settings]'),saveSettings=section.querySelector('[data-ai-settings-save]');
   bindManualNoteMcpDraft(form,section);
   aiNoteSettingsApply(form);
   if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(aiNoteSettings());
   if(saveSettings)saveSettings.onclick=()=>{const saved=aiNoteSettingsSave(form);if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(saved);status.textContent='Setările AI implicite au fost salvate local, fără cheie API.';};
   let draft='',plan=null;
-  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';};
+  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';};
   form.addEventListener('input',e=>{if(e.target.closest('[data-ai-note-draft]'))return;clearPlan();});
   form.elements.ai_task?.addEventListener('change',clearPlan);
   form.elements.ai_boundary?.addEventListener('change',()=>{if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml({...aiNoteSettings(),boundary:form.elements.ai_boundary.value,task:form.elements.ai_task?.value||'issue_note',mcp_server:form.elements.mcp_server?.value||'',mcp_tool:form.elements.mcp_tool?.value||''});if(plan)summary.innerHTML=aiDraftBoundaryHtml(plan,form.elements.ai_boundary.value);});
   run.onclick=async()=>{
-    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';summary.innerHTML='';
+    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';
     try{
       const draftPayload=manualNoteAiEvidence(form);
       plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
@@ -5710,6 +5730,12 @@ function bindManualNoteAiDraft(form){
     send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
     try{
       const executed=await aiRunEvidenceDraft(plan,boundary,p=>{status.textContent=p?.text||'Rulează AI…';});
+      if(guardrail)guardrail.innerHTML=aiGuardrailSummaryHtml(executed);
+      if(executed.failure||executed.status==='failed'){
+        result.textContent=executed.failure?.user_message||executed.nota||'Nu s-a creat nicio ciornă.';
+        insert.disabled=true;status.textContent='Generarea AI a fost oprită; nu există ciornă de inserat.';
+        return;
+      }
       draft=`${executed.insert_header}\nAudit: ${executed.audit.contract} · ${executed.audit.boundary} · server_calls_model=false · status=${executed.status}\n\n${executed.text}`;
       const unsupported=executed.claim_support?.unsupported_claims||0;
       result.textContent=draft+(unsupported?`\n\nAfirmații nesusținute etichetate: ${unsupported}. Inserare permisă: ${executed.insert_allowed?'da':'nu'}.`: '');
@@ -5838,18 +5864,18 @@ function bindManualNoteMcpDraft(form,section){
 }
 function bindUnifiedAiDraft(root,draftPayloadBuilder,insertDraft){
   const section=root.querySelector('[data-unified-ai-draft]');if(!section)return;
-  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]'),settings=section.querySelector('[data-ai-note-settings]'),saveSettings=section.querySelector('[data-ai-settings-save]');
+  const run=section.querySelector('[data-ai-draft-note]'),send=section.querySelector('[data-ai-send-note]'),copy=section.querySelector('[data-ai-copy-prompt]'),insert=section.querySelector('[data-ai-insert-note]'),status=section.querySelector('[data-ai-draft-status]'),result=section.querySelector('[data-ai-draft-result]'),summary=section.querySelector('[data-ai-boundary-summary]'),guardrail=section.querySelector('[data-ai-guardrail-output]'),settings=section.querySelector('[data-ai-note-settings]'),saveSettings=section.querySelector('[data-ai-settings-save]');
   const mcp=section.querySelector('[data-mcp-ai-draft]');if(mcp)mcp.hidden=true;
   aiNoteSettingsApply(root);
   if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(aiNoteSettings());
   if(saveSettings)saveSettings.onclick=()=>{const saved=aiNoteSettingsSave(root);if(settings)settings.innerHTML=aiNoteSettingsSummaryHtml(saved);status.textContent='Setările AI implicite au fost salvate local, fără cheie API.';};
   let draft='',plan=null;
-  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';};
+  const clearPlan=()=>{draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';};
   root.addEventListener('input',e=>{if(e.target.closest('[data-unified-ai-draft]'))return;clearPlan();});
   root.elements?.ai_task?.addEventListener('change',clearPlan);
   root.elements?.ai_boundary?.addEventListener('change',()=>{if(plan)summary.innerHTML=aiDraftBoundaryHtml(plan,root.elements.ai_boundary.value);});
   run.onclick=async()=>{
-    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi selectate…';result.textContent='';summary.innerHTML='';
+    draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi selectate…';result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';
     try{
       const draftPayload=draftPayloadBuilder();
       plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
@@ -5868,6 +5894,12 @@ function bindUnifiedAiDraft(root,draftPayloadBuilder,insertDraft){
     send.disabled=true;insert.disabled=true;draft='';status.textContent='Rulează AI după aprobarea explicită…';
     try{
       const executed=await aiRunEvidenceDraft(plan,boundary,p=>{status.textContent=p?.text||'Rulează AI…';});
+      if(guardrail)guardrail.innerHTML=aiGuardrailSummaryHtml(executed);
+      if(executed.failure||executed.status==='failed'){
+        result.textContent=executed.failure?.user_message||executed.nota||'Nu s-a creat nicio ciornă.';
+        insert.disabled=true;status.textContent='Generarea AI a fost oprită; nu există ciornă de inserat.';
+        return;
+      }
       draft=`${executed.insert_header}\nAudit: ${executed.audit.contract} · ${executed.audit.boundary} · server_calls_model=false · status=${executed.status}\n\n${executed.text}`;
       result.textContent=draft;
       insert.disabled=executed.insert_allowed===false;
