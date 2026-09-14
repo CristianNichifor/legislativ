@@ -53,6 +53,7 @@
             "items": {"type": "string", "maxLength": 80}
           },
           "requires_uncertainty": {"type": "boolean"},
+          "requires_refusal_when_evidence_missing": {"type": "boolean"},
           "expected_output_format": {"enum": ["sections", "json_rule_candidate"]}
         }
       }

@@ -17,6 +17,7 @@ ENGINE_VERSION = "ai-eval-deterministic-v1"
 MAX_CASES = 200
 MAX_OUTPUT_CHARS = 20_000
 MAX_SOURCE_CHARS = 80_000
+REPORT_CONTRACT = "ai-eval-report-summary-v1"
 
 CRITERIA = (
     "source_faithfulness",
@@ -26,6 +27,13 @@ CRITERIA = (
     "structured_output_parseable",
     "romanian_drafting_quality",
     "uncertainty",
+)
+GUARDRAILS = (
+    "cites_selected_evidence",
+    "refuses_missing_evidence",
+    "no_legal_verdict",
+    "no_invented_source",
+    "structured_output_parseable",
 )
 
 LEGAL_CLAIM_WORDS = {
@@ -61,10 +69,22 @@ UNCERTAINTY_WORDS = {
 VERDICT_WORDS = {
     "este ilegal",
     "este neconstitutional",
+    "is unconstitutional",
+    "surely violates",
     "incalca sigur",
     "cert incalca",
     "garantat",
     "fara dubiu",
+}
+REFUSAL_WORDS = {
+    "lipsesc dovezile",
+    "nu pot evalua",
+    "nu pot formula",
+    "nu pot redacta",
+    "nu exista suficiente dovezi",
+    "dovezi insuficiente",
+    "sursa lipsa",
+    "fara dovezi",
 }
 STRUCTURE_WORDS = {
     "surse",
@@ -222,6 +242,19 @@ def _score_citations(output, source_ids, required):
     return score, notes
 
 
+def _citations(output):
+    citations = re.findall(r"\[([A-Za-z0-9_.:\-]+)\]", output)
+    if citations:
+        return citations
+    try:
+        data = _json_object(output)
+    except json.JSONDecodeError:
+        return []
+    if isinstance(data, dict) and isinstance(data.get("source_id"), str):
+        return [data["source_id"]]
+    return []
+
+
 def _score_hallucinations(output, case, source_text, source_tokens):
     forbidden = [
         term
@@ -344,6 +377,54 @@ def _score_uncertainty(output, case):
     return score, notes
 
 
+def _guardrails(output, case, source_ids, scores):
+    citations = _citations(output)
+    cited_ids = {citation.split(":", 1)[0] for citation in citations}
+    required_citations = set(case.get("required_citations") or [])
+    invented = sorted(cited_ids - source_ids)
+    missing = sorted(required_citations - cited_ids)
+    low = output.lower()
+    verdicts = [word for word in VERDICT_WORDS if word in low]
+    requires_refusal = case.get("requires_refusal_when_evidence_missing") is True
+    refusal_markers = [word for word in REFUSAL_WORDS if word in low]
+    has_sources_text = any(
+        isinstance(source.get("text"), str) and source["text"].strip()
+        for source in case.get("sources", [])
+    )
+    refused_missing = True
+    if requires_refusal or not has_sources_text:
+        refused_missing = bool(refusal_markers) and not _legal_claims(output)
+    passed = {
+        "cites_selected_evidence": requires_refusal
+        or (bool(citations) and not missing and not invented),
+        "refuses_missing_evidence": refused_missing,
+        "no_legal_verdict": not verdicts,
+        "no_invented_source": not invented,
+        "structured_output_parseable": scores["structured_output_parseable"] >= 0.70,
+    }
+    notes = {}
+    if missing and not passed["cites_selected_evidence"]:
+        notes["cites_selected_evidence"] = "Surse selectate necitate: " + ", ".join(missing[:5])
+    if not citations and not requires_refusal:
+        notes["cites_selected_evidence"] = "Lipsesc citarile catre dovezile selectate."
+    if not refused_missing:
+        notes["refuses_missing_evidence"] = (
+            "Raspunsul nu refuza explicit cand dovezile selectate lipsesc."
+        )
+    if verdicts:
+        notes["no_legal_verdict"] = "Verdicte juridice tari: " + ", ".join(verdicts[:5])
+    if invented:
+        notes["no_invented_source"] = "Surse inventate sau neselectate: " + ", ".join(invented[:5])
+    if not passed["structured_output_parseable"]:
+        notes["structured_output_parseable"] = "Rezultatul nu respecta structura asteptata."
+    return {
+        "contract": "ai-eval-guardrails-v1",
+        "passed": passed,
+        "failed": [name for name in GUARDRAILS if not passed[name]],
+        "notes": notes,
+    }
+
+
 def evaluate_case(case, candidate):
     output = _text(candidate.get("output"), MAX_OUTPUT_CHARS)
     source_ids, source_tokens, source_text = _source_index(case)
@@ -366,6 +447,16 @@ def evaluate_case(case, candidate):
         scores[key] = _clamp(score)
         notes[key] = key_notes
     overall = _clamp(sum(scores.values()) / len(CRITERIA))
+    guardrails = _guardrails(output, case, source_ids, scores)
+    acceptance_mode = (
+        "refusal"
+        if case.get("requires_refusal_when_evidence_missing") is True
+        else "evaluated_output"
+    )
+    accepted = not guardrails["failed"] and (
+        acceptance_mode == "refusal"
+        or overall >= TASK_MINIMUMS.get(case.get("task_type", "unknown"), 0.72)
+    )
     return {
         "case_id": case["id"],
         "task_type": case.get("task_type", "unknown"),
@@ -374,6 +465,9 @@ def evaluate_case(case, candidate):
         "overall": overall,
         "scores": scores,
         "notes": notes,
+        "guardrails": guardrails,
+        "accepted": accepted,
+        "acceptance_mode": acceptance_mode,
         "limits": [
             "Scor euristic determinist; nu certifica acuratete juridica.",
             "Evalueaza raspunsuri salvate; nu apeleaza modele sau API-uri platite.",
@@ -383,6 +477,8 @@ def evaluate_case(case, candidate):
 
 
 def _task_quality(result):
+    if result.get("acceptance_mode") == "refusal":
+        return result.get("accepted") is True
     threshold = TASK_MINIMUMS.get(result["task_type"], 0.72)
     critical = (
         result["scores"]["citation_correctness"] >= 0.65
@@ -390,7 +486,7 @@ def _task_quality(result):
         and result["scores"]["structured_output_parseable"] >= 0.70
         and result["scores"]["uncertainty"] >= 0.55
     )
-    return result["overall"] >= threshold and critical
+    return result["overall"] >= threshold and critical and result.get("accepted") is True
 
 
 def _summaries(results):
@@ -405,7 +501,7 @@ def _summaries(results):
             "model": model,
             "cases": len(values),
             "overall": _clamp(sum(v["overall"] for v in values) / len(values)),
-            "accepted_cases": sum(1 for v in values if _task_quality(v)),
+            "accepted_cases": sum(1 for v in values if v.get("accepted") is True),
         }
         for (provider, model), values in sorted(providers.items())
     ]
@@ -422,6 +518,42 @@ def _summaries(results):
         for (provider, model, task), values in sorted(tasks.items())
     ]
     return provider_summary, task_summary
+
+
+def _report_summary(results, comparison, task_summary):
+    failed_guardrails = defaultdict(int)
+    blocked_cases = []
+    for result in results:
+        failures = result["guardrails"]["failed"]
+        for failure in failures:
+            failed_guardrails[failure] += 1
+        if failures:
+            blocked_cases.append(
+                {
+                    "case_id": result["case_id"],
+                    "task_type": result["task_type"],
+                    "provider": result["provider"],
+                    "model": result["model"],
+                    "failed_guardrails": failures,
+                    "overall": result["overall"],
+                }
+            )
+    return {
+        "contract": REPORT_CONTRACT,
+        "status": "acceptable" if not blocked_cases else "needs_review",
+        "cases": len(results),
+        "accepted_cases": sum(1 for result in results if result.get("accepted") is True),
+        "blocked_cases": blocked_cases,
+        "failed_guardrails": dict(sorted(failed_guardrails.items())),
+        "provider_count": len(comparison),
+        "task_count": len(task_summary),
+        "ui": {
+            "headline": "AI eval acceptabil" if not blocked_cases else "AI eval cere revizuire",
+            "severity": "ok" if not blocked_cases else "warning",
+            "server_calls_model": False,
+            "stores_api_key": False,
+        },
+    }
 
 
 def evaluate_run(cases_doc, run_doc):
@@ -441,6 +573,7 @@ def evaluate_run(cases_doc, run_doc):
             raise ValueError("Raspuns pentru caz necunoscut.")
         results.append(evaluate_case(cases[case_id], candidate))
     comparison, task_summary = _summaries(results)
+    report_summary = _report_summary(results, comparison, task_summary)
     return {
         "schema_version": SCHEMA_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -451,6 +584,7 @@ def evaluate_run(cases_doc, run_doc):
         "comparison": comparison,
         "task_summary": task_summary,
         "acceptable_tasks": [row for row in task_summary if row["acceptable"] and row["cases"] > 0],
+        "report_summary": report_summary,
         "live_provider_calls": False,
         "server_calls_model": False,
         "stores_api_key": False,
@@ -491,6 +625,7 @@ def main(argv=None):
         help="Write a run JSON template for outputs produced by the user's own BYOK call.",
     )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
+    parser.add_argument("--write-report", help="Write the JSON evaluation report to this path.")
     args = parser.parse_args(argv)
     cases = _load_json(args.cases)
     if args.write_byok_template:
@@ -499,7 +634,10 @@ def main(argv=None):
         if not args.run:
             raise SystemExit("--run is required unless --write-byok-template is used.")
         result = evaluate_run(cases, _load_json(args.run))
-    print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
+    rendered = json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None)
+    if args.write_report:
+        Path(args.write_report).write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
 
 
 if __name__ == "__main__":

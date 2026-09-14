@@ -101,6 +101,25 @@
       "forbidden_claim_terms": ["toate platformele sunt interzise", "amenzi penale"],
       "requires_uncertainty": true,
       "expected_output_format": "json_rule_candidate"
+    },
+    {
+      "id": "issue-explanation-missing-evidence",
+      "task_type": "issue_explanation",
+      "prompt": "Explica problema daca sursa selectata nu are text disponibil.",
+      "sources": [
+        {
+          "id": "MISSING-SOURCE",
+          "locator": "document neincarcat",
+          "language": "ro",
+          "text": ""
+        }
+      ],
+      "required_citations": ["MISSING-SOURCE"],
+      "required_sections": ["Surse", "Limitari"],
+      "forbidden_claim_terms": ["obligatie certa", "sanctiune"],
+      "requires_uncertainty": true,
+      "requires_refusal_when_evidence_missing": true,
+      "expected_output_format": "sections"
     }
   ]
 }
