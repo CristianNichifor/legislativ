@@ -847,22 +847,50 @@ def test_rule_candidate_controls_build_preview_payload():
         + 'const root={querySelector:(q)=>fields[q.match(/name="([^"]+)"/)?.[1]||q]};'
         "const fields={rule_provision_id:{value:'ro:lege-98-2016#art7'},"
         "rule_act_id:{value:'lege-98-2016'},rule_locator:{value:'art7'},"
+        "rule_source_url:{value:'https://legislatie.just.ro/Public/DetaliiDocument/178667'},"
         "rule_source_hash:{value:'a'.repeat(64)},rule_text:{value:'Text <legal>'},"
         "rule_modality:{value:'obligation'},rule_review_state:{value:'machine_detected'},"
         "rule_actor:{value:'autoritatea'},rule_condition:{value:'dacă există cerere'},"
         "rule_action:{value:'publică'},rule_deadline:{value:'10 zile'},"
         "rule_exceptions:{value:'urgență\\nsecret'},rule_effect:{value:'nulitate'},"
+        "rule_applicability_scope:{value:'autorități contractante'},"
+        "rule_confidence:{value:'medium'},rule_extraction_method:{value:'manual_note'},"
+        "rule_origin_kind:{value:'manual_note'},rule_origin_id:{value:'n1'},"
         "rule_reviewer:{value:'jurist'}};"
         "const payload=ruleCandidatePayload(root,{});"
         "assert.equal(payload.modality,'obligation');"
+        "assert.equal(payload.source_url,'https://legislatie.just.ro/Public/DetaliiDocument/178667');"
         "assert.deepEqual(payload.exceptions,['urgență','secret']);"
-        "const html=ruleCandidateControlsHtml({text:'<script>',source_hash:'b'.repeat(64)});"
+        "assert.equal(payload.applicability_scope,'autorități contractante');"
+        "assert.equal(payload.confidence,'medium');"
+        "assert.equal(payload.extraction_method,'manual_note');"
+        "assert.equal(payload.origin_kind,'manual_note');"
+        "const html=ruleCandidateControlsHtml({text:'<script>',source_hash:'b'.repeat(64),"
+        "source_url:'https://example.test/source',actor:'Autoritatea',condition:'cerere',"
+        "action:'publică',deadline:'10 zile',applicability_scope:'local',"
+        "confidence:'high',extraction_method:'matrix',origin_kind:'matrix_evidence',origin_id:'row-1'});"
         "assert.ok(html.includes('data-rule-candidate'));"
         "assert.ok(html.includes('data-rule-preview'));"
         "assert.ok(html.includes('data-rule-save'));"
+        "assert.ok(html.includes('rule_source_url'));"
+        "assert.ok(html.includes('rule_applicability_scope'));"
+        "assert.ok(html.includes('rule_confidence'));"
+        "assert.ok(html.includes('rule_extraction_method'));"
+        "assert.ok(html.includes('matrix_evidence'));"
         "assert.ok(!html.includes('<script>'));"
     )
     run_node(code)
+
+
+def test_rule_candidate_authoring_paths_are_visible():
+    source = APP.read_text()
+
+    assert "data-matrix-rule-evidence" in source
+    assert "extraction_method:'matrix'" in source
+    assert "form.elements.rule_extraction_method.value='ai_draft'" in source
+    assert "form.elements.rule_extraction_method.value='mcp_draft'" in source
+    assert "origin_kind:'rule_candidate_queue'" in source
+    assert "data-rule-edit-host" in source
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
@@ -884,7 +912,9 @@ def test_rule_drafts_panel_renders_queue_and_promoted_rules():
         "act_id:'lege',locator:'art1',modality:'obligation',"
         "review_state:'human_reviewed',actor:'Autoritatea',condition:'cerere',"
         "action:'publică',deadline:'10 zile',exceptions:['secret'],"
-        "effect:'nulitate',source_hash:'a'.repeat(64)};"
+        "effect:'nulitate',source_hash:'a'.repeat(64),"
+        "source_url:'https://legislatie.just.ro/Public/DetaliiDocument/178667',"
+        "applicability_scope:'proceduri',confidence:'medium',extraction_method:'manual_note'};"
         "const queue={total:1,counts:{human_reviewed:1},items:[{id:'q1',"
         "bucket:'human_reviewed',candidate,"
         "actiuni:{promote_to_rule:true}}]};"
@@ -905,6 +935,10 @@ def test_rule_drafts_panel_renders_queue_and_promoted_rules():
         "assert.ok(html.includes('law-rule-draft-v1'));"
         "assert.ok(html.includes('law-rule-execution-row-v1'));"
         "assert.ok(html.includes('data-rule-draft-text-form'));"
+        "assert.ok(html.includes('data-rule-edit'));"
+        "assert.ok(html.includes('data-rule-edit-host'));"
+        "assert.ok(html.includes('metodă: Din notă'));"
+        "assert.ok(html.includes('Domeniu aplicare'));"
         "assert.ok(html.includes('Rulează pe text'));"
         "assert.ok(html.includes('Verificări deterministe'));"
         "assert.ok(html.includes('Creează notă manuală'));"
