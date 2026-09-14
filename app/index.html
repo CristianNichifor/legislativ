@@ -1701,7 +1701,7 @@
             <option value="">toate sursele</option>
             <option value="loaded">surse încărcate</option>
             <option value="missing">surse lipsă</option>
-            <option value="stale">surse schimbate/stale</option>
+            <option value="stale">surse cu actualizare necesară</option>
             <option value="partial">surse parțiale</option>
             <option value="reviewable">revizuibile</option>
             <option value="unknown">registru indisponibil</option>
@@ -9176,14 +9176,14 @@ function mSourceQualityLabel(q){
   const parts=[];
   if(q.loaded) parts.push(`${nf(q.loaded)} încărcate`);
   if(q.missing) parts.push(`${nf(q.missing)} lipsă`);
-  if(q.stale) parts.push(`${nf(q.stale)} stale`);
+  if(q.stale) parts.push(`${nf(q.stale)} cu actualizare necesară`);
   if(q.partial) parts.push(`${nf(q.partial)} parțiale`);
   if(q.reviewable) parts.push(`${nf(q.reviewable)} reviz.`);
   return parts.join(" · ")||"0";
 }
 function mSourceQualityHint(q){
   q=q||{};
-  return `Surse: ${nf(q.loaded||q.current||0)} încărcate · ${nf(q.missing||0)} lipsă · ${nf(q.stale||0)} schimbate/stale · ${nf(q.partial||q.queued||0)} parțiale · ${nf(q.reviewable||0)} revizuibile · ${nf(q.unknown||0)} necunoscute`;
+  return `Surse: ${nf(q.loaded||q.current||0)} încărcate · ${nf(q.missing||0)} lipsă · ${nf(q.stale||0)} cu actualizare necesară · ${nf(q.partial||q.queued||0)} parțiale · ${nf(q.reviewable||0)} revizuibile · ${nf(q.unknown||0)} necunoscute`;
 }
 function mActiuni(lista){
   const acts=(lista||[]).filter(a=>a.fel==="prevedere"&&a.act_id&&a.locator);
@@ -9361,7 +9361,7 @@ function mWorkspaceHtml(workspace){
     +`<span class="matrix-workspace-badge">${esc(source.eticheta||"surse necunoscute")}</span></div>`
     +`<div class="matrix-workspace-grid">`
     +stat("prevederi",counts.prevederi)+stat("surse",counts.surse)+stat("proiecte",counts.proiecte)
-    +stat("referințe UE",counts.referinte_ue)+stat("surse lipsă",counts.surse_lipsa)+stat("surse stale/parțiale",(counts.surse_stale||0)+(counts.surse_partiale||0))
+    +stat("referințe UE",counts.referinte_ue)+stat("surse lipsă",counts.surse_lipsa)+stat("surse de actualizat/parțiale",(counts.surse_stale||0)+(counts.surse_partiale||0))
     +`<div class="matrix-workspace-axis"><b>Acțiuni</b>${actions}</div></div>`
     +(next.length?`<ol class="matrix-workspace-next">${next.map(x=>`<li>${esc(x)}</li>`).join("")}</ol>`:"")
     +(workspace.not_legal_verdict?`<p class="hint">Spațiu de lucru pentru analiză; nu verdict juridic.</p>`:"")
@@ -9415,7 +9415,7 @@ function mDrilldownHtml(d){
     +`<div class="matrix-stats">`
     +stat("prevederi suport",summary.prevederi)+stat("proiecte pendinte",summary.proiecte)
     +stat("referințe UE",summary.referinte_ue)+stat("surse lipsă",summary.surse_lipsa)
-    +stat("surse stale",summary.surse_stale)+stat("surse parțiale",summary.surse_partiale)
+    +stat("surse de actualizat",summary.surse_stale)+stat("surse parțiale",summary.surse_partiale)
     +stat("revizuibile",summary.surse_revizuibile)+`</div>`;
   const evidence=drill.evidence_records||[];
   h+=`<div class="parc-h">Dovezi citabile</div>`;
@@ -9934,7 +9934,7 @@ function renderMatrice(){
     +`<div class="matrix-stat"><b>${nf(rr.initiative_in_lucru)}</b><span>inițiative pendinte</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.surse_incarcate||rr.surse_curente)}</b><span>surse încărcate</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.surse_lipsa)}</b><span>surse lipsă</span></div>`
-    +`<div class="matrix-stat"><b>${nf(rr.surse_stale)}</b><span>surse stale</span></div>`
+    +`<div class="matrix-stat"><b>${nf(rr.surse_stale)}</b><span>surse de actualizat</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.surse_partiale)}</b><span>surse parțiale</span></div>`
     +`<div class="matrix-stat"><b>${nf(rr.surse_revizuibile)}</b><span>revizuibile</span></div>`
     +`</div>`;
@@ -10320,7 +10320,7 @@ function euSourceArticleSummary(articles,options={}){
     +`<div class="ue-ref-list">`+rows.slice(0,12).map(a=>`<div class="ue-ref"><span class="ue-loc">${esc(a.locator)}</span>${esc(a.titlu||'fără titlu')}<br><span class="hint">${esc(a.sha256||'')}</span>${options.noteAction?`<br><button type="button" class="ghost mini" data-eu-note-locator="${esc(a.locator)}">Folosește în nota UE</button>`:''}</div>`).join("")+`</div>`;
 }
 function euSourceMeta(source){
-  return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>Source hash / SHA-256 text extras: ${esc(source.text_sha256)}</p>`;
+  return `<h4>${esc(source.titlu||source.celex)}</h4><p>${esc(euSourceLanguage(source.limba))}</p><p>${acquisitionLink(source.item_url,'Text oficial · Cellar')} · ${acquisitionLink(source.sursa_url,'Referință CELEX')}</p><p class="hint">Observație locală: ${esc(dossierTime(source.citit_la))}<br>Amprentă sursă / SHA-256 text extras: ${esc(source.text_sha256)}</p>`;
 }
 function euSourceStatus(d){
   const labels={neimportat:'Nicio sursă importată',metadate:'Metadate disponibile · fără text local',text_disponibil:'Text local disponibil'};
@@ -10381,7 +10381,7 @@ function renderEuSource(d){
   out.innerHTML=`<h4>${esc(d.celex)} · ${esc(euSourceStatus(d))}</h4><p class="hint">Import explicit, câte un CELEX. Preferă româna oficială; engleza este marcată ca fallback când nu există text românesc compatibil. Fără traducere automată și fără verdict juridic.</p>`
     +`<button type="button" class="ghost mini" data-eu-import>${attempt&&attempt.stare!=='ok'?'Reîncearcă importul':d.stare==='text_disponibil'?'Verifică și importă actualizarea':'Importă din Cellar'}</button>`
     +(attempt?`<p class="hint">Ultima încercare: ${esc(dossierTime(attempt.incercat_la))}<br>Ultima preluare de text reușită în acest flux: ${attempt.reusit_la?esc(dossierTime(attempt.reusit_la)):'Necunoscută'}</p>${attempt.eroare?`<p>${esc(attempt.eroare)}</p>`:''}`:'<p class="hint">Nicio încercare înregistrată în acest flux.</p>')
-    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Preferință limbă: ${esc((lang.preferinta||[]).join(' → ')||'RON → ENG')}<br>Limbă aleasă: ${esc(lang.eticheta||euSourceLanguage(source.limba))}${lang.fallback?' · fallback explicit':''}<br>Snapshot curent: ${esc(d.curenta.id)}<br>Source hash: ${esc(source.text_sha256||'')}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în nota UE</button></div><details open><summary>Articole / prevederi importate</summary>${euSourceArticleSummary(d.curenta.articole,{noteAction:true})}</details>`:'')
+    +(d.stare==='text_disponibil'?euSourceMeta(source)+`<p class="hint">Preferință limbă: ${esc((lang.preferinta||[]).join(' → ')||'RON → ENG')}<br>Limbă aleasă: ${esc(lang.eticheta||euSourceLanguage(source.limba))}${lang.fallback?' · fallback explicit':''}<br>Snapshot curent: ${esc(d.curenta.id)}<br>Amprentă sursă: ${esc(source.text_sha256||'')}</p><div class="dossier-actions"><button type="button" class="ghost mini" data-eu-current>Vezi textul local curent</button><button type="button" class="ghost mini" data-eu-use-dossier>Folosește în nota UE</button></div><details open><summary>Articole / prevederi importate</summary>${euSourceArticleSummary(d.curenta.articole,{noteAction:true})}</details>`:'')
     +`<details><summary>Manifestări Cellar locale · ${d.manifestari.length}${d.manifestari_trunchiate?'+':''}</summary>${d.manifestari.map(m=>`<p>${esc(m.limba)} · ${esc(m.format)} · ${acquisitionLink(m.item_url,m.titlu||'Sursa oficială')}</p>`).join('')||'<p>Nicio manifestare locală.</p>'}</details>`
     +`<details data-eu-history><summary>Instantanee istorice</summary><p class="hint">Text extras păstrat local, nu versiuni juridice certificate.</p><div data-eu-history-list></div></details><div data-eu-source-text></div>`;
   out.querySelector('[data-eu-import]').onclick=()=>importEuSource(d.celex);
@@ -10413,7 +10413,7 @@ async function importEuSource(celex){
     message=result.stare==='metadate'?'Metadate păstrate; niciun text compatibil disponibil.':result.schimbat?'Sursa UE a fost actualizată.':'Textul și metadatele sursei sunt neschimbate.';
     if(result.limba_import?.fallback)message+=' Text românesc compatibil negăsit; s-a păstrat engleza oficială ca fallback explicit.';
     if(result.articole)message+=` Articole delimitate: ${nf(result.articole.total||0)}.`;
-    if(result.snapshot?.source_hash)message+=` Source hash: ${result.snapshot.source_hash.slice(0,12)}….`;
+    if(result.snapshot?.source_hash)message+=` Amprentă sursă: ${result.snapshot.source_hash.slice(0,12)}….`;
     message+=' Analizele salvate și textul din editor nu au fost modificate.';
     SOURCE_REPORT=null;
   }catch(err){message=err.message;}

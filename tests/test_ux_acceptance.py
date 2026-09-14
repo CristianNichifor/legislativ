@@ -77,11 +77,8 @@ def test_current_ui_reports_the_actual_checked_in_status():
     assert out["contract"] == "ux-acceptance-gate-v1"
     assert out["acceptance_allowed"] is True
     assert out["blockers"] == []
-    assert out["status"] == "warning"
-    assert {item["message"] for item in out["warnings"]} == {
-        "Technical wording remains visible: Source hash.",
-        "Technical wording remains visible: stale.",
-    }
+    assert out["status"] == "ready"
+    assert out["warnings"] == []
     assert out["visible_in"]["inputs"] == ["app/index.html", "app/civic-ui-adapter.css"]
 
 
