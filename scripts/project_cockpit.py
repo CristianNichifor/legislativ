@@ -13,12 +13,18 @@ TOKEN = re.compile(r"^[a-z0-9_.:/ -]{1,200}$", re.I)
 SOURCE_FAMILY_LABELS = {
     "camera": "Camera Deputaților",
     "senat": "Senat",
+    "consultare_guvern": "Consultări Guvern",
     "consultare_econsultare": "e-consultare",
+    "consultare_minister": "Consultări ministere",
+    "avize": "Avize și opinii",
     "monitorul_oficial_local": "Monitorul Oficial Local",
     "monitorul_oficial_pi": "Monitorul Oficial",
     "ue_cellar": "EU Cellar",
     "cellar": "EU Cellar",
 }
+CONSULTATION_FAMILIES = frozenset(
+    {"consultare_guvern", "consultare_econsultare", "consultare_minister", "avize"}
+)
 SOURCE_ACTION_BY_STATE = {
     "changed": "Revizuiește schimbarea sursei urmărite.",
     "failed": "Reîncearcă sincronizarea sau marchează sursa ca indisponibilă.",
@@ -135,15 +141,60 @@ def _evidence_summary(pack: dict) -> dict:
     }
 
 
+def _consultation_context(events: list[dict]) -> dict:
+    consultations = [
+        {
+            "id": event.get("id", ""),
+            "source_family": event.get("source_family", ""),
+            "source_family_label": SOURCE_FAMILY_LABELS.get(
+                event.get("source_family", ""), event.get("source_family", "")
+            ),
+            "event_type": event.get("event_type", ""),
+            "title": event.get("title")
+            or event.get("display_label")
+            or event.get("event_label")
+            or "",
+            "occurred_at": event.get("occurred_at") or event.get("observed_at") or "",
+            "source_url": event.get("source_url", ""),
+            "reviewed": bool((event.get("review") or {}).get("reviewed")),
+            "status": (event.get("payload") or {}).get("status", ""),
+            "deadline": (event.get("payload") or {}).get("deadline", ""),
+            "authority": (event.get("payload") or {}).get("authority", ""),
+        }
+        for event in events
+        if event.get("source_family") in CONSULTATION_FAMILIES
+    ]
+    by_family: dict[str, int] = {}
+    for item in consultations:
+        key = item["source_family"] or "unknown"
+        by_family[key] = by_family.get(key, 0) + 1
+    return {
+        "total": len(consultations),
+        "unreviewed": sum(1 for item in consultations if not item["reviewed"]),
+        "by_family": by_family,
+        "items": consultations[:20],
+    }
+
+
 def _next_actions(
     *,
     tracker_summary: dict,
     source_attention: dict,
     evidence_summary: dict,
     evidence_pack: dict,
+    consultation_context: dict,
     dossier_id: str,
 ) -> list[dict]:
     actions: list[dict] = []
+    if consultation_context["unreviewed"]:
+        actions.append(
+            {
+                "key": "review_consultations",
+                "label": "Revizuiește consultările și avizele legate de proiect.",
+                "reason": "Acestea pot schimba motivele, termenele sau soluția de redactare.",
+                "count": consultation_context["unreviewed"],
+            }
+        )
     if tracker_summary["unreviewed"]:
         actions.append(
             {
@@ -241,6 +292,7 @@ def build(stare, query: dict | None = None) -> dict:
     tracker_info = _tracker_summary(
         tracker.get("events", []), int(tracker.get("total") or 0), tracker.get("summary")
     )
+    consultation_info = _consultation_context(tracker.get("events", []))
     source_info = _source_attention(project)
     evidence_info = _evidence_summary(evidence_pack)
     limitations = [
@@ -264,6 +316,7 @@ def build(stare, query: dict | None = None) -> dict:
             "project": project or None,
         },
         "tracker": tracker_info,
+        "consultations": consultation_info,
         "source_attention": source_info,
         "evidence_pack": evidence_info,
         "next_actions": _next_actions(
@@ -271,6 +324,7 @@ def build(stare, query: dict | None = None) -> dict:
             source_attention=source_info,
             evidence_summary=evidence_info,
             evidence_pack=evidence_pack,
+            consultation_context=consultation_info,
             dossier_id=dossier_id,
         ),
         "limitari": list(dict.fromkeys(limitations)),
