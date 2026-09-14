@@ -761,7 +761,7 @@ def face_handler(stare: Stare, *, runtime=None):
                                 int(qs.get("offset", ["0"])[0]),
                             )
                         else:
-                            out = lista(path, ident, run_id)
+                            out = lista(path, ident, run_id, stare)
                     elif ruta.path == "/api/dosare/rulari":
                         out = dosare.rulari(path, ident, qs.get("rulare_id", [None])[0])
                     elif ident:

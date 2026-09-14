@@ -58,6 +58,8 @@ def _row(row: sqlite3.Row) -> dict:
 
 
 def _registry_matches(stare, rows: list[dict]) -> dict[str, dict]:
+    if stare is None:
+        return {}
     path = registry_path(stare)
     if not rows or not Path(path).exists():
         return {}
@@ -162,6 +164,62 @@ def feed(stare, path, dossier_id: str, offset: int = 0) -> dict:
         "limitari": [
             "Feed-ul citește starea locală a registrului de surse; nu sincronizează surse.",
             "Domeniile și cuvintele cheie sunt urmărite ca intenție, fără sursă publică unică.",
+        ],
+    }
+
+
+def manifest(stare, path, dossier_id: str, limit: int = 500) -> dict:
+    dossier_id = dosare._id(dossier_id)
+    if type(limit) is not int or not 1 <= limit <= 1000:
+        raise ValueError("Limită watchlist invalidă.")
+    try:
+        dosare.citeste(path, dossier_id)
+        with dosare._open(path) as con:
+            rows = [
+                _row(r)
+                for r in con.execute(
+                    "SELECT * FROM watchlist_dosare WHERE dosar_id=? "
+                    "ORDER BY creat_la DESC,id LIMIT ?",
+                    (dossier_id, limit + 1),
+                )
+            ]
+            total = con.execute(
+                "SELECT count(*) FROM watchlist_dosare WHERE dosar_id=?", (dossier_id,)
+            ).fetchone()[0]
+    except sqlite3.Error:
+        return {
+            "contract": "dossier-source-manifest-v1",
+            "total": 0,
+            "trunchiat": False,
+            "surse": [],
+            "attention": 0,
+            "limitari": [
+                "Depozitul de dosare nu conține încă tabela watchlist_dosare; exportul rămâne "
+                "compatibil cu arhive vechi, dar nu include surse urmărite."
+            ],
+        }
+    rows, truncated = rows[:limit], len(rows) > limit
+    matches = _registry_matches(stare, rows)
+    items = [_feed_item(row, matches.get(row["id"])) for row in rows]
+    return {
+        "contract": "dossier-source-manifest-v1",
+        "total": total,
+        "trunchiat": truncated,
+        "surse": items,
+        "attention": sum(1 for item in items if item["needs_attention"]),
+        "limitari": [
+            "Manifestul exportă starea locală cunoscută a surselor urmărite; nu sincronizează "
+            "sursele oficiale în momentul exportului.",
+            "Hash-urile sunt disponibile numai pentru sursele sincronizate local în registru.",
+            "Domeniile și cuvintele cheie descriu intenția de urmărire, nu o sursă publică unică.",
+            *(
+                [
+                    f"Manifest trunchiat la {limit} surse urmărite din {total}; baza locală "
+                    "păstrează lista completă."
+                ]
+                if truncated
+                else []
+            ),
         ],
     }
 
