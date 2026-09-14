@@ -30,9 +30,218 @@
 .civic-legislativ .cauta-filtre .civic-select {
   min-height: 44px;
 }
+.civic-legislativ .civic-workspace-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  gap: 0.45rem;
+  margin: -0.35rem 0 0.75rem;
+  font-family: var(--sans);
+}
+.civic-legislativ .civic-workspace-nav button,
+.civic-legislativ .civic-workspace-nav a {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.08rem;
+  min-height: 44px;
+  padding: 0.48rem 0.65rem;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: var(--ink-mid);
+  box-shadow: var(--e1);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: left;
+  text-decoration: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.civic-legislativ .civic-workspace-nav small {
+  color: var(--ink-mute);
+  font-size: 0.64rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.civic-legislativ .civic-workspace-nav button:not(:disabled) {
+  cursor: pointer;
+}
+.civic-legislativ .civic-workspace-nav button:hover:not(:disabled),
+.civic-legislativ .civic-workspace-nav a:hover {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  color: var(--ink);
+}
+.civic-legislativ .civic-workspace-nav button[aria-current="true"],
+.civic-legislativ .civic-workspace-nav a[aria-current="true"] {
+  border-left-color: var(--accent);
+  color: var(--ink);
+}
+.civic-legislativ .civic-workspace-nav button[aria-current="true"] small,
+.civic-legislativ .civic-workspace-nav a[aria-current="true"] small {
+  color: var(--ink-mid);
+}
+.civic-legislativ .civic-workspace-nav button:focus-visible,
+.civic-legislativ .civic-workspace-nav a:focus-visible {
+  outline: 3px solid var(--civic-focus);
+  outline-offset: 2px;
+}
+.civic-legislativ .civic-workspace-status,
+.civic-legislativ .civic-status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+  font-family: var(--sans);
+}
+.civic-legislativ .civic-workspace-status span,
+.civic-legislativ .civic-status-strip > * {
+  min-height: 3.2rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: var(--ink-mid);
+  font-size: 0.76rem;
+}
+.civic-legislativ .civic-status-strip > * {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.civic-legislativ .civic-workspace-status b,
+.civic-legislativ .civic-status-strip b,
+.civic-legislativ .civic-status-strip strong {
+  display: block;
+  margin-bottom: 0.12rem;
+  color: var(--ink-mute);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.civic-legislativ .civic-status-strip b,
+.civic-legislativ .civic-status-strip strong {
+  line-height: 1.25;
+}
+.civic-legislativ .civic-badge--source,
+.civic-legislativ .civic-badge--evidence,
+.civic-legislativ .civic-badge--review,
+.civic-legislativ .civic-badge--candidate {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 1.5rem;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--rule-soft);
+  border-radius: 999px;
+  background: var(--sunk);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.25;
+  vertical-align: baseline;
+  overflow-wrap: anywhere;
+}
+.civic-legislativ .civic-card--source,
+.civic-legislativ .civic-card--evidence,
+.civic-legislativ .civic-card--review,
+.civic-legislativ .civic-card--candidate {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: var(--r1);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--e1);
+  overflow-wrap: anywhere;
+}
+.civic-legislativ .civic-card--source h3,
+.civic-legislativ .civic-card--source h4,
+.civic-legislativ .civic-card--evidence h3,
+.civic-legislativ .civic-card--evidence h4,
+.civic-legislativ .civic-card--review h3,
+.civic-legislativ .civic-card--review h4,
+.civic-legislativ .civic-card--candidate h3,
+.civic-legislativ .civic-card--candidate h4 {
+  margin: 0.05rem 0 0.25rem;
+  font-family: var(--sans);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.civic-legislativ .civic-card--source p,
+.civic-legislativ .civic-card--evidence p,
+.civic-legislativ .civic-card--review p,
+.civic-legislativ .civic-card--candidate p {
+  margin: 0.22rem 0;
+  line-height: 1.45;
+}
+.civic-legislativ .civic-card--source pre,
+.civic-legislativ .civic-card--evidence pre,
+.civic-legislativ .civic-card--review pre,
+.civic-legislativ .civic-card--candidate pre {
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.civic-legislativ .civic-badge--source,
+.civic-legislativ .civic-card--source {
+  border-color: var(--accent);
+}
+.civic-legislativ .civic-badge--evidence,
+.civic-legislativ .civic-card--evidence {
+  border-color: var(--note);
+}
+.civic-legislativ .civic-badge--review,
+.civic-legislativ .civic-card--review {
+  border-color: var(--good);
+}
+.civic-legislativ .civic-badge--candidate,
+.civic-legislativ .civic-card--candidate {
+  border-color: var(--material);
+}
+.civic-legislativ [data-tone="blocking"].civic-badge--source,
+.civic-legislativ [data-tone="blocking"].civic-badge--evidence,
+.civic-legislativ [data-tone="blocking"].civic-badge--review,
+.civic-legislativ [data-tone="blocking"].civic-badge--candidate,
+.civic-legislativ [data-tone="blocking"].civic-card--source,
+.civic-legislativ [data-tone="blocking"].civic-card--evidence,
+.civic-legislativ [data-tone="blocking"].civic-card--review,
+.civic-legislativ [data-tone="blocking"].civic-card--candidate {
+  border-color: var(--blocking);
+}
+.civic-legislativ [data-tone="attention"].civic-badge--source,
+.civic-legislativ [data-tone="attention"].civic-badge--evidence,
+.civic-legislativ [data-tone="attention"].civic-badge--review,
+.civic-legislativ [data-tone="attention"].civic-badge--candidate,
+.civic-legislativ [data-tone="attention"].civic-card--source,
+.civic-legislativ [data-tone="attention"].civic-card--evidence,
+.civic-legislativ [data-tone="attention"].civic-card--review,
+.civic-legislativ [data-tone="attention"].civic-card--candidate {
+  border-color: var(--material);
+}
+.civic-legislativ [data-tone="ok"].civic-badge--source,
+.civic-legislativ [data-tone="ok"].civic-badge--evidence,
+.civic-legislativ [data-tone="ok"].civic-badge--review,
+.civic-legislativ [data-tone="ok"].civic-badge--candidate,
+.civic-legislativ [data-tone="ok"].civic-card--source,
+.civic-legislativ [data-tone="ok"].civic-card--evidence,
+.civic-legislativ [data-tone="ok"].civic-card--review,
+.civic-legislativ [data-tone="ok"].civic-card--candidate {
+  border-color: var(--good);
+}
 @media (max-width: 700px) {
   .civic-legislativ .cauta-filtre {
     display: grid;
+    grid-template-columns: 1fr;
+  }
+  .civic-legislativ .civic-workspace-nav,
+  .civic-legislativ .civic-workspace-status,
+  .civic-legislativ .civic-status-strip {
     grid-template-columns: 1fr;
   }
 }
