@@ -173,6 +173,9 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     assert "https://e-consultare.gov.ro/consultare/" in html
     assert "econsultare-feed-discover" in html
     assert "discover_econsultare" in html
+    assert "source-registry-guvern" in html
+    assert "discover_guvern" in html
+    assert "Adaugă consultare Guvern" in html
     assert "data-econsultare-review" in html
     assert "Revizuită din feed-ul e-consultare." in html
     assert "o singură pagină" in html
@@ -229,6 +232,12 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "assert.equal(sourceRegistryConsultationStatus('missing'),'missing');"
         "assert.equal(sourceRegistryTrackerProject({identifier:'PL-x 2/2026'}),'PL-x 2/2026');"
         "assert.equal(sourceRegistryTrackerProject({identifier:'https://example.test'}),'');"
+        "row.family='consultare_guvern';"
+        "families.consultare_guvern='Consultări Guvern';"
+        "h=sourceRegistryRowHtml(row,families);"
+        "assert.ok(h.includes('Consultare Guvern parsată'));"
+        "h=sourceRegistryDetailHtml(row,families);"
+        "assert.ok(h.includes('Date parsate Consultare Guvern'));"
     )
     result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
     assert result.returncode == 0, result.stderr.decode()
