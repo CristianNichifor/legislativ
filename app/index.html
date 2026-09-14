@@ -3433,6 +3433,18 @@ function aiText(d){
   if(Array.isArray(d.content)) return d.content.map(x=>x&&x.type==="text"?x.text:"").join("").trim();
   return "";
 }
+function aiEvalReportSummaryHtml(report){
+  if(!report||report.schema_version!==1)return '<p class="hint">Raport AI indisponibil.</p>';
+  const rows=Array.isArray(report.task_summary)?report.task_summary:[];
+  const providers=Array.isArray(report.comparison)?report.comparison:[];
+  const providerRows=providers.map(p=>`<li>${esc(p.provider||'provider')} · ${esc(p.model||'model')} · ${esc(p.cases||0)} cazuri · scor ${esc(p.overall??'n/a')} · acceptate ${esc(p.accepted_cases??0)}</li>`).join('');
+  const taskRows=rows.map(r=>`<tr><td>${esc(r.task_type)}</td><td>${esc([r.provider,r.model].filter(Boolean).join(' / '))}</td><td>${esc(r.overall??'n/a')}</td><td>${r.acceptable?'acceptabil':'nerecomandat'}</td></tr>`).join('');
+  return '<details data-ai-eval-report><summary>Evaluare calitate AI</summary>'
+    +'<p class="hint">Raport determinist din fixture-uri sau rezultate BYOK salvate. Nu apelează modele și nu certifică verdicte juridice.</p>'
+    +(providerRows?`<ul>${providerRows}</ul>`:'<p class="hint">Nu există comparații provider/model.</p>')
+    +(taskRows?'<table><thead><tr><th>Sarcină</th><th>Model</th><th>Scor</th><th>Utilizare</th></tr></thead><tbody>'+taskRows+'</tbody></table>':'')
+    +`<p class="hint">Chei API salvate: ${report.stores_api_key?'da':'nu'} · serverul cheamă model: ${report.server_calls_model?'da':'nu'} · apeluri live în evaluator: ${report.live_provider_calls?'da':'nu'}</p></details>`;
+}
 async function aiRescrieOnline(text, sistem, norma, opt){
   opt=opt||{}; const prog=opt.prog;
   const p=aiProvider(), cfg=aiProv(p), ep=aiEndpoint(p), model=aiModelOnline(p), key=aiKey(p);

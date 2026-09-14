@@ -17,10 +17,11 @@
           "id": {"type": "string", "minLength": 1, "maxLength": 120},
           "task_type": {
             "enum": [
-              "source_summarization",
-              "gap_note_drafting",
-              "eu_article_comparison",
-              "amendment_wording"
+              "issue_explanation",
+              "amendment_drafting",
+              "source_change_summary",
+              "eu_risk_note",
+              "rule_extraction"
             ]
           },
           "prompt": {"type": "string", "minLength": 1, "maxLength": 4000},
@@ -47,7 +48,12 @@
             "type": "array",
             "items": {"type": "string", "maxLength": 160}
           },
-          "requires_uncertainty": {"type": "boolean"}
+          "required_sections": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 80}
+          },
+          "requires_uncertainty": {"type": "boolean"},
+          "expected_output_format": {"enum": ["sections", "json_rule_candidate"]}
         }
       }
     },
@@ -65,7 +71,10 @@
           "output": {"type": "string", "minLength": 1, "maxLength": 20000}
         }
       }
-    }
+    },
+    "live_provider_calls": {},
+    "server_calls_model": {"type": "boolean"},
+    "stores_api_key": {"type": "boolean"}
   },
   "oneOf": [
     {"required": ["cases"]},

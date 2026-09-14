@@ -23,6 +23,7 @@ CRITERIA = (
     "citation_correctness",
     "hallucinated_legal_claims",
     "useful_structure",
+    "structured_output_parseable",
     "romanian_drafting_quality",
     "uncertainty",
 )
@@ -76,6 +77,13 @@ STRUCTURE_WORDS = {
     "amendament",
     "comparatie",
     "temei",
+}
+TASK_MINIMUMS = {
+    "issue_explanation": 0.70,
+    "amendment_drafting": 0.72,
+    "source_change_summary": 0.70,
+    "eu_risk_note": 0.74,
+    "rule_extraction": 0.78,
 }
 ROMANIAN_STOPWORDS = {
     "acest",
@@ -188,7 +196,14 @@ def _score_faithfulness(output, source_tokens):
 
 
 def _score_citations(output, source_ids, required):
-    citations = re.findall(r"\[([A-Za-z0-9_.:-]+)\]", output)
+    citations = re.findall(r"\[([A-Za-z0-9_.:\-]+)\]", output)
+    if not citations:
+        try:
+            data = _json_object(output)
+        except json.JSONDecodeError:
+            data = {}
+        if isinstance(data.get("source_id"), str):
+            citations = [data["source_id"]]
     valid = [c for c in citations if c.split(":", 1)[0] in source_ids]
     invalid = [c for c in citations if c.split(":", 1)[0] not in source_ids]
     required = set(required or [])
@@ -232,6 +247,12 @@ def _score_hallucinations(output, case, source_text, source_tokens):
 
 
 def _score_structure(output):
+    try:
+        data = _json_object(output)
+    except json.JSONDecodeError:
+        data = None
+    if isinstance(data, dict):
+        return min(1.0, len(data) * 0.1), []
     low = output.lower()
     headings = len(re.findall(r"(^|\n)\s*(#{1,3}\s*)?[A-ZĂÂÎȘȚa-zăâîșț ]{3,35}\s*:", output))
     bullets = len(re.findall(r"(^|\n)\s*(-|\d+[.)])\s+", output))
@@ -239,6 +260,50 @@ def _score_structure(output):
     score = min(1.0, headings * 0.18 + bullets * 0.08 + labels * 0.12)
     notes = [] if score >= 0.65 else ["Structura este greu de scanat pentru revizuire."]
     return score, notes
+
+
+def _json_object(text):
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    if "{" in text and "}" in text:
+        text = text[text.find("{") : text.rfind("}") + 1]
+    return json.loads(text)
+
+
+def _score_structured_output(output, case):
+    fmt = case.get("expected_output_format", "sections")
+    if fmt == "json_rule_candidate":
+        try:
+            data = _json_object(output)
+        except json.JSONDecodeError:
+            return 0.0, ["Rezultatul nu este JSON parsabil."]
+        required = {
+            "provision_id",
+            "source_id",
+            "actor",
+            "action",
+            "modality",
+            "condition",
+            "effect",
+            "confidence",
+            "not_legal_verdict",
+        }
+        missing = sorted(k for k in required if k not in data)
+        score = 1.0 - len(missing) / len(required)
+        notes = [] if score >= 0.8 else ["Campuri JSON lipsa: " + ", ".join(missing[:6])]
+        if data.get("not_legal_verdict") is not True:
+            score = min(score, 0.65)
+            notes.append("Lipseste marcajul explicit not_legal_verdict=true.")
+        return _clamp(score), notes
+    required_sections = case.get("required_sections", ["Surse", "Limitari"])
+    low = output.lower()
+    found = [section for section in required_sections if section.lower() in low]
+    score = 1.0 if not required_sections else len(found) / len(required_sections)
+    missing = [section for section in required_sections if section not in found]
+    notes = [] if score >= 0.75 else ["Sectiuni lipsa: " + ", ".join(missing[:6])]
+    return _clamp(score), notes
 
 
 def _score_romanian(output):
@@ -268,7 +333,10 @@ def _score_uncertainty(output, case):
     verdicts = sum(1 for word in VERDICT_WORDS if word in low)
     required = case.get("requires_uncertainty", True)
     if required:
-        score = min(1.0, markers * 0.35 + (0.3 if "nu este consultanta juridica" in low else 0))
+        score = min(
+            1.0,
+            markers * 0.65 + (0.3 if "nu este consultanta juridica" in low else 0),
+        )
         score -= min(0.45, verdicts * 0.2)
     else:
         score = 0.8 + min(0.2, markers * 0.05) - min(0.3, verdicts * 0.1)
@@ -290,6 +358,7 @@ def evaluate_case(case, candidate):
             output, case, source_text, source_tokens
         ),
         "useful_structure": _score_structure(output),
+        "structured_output_parseable": _score_structured_output(output, case),
         "romanian_drafting_quality": _score_romanian(output),
         "uncertainty": _score_uncertainty(output, case),
     }
@@ -313,6 +382,48 @@ def evaluate_case(case, candidate):
     }
 
 
+def _task_quality(result):
+    threshold = TASK_MINIMUMS.get(result["task_type"], 0.72)
+    critical = (
+        result["scores"]["citation_correctness"] >= 0.65
+        and result["scores"]["hallucinated_legal_claims"] >= 0.55
+        and result["scores"]["structured_output_parseable"] >= 0.70
+        and result["scores"]["uncertainty"] >= 0.55
+    )
+    return result["overall"] >= threshold and critical
+
+
+def _summaries(results):
+    providers = defaultdict(list)
+    tasks = defaultdict(list)
+    for result in results:
+        providers[(result["provider"], result["model"])].append(result)
+        tasks[(result["provider"], result["model"], result["task_type"])].append(result)
+    provider_summary = [
+        {
+            "provider": provider,
+            "model": model,
+            "cases": len(values),
+            "overall": _clamp(sum(v["overall"] for v in values) / len(values)),
+            "accepted_cases": sum(1 for v in values if _task_quality(v)),
+        }
+        for (provider, model), values in sorted(providers.items())
+    ]
+    task_summary = [
+        {
+            "provider": provider,
+            "model": model,
+            "task_type": task,
+            "cases": len(values),
+            "overall": _clamp(sum(v["overall"] for v in values) / len(values)),
+            "acceptable": all(_task_quality(v) for v in values),
+            "minimum_overall": TASK_MINIMUMS.get(task, 0.72),
+        }
+        for (provider, model, task), values in sorted(tasks.items())
+    ]
+    return provider_summary, task_summary
+
+
 def evaluate_run(cases_doc, run_doc):
     if (
         cases_doc.get("schema_version") != SCHEMA_VERSION
@@ -329,18 +440,7 @@ def evaluate_run(cases_doc, run_doc):
         if case_id not in cases:
             raise ValueError("Raspuns pentru caz necunoscut.")
         results.append(evaluate_case(cases[case_id], candidate))
-    providers = defaultdict(list)
-    for result in results:
-        providers[(result["provider"], result["model"])].append(result["overall"])
-    comparison = [
-        {
-            "provider": provider,
-            "model": model,
-            "cases": len(values),
-            "overall": _clamp(sum(values) / len(values)),
-        }
-        for (provider, model), values in sorted(providers.items())
-    ]
+    comparison, task_summary = _summaries(results)
     return {
         "schema_version": SCHEMA_VERSION,
         "engine_version": ENGINE_VERSION,
@@ -349,16 +449,56 @@ def evaluate_run(cases_doc, run_doc):
         "criteria": list(CRITERIA),
         "results": results,
         "comparison": comparison,
+        "task_summary": task_summary,
+        "acceptable_tasks": [row for row in task_summary if row["acceptable"] and row["cases"] > 0],
+        "live_provider_calls": False,
+        "server_calls_model": False,
+        "stores_api_key": False,
     }
+
+
+def write_byok_template(cases_doc, path):
+    cases = _case_by_id(cases_doc.get("cases"))
+    candidates = []
+    for case in cases.values():
+        candidates.append(
+            {
+                "case_id": case["id"],
+                "provider": "byok-provider-label",
+                "model": "user-selected-model",
+                "output": "Paste the provider output here. Do not paste API keys.",
+            }
+        )
+    template = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": "byok-live-manual-template",
+        "live_provider_calls": "user_performed_outside_evaluator",
+        "stores_api_key": False,
+        "candidates": candidates,
+    }
+    Path(path).write_text(
+        json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return template
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cases", required=True, help="Path to AI eval cases JSON.")
-    parser.add_argument("--run", required=True, help="Path to saved provider outputs JSON.")
+    parser.add_argument("--run", help="Path to saved provider outputs JSON.")
+    parser.add_argument(
+        "--write-byok-template",
+        help="Write a run JSON template for outputs produced by the user's own BYOK call.",
+    )
     parser.add_argument("--pretty", action="store_true", help="Pretty-print JSON output.")
     args = parser.parse_args(argv)
-    result = evaluate_run(_load_json(args.cases), _load_json(args.run))
+    cases = _load_json(args.cases)
+    if args.write_byok_template:
+        result = write_byok_template(cases, args.write_byok_template)
+    else:
+        if not args.run:
+            raise SystemExit("--run is required unless --write-byok-template is used.")
+        result = evaluate_run(cases, _load_json(args.run))
     print(json.dumps(result, ensure_ascii=False, indent=2 if args.pretty else None))
 
 
