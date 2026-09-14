@@ -103,6 +103,63 @@ def test_real_data_acceptance_runs_workbench_without_synthetic_bridge(monkeypatc
     assert calls[1][1] == {"dosar_id": "b" * 32, "filtre": {"act": "lege-98-2016"}}
 
 
+def test_real_data_acceptance_three_source_dossier_handoff(monkeypatch):
+    calls = []
+
+    def fake_request(_httpd, path="/api/date", body=None, *, timeout=1800):
+        calls.append((path, body, timeout))
+        if path == "/api/dosare/watchlist" and body:
+            return {"ok": True}
+        if path.startswith("/api/dosare/revizuiri?"):
+            return {
+                "manifest_surse_dosar": {
+                    "contract": "dossier-source-manifest-v1",
+                    "total": 3,
+                    "attention": 3,
+                    "surse": [
+                        {"tip": "project", "valoare": "PL-x 33/2025"},
+                        {
+                            "tip": "keyword",
+                            "valoare": "https://e-consultare.gov.ro/Consultare-publica/test",
+                        },
+                        {"tip": "celex", "valoare": "32014L0024"},
+                    ],
+                    "limitari": ["local"],
+                },
+                "markdown": "# Revizuire\n\n# Surse urmărite în dosar",
+            }
+        raise AssertionError((path, body))
+
+    monkeypatch.setattr(acceptance, "request", fake_request)
+
+    out = acceptance.pilot_three_source_dossier(
+        object(),
+        "b" * 32,
+        "run-1",
+        project_id="PL-x 33/2025",
+        consultation_url="https://e-consultare.gov.ro/Consultare-publica/test",
+        celex="32014L0024",
+    )
+
+    assert out["status"] == "passed"
+    assert out["contract"] == "dossier-source-manifest-v1"
+    assert out["total"] == 3
+    assert out["kinds"] == ["celex", "keyword", "project"]
+    assert out["markdown_includes_sources"] is True
+    assert [call[1]["tip"] for call in calls[:3]] == ["project", "keyword", "celex"]
+
+
+def source_handoff(**patch):
+    return {
+        "status": "passed",
+        "contract": "dossier-source-manifest-v1",
+        "total": 3,
+        "kinds": ["celex", "keyword", "project"],
+        "rollback_survived": True,
+        **patch,
+    }
+
+
 def test_real_data_acceptance_reports_when_no_act_can_be_selected(monkeypatch):
     def fail_request(*_args, **_kwargs):
         raise AssertionError
@@ -133,6 +190,7 @@ def test_real_data_acceptance_v2_marks_current_pilot_gaps_as_attention():
                 "neimportate": 8,
             },
         },
+        "source_handoff": source_handoff(),
     }
 
     out = acceptance.v2_readiness(result)
@@ -158,6 +216,7 @@ def test_real_data_acceptance_v2_blocks_when_release_gates_are_required():
             "finding_to_proposal": "not_exercised_no_authentic_gap_or_ccr_finding",
             "eu_availability": {"total": 1, "text_importat": 0, "neimportate": 1},
         },
+        "source_handoff": source_handoff(),
     }
 
     out = acceptance.v2_readiness(
@@ -193,6 +252,7 @@ def test_real_data_acceptance_v2_passes_when_real_evidence_is_available():
                 "neimportate": 0,
             },
         },
+        "source_handoff": source_handoff(),
     }
 
     out = acceptance.v2_readiness(
