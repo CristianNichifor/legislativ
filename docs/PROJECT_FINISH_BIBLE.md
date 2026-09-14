@@ -1,377 +1,363 @@
-# Legislativ 100% Finish Bible
+# Legislativ 100% Implementation Bible
 
-This is the execution plan from the current post-PR330 state to a complete app.
-It supersedes loose chat planning. Work that does not move one of these phases to
-acceptance is drift.
+Status date: 2026-09-14, after PR341.
 
-## 0. Product Finish Line
+This document is the implementation bible. Work that does not move one of the
+remaining gates below is drift. The target is a finished, usable Romanian
+legislative analysis app, not an endless sequence of infrastructure PRs.
 
-The product is complete when a Romanian legislative worker can use the app to:
+## 0. Definition Of 100%
 
-1. Find a law, draft/project, consultation or EU act from public sources.
-2. See its current lifecycle status and source freshness.
-3. Save it into a local/private dossier.
-4. Identify or manually record a legislative gap, loophole, contradiction, EU risk
-   or implementation issue.
-5. Attach exact supporting provisions, source URLs, hashes and uncertainty.
-6. Draft a proposed amendment or issue note from selected evidence.
-7. Use AI only as a bounded drafting assistant, with BYOK/local/MCP options.
-8. Convert reviewed findings into structured law-as-code candidates.
-9. Export a dossier with traceable evidence and limitations.
-10. Update public source data incrementally without destroying private work.
+The app is complete when a Romanian legislative worker can:
 
-The app must not claim legal truth automatically. It must show evidence, source
-state, confidence/uncertainty and review state.
+1. Start from a public source: law, draft/project, consultation, EU act or
+   Monitorul Oficial publication reference.
+2. See source freshness, current lifecycle stage, known gaps in coverage and
+   limitations.
+3. Save the item into a private local dossier.
+4. Record a legislative gap, loophole, contradiction, EU risk or implementation
+   issue with exact source URL, hash, quote and uncertainty.
+5. Use the matrix as the main workspace for "what is wrong or missing in this
+   legal area".
+6. Draft an issue note or amendment from selected evidence.
+7. Use AI only through explicit, bounded local/BYOK/MCP flows.
+8. Convert reviewed evidence into law-as-code rule candidates.
+9. Run deterministic checks against drafts/proposals and get candidate issues,
+   never automatic legal verdicts.
+10. Export/backup/restore dossiers with traceable evidence and limitations.
+11. Open the public GitHub Pages app or run the downloadable local app without
+   losing private work.
+12. Pass the final release gate with CI, browser tests, code scanning, public
+   smoke, local smoke, real-data acceptance, AI eval and MCP dry run.
 
-## 1. Non-Negotiable Execution Rules
+The app must never say "this is illegal" or "this is compliant" as truth. It can
+say: "candidate issue", "missing evidence", "source changed", "possible conflict",
+"requires human review".
 
-- No more tiny plumbing PRs unless they unblock a user-visible acceptance test.
-- No large rebuild/release work unless it directly serves a real-data workflow.
-- No hidden AI calls, no project-paid AI default, no committed user keys.
-- No automatic legal verdicts.
-- No source absence treated as legal absence unless coverage is explicitly measured
-  and declared complete for that scope.
-- Every phase must end with a user-facing acceptance flow, not only unit tests.
-- Every PR must say which phase and acceptance item it advances.
-- Prefer one large vertical slice over many internal horizontal slices.
+## 1. Current State
 
-## 2. Current Baseline After PR330
+Already implemented:
 
-Implemented foundations:
+- Local-first dossiers, private browser workspace, backup/restore foundations.
+- Manual notes for gaps, loopholes, contradictions, EU risks and constitutional
+  issues.
+- Proposal drafting, revision history and deterministic checks.
+- Real workflow entry for CDEP/Senate/e-consultare/ministry consultation/CELEX.
+- Source registry with explicit one-source sync, queue, review, retry, source
+  impact, changed-source detail and source-to-dossier-note actions.
+- Lifecycle tracker with canonical-ish states, filters, evidence coverage,
+  missing-stage actions, unknown-label review and source-backed timeline views.
+- EU/CELEX on-demand import with official Romanian preference and English
+  fallback.
+- Law matrix exists with drilldown and matrix-to-note context.
+- Law-as-code candidates/checks exist as foundations.
+- AI/BYOK/local/MCP concepts exist with bounded prompt/audit preview pieces.
+- Public/local release and real-data acceptance scaffolding exists.
 
-- Local-first dossiers and browser workspace persistence.
-- Manual notes for gaps, contradictions, loopholes and EU risks.
-- Structured proposals, revision history and deterministic checks.
-- Source registry, source sync concepts and changed-source impact.
-- Project tracker event storage and partial lifecycle UI.
-- Law matrix, drilldown and matrix-to-note context.
-- On-demand CELEX import with official Romanian preference and English fallback.
-- Source-backed EU issue-note backend and PR330 source-manager bridge.
-- AI draft boundaries, BYOK settings and MCP preview concepts.
-- Release rehearsal and real-data acceptance runner scaffolding.
+Still not complete:
 
-Known product gaps:
+- Source coverage is still incomplete for public drafting work.
+- Matrix is not yet the main daily workspace.
+- AI is not yet a single polished user flow.
+- MCP is not yet a real execution surface.
+- Law-as-code is not yet a complete authoring and execution workflow.
+- Public Pages/local install/update acceptance has not been closed end to end.
+- UX still exposes too many internal words and duplicate panels.
+- Final acceptance evidence is not assembled.
 
-- Real public source coverage is still too thin.
-- Lifecycle tracking is not complete end to end.
-- The matrix is not yet the main daily workspace.
-- AI/MCP exists as pieces, not a polished user flow.
-- Law-as-code exists as rule candidates/checks, not a complete authoring workflow.
-- Public GitHub Pages/local app/data update path still needs final acceptance.
-- UX still exposes too many internal concepts: rebuild, index, reload, pack.
+Overall progress estimate: 60-65% of a strict v1.
 
-## 3. Phase A: Real-Data Vertical Slice
+## 2. Non-Negotiable Rules
 
-Goal: prove one complete real workflow works before expanding features.
+- No automatic PR merging. The user reviews and merges.
+- All commits must be signed and verified.
+- Every PR must state the phase, user-facing value and acceptance gate it moves.
+- Prefer fewer, larger vertical PRs over tiny plumbing PRs.
+- Do not add multi-GB releases or broad data dumps unless the release gate
+  explicitly needs them.
+- No hidden paid AI. Default is no project-paid AI.
+- No committed user keys. BYOK stays local/private.
+- No source absence treated as legal absence unless coverage is explicitly
+  measured and shown.
+- No new backend/account infrastructure until public/local acceptance needs it.
+- If CI fails, fixing CI has priority over new work.
 
-User story:
+## 3. Remaining PR Sequence
 
-A user starts with a real public project or consultation URL, saves it into a
-dossier, sees lifecycle/source status, finds related laws/EU references, writes an
-issue note and exports the dossier.
+Target: 18 large PRs maximum from here to final release gate.
 
-Deliverables:
+### PR342: Source Coverage Control Center
 
-- One primary workflow screen: "Urmărește proiect / consultare".
-- Accepts:
-  - CDEP project URL or PL-x id;
-  - Senate project URL or B id;
-  - e-consultare URL;
-  - ministry consultation URL when supported;
-  - CELEX id or EUR-Lex/Cellar URL.
-- Shows:
-  - title;
+Phase: C.
+
+Goal: make source coverage understandable and actionable from one screen.
+
+Implement:
+
+- A "Sources" workspace summary grouped by family:
+  - Romanian legislation corpus;
+  - CDEP;
+  - Senate;
+  - e-consultare;
+  - ministry consultations;
+  - CCR;
+  - EU CELEX/Cellar;
+  - Monitorul Oficial Part I;
+  - Monitorul Oficial Local;
+  - Monitorul Oficial Parts II-VII metadata-only.
+- For each family show:
+  - supported/not supported;
+  - registry count;
+  - fetched count;
+  - changed count;
+  - failed/unavailable/rate-limited count;
+  - last checked;
+  - next useful action.
+- User actions:
+  - add one source;
+  - sync selected source;
+  - retry failures;
+  - create note from missing/failed source;
+  - open parser failure details.
+- Replace user-facing "rebuild/index/reload/pack" wording in this area with:
+  - "update source data";
+  - "search data";
+  - "refresh view";
+  - "optional source data".
+
+Acceptance:
+
+- User can understand what source coverage exists without reading docs.
+- User can retry a failed source and create a note if it still fails.
+- Public data update boundaries are visible.
+
+### PR343: e-Consultare And Ministry Tracker Completion
+
+Phase: C.
+
+Goal: consultations become first-class trackable sources.
+
+Implement:
+
+- Stronger normalization for e-consultare and ministry consultation metadata.
+- Deadline extraction and closed/open/unknown status normalization.
+- Attachment/document metadata summary.
+- Tracker events for:
+  - consultation announced;
+  - consultation open;
+  - deadline changed;
+  - consultation closed;
+  - document added;
+  - source unavailable/failed.
+- Review queue rows for missing deadline/status/authority.
+
+Acceptance:
+
+- One real e-consultare URL can be added, synced, watched, noted and exported.
+- One ministry consultation URL can be metadata-tracked even if parser coverage is
+  partial.
+
+### PR344: CDEP/Senate Documents, Votes, Reports And Avize
+
+Phase: C.
+
+Goal: parliamentary source coverage supports actual drafting work.
+
+Implement:
+
+- Extract and store project document links where available.
+- Normalize committee/report/vote/aviz events into tracker events.
+- Preserve raw labels and source URLs.
+- Show "documents/reports/votes/avize" counts in lifecycle and source detail.
+- Add source failure rows when a project page references unavailable documents.
+
+Acceptance:
+
+- One CDEP project has documents + committee/report/vote evidence visible.
+- One Senate project has documents/stage evidence visible.
+- User can open evidence from lifecycle and create a note/proposal.
+
+### PR345: Monitorul Oficial Metadata-First Tracking
+
+Phase: C.
+
+Goal: final publication status exists without huge data ingestion.
+
+Implement:
+
+- Monitorul Oficial Part I publication reference model.
+- Monitorul Oficial Local metadata registry.
+- Parts II-VII metadata-only policy in code and UI.
+- Link project/law publication references to lifecycle `published_monitor`.
+- On-demand document placeholder state for unsupported/paid/manual documents.
+
+Acceptance:
+
+- User sees publication reference status for a law/project when known.
+- User sees honest unavailable/manual states when Monitor source text is not
+  locally available.
+- No large bulk Monitor ingestion is introduced.
+
+### PR346: Matrix Workspace V1
+
+Phase: D.
+
+Goal: matrix becomes the main "what is wrong/missing" workspace.
+
+Implement:
+
+- Matrix route/workspace with filters:
+  - domain/legal area;
+  - legal hierarchy;
+  - issuer;
   - source family;
-  - latest known stage;
-  - deadline when present;
-  - public source URL;
-  - last fetched time;
-  - changed/unchanged/failed state;
-  - missing data warnings.
-- Actions:
-  - add to dossier;
-  - watch for changes;
+  - lifecycle state;
+  - review state;
+  - source quality;
+  - issue type.
+- Rows from:
+  - manual notes;
+  - deterministic gap candidates;
+  - contradiction candidates;
+  - EU risks;
+  - CCR unrepaired candidates;
+  - pending project overlaps;
+  - missing/failed/changed source states;
+  - rule candidates.
+- Actions per row:
+  - open evidence;
+  - open source;
   - create note;
-  - import related CELEX;
-  - export dossier.
+  - create proposal;
+  - create law-as-code candidate;
+  - prepare AI draft from selected evidence.
 
 Acceptance:
 
-- Run one real CDEP project through the flow.
-- Run one real e-consultare consultation through the flow.
-- Run one real CELEX through the flow.
-- Create one dossier containing all three.
-- Export includes all source URLs, hashes, statuses and limitations.
-- Private dossier survives reload, backup and rollback.
-
-PR shape:
-
-- One large PR named `real-data-workflow-v1`.
-- It may touch UI, tracker, source registry and acceptance tests.
-- It must not add broad crawling or large data packs.
-
-## 4. Phase B: Lifecycle Tracker Completion
-
-Goal: make legislative status tracking a core feature, not a log table.
-
-Canonical lifecycle states:
-
-- `consultation_announced`
-- `consultation_open`
-- `consultation_closed`
-- `ministry_drafting`
-- `government_agenda`
-- `government_adopted`
-- `sent_to_parliament`
-- `registered_chamber`
-- `registered_senate`
-- `committee_assigned`
-- `committee_opinion_requested`
-- `committee_opinion_received`
-- `committee_report_issued`
-- `plenary_scheduled`
-- `adopted_first_chamber`
-- `adopted_decision_chamber`
-- `rejected`
-- `promulgation_sent`
-- `promulgated`
-- `published_monitor`
-- `withdrawn`
-- `archived`
-- `unknown`
-
-Source families to map:
-
-- CDEP project pages.
-- Senate project pages.
-- e-consultare pages.
-- Ministry consultation pages.
-- Government decision/project pages where available.
-- Monitorul Oficial publication references.
-
-Deliverables:
-
-- Unified timeline per project/consultation.
-- Source-backed event snapshots.
-- Stage normalization with original raw label preserved.
-- Committee, vote, aviz and report extraction where available.
-- Deadline extraction for consultations.
-- Watchlist events for stage/deadline/source changes.
-- Review queue for unknown/new lifecycle labels.
-
-Acceptance:
-
-- A project can be followed from consultation to Parliament when public links exist.
-- Timeline never overwrites prior state; it appends events.
-- Unknown labels are visible and reviewable.
-- User can filter by "needs attention", "deadline soon", "committee stage",
-  "vote/adoption", "published".
-
-PR shape:
-
-- One PR for lifecycle model + UI.
-- One PR for source-family adapters if the diff becomes too large.
-- No more than two PRs for this phase.
-
-## 5. Phase C: Source Coverage That Actually Helps Drafting
-
-Goal: ingest the sources an MP/adviser needs to write law, without trying to store
-the internet.
-
-Must-have sources:
-
-- Legislatie.just.ro / Romanian law corpus.
-- CDEP projects, documents, stages, votes, reports.
-- Senate projects, documents, stages, votes, reports.
-- e-consultare.gov.ro consultations.
-- Ministry consultation pages.
-- CCR decisions.
-- EU CELEX / Cellar / EUR-Lex metadata and text.
-- Monitorul Oficial publication references for laws and final publication status.
-
-Selective/metadata-first sources:
-
-- Monitorul Oficial Local: metadata and URL registry first; documents only on
-  demand or by opted-in local packs.
-- Monitorul Oficial Parts II-VII: do not full-ingest by default. Use metadata,
-  references and user-requested documents first.
-- Local authority acts: registry/watchlist first, domain packs later.
-
-Storage policy:
-
-- Base public dataset stays small.
-- Source packs are optional by family/domain.
-- Documents are fetched on demand unless they are essential for the accepted v1
-  workflow.
-- R2 stores public source packs and manifests, not private dossiers or user keys.
-- Private dossiers remain browser/local runtime data.
-
-Deliverables:
-
-- Source registry UI that says "add source", "sync selected", "watch", "open
-  source", "create note".
-- No user-facing "rebuild/index/reload" wording except in developer diagnostics.
-- Source status vocabulary:
-  - discovered;
-  - queued;
-  - fetched;
-  - unchanged;
-  - changed;
-  - failed;
-  - unavailable;
-  - rate_limited;
-  - needs_review.
-- Parser failure dashboard grouped by source family.
-
-Acceptance:
-
-- User can add one URL/id and sync only that source.
-- User can see why a source failed and retry it.
-- User can create a note from a failed/missing source state.
-- Public data update does not touch private user data.
-
-PR shape:
-
-- One PR for source registry UX simplification.
-- One PR for e-consultare/ministry source completion.
-- One PR for Monitorul Oficial policy + metadata-first tracker.
-
-## 6. Phase D: Law Matrix As Main Workspace
-
-Goal: make the matrix the central "what is wrong or missing in this legal area"
-screen.
-
-Matrix dimensions:
-
-- Domain/legal area.
-- Legal hierarchy:
-  - Constitution;
-  - organic law;
-  - ordinary law;
-  - emergency ordinance;
-  - ordinance;
-  - government decision;
-  - ministerial order;
-  - local act;
-  - EU regulation;
-  - EU directive;
-  - EU decision.
-- Issuer.
-- Institution/person affected.
-- Obligation/prohibition/permission/procedure/sanction.
-- Applicability date.
-- Territory.
-- Source quality.
-- Lifecycle state.
-- Review state.
-
-Rows must include:
-
-- Manual issue notes.
-- Deterministic gap candidates.
-- Contradiction candidates.
-- CCR unrepaired candidates.
-- Pending project overlaps.
-- EU risks.
-- Missing source rows.
-- Changed source rows.
-
-Actions from each row:
-
-- Open evidence.
-- Open source.
-- Add/watch source.
-- Create note.
-- Create proposal.
-- Run AI draft from selected evidence.
-- Create law-as-code candidate.
-
-Acceptance:
-
-- A user can start from domain and end with a saved note/proposal.
-- Every matrix warning has supporting evidence or explicit missing-source state.
+- User starts from a legal domain and ends with a saved note/proposal.
+- Every matrix warning has evidence or explicit missing-source state.
 - Matrix does not present unsupported legal conclusions.
 
-PR shape:
+### PR347: Matrix Evidence Drilldown And Navigation
 
-- One large matrix workspace PR.
-- One follow-up only if browser/UX tests require it.
+Phase: D.
 
-## 7. Phase E: AI Drafting, BYOK and Local AI
+Goal: matrix rows become navigable, not just summaries.
 
-Goal: make AI useful, cheap for the maintainer and safe for the user.
+Implement:
 
-AI policy:
-
-- Default: no paid app-owned AI.
-- Primary online mode: BYOK.
-- Optional local AI: browser/local runtime where hardware supports it.
-- Optional MCP AI: user-approved external MCP server.
-- Every request has preview, cost/token estimate where possible and explicit send.
-- Keys are not committed, exported in dossiers or uploaded to public source data.
-
-Supported tasks:
-
-- Explain selected issue.
-- Draft issue note.
-- Draft amendment text.
-- Draft reviewer checklist.
-- Summarize source changes.
-- Compare two selected quoted provisions.
-- Extract proposed rule candidate from selected text.
-
-Hard blockers:
-
-- AI cannot invent sources.
-- AI cannot silently use unselected source text.
-- AI cannot mark a finding reviewed/accepted.
-- AI output must be stored as draft/unreviewed.
-- Missing evidence must produce refusal/uncertainty, not confident prose.
-
-Deliverables:
-
-- Unified AI panel in dossier and matrix.
-- Provider setup:
-  - OpenAI-compatible endpoint;
-  - Anthropic-compatible endpoint;
-  - local model option;
-  - MCP option.
-- Prompt manifest for every request.
-- Result import with audit trail.
-- AI evaluation harness wired to fixtures and optional BYOK live eval.
+- Evidence drawer for selected row.
+- Source hash/URL/quote/uncertainty displayed together.
+- "Related items" links:
+  - laws;
+  - projects;
+  - CELEX;
+  - consultations;
+  - Monitor publication references;
+  - existing notes/proposals/rules.
+- Browser tests for top matrix routes.
 
 Acceptance:
 
-- User can complete the full app workflow without AI.
-- User can use BYOK AI to draft from selected evidence.
-- User can inspect exactly what text was sent.
-- Evaluation report identifies which models are acceptable for which task.
+- User can move from matrix warning to exact supporting provisions in two clicks.
+- Missing-source rows show what is missing and how to collect it.
 
-PR shape:
+### PR348: Unified AI Drafting Panel
 
-- One PR for unified AI UX.
-- One PR for provider execution hardening.
-- One PR for evaluation/reporting.
+Phase: E.
 
-## 8. Phase F: MCP Product Surface
+Goal: one AI UX, not scattered panels.
 
-Goal: MCP becomes a real integration surface, not just a payload preview.
+Implement:
 
-Use cases:
+- AI panel usable from dossier, note, proposal and matrix row.
+- Tasks:
+  - explain selected issue;
+  - draft issue note;
+  - draft amendment;
+  - reviewer checklist;
+  - summarize source change;
+  - compare two quoted provisions;
+  - extract rule candidate.
+- Selected-evidence-only payload builder.
+- Prompt manifest preview:
+  - task;
+  - provider;
+  - selected evidence ids;
+  - source URLs;
+  - hashes;
+  - token estimate;
+  - limitations.
+- Explicit "run" action.
 
-- User AI subscription through MCP.
-- Export dossier to user documents/storage.
-- Create calendar/task reminders for consultation deadlines.
-- Import source files from a user-selected folder.
-- Optional GitHub issue/PR creation from reviewed findings.
+Acceptance:
 
-Deliverables:
+- User can complete the app without AI.
+- User can inspect exactly what would be sent before any AI call.
+- Missing evidence blocks confident AI prose.
+
+### PR349: BYOK And Local AI Execution Hardening
+
+Phase: E.
+
+Goal: make online/local AI usable without maintainer cost.
+
+Implement:
+
+- OpenAI-compatible BYOK settings.
+- Anthropic-compatible BYOK settings.
+- Local model option where supported.
+- Secure local key handling; no export, no public upload.
+- Request timeout/error/retry states.
+- Result imported as draft/unreviewed with audit metadata.
+
+Acceptance:
+
+- User can use their own key for one drafting task.
+- Failed AI calls do not create accepted findings.
+- Export does not include API keys.
+
+### PR350: AI Evaluation Harness
+
+Phase: E.
+
+Goal: decide what AI is reliable for, with evidence.
+
+Implement:
+
+- Fixture-based evals for:
+  - issue explanation;
+  - amendment drafting;
+  - source-change summary;
+  - EU risk note;
+  - rule extraction.
+- Checks:
+  - cites selected evidence;
+  - refuses missing evidence;
+  - no legal verdict;
+  - no invented source;
+  - structured output parseable.
+- Optional BYOK live eval command.
+- JSON report and UI summary.
+
+Acceptance:
+
+- Evaluation report identifies acceptable tasks/providers.
+- Local/default mode remains no paid AI.
+
+### PR351: MCP Runtime Surface
+
+Phase: F.
+
+Goal: MCP becomes real product surface.
+
+Implement:
 
 - MCP server list/test connection UI.
 - Tool capability discovery.
-- Data preview before execution.
-- Explicit approval per external call.
-- Audit log:
+- Payload preview before execution.
+- Explicit approval state for each external call.
+- Audit log schema:
   - server;
   - tool;
   - timestamp;
@@ -379,288 +365,273 @@ Deliverables:
   - selected evidence ids;
   - result hash;
   - user action.
-- Result import into dossier.
 - Failure/retry states.
 
 Acceptance:
 
-- User can run one AI MCP workflow from selected dossier evidence.
-- User can run one export/reminder workflow.
 - App works when MCP is unavailable.
-- No hidden external data transfer exists.
+- User can see exactly what would be sent to an MCP tool.
+- No hidden external transfer.
 
-PR shape:
+### PR352: MCP Workflows
 
-- One MCP UX/runtime PR.
-- One MCP workflow PR.
+Phase: F.
 
-## 9. Phase G: Law-As-Code V1
+Goal: useful MCP workflows, not only settings.
 
-Goal: convert reviewed legal text into structured, testable rules without claiming
-the law is fully executable.
+Implement:
 
-Rule candidate fields:
+- AI through MCP from selected dossier/matrix evidence.
+- Export dossier to user-selected document/storage MCP.
+- Consultation deadline reminder workflow.
+- Import source files from user-selected folder.
+- Result import into dossier with audit record.
 
-- Source provision identity.
-- Source hash.
-- Actor.
-- Action.
-- Modality:
-  - obligation;
-  - prohibition;
-  - permission;
-  - condition;
-  - exception;
-  - deadline;
-  - sanction;
-  - competence;
-  - procedure.
-- Trigger/condition.
-- Effect.
-- Deadline/date rule.
-- Exceptions.
-- Applicability scope.
-- Confidence/source extraction method.
-- Review status.
+Acceptance:
 
-Rule workflow:
+- One AI MCP workflow works.
+- One export/reminder workflow works.
+- MCP result is saved as draft/unreviewed.
 
-1. Select provision/evidence.
-2. Extract candidate deterministically or with AI draft.
-3. Human edits structured rule.
-4. Save as unreviewed/reviewed.
-5. Run deterministic checks against draft/proposal.
-6. Report candidate issue, not verdict.
+### PR353: Law-As-Code Authoring UX
 
-First supported checks:
+Phase: G.
+
+Goal: reviewed evidence can become structured rules.
+
+Implement:
+
+- Rule candidate editor with:
+  - provision identity;
+  - source URL/hash;
+  - actor;
+  - action;
+  - modality;
+  - trigger/condition;
+  - effect;
+  - deadline/date rule;
+  - exceptions;
+  - applicability scope;
+  - confidence/extraction method;
+  - review status.
+- Start from:
+  - provision;
+  - manual note;
+  - matrix row;
+  - AI/MCP draft.
+
+Acceptance:
+
+- User can create and edit a rule candidate from one provision or note.
+- Rule candidate survives backup/restore/export.
+
+### PR354: Law-As-Code Deterministic Checks
+
+Phase: G.
+
+Goal: rules produce candidate issues against drafts/proposals.
+
+Implement first checks:
 
 - Delegated norm required but missing.
 - Deadline required but no implementing act found.
 - Draft creates obligation with no actor.
-- Draft creates procedure with no deadline/competent body.
+- Draft creates procedure with no deadline or competent body.
 - Draft amends repealed/changed provision.
 - Draft references missing/ambiguous act.
 - Draft potentially conflicts with selected EU article.
 
 Acceptance:
 
-- A user can create a rule candidate from one provision.
-- A user can run it against one draft.
+- User runs rules against one draft/proposal.
 - Output cites exact source and explains uncertainty.
-- Reviewed rule candidates survive backup/restore/export.
+- Output says candidate issue, not verdict.
 
-PR shape:
+### PR355: Public Pages And Local App Acceptance
 
-- One PR for rule authoring UX.
-- One PR for deterministic execution/reporting.
-- One PR for AI/MCP rule extraction.
+Phase: H.
 
-## 10. Phase H: Public App, Local App and Data Updates
+Goal: prove the app ships and preserves private work.
 
-Goal: make the app actually shippable from GitHub Pages and runnable locally.
-
-Supported modes:
-
-- GitHub Pages public app:
-  - small base dataset;
-  - browser-local private workspace;
-  - optional source packs;
-  - no server-only features unless clearly marked unavailable.
-- Downloadable local app:
-  - easy start command;
-  - local SQLite data;
-  - source sync;
-  - backup/restore;
-  - optional local AI/MCP.
-
-Deliverables:
+Implement:
 
 - Public deployment verification script.
 - Local install smoke script.
 - Data manifest/channel verification.
-- Optional source pack UI.
-- Update button wording:
-  - "Check for source updates";
-  - "Download selected source pack";
-  - "Activate update";
-  - "Rollback source update".
+- Optional source data UI.
+- Public mode unavailable states for server-only actions.
 - Private data boundary tests.
 
 Acceptance:
 
 - Fresh user can open GitHub Pages and create a private dossier.
-- Fresh user can download and run locally.
-- Updating public data does not overwrite private work.
+- Fresh user can download/run locally.
+- Source update does not overwrite private work.
 - Rollback preserves private dossiers.
-- User sees unavailable states instead of broken buttons.
 
-PR shape:
+### PR356: First-Run UX And Navigation Cleanup
 
-- One public/local acceptance PR.
-- One UX wording cleanup PR if needed.
+Phase: I.
 
-## 11. Phase I: Final UX Cleanup
+Goal: remove the feeling of internal tools.
 
-Goal: remove the feeling of a pile of internal tools.
+Implement navigation:
 
-Navigation should become:
+- Start.
+- Search.
+- Track.
+- Matrix.
+- Dossiers.
+- Sources.
+- AI/MCP.
+- Settings.
 
-- Start
-- Search
-- Track
-- Matrix
-- Dossiers
-- Sources
-- AI/MCP
-- Settings
-
-Language cleanup:
-
-- Replace "rebuild" with "update source data" unless developer-only.
-- Replace "index" with "search data" unless developer-only.
-- Replace "reload" with "refresh view" or remove it.
-- Replace "pack" with "optional source data" in user-facing text.
-- Use "source state", "last checked", "needs attention", "watch" consistently.
-
-Deliverables:
+Implement UX states:
 
 - First-run path.
 - Empty states.
 - Error states.
 - Loading states.
 - Disabled states with reasons.
-- Mobile pass.
-- Keyboard pass.
+- Mobile/keyboard pass.
 - Romanian copy pass.
 
 Acceptance:
 
-- User can understand what to do without reading docs.
+- User can understand what to do without docs.
 - Top five workflows are reachable in two clicks or less.
 - No duplicate panels for the same job.
-- Browser tests cover the main routes.
 
-PR shape:
+### PR357: Real-Data End-To-End Acceptance
 
-- One UX consolidation PR.
+Phase: J.
 
-## 12. Phase J: Final Reliability, Security and Release Gate
+Goal: prove complete real workflow.
 
-Goal: final confidence before calling the app complete.
+Implement/run:
 
-Required checks:
-
-- Full Python test suite.
-- Browser tests.
-- Package checks on Linux/macOS/Windows.
-- Code scanning/security alerts clean or explicitly accepted.
-- Signed commits.
-- Backup/restore drill.
-- Public Pages smoke.
-- Local download smoke.
-- Real-data acceptance run.
-- AI eval run if AI is enabled.
-- MCP dry run if MCP is enabled.
-
-Release evidence:
-
-- `docs/FINAL_ACCEPTANCE.md`
-- latest source coverage JSON
-- latest real-data workflow JSON
-- latest AI evaluation JSON
-- latest MCP audit fixture
-- latest public/local install verification
-- known limitations
+- One real CDEP project.
+- One real Senate project.
+- One real e-consultare consultation.
+- One real ministry consultation.
+- One CELEX/EU act.
+- One Monitor publication reference where available.
+- One dossier containing all of them.
+- One note, one proposal, one matrix issue, one rule candidate.
+- Export, backup, restore, rollback.
 
 Acceptance:
 
-- No failing required CI checks.
+- JSON evidence artifact committed under docs/artifacts or generated by test.
+- `docs/FINAL_ACCEPTANCE.md` links the run and limitations.
+
+### PR358: Security, Code Scanning And Privacy Gate
+
+Phase: J.
+
+Goal: no untriaged security/privacy risk remains.
+
+Implement:
+
+- Triage/fix code scanning alerts.
+- Check key handling and dossier exports.
+- Confirm no private data upload in normal workflows.
+- Confirm no hidden AI/MCP call.
+- Add privacy/security release checklist.
+
+Acceptance:
+
+- Required code scanning is green or documented accepted risk.
+- API keys are never exported or uploaded.
+- Private dossiers stay local.
+
+### PR359: Final Release Gate
+
+Phase: J.
+
+Goal: call v1 complete.
+
+Required evidence:
+
+- Full Python test suite green.
+- Browser tests green.
+- Package checks on Linux/macOS/Windows green.
+- Code scanning clean or explicitly accepted.
+- Public Pages smoke green.
+- Local download smoke green.
+- Real-data acceptance green.
+- AI eval report present.
+- MCP dry run present.
+- `docs/FINAL_ACCEPTANCE.md` complete.
+
+Acceptance:
+
+- No required failing CI checks.
 - No untriaged code scanning alerts.
 - No hidden paid external calls.
-- No private data upload in normal workflows.
+- No private data upload.
 - User-facing limitations are honest and visible.
 
-PR shape:
-
-- One final release gate PR.
-
-## 13. Execution Order From Here
-
-Do this order. Do not reorder unless a blocker is real.
-
-1. Phase A: real-data vertical workflow.
-2. Phase B: lifecycle tracker completion.
-3. Phase C: source coverage for e-consultare, ministries, CDEP/Senate and
-   Monitorul Oficial metadata-first.
-4. Phase D: matrix as main workspace.
-5. Phase E: AI drafting/BYOK/local workflow.
-6. Phase F: MCP execution workflow.
-7. Phase G: law-as-code rule candidate authoring and execution.
-8. Phase H: public/local app and data updates.
-9. Phase I: UX cleanup.
-10. Phase J: final release gate.
-
-## 14. Parallelization Rules
+## 4. Parallelization Rules
 
 Can run in parallel:
 
-- Lifecycle adapters and source registry UX, if they do not touch the same files.
-- AI provider UX and AI evaluation harness.
-- MCP audit/runtime and law-as-code rule schema.
-- Public/local smoke scripts and UX wording cleanup.
+- PR342 and PR343 only if they do not edit the same UI section.
+- PR343 and PR344 parser work if adapters stay in separate modules.
+- PR348 and PR350 after the AI prompt manifest contract is stable.
+- PR351 and PR353 after shared audit/rule references are stable.
+- PR355 and PR356 if one owns scripts/tests and the other owns navigation copy.
 
 Must not run in parallel:
 
-- Two PRs editing the same major section of `app/index.html`.
-- Schema migrations that affect the same database.
-- Source registry state vocabulary changes and tracker event vocabulary changes
-  unless one PR owns the shared contract.
-- Release manifest changes while data pack generation is changing.
+- Two PRs editing the main `app/index.html` source registry section.
+- Two PRs changing source-registry state vocabulary.
+- Two PRs changing tracker event vocabulary.
+- Data manifest/release work while source-pack generation changes.
+- Final acceptance while any feature phase is still unstable.
 
-## 15. Stop Conditions
+## 5. Merge Order
 
-Stop and ask before continuing if:
+Strict order unless a real blocker appears:
 
-- A change would require storing multi-GB data by default.
-- A change would require paid app-owned AI.
-- A change would upload private dossiers or keys.
-- A phase needs a legal reviewer to claim legal correctness.
-- CI failures are unrelated to the phase and would require broad refactoring.
+1. PR342 source coverage control center.
+2. PR343 e-consultare/ministry tracker completion.
+3. PR344 CDEP/Senate documents, votes, reports and avize.
+4. PR345 Monitorul Oficial metadata-first tracking.
+5. PR346 matrix workspace v1.
+6. PR347 matrix evidence drilldown.
+7. PR348 unified AI drafting panel.
+8. PR349 BYOK/local AI execution hardening.
+9. PR350 AI evaluation harness.
+10. PR351 MCP runtime surface.
+11. PR352 MCP workflows.
+12. PR353 law-as-code authoring UX.
+13. PR354 law-as-code deterministic checks.
+14. PR355 public/local acceptance.
+15. PR356 first-run UX/navigation cleanup.
+16. PR357 real-data end-to-end acceptance.
+17. PR358 security/code scanning/privacy gate.
+18. PR359 final release gate.
 
-Do not stop for:
+## 6. Stop Conditions
 
-- Normal test failures caused by the current change.
-- Missing polish that is inside the phase acceptance.
-- Needing to add focused tests.
+Stop new feature work and fix immediately if:
 
-## 16. PR Size Standard
+- CI fails.
+- Browser baseline fails on mobile.
+- A change risks private dossier loss.
+- A flow makes a legal conclusion without evidence.
+- A flow sends AI/MCP data without explicit user action.
+- Source update touches private data.
+- The user reports the work is drifting again.
 
-A good PR now should usually be one vertical slice:
+## 7. Next Action
 
-- 300-1200 changed lines is acceptable.
-- It may touch backend, UI, tests and docs together.
-- It must have one user-facing workflow acceptance.
-- It must not be only renaming, only copy changes or only plumbing unless it fixes
-  a blocker in the current phase.
+The next implementation PR after this docs PR is PR342:
 
-## 17. What 100% Does Not Mean
+`phase-c-source-coverage-control-center`
 
-100% does not mean:
-
-- every EU act downloaded locally;
-- all Monitorul Oficial parts fully ingested by default;
-- AI gives legal advice;
-- the app certifies compliance;
-- the maintainer pays for all users' AI calls;
-- every Romanian legal domain is perfect on day one.
-
-100% means:
-
-- the app has complete workflows for the agreed scope;
-- sources are traceable;
-- gaps are explicit;
-- missing data is visible;
-- AI/MCP are controlled and user-owned;
-- law-as-code candidates are reviewable and testable;
-- public and local usage are reliable.
-
+It should be a user-facing source coverage control center. It should not start
+Monitor bulk ingestion, AI, MCP or law-as-code work. Its purpose is to make the
+existing source registry and coverage useful to a real user before expanding more
+features.
