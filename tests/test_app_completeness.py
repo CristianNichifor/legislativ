@@ -78,6 +78,16 @@ def test_app_completeness_require_complete_cli_exits_nonzero():
     assert out["status"] == "blocked"
     assert out["blocking_capabilities"]
     assert out["completion_claim_allowed"] is False
+    assert out["source_status"]["missing_required"] == 0
+    assert out["source_status"]["unsynced_required"] == 12
+
+
+def test_app_completeness_default_report_bootstraps_official_source_anchors():
+    out = app_completeness.report()
+
+    assert out["source_status"]["missing_required"] == 0
+    assert out["source_status"]["unsynced_required"] == 12
+    assert any(blocker["kind"] == "source_unsynced" for blocker in out["source_status"]["blockers"])
 
 
 def test_app_completeness_http_endpoint(state):

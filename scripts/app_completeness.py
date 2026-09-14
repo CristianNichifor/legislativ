@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts import acceptance_dashboard, final_v1_acceptance
+from scripts import acceptance_dashboard, final_v1_acceptance, source_registry
 
 CONTRACT = "app-completeness-gate-v1"
 REQUIRED_CAPABILITIES = (
@@ -90,6 +90,7 @@ def _source_summary(stare) -> dict:
             eu=root / "eu.db",
             date_dir=None,
         )
+        source_registry.bootstrap(stare)
     try:
         return acceptance_dashboard.raport(stare)
     except Exception as exc:  # pragma: no cover - defensive status reporting
