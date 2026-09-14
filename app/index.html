@@ -1417,6 +1417,13 @@
             <button type="button" class="ghost mini" id="start-real-project">Start proiect real</button>
             <button type="button" class="ghost mini" data-workflow-open-export>Export</button>
           </div>
+          <form id="real-workflow-start" class="dossier-actions">
+            <label>Sursă publică reală<input name="identifier" maxlength="1000" required placeholder="PL-x 33/2025, CELEX:32014L0024, URL CDEP/Senat/e-consultare/EUR-Lex"></label>
+            <label>Tip<select name="family"><option value="auto">detectează automat</option><option value="camera">Camera Deputaților</option><option value="senat">Senat</option><option value="consultare_econsultare">e-consultare</option><option value="ue_cellar">Drept UE · CELEX</option><option value="consultare_minister">consultare minister</option></select></label>
+            <label>Etichetă<input name="label" maxlength="300" placeholder="Titlu scurt opțional"></label>
+            <button type="submit" class="ghost mini">Pornește fluxul</button>
+            <p class="hint" id="real-workflow-status" role="status"></p>
+          </form>
         </section>
         <section class="source-inventory" aria-labelledby="source-title">
           <div class="source-heading"><h3 id="source-title">Acoperirea surselor</h3><div class="source-actions">
@@ -1953,6 +1960,79 @@ PANES.forEach((p,index)=>{
   };
 });
 $(".app").dataset.pane = "lint";   // initial tab
+function realWorkflowUrl(value){
+  try{return new URL(String(value||'').trim());}catch{return null;}
+}
+function realWorkflowProjectId(value){
+  const text=String(value||'').trim();
+  let m=text.match(/\bPL[-\s]*x\s*\.?\s*(\d+)\s*\/\s*(\d{4})\b/i);
+  if(m)return `PL-x ${m[1]}/${m[2]}`;
+  m=text.match(/\bB\s*\.?\s*(\d+)\s*\/\s*(\d{4})\b/i);
+  if(m)return `B ${m[1]}/${m[2]}`;
+  return '';
+}
+function realWorkflowCelex(value){
+  const text=String(value||'').trim().toUpperCase();
+  let m=text.match(/CELEX[:=]([0-9A-Z()._-]{5,50})/);
+  if(m)return m[1];
+  m=text.match(/\b[0-9][0-9A-Z()._-]{4,49}\b/);
+  return m?m[0]:'';
+}
+function realWorkflowGuess(value,family='auto'){
+  const raw=String(value||'').trim(), url=realWorkflowUrl(raw), host=(url?.hostname||'').replace(/^www\./,'').toLowerCase();
+  const projectId=realWorkflowProjectId(raw), celex=realWorkflowCelex(raw);
+  let detected=family&&family!=='auto'?family:'';
+  if(!detected){
+    if(celex&&(host.includes('eur-lex.europa.eu')||host.includes('op.europa.eu')||/^CELEX:/i.test(raw)||!url))detected='ue_cellar';
+    else if(host.includes('e-consultare.gov.ro'))detected='consultare_econsultare';
+    else if(host.includes('cdep.ro')||/^PL[-\s]*x/i.test(raw))detected='camera';
+    else if(host.includes('senat.ro')||/^B\s*\.?\s*\d+/i.test(raw))detected='senat';
+    else detected='consultare_minister';
+  }
+  const identifier=detected==='ue_cellar'&&celex?celex:projectId||raw;
+  return {family:detected,identifier,url:url?raw:'',project_id:projectId||identifier,celex};
+}
+async function startRealWorkflow(form){
+  const status=$('#real-workflow-status'), fields=Object.fromEntries(new FormData(form));
+  const guessed=realWorkflowGuess(fields.identifier,fields.family);
+  if(!guessed.identifier){status.textContent='Introdu un identificator sau URL public.';return;}
+  status.textContent='Înregistrez sursa publică în fluxul real…';
+  selectTab('matrice');
+  $('#source-registry').open=true;
+  try{
+    const source=await sourceRegistryApi({action:'discover',family:guessed.family,identifier:guessed.identifier,url:guessed.url,label:fields.label||guessed.identifier});
+    let synced=source;
+    if(source.sync_status?.can_sync){
+      status.textContent='Sincronizez numai sursa selectată…';
+      synced=await sourceRegistryApi({action:'sync',id:source.id});
+    }
+    await loadSourceRegistry(0,sourceRegistryOutcome(synced,'Flux real'));
+    await inspectSourceRegistryRow(synced.id||source.id);
+    if(guessed.family==='ue_cellar'){
+      await openEuSource(guessed.celex||guessed.identifier);
+      status.textContent='CELEX importat/verificat. Alege articolul și creează nota UE în dosarul local.';
+      return;
+    }
+    if(['camera','senat','parlament'].includes(guessed.family)){
+      $('#lifecycle-tracker').open=true;
+      $('#lifecycle-search').elements.q.value=guessed.project_id;
+      LIFECYCLE.query=guessed.project_id;LIFECYCLE.filter='toate';$('#lifecycle-filter').value='toate';
+      await loadLifecycleList(0);
+      await openProjectCockpit({project_id:guessed.project_id,dossier_id:DOSARE_UI.selected?.id||''});
+      status.textContent='Proiectul este înregistrat. Verifică stadiul, pachetul de dovezi și dosarul local.';
+      return;
+    }
+    if(guessed.family==='consultare_econsultare'){
+      $('#econsultare-feed').open=true;
+      await loadEconsultareFeed();
+      await loadSourceWorkbench();
+      status.textContent='Consultarea este înregistrată în surse/tracker. Leag-o la dosar și urmărește termenul.';
+      return;
+    }
+    await loadSourceWorkbench();
+    status.textContent='Sursa este înregistrată metadata-first. Completează metadata necesară și urmărește în registru.';
+  }catch(err){status.textContent=err.message;}
+}
 function bindDailyWorkflow(){
   const root=$('#legislative-workflow');if(!root)return;
   const status=$('#legislative-workflow-status');
@@ -1976,16 +2056,13 @@ function bindDailyWorkflow(){
   if(startRealProject)startRealProject.onclick=()=>{
     mark('source');
     selectTab('matrice');
-    $('#lifecycle-tracker').open=true;
-    LIFECYCLE.filter='toate';LIFECYCLE.query='PL-x 33/2025';
-    $('#lifecycle-filter').value='toate';
-    $('#lifecycle-search').elements.q.value='PL-x 33/2025';
-    status.textContent='Deschid proiectul pilot real PL-x 33/2025 în tracker, cockpit și pachetul de dovezi.';
-    loadLifecycleList(0).then(()=>{
-      const project=(LIFECYCLE.last?.projects||[]).find(p=>p.project_id==='PL-x 33/2025')||{project_id:'PL-x 33/2025',title:'Pilot real achiziții publice'};
-      openProjectCockpit(project);
-    }).catch(err=>{status.textContent=err.message;});
+    const form=$('#real-workflow-start');
+    form?.scrollIntoView({block:'start'});
+    form?.elements.identifier.focus();
+    status.textContent='Lipește un PL-x, CELEX sau URL oficial. Fluxul îl trimite spre surse, tracker, cockpit și dosar.';
   };
+  const realForm=root.querySelector('#real-workflow-start');
+  if(realForm)realForm.onsubmit=e=>{e.preventDefault();mark('source');startRealWorkflow(e.currentTarget);};
   root.querySelector('[data-workflow-open-dossier]').onclick=()=>{mark('note');reveal('#dossier-library','Alege sau creează dosarul local care va ține nota, dovezile, ciorna și exportul.');};
   root.querySelector('[data-workflow-open-note]').onclick=()=>{
     mark('note');

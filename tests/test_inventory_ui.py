@@ -12,8 +12,39 @@ def test_daily_workflow_exposes_start_real_project_action():
 
     assert 'id="start-real-project"' in html
     assert "Start proiect real" in html
-    assert "PL-x 33/2025" in html
-    assert "openProjectCockpit(project)" in html
+    assert 'id="real-workflow-start"' in html
+    assert "Sursă publică reală" in html
+    assert "Pornește fluxul" in html
+    assert "Pilot real achiziții publice" not in html
+    assert "function startRealWorkflow" in html
+    assert "sourceRegistryApi({action:'discover'" in html
+    assert "sourceRegistryApi({action:'sync'" in html
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_real_workflow_guess_routes_public_sources():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function realWorkflowUrl", 1)[1].split("function bindDailyWorkflow", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "function realWorkflowUrl" + source + "let g=realWorkflowGuess('CELEX:32014L0024');"
+        "assert.equal(g.family,'ue_cellar');"
+        "assert.equal(g.identifier,'32014L0024');"
+        "assert.equal(g.celex,'32014L0024');"
+        "g=realWorkflowGuess('https://e-consultare.gov.ro/Consultare-publica/abc');"
+        "assert.equal(g.family,'consultare_econsultare');"
+        "assert.equal(g.identifier,'https://e-consultare.gov.ro/Consultare-publica/abc');"
+        "g=realWorkflowGuess('PL-x 33/2025');"
+        "assert.equal(g.family,'camera');"
+        "assert.equal(g.project_id,'PL-x 33/2025');"
+        "g=realWorkflowGuess('B. 44/2026');"
+        "assert.equal(g.family,'senat');"
+        "assert.equal(g.project_id,'B 44/2026');"
+        "g=realWorkflowGuess('https://minister.gov.ro/transparenta/proiect','consultare_minister');"
+        "assert.equal(g.family,'consultare_minister');"
+        "assert.equal(g.url,'https://minister.gov.ro/transparenta/proiect');"
+    )
+    subprocess.run(["node", "-e", program], check=True, capture_output=True, timeout=10)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
