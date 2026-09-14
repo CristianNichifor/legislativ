@@ -3,28 +3,34 @@
   "run_id": "fixture-good",
   "candidates": [
     {
-      "case_id": "source-summary-public-consultation",
+      "case_id": "issue-explanation-consultation-deadline",
       "provider": "fixture",
       "model": "grounded",
-      "output": "Surse: [RO-L52-2003:art-7]\nConstatare: Art. 7 prevede obligatia autoritatii administratiei publice de a publica un anunt despre elaborarea proiectului de act normativ si de a acorda un termen pentru propuneri scrise.\nLimitari: Din fragment nu rezulta o sanctiune si nu certifica respectarea tuturor etapelor procedurale.\nIncertitudini: este posibil sa fie necesara verificarea formei actualizate si a normelor conexe."
+      "output": "Surse: [RO-L52-2003:art-7]\nIpoteza: art. 7 prevede obligatia autoritatii administratiei publice de a publica un anunt despre elaborarea proiectului de act normativ si de a acorda un termen pentru propuneri scrise.\nConstatare: problema de lucru este daca termenul si anuntul sunt vizibile in procedura analizata, nu daca actul este nelegal.\nLimitari: din fragment nu rezulta o sanctiune si nu certifica respectarea tuturor etapelor procedurale.\nIncertitudini: este posibil sa fie necesara verificarea formei actualizate si a normelor conexe."
     },
     {
-      "case_id": "eu-comparison-procurement",
+      "case_id": "amendment-drafting-deadline",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [RO-DRAFT-TERMEN:art-2]\nAmendament: la articolul 2, dupa sintagma privind transmiterea normelor metodologice, se precizeaza ca termenul de 30 de zile curge de la data intrarii in vigoare a legii.\nTemei: sursa prevede autoritatea competenta, normele metodologice si termenul de 30 de zile.\nLimitari: propunerea este o redactare de lucru si necesita verificare tehnico-legislativa."
+    },
+    {
+      "case_id": "source-change-summary-consultation",
+      "provider": "fixture",
+      "model": "grounded",
+      "output": "Surse: [CONS-001-OLD], [CONS-001-NEW]\nSchimbare: termenul consultarii s-a mutat de la 10 septembrie la 20 septembrie, iar numarul documentelor atasate a crescut de la doua la trei.\nActiune: notele si propunerile bazate pe termenul vechi trebuie revizuite, inclusiv trimiterea la nota de fundamentare actualizata.\nLimitari: acesta este un rezumat de schimbare a sursei, nu o concluzie juridica. Trebuie verificat textul complet al documentelor atasate."
+    },
+    {
+      "case_id": "eu-risk-note-procurement",
       "provider": "fixture",
       "model": "grounded",
       "output": "Surse: [RO-PLX-101:art-I], [EU-32014L0024:art-18]\nIpoteza: proiectul national introduce o procedura rapida pentru achizitii publice, iar articolul UE mentioneaza tratamentul egal, nediscriminatoriu, transparent si proportional.\nRisc: lipsa criteriilor de transparenta pentru anunt poate crea un posibil conflict de aplicare, dar nu certifica incalcarea directivei.\nRecomandare: formularea ar trebui sa indice criteriile de transparenta aplicabile si exceptiile justificate.\nLimitari: analiza ramane o ipoteza si trebuie verificata pe textul complet."
     },
     {
-      "case_id": "amendment-wording-deadline",
+      "case_id": "rule-extraction-notification",
       "provider": "fixture",
       "model": "grounded",
-      "output": "Surse: [RO-DRAFT-TERMEN:art-2]\nAmendament: La articolul 2, dupa sintagma privind transmiterea normelor metodologice, se precizeaza ca termenul de 30 de zile curge de la data intrarii in vigoare a legii.\nTemei: sursa prevede autoritatea competenta, normele metodologice si termenul de 30 de zile.\nLimitari: propunerea este o redactare de lucru si necesita verificare tehnico-legislativa."
-    },
-    {
-      "case_id": "gap-note-local-domain",
-      "provider": "fixture",
-      "model": "grounded",
-      "output": "Surse: [RO-LAW-DOMAIN:art-3]\nIpoteza: legea defineste domeniul serviciilor digitale si include platforme online, dar fragmentul citat mentioneaza doar obligatia de notificare a incidentelor.\nConstatare: poate exista un posibil vid daca sunt necesare reguli pentru prevenire, termene sau continutul notificarii, insa textul citat nu certifica aceasta concluzie.\nRecomandare: verificati actele secundare si definitiile conexe inainte de amendament.\nIncertitudini: analiza este limitata la fragmentul furnizat."
+      "output": "{\"provision_id\":\"RO-LAW-DOMAIN:art-3\",\"source_id\":\"RO-LAW-DOMAIN\",\"actor\":\"Furnizorul\",\"action\":\"notifica incidentele catre autoritatea competenta\",\"modality\":\"obligation\",\"condition\":\"incident constatat in domeniul serviciilor digitale\",\"deadline\":\"24 de ore de la constatare\",\"effect\":\"obligatie de notificare\",\"confidence\":0.82,\"not_legal_verdict\":true,\"limitations\":[\"candidat extras dintr-un fragment selectat\",\"necesita verificare umana\"]}"
     }
   ]
 }

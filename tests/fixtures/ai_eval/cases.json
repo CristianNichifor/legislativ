@@ -2,9 +2,9 @@
   "schema_version": 1,
   "cases": [
     {
-      "id": "source-summary-public-consultation",
-      "task_type": "source_summarization",
-      "prompt": "Rezuma obligatia si limitele consultarii publice folosind numai sursele date.",
+      "id": "issue-explanation-consultation-deadline",
+      "task_type": "issue_explanation",
+      "prompt": "Explica problema procedurala folosind numai sursele date.",
       "sources": [
         {
           "id": "RO-L52-2003",
@@ -14,12 +14,56 @@
         }
       ],
       "required_citations": ["RO-L52-2003"],
+      "required_sections": ["Surse", "Ipoteza", "Limitari", "Incertitudini"],
       "forbidden_claim_terms": ["constitutionalitate", "sanctiune penala"],
-      "requires_uncertainty": true
+      "requires_uncertainty": true,
+      "expected_output_format": "sections"
     },
     {
-      "id": "eu-comparison-procurement",
-      "task_type": "eu_article_comparison",
+      "id": "amendment-drafting-deadline",
+      "task_type": "amendment_drafting",
+      "prompt": "Propune o formulare de amendament pentru clarificarea termenului.",
+      "sources": [
+        {
+          "id": "RO-DRAFT-TERMEN",
+          "locator": "art-2",
+          "language": "ro",
+          "text": "Autoritatea competenta transmite normele metodologice in termen de 30 de zile de la intrarea in vigoare a legii."
+        }
+      ],
+      "required_citations": ["RO-DRAFT-TERMEN"],
+      "required_sections": ["Surse", "Amendament", "Temei", "Limitari"],
+      "forbidden_claim_terms": ["60 de zile", "abrogare totala"],
+      "requires_uncertainty": true,
+      "expected_output_format": "sections"
+    },
+    {
+      "id": "source-change-summary-consultation",
+      "task_type": "source_change_summary",
+      "prompt": "Rezuma schimbarea sursei si ce trebuie revizuit.",
+      "sources": [
+        {
+          "id": "CONS-001-OLD",
+          "locator": "anunt initial",
+          "language": "ro",
+          "text": "Consultarea publica este deschisa pana la 10 septembrie si are doua documente atasate."
+        },
+        {
+          "id": "CONS-001-NEW",
+          "locator": "anunt actualizat",
+          "language": "ro",
+          "text": "Consultarea publica este deschisa pana la 20 septembrie si are trei documente atasate, inclusiv nota de fundamentare actualizata."
+        }
+      ],
+      "required_citations": ["CONS-001-OLD", "CONS-001-NEW"],
+      "required_sections": ["Surse", "Schimbare", "Actiune", "Limitari"],
+      "forbidden_claim_terms": ["consultarea este ilegala"],
+      "requires_uncertainty": true,
+      "expected_output_format": "sections"
+    },
+    {
+      "id": "eu-risk-note-procurement",
+      "task_type": "eu_risk_note",
       "prompt": "Compara proiectul national cu articolul UE si marcheaza numai ipoteze de risc.",
       "sources": [
         {
@@ -36,40 +80,27 @@
         }
       ],
       "required_citations": ["RO-PLX-101", "EU-32014L0024"],
+      "required_sections": ["Surse", "Ipoteza", "Risc", "Limitari"],
       "forbidden_claim_terms": ["directiva este incalcata sigur", "nulitate"],
-      "requires_uncertainty": true
+      "requires_uncertainty": true,
+      "expected_output_format": "sections"
     },
     {
-      "id": "amendment-wording-deadline",
-      "task_type": "amendment_wording",
-      "prompt": "Propune o formulare de amendament pentru clarificarea termenului.",
-      "sources": [
-        {
-          "id": "RO-DRAFT-TERMEN",
-          "locator": "art-2",
-          "language": "ro",
-          "text": "Autoritatea competenta transmite normele metodologice in termen de 30 de zile de la intrarea in vigoare a legii."
-        }
-      ],
-      "required_citations": ["RO-DRAFT-TERMEN"],
-      "forbidden_claim_terms": ["60 de zile", "abrogare totala"],
-      "requires_uncertainty": true
-    },
-    {
-      "id": "gap-note-local-domain",
-      "task_type": "gap_note_drafting",
-      "prompt": "Redacteaza o nota scurta despre un posibil vid legislativ in domeniul definit.",
+      "id": "rule-extraction-notification",
+      "task_type": "rule_extraction",
+      "prompt": "Extrage un candidat law-as-code din prevederea selectata.",
       "sources": [
         {
           "id": "RO-LAW-DOMAIN",
           "locator": "art-3",
           "language": "ro",
-          "text": "Domeniul serviciilor digitale include furnizarea de platforme online catre utilizatori. Legea stabileste obligatia de notificare a incidentelor catre autoritatea competenta."
+          "text": "Domeniul serviciilor digitale include platforme online catre utilizatori. Furnizorul are obligatia de notificare a incidentelor catre autoritatea competenta in termen de 24 de ore de la constatare."
         }
       ],
       "required_citations": ["RO-LAW-DOMAIN"],
       "forbidden_claim_terms": ["toate platformele sunt interzise", "amenzi penale"],
-      "requires_uncertainty": true
+      "requires_uncertainty": true,
+      "expected_output_format": "json_rule_candidate"
     }
   ]
 }

@@ -3,16 +3,22 @@
   "run_id": "fixture-bad",
   "candidates": [
     {
-      "case_id": "source-summary-public-consultation",
+      "case_id": "issue-explanation-consultation-deadline",
       "provider": "fixture",
       "model": "loose",
       "output": "The law is unconstitutional and creates a criminal sanction. It surely violates all consultation rules. [UNKNOWN]"
     },
     {
-      "case_id": "eu-comparison-procurement",
+      "case_id": "eu-risk-note-procurement",
       "provider": "fixture",
       "model": "loose",
       "output": "Directiva este incalcata sigur. Contractul este nul si toate achizitiile sunt interzise. [RO-PLX-101]"
+    },
+    {
+      "case_id": "rule-extraction-notification",
+      "provider": "fixture",
+      "model": "loose",
+      "output": "Furnizorul este clar ilegal si toate platformele sunt interzise."
     }
   ]
 }

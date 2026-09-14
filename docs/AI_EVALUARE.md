@@ -5,16 +5,17 @@ outputs. It does not call any provider. A run stores model outputs produced
 elsewhere, then `scripts.evaluari_ai` scores them deterministically against the
 same source snippets.
 
-The first supported tasks are:
+The supported v1 task set is:
 
-- source summarization;
-- legislative gap-note drafting;
-- Romanian/EU article comparison;
-- amendment wording.
+- issue explanation;
+- amendment drafting;
+- source-change summary;
+- EU risk note;
+- law-as-code rule extraction.
 
-The harness scores six criteria: source faithfulness, citation correctness,
-hallucinated legal claims, useful structure, Romanian drafting quality and
-uncertainty. The scores are review signals, not legal conclusions.
+The harness scores source faithfulness, citation correctness, hallucinated legal
+claims, useful structure, structured-output parseability, Romanian drafting
+quality and uncertainty. The scores are review signals, not legal conclusions.
 
 ## Input contract
 
@@ -30,7 +31,9 @@ uv run python -m scripts.evaluari_ai \
 ```
 
 The output includes per-case scores and a provider/model comparison summary.
-Future provider adapters should only write run JSON files into this contract.
+It also includes task-level acceptability gates so the UI can show which tasks
+are acceptable for a provider/model and which are not recommended. Future
+provider adapters should only write run JSON files into this contract.
 Paid calls and keys stay outside this deterministic evaluator: the app first
 creates an `ai-external-send-approval-v1` payload with evidence hashes, prompt
 hash, token estimate and server cost `none`; the user then sends the prompt
@@ -42,6 +45,19 @@ WebGPU or the user's configured BYOK provider. The localhost/Python server still
 does not call OpenAI, Anthropic or compatible endpoints, and API keys are not
 part of saved app data or approval payloads. Provider calls are tested with
 mocks only; live calls remain a user action in the browser.
+
+To evaluate outputs produced with a user's own BYOK account, first create a
+template. The evaluator still does not call the provider:
+
+```sh
+uv run python -m scripts.evaluari_ai \
+  --cases tests/fixtures/ai_eval/cases.json \
+  --write-byok-template /tmp/legislativ-byok-ai-run.json \
+  --pretty
+```
+
+Paste provider outputs into the generated `output` fields, never API keys, then
+run the normal `--run` command against that file.
 
 BYOK execution failures use the `ai-byok-provider-failure-v1` contract. The
 browser maps mocked/direct provider failures to these states: `timeout`,
