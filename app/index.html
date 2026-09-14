@@ -1466,7 +1466,7 @@
               <label>Proiect<input name="project_id" id="tracker-project-id" type="search" maxlength="200" placeholder="PL-x, plx sau id sursă"></label>
               <label>Dosar<input name="dossier_id" id="tracker-dossier-id" type="search" maxlength="200" placeholder="id dosar salvat"></label>
               <label>Tip<select name="event_type" id="tracker-event-type"><option value="">Toate tipurile</option></select></label>
-              <label>Sursă<select name="source_family" id="tracker-source-family"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label>
+              <label>Sursă<select name="source_family" id="tracker-source-family"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_guvern">Consultări Guvern</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label>
               <label>Revizie<select name="reviewed" id="tracker-reviewed"><option value="">Toate</option><option value="0">Nerevizuite</option><option value="1">Revizuite</option></select></label>
               <button type="submit" class="ghost mini">Arată timeline</button>
               <button type="button" id="tracker-timeline-refresh" class="ghost mini" title="Reîncarcă evenimentele" aria-label="Reîncarcă evenimentele">↻</button>
@@ -1477,7 +1477,7 @@
           </details>
           <details id="tracker-review-queue" class="tracker-timeline">
             <summary>Coada de revizie tracker</summary>
-            <div class="dossier-actions"><label>Sursă<select id="tracker-review-source"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label><button type="button" id="tracker-review-refresh" class="ghost mini">Reîncarcă coada</button></div>
+            <div class="dossier-actions"><label>Sursă<select id="tracker-review-source"><option value="">Toate sursele</option><option value="camera">Camera</option><option value="senat">Senat</option><option value="consultare_guvern">Consultări Guvern</option><option value="consultare_econsultare">e-consultare</option><option value="monitorul_oficial_pi">Monitorul Oficial I</option><option value="ue_cellar">Drept UE</option></select></label><button type="button" id="tracker-review-refresh" class="ghost mini">Reîncarcă coada</button></div>
             <p id="tracker-review-status" class="hint" role="status">Coada de revizie neîncărcată.</p>
             <div id="tracker-review-list"></div>
           </details>

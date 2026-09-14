@@ -40,7 +40,7 @@ HEX64 = re.compile(r"^[a-f0-9]{64}$")
 TOKEN = re.compile(r"^[a-z0-9_.:-]{1,120}$", re.I)
 PROJECT_FAMILIES = frozenset({"parlament", "camera", "senat"})
 ATTENTION_STATES = frozenset({"changed", "failed", "needs_review", "rate_limited"})
-MANUAL_METADATA_FAMILIES = frozenset({"consultare_minister", "avize"})
+MANUAL_METADATA_FAMILIES = frozenset({"consultare_guvern", "consultare_minister", "avize"})
 SYNC_FAMILIES = (
     PROJECT_FAMILIES | MANUAL_METADATA_FAMILIES | frozenset({"consultare_econsultare", "ue_cellar"})
 )
@@ -946,7 +946,7 @@ def _manual_metadata_snapshot(row: dict, metadata: dict) -> dict:
     )
     occurred_at = _text(metadata.get("occurred_at", ""), limit=80)
     documents = _manual_documents(metadata.get("documents"))
-    if family == "consultare_minister":
+    if family in {"consultare_guvern", "consultare_minister"}:
         summary = {
             "title": title,
             "authority": authority,
@@ -1228,7 +1228,7 @@ def _persist_manual_metadata_tracker_event(
 ) -> list[dict]:
     family = snapshot.get("family")
     observed_at = now()
-    if family == "consultare_minister":
+    if family in {"consultare_guvern", "consultare_minister"}:
         status = (snapshot.get("status") or "unknown").strip().lower()
         event_type = (
             "public_consultation_closed"
@@ -1262,7 +1262,7 @@ def _persist_manual_metadata_tracker_event(
                 "source_url": snapshot.get("url", ""),
                 "occurred_at": _tracker_date(deadline),
                 "observed_at": observed_at,
-                "title": snapshot.get("title") or "Consultare ministerială",
+                "title": snapshot.get("title") or "Consultare publică",
                 "payload": {key: value for key, value in payload.items() if value not in ("", [])},
                 "content_hash": content_hash,
             },

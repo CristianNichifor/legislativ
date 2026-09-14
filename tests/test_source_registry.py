@@ -150,6 +150,7 @@ def test_registry_names_precise_public_source_families():
     assert families["monitorul_oficial_local"] == "Monitorul Oficial Local"
     assert families["avize"] == "Avize și opinii instituționale"
     assert "consultare_econsultare" in registry.SYNC_FAMILIES
+    assert "consultare_guvern" in registry.SYNC_FAMILIES
     assert "consultare_minister" in registry.SYNC_FAMILIES
     assert "avize" in registry.SYNC_FAMILIES
     assert "monitorul_oficial_pi" not in registry.SYNC_FAMILIES
@@ -550,6 +551,65 @@ def test_registry_syncs_ministry_consultation_metadata_to_tracker(tmp_path):
 
     listed = registry.lista(stare)
     assert listed["counts"]["consultare_minister:changed"] == 1
+
+
+def test_registry_syncs_government_consultation_metadata_to_tracker(tmp_path):
+    stare = state(tmp_path)
+    row = registry.executa(
+        stare,
+        {
+            "family": "consultare_guvern",
+            "identifier": "gov-consultare-1",
+            "url": "https://sgg.gov.ro/1/transparenta-decizionala/proiect-hg-test/",
+            "label": "Consultare Guvern HG servicii publice",
+        },
+    )
+
+    synced = registry.executa(
+        stare,
+        {
+            "action": "sync",
+            "id": row["id"],
+            "metadata": {
+                "title": "Proiect HG privind serviciile publice",
+                "authority": "Guvernul României",
+                "deadline": "15.10.2026",
+                "status": "open",
+                "project_id": "gov-consultare-1",
+                "documents": [
+                    {
+                        "url": "https://sgg.gov.ro/1/wp-content/uploads/proiect-hg.pdf",
+                        "label": "Proiect hotărâre",
+                        "content_hash": "f" * 64,
+                    }
+                ],
+                "tags": ["guvern", "servicii publice"],
+            },
+        },
+    )
+
+    assert synced["state"] == "changed"
+    assert synced["parser_version"] == registry.MANUAL_METADATA_PARSER_VERSION
+    assert synced["tracker_sync"] == {
+        "contract": "source-sync-tracker-events-v1",
+        "stored": 1,
+        "event_types": {"public_consultation_opened": 1},
+    }
+    selected = registry.lista(stare, {"id": [row["id"]]})["sources"][0]
+    assert selected["snapshots"][0]["summary"] == {
+        "title": "Proiect HG privind serviciile publice",
+        "authority": "Guvernul României",
+        "status": "open",
+        "deadline": "15.10.2026",
+        "documents": 1,
+        "truncated": False,
+    }
+    events = tracker_events.lista(stare, {"source_family": ["consultare_guvern"]})
+    assert events["total"] == 1
+    assert events["events"][0]["event_type"] == "public_consultation_opened"
+    assert events["events"][0]["project_id"] == "gov-consultare-1"
+    assert events["events"][0]["payload"]["authority"] == "Guvernul României"
+    assert events["events"][0]["payload"]["attachment_hashes"] == ["f" * 64]
 
 
 def test_registry_syncs_avize_metadata_to_opinion_tracker_event(tmp_path):
