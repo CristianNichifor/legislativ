@@ -89,6 +89,8 @@ def test_registry_discovers_lists_queues_and_records_one_source(tmp_path):
         "state": "discovered",
         "label": "Source known by URL or public identifier; no fetch attempted in this queue.",
         "severity": "ready",
+        "freshness": "never_synced",
+        "freshness_label": "Nesincronizată; nu există încă o citire locală.",
         "can_queue": True,
         "can_sync": True,
         "can_review": False,
@@ -173,6 +175,11 @@ def test_registry_bootstraps_required_official_source_anchors(tmp_path):
     assert by_family["consultare_econsultare"]["url"].startswith("https://e-consultare.gov.ro/")
     assert by_family["ue_cellar"]["url"].startswith("https://op.europa.eu/")
     assert by_family["camera"]["sync_status"]["can_sync"] is False
+    assert by_family["consultare_guvern"]["sync_status"]["freshness"] == "family_anchor"
+    assert (
+        "ancora nu se sincronizează direct"
+        in by_family["consultare_guvern"]["sync_status"]["next_action"]
+    )
 
     with pytest.raises(ValueError, match="Ancora de familie"):
         registry.executa(stare, {"action": "sync", "id": by_family["camera"]["id"]})

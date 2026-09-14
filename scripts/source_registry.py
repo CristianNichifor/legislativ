@@ -273,10 +273,29 @@ def _sync_status(row: dict) -> dict:
             "Revizie manuală: sursa a fost citită, dar nu poate actualiza automat date juridice."
         ),
     }
+    freshness = "current"
+    freshness_label = "Sincronizată local."
+    if is_anchor:
+        freshness = "family_anchor"
+        freshness_label = "Ancoră de familie; adaugă surse punctuale înainte de sync."
+        next_actions["discovered"] = (
+            "Adaugă o sursă punctuală din această familie; ancora nu se sincronizează direct."
+        )
+    elif not row.get("last_attempt_at"):
+        freshness = "never_synced"
+        freshness_label = "Nesincronizată; nu există încă o citire locală."
+    elif state in {"failed", "rate_limited", "unavailable"}:
+        freshness = state
+        freshness_label = next_actions[state]
+    elif state in {"changed", "needs_review"}:
+        freshness = "needs_human_review"
+        freshness_label = "Citită local, dar așteaptă revizie umană."
     return {
         "state": state,
         "label": STATE_LABELS[state],
         "severity": severity,
+        "freshness": freshness,
+        "freshness_label": freshness_label,
         "can_queue": can_queue,
         "can_sync": can_sync,
         "can_review": can_review,
