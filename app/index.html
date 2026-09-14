@@ -1476,7 +1476,7 @@
           <summary>Proiecte urmărite · Stadiu legislativ</summary>
           <form id="lifecycle-search" class="lifecycle-toolbar">
             <label>Caută proiect<input name="q" type="search" maxlength="200" placeholder="PL-x sau titlu"></label>
-            <label>Filtru<select id="lifecycle-filter"><option value="watched">Urmărite</option><option value="affected">Cu dosare afectate</option><option value="attention">Necesită atenție</option><option value="stale">Date vechi</option><option value="unknown">Etapă necunoscută</option><option value="unavailable">Sursă indisponibilă</option><option value="toate">Toate proiectele</option></select></label>
+            <label>Filtru<select id="lifecycle-filter"><option value="watched">Urmărite</option><option value="affected">Cu dosare afectate</option><option value="attention">Necesită atenție</option><option value="deadline">Termen apropiat/depășit</option><option value="committee">Comisii și rapoarte</option><option value="vote">Plen, vot sau adoptare</option><option value="published">Publicate</option><option value="stale">Date vechi</option><option value="unknown">Etapă necunoscută</option><option value="unavailable">Sursă indisponibilă</option><option value="toate">Toate proiectele</option></select></label>
             <button type="submit" class="ghost mini">Caută</button>
             <button type="button" id="lifecycle-refresh" class="ghost mini" title="Reîncarcă stadiile locale" aria-label="Reîncarcă stadiile locale">↻</button>
           </form>
@@ -7360,7 +7360,7 @@ $('#econsultare-feed-status').onchange=loadEconsultareFeed;
 $('#econsultare-feed-open-registry').onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
 const PROJECT_WATCH_KEY='legislativ-project-watch';
 const LIFECYCLE={offset:0,query:'',filter:'watched',sequence:0,loaded:false,last:null,review:null,watchIds:new Set(),watchItems:[]};
-const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',stale:'date vechi',unknown:'etapă necunoscută',unavailable:'sursă indisponibilă',toate:'toate proiectele'};
+const LIFECYCLE_FILTERS={watched:'urmărite',affected:'cu dosare afectate',attention:'necesită atenție',deadline:'termen apropiat/depășit',committee:'comisii și rapoarte',vote:'plen, vot sau adoptare',published:'publicate',stale:'date vechi',unknown:'etapă necunoscută',unavailable:'sursă indisponibilă',toate:'toate proiectele'};
 const LIFECYCLE_STEPS=[
   ['consultation_open','Consultare'],
   ['drafting','Avizare'],
@@ -7423,21 +7423,29 @@ function lifecycleVisible(project,filter=LIFECYCLE.filter){
   if(filter==='watched') return projectWatched(project.project_id);
   if(filter==='toate') return true;
   if(filter==='affected') return Number(project.affected_dossiers||0)>0;
+  if(filter==='deadline') return (project.filter_buckets||[]).includes('deadline')||['deadline_soon','overdue'].includes(project.deadline_attention?.state);
+  if(filter==='committee') return (project.filter_buckets||[]).includes('committee')||['committee','report'].includes(project.stage?.key)||project.canonical_status?.key==='committee';
+  if(filter==='vote') return (project.filter_buckets||[]).includes('vote')||['plenary_scheduled','adopted'].includes(project.stage?.key)||project.canonical_status?.key==='plenary';
+  if(filter==='published') return (project.filter_buckets||[]).includes('published')||project.stage?.key==='published'||project.canonical_status?.key==='published';
   if(filter==='stale') return project.source_state==='stale'||project.stale;
   if(filter==='unknown') return project.source_state==='unknown'||project.stage?.key==='unknown';
   if(filter==='unavailable') return project.source_state==='unavailable'||project.unavailable;
   return !!project.needs_attention;
 }
 function lifecycleCounts(data){
-  const projects=data.projects||[], watched=new Set(projectWatchList());
+  const projects=data.projects||[], watched=new Set(projectWatchList()), buckets=data.filter_buckets||{};
   return {
     watched: projects.filter(p=>watched.has(p.project_id)).length,
-    attention: projects.filter(p=>p.needs_attention).length,
-    stale: projects.filter(p=>p.source_state==='stale'||p.stale).length,
-    unknown: projects.filter(p=>p.source_state==='unknown'||p.stage?.key==='unknown').length,
-    unavailable: projects.filter(p=>p.source_state==='unavailable'||p.unavailable).length,
+    attention: buckets.attention??projects.filter(p=>p.needs_attention).length,
+    deadline: buckets.deadline??projects.filter(p=>lifecycleVisible(p,'deadline')).length,
+    committee: buckets.committee??projects.filter(p=>lifecycleVisible(p,'committee')).length,
+    vote: buckets.vote??projects.filter(p=>lifecycleVisible(p,'vote')).length,
+    published: buckets.published??projects.filter(p=>lifecycleVisible(p,'published')).length,
+    stale: buckets.stale??projects.filter(p=>p.source_state==='stale'||p.stale).length,
+    unknown: buckets.unknown??projects.filter(p=>p.source_state==='unknown'||p.stage?.key==='unknown').length,
+    unavailable: buckets.unavailable??projects.filter(p=>p.source_state==='unavailable'||p.unavailable).length,
     registry: projects.filter(p=>p.registry_needs_attention).length,
-    affected: projects.filter(p=>Number(p.affected_dossiers||0)>0).length,
+    affected: buckets.affected??projects.filter(p=>Number(p.affected_dossiers||0)>0).length,
   };
 }
 function lifecycleEventText(project){
@@ -7492,6 +7500,7 @@ function lifecycleOverviewHtml(data){
   return `<section class="lifecycle-overview-card"><span class="hint">Afișate</span><strong>${esc(data.returned||0)}</strong><span class="hint">din ${esc(data.total||0)} proiecte locale</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Necesită atenție</span><strong>${esc(counts.attention)}</strong><span class="hint">${esc(counts.registry)} surse urmărite schimbate</span></section>`
     +`<section class="lifecycle-overview-card"><span class="hint">Calitate stadii</span><strong>${esc(counts.unknown+counts.unavailable)}</strong><span class="hint">${esc(counts.stale)} surse vechi</span></section>`
+    +`<section class="lifecycle-overview-card"><span class="hint">Cozi de lucru</span><strong>${esc(counts.deadline+counts.committee+counts.vote)}</strong><span class="hint">${esc(counts.deadline)} termene · ${esc(counts.committee)} comisii/rapoarte · ${esc(counts.vote)} plen/vot · ${esc(counts.published)} publicate</span></section>`
     +lifecycleAttentionFeedHtml(data)+lifecycleUnknownReviewQueueHtml(data);
 }
 function lifecycleStatusSummaryHtml(project){
@@ -7794,7 +7803,7 @@ function renderLifecycleList(){
 function updateLifecycleStatus(){
   if(!LIFECYCLE.last)return;
   const visible=lifecycleFilteredProjects(LIFECYCLE.last).length, counts=lifecycleCounts(LIFECYCLE.last);
-  $('#lifecycle-status').textContent=`${visible} proiecte afișate în filtrul ${LIFECYCLE_FILTERS[LIFECYCLE.filter]} · urmărite ${counts.watched} · dosare afectate ${counts.affected} · atenție ${counts.attention} · surse schimbate ${counts.registry} · vechi ${counts.stale} · etapă necunoscută ${counts.unknown} · indisponibile ${counts.unavailable}.`;
+  $('#lifecycle-status').textContent=`${visible} proiecte afișate în filtrul ${LIFECYCLE_FILTERS[LIFECYCLE.filter]} · urmărite ${counts.watched} · dosare afectate ${counts.affected} · atenție ${counts.attention} · termene ${counts.deadline} · comisii/rapoarte ${counts.committee} · plen/vot ${counts.vote} · publicate ${counts.published} · surse schimbate ${counts.registry} · vechi ${counts.stale} · etapă necunoscută ${counts.unknown} · indisponibile ${counts.unavailable}.`;
 }
 async function loadLifecycleList(offset=0){
   const token=++LIFECYCLE.sequence;LIFECYCLE.offset=offset;

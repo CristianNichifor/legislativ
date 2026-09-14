@@ -364,6 +364,72 @@ def test_project_lifecycle_summary_reads_optional_deadline_column(tmp_path):
     assert project["deadline_attention"]["date"] == "2026-09-15"
     assert project["deadline_attention"]["state"] == "deadline_soon"
     assert "deadline_soon" in project["attention_reasons"]
+    assert "deadline" in project["filter_buckets"]
+
+
+def test_project_lifecycle_summary_counts_user_work_buckets(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+    with depozit.deschide(state.initiative) as con:
+        con.execute("ALTER TABLE initiative ADD COLUMN consultation_deadline TEXT")
+        con.executemany(
+            "INSERT INTO initiative(plx_id,cam,idp,titlu,stadiu,citit_la,data_inreg,sursa_url,"
+            "consultation_deadline) VALUES (?,2,?,?,?,?,?,?,?)",
+            [
+                (
+                    "PL-x 31/2026",
+                    "31",
+                    "Lege termen",
+                    "În consultare publică",
+                    "2026-09-10T10:00:00+00:00",
+                    "2026-09-01",
+                    "https://www.cdep.ro/proiect31",
+                    "15.09.2026",
+                ),
+                (
+                    "PL-x 32/2026",
+                    "32",
+                    "Lege comisie",
+                    "Raport depus",
+                    "2026-09-10T10:00:00+00:00",
+                    "2026-09-01",
+                    "https://www.cdep.ro/proiect32",
+                    "",
+                ),
+                (
+                    "PL-x 33/2026",
+                    "33",
+                    "Lege plen",
+                    "Pe ordinea de zi",
+                    "2026-09-10T10:00:00+00:00",
+                    "2026-09-01",
+                    "https://www.cdep.ro/proiect33",
+                    "",
+                ),
+                (
+                    "PL-x 34/2026",
+                    "34",
+                    "Lege publicată",
+                    "Publicat în Monitorul Oficial",
+                    "2026-09-10T10:00:00+00:00",
+                    "2026-09-01",
+                    "https://www.cdep.ro/proiect34",
+                    "",
+                ),
+            ],
+        )
+        con.commit()
+
+    out = project_lifecycle_summary(state, limit=10, now=datetime(2026, 9, 11, tzinfo=UTC))
+    by_id = {project["project_id"]: project for project in out["projects"]}
+
+    assert by_id["PL-x 31/2026"]["filter_buckets"] == ["deadline"]
+    assert by_id["PL-x 32/2026"]["filter_buckets"] == ["committee"]
+    assert by_id["PL-x 33/2026"]["filter_buckets"] == ["vote"]
+    assert by_id["PL-x 34/2026"]["filter_buckets"] == ["published"]
+    assert out["filter_buckets"]["deadline"] == 1
+    assert out["filter_buckets"]["committee"] == 1
+    assert out["filter_buckets"]["vote"] == 1
+    assert out["filter_buckets"]["published"] == 1
 
 
 def test_project_lifecycle_summary_counts_affected_dossiers(tmp_path):
