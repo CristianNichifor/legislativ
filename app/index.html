@@ -8887,6 +8887,42 @@ function mWorkspaceHtml(workspace){
     +(workspace.not_legal_verdict?`<p class="hint">Spațiu de lucru pentru analiză; nu verdict juridic.</p>`:"")
     +`</div>`;
 }
+function mEvidenceRecordHtml(row){
+  const href=urlSigur(row.source_url);
+  const loc=row.locator?` · ${esc(locRo(row.locator))}`:"";
+  const hash=row.source_hash?`SHA-256 ${esc(String(row.source_hash).slice(0,16))}`:"hash lipsă";
+  const parser=row.parser_version?` · ${esc(row.parser_version)}`:"";
+  return `<article class="matrix-drilldown-item" data-matrix-evidence="${esc(row.id||"")}">`
+    +`<h4>${esc(row.label||row.kind||"Dovadă")} · ${esc(row.act_id||"")}${loc}</h4>`
+    +`<div class="matrix-graph-meta">${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">sursă oficială</a> · `:""}${hash}${parser} · ${esc(row.uncertainty||"incertitudine neprecizată")}</div>`
+    +(row.quote?`<blockquote class="source-text">${esc(row.quote)}</blockquote>`:`<p class="hint">Citatul exact lipsește din dovada locală.</p>`)
+    +(row.not_legal_verdict?`<p class="hint">Dovadă pentru analiză; nu verdict juridic.</p>`:"")
+    +`</article>`;
+}
+function mRelatedItemsHtml(related){
+  if(!related) return "";
+  const link=(href,label)=>href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`:esc(label);
+  const laws=(related.laws||[]).map(x=>`<li>${link(urlSigur(x.url),x.label||x.act_id)} · ${esc((x.title||"").slice(0,120))} · ${esc(x.source_state||"sursă nelegată")} ${x.source_hash?`· ${esc(String(x.source_hash).slice(0,12))}`:""}</li>`).join("");
+  const projects=(related.projects||[]).map(x=>`<li>${link(urlSigur(x.url),x.plx_id||"proiect")} · ${esc(x.stage||"stadiu necunoscut")} · ${esc((x.title||"").slice(0,120))}</li>`).join("");
+  const eu=(related.eu||[]).map(x=>`<li>${esc(x.celex||"CELEX lipsă")} · ${x.imported?"text local":"text lipsă"} · ${nf(x.mentions||0)} menționări${x.command?` · <code>${esc(x.command)}</code>`:""}</li>`).join("");
+  const monitor=(related.monitor||[]).map(x=>`<li>${link(urlSigur(x.source_url),x.project_id||"publicare Monitor")} · ${esc(x.occurred_at||"dată lipsă")} · ${esc(x.source_hash?String(x.source_hash).slice(0,12):"hash lipsă")}</li>`).join("");
+  const consultations=(related.consultations||[]).map(x=>`<li>${link(urlSigur(x.source_url),x.label||x.project_id||"consultare publică")} · ${esc(x.event_type||"eveniment consultare")} · ${esc(x.occurred_at||"dată lipsă")} · ${esc(x.source_hash?String(x.source_hash).slice(0,12):"hash lipsă")}</li>`).join("");
+  const notes=(related.notes||[]).map(x=>`<li>${esc(x.title||x.id)} · ${esc(x.type||"notă")} · ${esc(x.status||"stare necunoscută")} · ${esc(x.act_id||"")} ${esc(locRo(x.locator||""))}</li>`).join("");
+  const proposals=(related.proposals||[]).map(x=>`<li>${esc(x.title||x.id)} · ${esc(x.act_id||"")} ${esc(locRo(x.locator||""))}</li>`).join("");
+  const rules=(related.rules||[]).map(x=>`<li>${esc(x.candidate_id||x.id)} · ${esc(x.status||"")} · ${esc(x.review_state||"")} · ${esc(x.act_id||"")} ${esc(locRo(x.locator||""))}</li>`).join("");
+  const section=(title,items,emptyText)=>`<details ${items?"open":""}><summary>${esc(title)}</summary>${items?`<ul class="hint">${items}</ul>`:`<p class="hint">${esc(emptyText)}</p>`}</details>`;
+  return `<div class="matrix-drilldown-item" data-matrix-related-items><div class="parc-h">Legături relevante</div>`
+    +section("Legi",laws,"Nicio lege legată în selecția curentă.")
+    +section("Proiecte",projects,"Niciun proiect parlamentar legat.")
+    +section("CELEX / UE",eu,"Nicio referință CELEX legată.")
+    +section("Monitorul Oficial",monitor,"Nicio publicare Monitor legată.")
+    +section("Consultări publice",consultations,"Nicio consultare publică legată.")
+    +section("Note existente",notes,"Nicio notă locală legată.")
+    +section("Propuneri existente",proposals,"Nicio propunere locală legată.")
+    +section("Reguli candidate",rules,"Nicio regulă candidată legată.")
+    +(related.not_legal_verdict?`<p class="hint">Legături pentru navigare și revizie; nu verdict juridic.</p>`:"")
+    +`</div>`;
+}
 function mDrilldownHtml(d){
   if(!d||!d.gasit) return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.");
   const drill=d.drilldown||{}, summary=drill.summary||{}, ex=(d.rand&&d.rand.exemple)||{};
@@ -8900,6 +8936,10 @@ function mDrilldownHtml(d){
     +stat("referințe UE",summary.referinte_ue)+stat("surse lipsă",summary.surse_lipsa)
     +stat("surse stale",summary.surse_stale)+stat("surse parțiale",summary.surse_partiale)
     +stat("revizuibile",summary.surse_revizuibile)+`</div>`;
+  const evidence=drill.evidence_records||[];
+  h+=`<div class="parc-h">Dovezi citabile</div>`;
+  h+=evidence.length?evidence.map(mEvidenceRecordHtml).join(""):`<p class="hint">Nu există încă dovezi cu citat, URL, hash și incertitudine într-un singur loc.</p>`;
+  h+=mRelatedItemsHtml(drill.related_items);
   h+=`<div class="parc-h">Intrări de lucru</div><div class="matrix-drilldown-actions">`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar + note</button>`
     +`<button type="button" class="ghost mini matrix-drafts" data-emitent="${esc(d.emitent||"")}">proiecte / amendamente</button>`

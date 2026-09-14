@@ -907,6 +907,7 @@ def _source_quality_for_act(
         "legacy_cheie": legacy,
         "source_state": (source or {}).get("state", ""),
         "source_id": (source or {}).get("id", ""),
+        "source_url": (source or {}).get("url", ""),
         "content_hash": (source or {}).get("last_hash", ""),
         "parser_version": (source or {}).get("parser_version", ""),
         "last_attempt_at": (source or {}).get("last_attempt_at"),
@@ -2322,7 +2323,236 @@ def _matrix_workspace_row(
     }
 
 
-def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
+def _matrix_evidence_records(
+    prevederi: list[dict], source_by_act: dict[str, dict], act_url_by_id: dict[str, str]
+) -> list[dict]:
+    records = []
+    for index, row in enumerate(prevederi, start=1):
+        act_id = row.get("act_id", "")
+        source = source_by_act.get(act_id) or {}
+        quote = row.get("text", "")
+        missing_bits = []
+        if not quote:
+            missing_bits.append("citat")
+        if not row.get("locator"):
+            missing_bits.append("locator")
+        if not (source.get("content_hash") or source.get("source_id")):
+            missing_bits.append("instantaneu sursă")
+        records.append(
+            {
+                "id": f"matrix-evidence-{index}",
+                "kind": row.get("kind", ""),
+                "label": {
+                    "lacuna": "Lacună candidată",
+                    "constitutionalitate": "CCR nereparat candidat",
+                }.get(row.get("kind", ""), "Dovadă matrice"),
+                "act_id": act_id,
+                "locator": row.get("locator", ""),
+                "quote": quote,
+                "source_url": source.get("source_url") or act_url_by_id.get(act_id, ""),
+                "source_id": source.get("source_id", ""),
+                "source_state": source.get("source_state", ""),
+                "source_hash": source.get("content_hash", ""),
+                "parser_version": source.get("parser_version", ""),
+                "uncertainty": (
+                    "completă pentru revizie locală"
+                    if not missing_bits
+                    else "lipsește: " + ", ".join(missing_bits)
+                ),
+                "not_legal_verdict": True,
+                "actions": row.get("actiuni") or [],
+            }
+        )
+    return records
+
+
+def _matrix_private_related(stare: Stare, act_ids: set[str]) -> dict:
+    from scripts import dosare
+
+    empty = {"notes": [], "proposals": [], "rules": []}
+    path = dosare.cale(stare)
+    if not act_ids or not Path(path).exists():
+        return empty
+    placeholders = ",".join("?" for _ in act_ids)
+    params = sorted(act_ids)
+    try:
+        with dosare._open(path) as con:
+            tables = {
+                row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            notes = []
+            if "note_manuale" in tables:
+                notes = [
+                    {
+                        "kind": "note",
+                        "id": row["id"],
+                        "dosar_id": row["dosar_id"],
+                        "title": row["titlu"],
+                        "type": row["tip"],
+                        "status": row["stare"],
+                        "act_id": row["act_id"],
+                        "locator": row["locator"],
+                    }
+                    for row in con.execute(
+                        "SELECT id,dosar_id,titlu,tip,stare,act_id,locator "
+                        "FROM note_manuale WHERE act_id IN ("
+                        + placeholders
+                        + ") ORDER BY modificat_la DESC,id LIMIT 20",
+                        params,
+                    )
+                ]
+            proposals = []
+            if {"propuneri", "note_manuale"} <= tables:
+                proposals = [
+                    {
+                        "kind": "proposal",
+                        "id": row["id"],
+                        "note_id": row["constatare_id"],
+                        "title": row["titlu"],
+                        "act_id": row["act_id"],
+                        "locator": row["locator"],
+                    }
+                    for row in con.execute(
+                        "SELECT p.id,p.constatare_id,p.titlu,n.act_id,n.locator "
+                        "FROM propuneri p JOIN note_manuale n ON n.id=p.constatare_id "
+                        "WHERE n.act_id IN ("
+                        + placeholders
+                        + ") ORDER BY p.creat_la DESC,p.id LIMIT 20",
+                        params,
+                    )
+                ]
+            rules = []
+            if "rule_candidate_queue" in tables:
+                rules = [
+                    {
+                        "kind": "rule_candidate",
+                        "id": row["id"],
+                        "dosar_id": row["dosar_id"],
+                        "candidate_id": row["candidate_id"],
+                        "status": row["status"],
+                        "review_state": row["review_state"],
+                        "act_id": row["act_id"],
+                        "locator": row["locator"],
+                    }
+                    for row in con.execute(
+                        "SELECT id,dosar_id,candidate_id,status,review_state,act_id,locator "
+                        "FROM rule_candidate_queue WHERE act_id IN ("
+                        + placeholders
+                        + ") ORDER BY creat_la DESC,id LIMIT 20",
+                        params,
+                    )
+                ]
+            return {"notes": notes, "proposals": proposals, "rules": rules}
+    except (OSError, sqlite3.Error, ValueError):
+        return empty
+
+
+def _matrix_tracker_related(stare: Stare, act_ids: set[str]) -> list[dict]:
+    if not act_ids:
+        return []
+    from scripts import tracker_events
+
+    related = []
+    for act_id in sorted(act_ids)[:20]:
+        try:
+            out = tracker_events.lista(stare, {"project_id": [act_id], "limit": ["20"]})
+        except ValueError:
+            continue
+        for event in out.get("events") or []:
+            related.append(
+                {
+                    "kind": "monitor_publication"
+                    if event.get("event_type") == "published_in_monitor"
+                    else "tracker_event",
+                    "id": event.get("id", ""),
+                    "project_id": event.get("project_id", ""),
+                    "event_type": event.get("event_type", ""),
+                    "label": event.get("display_label") or event.get("event_label", ""),
+                    "source_family": event.get("source_family", ""),
+                    "source_url": event.get("source_url", ""),
+                    "source_hash": event.get("content_hash", ""),
+                    "occurred_at": event.get("occurred_at", ""),
+                    "reviewed": bool((event.get("review") or {}).get("reviewed")),
+                }
+            )
+            if len(related) >= 40:
+                return related
+    return related
+
+
+def _matrix_related_items(
+    stare: Stare,
+    proiecte: dict,
+    acte: list[dict],
+    referinte_ue: list[dict],
+    evidence_records: list[dict],
+) -> dict:
+    act_ids = {a.get("act_id", "") for a in acte if a.get("act_id")}
+    private = _matrix_private_related(stare, act_ids)
+    tracker = _matrix_tracker_related(stare, act_ids)
+    consultations = [
+        item
+        for item in tracker
+        if item["source_family"]
+        in {"consultare_econsultare", "consultare_guvern", "consultare_minister"}
+        or item["event_type"].startswith("consultation_")
+        or item["event_type"].startswith("public_consultation_")
+    ][:20]
+    return {
+        "contract": "matrix-related-items-v1",
+        "laws": [
+            {
+                "kind": "law",
+                "act_id": a.get("act_id", ""),
+                "label": a.get("cheie_citare") or a.get("act_id", ""),
+                "title": a.get("titlu", ""),
+                "url": a.get("sursa_url", ""),
+                "source_state": (a.get("source_quality") or {}).get("source_state", ""),
+                "source_hash": (a.get("source_quality") or {}).get("content_hash", ""),
+            }
+            for a in acte[:20]
+        ],
+        "projects": [
+            {
+                "kind": "project",
+                "plx_id": p.get("plx_id", ""),
+                "title": p.get("titlu", ""),
+                "stage": p.get("stadiu", ""),
+                "url": p.get("sursa_url", ""),
+            }
+            for p in (proiecte or {}).get("initiative") or []
+        ][:20],
+        "eu": [
+            {
+                "kind": "celex",
+                "celex": ref.get("celex", ""),
+                "imported": bool(ref.get("importat")),
+                "mentions": ref.get("mentionari", 0),
+                "command": ref.get("comanda_import", ""),
+            }
+            for ref in referinte_ue[:20]
+        ],
+        "monitor": [item for item in tracker if item["kind"] == "monitor_publication"][:20],
+        "consultations": consultations,
+        "tracker": tracker[:20],
+        "notes": private["notes"],
+        "proposals": private["proposals"],
+        "rules": private["rules"],
+        "evidence": [
+            {"id": e["id"], "kind": e["kind"], "act_id": e["act_id"], "locator": e["locator"]}
+            for e in evidence_records
+        ],
+        "not_legal_verdict": True,
+        "limitari": [
+            (
+                "Legăturile sunt locale și operaționale; lipsa unei legături "
+                "nu dovedește lipsă juridică."
+            )
+        ],
+    }
+
+
+def _drilldown_dosar_matrice(stare: Stare, dosar: dict, proiecte: dict) -> dict:
     rand = dosar.get("rand") or {}
     semnale = rand.get("semnale") or {}
     exemple = rand.get("exemple") or {}
@@ -2400,6 +2630,16 @@ def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
         for a in acte
         if a.get("act_id")
     ]
+    source_by_act = {a.get("act_id"): a.get("source_quality") or {} for a in acte}
+    act_url_by_id = {a.get("act_id"): a.get("sursa_url", "") for a in acte}
+    evidence_records = _matrix_evidence_records(prevederi, source_by_act, act_url_by_id)
+    related_items = _matrix_related_items(
+        stare,
+        proiecte,
+        acte,
+        dosar.get("referinte_ue") or [],
+        evidence_records,
+    )
     ready_checks = {
         "domain": bool(domeniu.get("cheie") and domeniu.get("cheie") != "necunoscut"),
         "legal_rank": bool(ranguri),
@@ -2501,6 +2741,8 @@ def _drilldown_dosar_matrice(dosar: dict, proiecte: dict) -> dict:
             "viduri": semnale.get("viduri", 0),
             "neconstitutionale": semnale.get("neconstitutionale", 0),
         },
+        "evidence_records": evidence_records,
+        "related_items": related_items,
         "prevederi": prevederi,
         "proiecte": [
             {
@@ -2633,7 +2875,7 @@ def _matrice_dosar(qs: dict, stare: Stare) -> dict:
             *list(acte.get("limitari") or []),
         ],
     }
-    dosar["drilldown"] = _drilldown_dosar_matrice(dosar, proiecte)
+    dosar["drilldown"] = _drilldown_dosar_matrice(stare, dosar, proiecte)
     dosar["markdown"] = _markdown_dosar_matrice(dosar)
     return dosar
 
