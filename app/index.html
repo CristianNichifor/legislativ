@@ -2567,6 +2567,11 @@ const slug = t => t.toLowerCase().replace(/[^a-z]+/g,"-").replace(/^-|-$/g,"");
 const sec = (t,n,body)=>{ const id="sec-"+slug(t);
   return `<section id="${id}"><div class="sec-head"><h2>${t}</h2><span class="count">${n}</span></div>${body}</section>`; };
 const empty = t=>`<p class="empty">${t}</p>`;
+function workflowEmptyState(title,message,nextAction){
+  return `<section class="gap-workflow" data-workflow-empty-state><h4>${esc(title)}</h4>`
+    +`<p>${esc(message)}</p>`
+    +`<p class="hint"><strong>Următorul pas:</strong> ${esc(nextAction)}</p></section>`;
+}
 function card(cls, lead, meta, quote, tag, actions=""){
   return `<div class="card ${cls}">`+(tag?`<span class="tag ${tag}">${tag}</span>`:"")
     +`<span class="lead">${lead}</span>`
@@ -6479,7 +6484,7 @@ function ruleChecksHtml(checks){
   return `<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Ciorne eligibile<br><b>${esc(checks.eligible_rule_drafts||0)}</b></button><button type="button" class="ghost mini" disabled>Candidate probleme<br><b>${esc(checks.candidate_issues||0)}</b></button><button type="button" class="ghost mini" disabled>Returnate<br><b>${esc(checks.returned||0)}</b></button></div>`
     +`<p class="hint">${esc(checks.check||'verificare')} · ${esc(checks.status||'')} · nu este verdict juridic.</p>`
     +(checks.limitations?.length?`<ul>${checks.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul>`:'')
-    +`<div data-rule-check-list>${rows.map(ruleCheckRowHtml).join('')||'<p>Nicio ciornă eligibilă pentru verificarea deterministă curentă.</p>'}</div>`;
+      +`<div data-rule-check-list>${rows.map(ruleCheckRowHtml).join('')||workflowEmptyState('Nicio ciornă eligibilă','Filtrul curent nu găsește ciorne care pot fi verificate determinist.','Schimbă filtrul sau creează o ciornă dintr-o dovadă verificabilă.')}</div>`;
 }
 function ruleDraftTextExecutionHtml(result){
   if(!result)return '<p class="hint">Lipește textul proiectului și rulează ciornele promovate împotriva lui.</p>';
@@ -7221,7 +7226,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     const history=await dossierApi('/api/dosare/rulari?id='+encodeURIComponent(id));
     if(token!==DOSARE_UI.sequence) return;
     const runs=$('#dossier-runs');
-    if(!history.rulari.length){runs.textContent='Nicio analiză salvată.';return;}
+    if(!history.rulari.length){runs.innerHTML=workflowEmptyState('Nicio analiză salvată','Dosarul există, dar nu are încă o rulare păstrată pentru revizie sau export.','Rulează analiza pe dosar, apoi revino aici pentru constatări și propuneri.');return;}
     runs.innerHTML=`<label>Analize salvate<select id="dossier-run-select"><option value="">Alege o analiză</option>${history.rulari.map((r,i)=>`<option value="${esc(r.id)}">${esc((i+1)+' · '+dossierTime(r.creat_la))}</option>`).join('')}</select></label>`+(history.trunchiat?'<p class="hint">Sunt afișate ultimele 100 de analize.</p>':'');
     $('#dossier-run-select').onchange=e=>{if(!dossierMayNavigate())return;const next=++DOSARE_UI.sequence;$('#dossier-saved').innerHTML='';if(e.target.value) openDossierRun(id,e.target.value,next);else{DOSARE_UI.runId=null;DOSARE_UI.runFilters=null;loadDossierWatchlist(id);}};
     if(runId){
@@ -7732,7 +7737,8 @@ async function loadSourceRegistry(offset=0,notice='',family=SOURCE_REGISTRY.fami
   status.textContent='Încarc registrul surselor…';list.textContent='';
   try{
     const data=await sourceRegistryApi(null,params);sourceRegistryConfigure(data);SOURCE_REGISTRY.offset=offset;
-    list.innerHTML=data.sources.map((row,i)=>sourceRegistryRowHtml(row,data.families,i)).join('')||'<p>Nicio sursă urmărită în această selecție.</p>';
+    const rows=data.sources.map((row,i)=>sourceRegistryRowHtml(row,data.families,i)).join('');
+    list.innerHTML=rows||workflowEmptyState('Nicio sursă urmărită','Registrul nu are surse pentru filtrul curent.','Adaugă sursele oficiale de bază sau înregistrează o sursă din formular.');
     $('#source-registry-prev').disabled=offset===0;$('#source-registry-next').disabled=!data.more;
     const scope=SOURCE_REGISTRY.family?` în ${data.families?.[SOURCE_REGISTRY.family]||SOURCE_REGISTRY.family}`:'';
     status.textContent=notice||`${data.total} surse urmărite${scope}. Sincronizarea este explicită, câte o sursă.`;
@@ -9134,7 +9140,7 @@ function projectWorkbenchMarkdown(project,pack){
   return lines.join('\n').trim()+'\n';
 }
 function writingWorkspaceContextHtml(pack=null){
-  if(!pack)return '<p class="hint">Încarcă un proiect ca să vezi pachetul de dovezi, notele și evenimentele lângă text.</p>';
+  if(!pack)return workflowEmptyState('Pachet de dovezi neîncărcat','Spațiul de redactare nu are încă evenimente, note și dovezi normalizate lângă text.','Completează Project ID și apasă „Încarcă context proiect”.');
   const notes=pack.dossier_notes||[];
   const gaps=notes.filter(note=>['lacuna','contradictie','necorelare','risc_ue','constitutionalitate'].includes(note.type));
   const events=pack.events||[];
@@ -9447,7 +9453,7 @@ async function loadAcquisitionList(offset=0){
   try{
     const d=await acquisitionApi({q:ACQUISITION.query,offset});if(token!==ACQUISITION.sequence)return;
     ACQUISITION.loaded=true;
-    list.innerHTML=d.initiative.map(acquisitionRowHtml).join('')||'<p>Nicio inițiativă în această selecție.</p>';
+    list.innerHTML=d.initiative.map(acquisitionRowHtml).join('')||workflowEmptyState('Nicio inițiativă locală','Filtrul curent nu găsește proiecte parlamentare în datele instalate.','Schimbă filtrul sau pornește un flux real cu PL-x, BPI ori URL oficial.');
     list.querySelectorAll('button').forEach(b=>b.onclick=()=>loadAcquisitionDetail(b.dataset.acquisitionPlx));
     $('#acquisition-prev').disabled=!offset;$('#acquisition-next').disabled=!d.mai_multe;
     status.textContent=d.initiative.length?`Inițiative ${offset+1}–${offset+d.initiative.length} · Date locale; actualitate necunoscută.`:'Niciun rezultat local.';
@@ -9891,7 +9897,7 @@ function mRelatedItemsHtml(related){
     +`</div>`;
 }
 function mDrilldownHtml(d){
-  if(!d||!d.gasit) return empty((d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.");
+  if(!d||!d.gasit) return workflowEmptyState('Drilldown indisponibil',(d&&d.limitari&&d.limitari[0])||"Nu am putut construi drilldown-ul.",'Reîncarcă matricea sau schimbă filtrul înainte de a crea note.');
   const drill=d.drilldown||{}, summary=drill.summary||{}, ex=(d.rand&&d.rand.exemple)||{};
   const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
   let h=`<div class="matrix-drilldown"><div class="parc-h">Drilldown matrice · ${esc(d.emitent||"")}</div>`
@@ -9905,7 +9911,7 @@ function mDrilldownHtml(d){
     +stat("revizuibile",summary.surse_revizuibile)+`</div>`;
   const evidence=drill.evidence_records||[];
   h+=`<div class="parc-h">Dovezi citabile</div>`;
-  h+=evidence.length?evidence.map(mEvidenceRecordHtml).join(""):`<p class="hint">Nu există încă dovezi cu citat, URL, hash și incertitudine într-un singur loc.</p>`;
+  h+=evidence.length?evidence.map(mEvidenceRecordHtml).join(""):workflowEmptyState('Dovezi citabile lipsă','Acest rând nu are încă citat, URL, hash și incertitudine într-un singur loc.','Deschide sursele legate sau notează manual dovada înainte de redactare.');
   h+=mRelatedItemsHtml(drill.related_items);
   h+=`<div class="parc-h">Intrări de lucru</div><div class="matrix-drilldown-actions">`
     +`<button type="button" class="ghost mini matrix-dossier" data-emitent="${esc(d.emitent||"")}">dosar + note</button>`
@@ -10433,7 +10439,7 @@ function renderMatrice(){
   const q=fold($("#m-q")?.value||"").trim();
   MATRIX_ROWS=(d.randuri||[]).filter(r=>!q||mTextCautare(r).includes(q));
   if(!MATRIX_ROWS.length){
-    gazda.innerHTML=empty("Nu există rânduri pentru filtrul ales.");
+    gazda.innerHTML=workflowEmptyState('Niciun rând în matrice','Filtrele curente nu întorc lacune, contradicții sau riscuri în datele instalate.','Șterge căutarea, schimbă aria/rangul sau verifică inventarul surselor.');
     det.innerHTML=(d.limitari||[]).map(x=>`<p class="hint">${esc(x)}</p>`).join("");
     return;
   }
