@@ -62,7 +62,9 @@ def test_capabilities_describe_local_mock_executor_contract():
 
 
 def test_preview_requires_explicit_payload_and_never_marks_approved():
-    result = mcp_boundary.preview(valid_request())
+    result = mcp_boundary.preview(
+        valid_request(selected_evidence_ids=["lege-1-2026:art3", "lege-1-2026:art3"])
+    )
 
     assert result["status"] == "requires_user_approval"
     assert result["approval"]["server"] == "desktop-claude"
@@ -84,7 +86,7 @@ def test_preview_requires_explicit_payload_and_never_marks_approved():
     assert result["audit_event"]["timestamp"] == result["audit_event"]["created_at"]
     assert result["audit_event"]["payload_hash"] == result["approval"]["data_sha256"]
     assert result["audit_event"]["result_hash"] is None
-    assert result["audit_event"]["selected_evidence_ids"] == []
+    assert result["audit_event"]["selected_evidence_ids"] == ["lege-1-2026:art3"]
     assert result["audit_event"]["user_action"] == "previewed"
     assert result["audit_event"]["approval_state"] == "preview_created"
 
@@ -108,6 +110,7 @@ def test_preview_truncates_visible_text_but_hashes_full_payload():
         {"purpose": " "},
         {"data": ""},
         {"extra": "field"},
+        {"selected_evidence_ids": ["bad evidence id"]},
     ],
 )
 def test_preview_rejects_ambiguous_or_incomplete_requests(patch):
@@ -137,6 +140,9 @@ def test_runtime_registry_exposes_servers_approval_schema_and_failures():
     assert result["discovery"]["contract"] == "mcp-runtime-discovery-v1"
     assert result["discovery"]["server_count"] == 1
     assert result["discovery"]["tool_count"] == 2
+    assert result["discovery"]["connected_tool_count"] == 2
+    assert result["discovery"]["connected_tools"][0]["server"] == "local-mock"
+    assert result["discovery"]["connected_tools"][0]["requires_user_approval"] is True
     assert result["discovery"]["external_transport_configured"] is False
     assert result["discovery"]["hidden_external_calls"] is False
     assert "preview_created" in result["servers"][0]["tools"][0]["approval_states"]
