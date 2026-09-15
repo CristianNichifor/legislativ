@@ -6620,8 +6620,33 @@ function proposalListExportReadinessHtml(data,offset=0){
 }
 const WATCHLIST_KINDS={act:'Act normativ',project:'Proiect legislativ',celex:'CELEX',domain:'Domeniu',keyword:'Cuvânt cheie'};
 const WATCHLIST_STATES={not_registered:'neurmărit în registrul de surse',changed:'sursă schimbată',failed:'sincronizare eșuată',needs_review:'necesită revizie',rate_limited:'limitată de sursă',queued:'în coadă',fetched:'citită',unchanged:'neschimbată',discovered:'descoperită',unavailable:'indisponibilă'};
+const SOURCE_STATUS_ACTIONS={
+  not_registered:'adaugă sursa oficială în registru',
+  discovered:'sincronizează sursa înainte de analiză',
+  queued:'așteaptă sincronizarea sau rulează manual',
+  fetched:'poți folosi citatul dacă există URL/hash',
+  unchanged:'folosește copia locală, cu context verificat',
+  changed:'reverifică dosarele și propunerile dependente',
+  failed:'reîncearcă sincronizarea sau notează indisponibilitatea',
+  unavailable:'păstrează limitarea vizibilă înainte de concluzii',
+  rate_limited:'reîncearcă mai târziu',
+  needs_review:'verifică manual sursa oficială',
+  stale:'actualizează înainte de concluzii',
+  missing:'înregistrează sursa oficială',
+  partial:'completează documentele lipsă',
+  current:'continuă cu copia locală curentă',
+  unknown:'verifică manual starea sursei'
+};
+function sourceStatusLabel(state,fallback='',labels=WATCHLIST_STATES){
+  return labels[state]||WATCHLIST_STATES[state]||fallback||state||'stare necunoscută';
+}
+function sourceStatusInline(state,fallback='',labels=WATCHLIST_STATES){
+  const label=sourceStatusLabel(state,fallback,labels);
+  const action=SOURCE_STATUS_ACTIONS[state]||fallback||SOURCE_STATUS_ACTIONS.unknown;
+  return `${label} · ${action}`;
+}
 function watchlistItemHtml(item,i){
-  const source=item.source||{},state=WATCHLIST_STATES[item.source_state]||item.source_state;
+  const source=item.source||{},state=sourceStatusInline(item.source_state,item.source_state||'stare necunoscută');
   const cls=item.needs_attention?'attention':'';
   const when=source.updated_at||item.creat_la||'';
   return `<article class="${cls}" data-watch-index="${i}"><h5>${esc(item.eticheta||item.valoare)}</h5>`
@@ -7495,7 +7520,7 @@ const SOURCE_NOTE_STATES=new Set(['changed','failed','unavailable','rate_limited
 function sourceRegistryNote(row){
   const family=SOURCE_REGISTRY.families?.[row.family]||row.family||'sursă';
   const label=row.label||row.identifier||row.url||row.id||'sursă urmărită';
-  const state=SOURCE_STATE_LABELS[row.state]||row.state||'necunoscută';
+  const state=sourceStatusInline(row.state,row.state||'necunoscută',SOURCE_STATE_LABELS);
   const lines=[
     `Sursă: ${label}`,
     `Familie: ${family}`,
@@ -7666,10 +7691,11 @@ function sourceRegistryProjectWorkbenchHtml(row){
 }
 function sourceRegistryDetailHtml(row,families){
   const family=families?.[row.family]||row.family||'necunoscută';
+  const stateCopy=sourceStatusInline(row.state,row.sync_status?.next_action||row.state,SOURCE_STATE_LABELS);
   const attempts=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.http_status?` · HTTP ${esc(a.http_status)}`:''}${a.content_hash?` · ${esc(a.content_hash.slice(0,12))}`:''}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
   const workbench=sourceRegistryProjectWorkbenchHtml(row);
   const note=SOURCE_NOTE_STATES.has(row.state)?`<button type="button" class="ghost mini" data-source-note-action="${esc(row.id)}">Creează notă din stare</button>`:'';
-  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p>${sourceRegistryFreshnessHtml(row)}<p class="hint">ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryChangeHtml(row)}${sourceRegistryImpactHtml(row)}${workbench||note?`<div class="dossier-actions">${workbench}${note}</div>`:''}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
+  return `<section class="source-registry-row" data-source-detail><h4>${esc(row.label||row.identifier||row.id)} · ${esc(SOURCE_STATE_LABELS[row.state]||row.state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}</p>${sourceRegistryFreshnessHtml(row)}<p class="hint">Stare sursă: ${esc(stateCopy)}<br>ID: ${esc(row.id)}${row.url?`<br>URL: ${esc(row.url)}`:''}${row.last_hash?`<br>SHA-256: ${esc(row.last_hash)}`:''}${row.parser_version?`<br>Parser: ${esc(row.parser_version)}`:''}${row.sync_status?.next_action?`<br>Următorul pas: ${esc(row.sync_status.next_action)}`:''}</p>${sourceRegistrySnapshotSummary(row)}${sourceRegistryChangeHtml(row)}${sourceRegistryImpactHtml(row)}${workbench||note?`<div class="dossier-actions">${workbench}${note}</div>`:''}${attempts?`<details open><summary>Istoric sync pentru această sursă</summary><ul class="hint">${attempts}</ul></details>`:'<p class="hint">Nu există încercări de sync pentru această sursă.</p>'}</section>`;
 }
 function bindSourceRegistryWorkbench(scope){
   scope.querySelectorAll('[data-source-workbench-project]').forEach(button=>button.onclick=()=>openProjectWorkbench({project_id:button.dataset.sourceWorkbenchProject}));
@@ -7704,6 +7730,7 @@ function sourceRegistryRowHtml(row,families,index=0){
   const canQueue=syncStatus.can_queue??row.state!=='queued';
   const canReview=syncStatus.can_review??['changed','needs_review'].includes(row.state);
   const next=syncStatus.next_action||SOURCE_STATE_HINTS[row.state]||'Stare sursă necunoscută.';
+  const statusCopy=sourceStatusInline(row.state,next,SOURCE_STATE_LABELS);
   const sync=canSync?`<button type="button" class="ghost mini" data-source-sync="${esc(row.id)}">${row.family==='ue_cellar'?'Sincronizează CELEX':'Sincronizează sursa'}</button>`:'';
   const evidence=row.family==='ue_cellar'&&row.identifier?`<button type="button" class="ghost mini" data-source-open-eu="${esc(row.identifier)}">Deschide CELEX</button>`:['parlament','camera','senat'].includes(row.family)&&row.identifier?`<button type="button" class="ghost mini" data-source-open-project="${esc(row.identifier)}">Deschide proiectul</button>`:'';
   const review=canReview?`<button type="button" class="ghost mini" data-source-review="${esc(row.id)}">Marchează revizuită</button>`:'';
@@ -7711,7 +7738,7 @@ function sourceRegistryRowHtml(row,families,index=0){
   const tracker=`<button type="button" class="ghost mini" data-source-tracker="${esc(index)}">Evenimente tracker</button>`;
   const workbench=sourceRegistryProjectWorkbenchHtml(row);
   const history=(row.attempts||[]).map(a=>`<li>${esc(dossierTime(a.attempted_at))}: ${esc(SOURCE_STATE_LABELS[a.state]||a.state)}${a.error_category?` · ${esc(a.error_category)}`:''}${a.note?` · ${esc(a.note)}`:''}</li>`).join('');
-  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p>${sourceRegistryFreshnessHtml(row)}<p class="hint">${esc(next)}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryChangeHtml(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}${workbench}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${note}${review}</div></article>`;
+  return `<article class="source-registry-row" data-source-severity="${esc(syncStatus.severity||'ready')}"><h4>${esc(row.label||row.identifier||row.url)} · ${esc(state)}</h4><p>${esc(family)} · ${esc(row.identifier||'fără identificator')}${source}</p>${sourceRegistryFreshnessHtml(row)}<p class="hint">Stare sursă: ${esc(statusCopy)}${syncStatus.next_action?`<br>Următorul pas: ${esc(syncStatus.next_action)}`:''}<br>${attempt}${hash}${row.last_error?`<br>Eroare: ${esc(row.last_error)}`:''}</p>${sourceRegistrySnapshotSummary(row,true)}${sourceRegistryChangeHtml(row,true)}${sourceRegistryImpactHtml(row,true)}${history?`<details><summary>Ultimele încercări</summary><ul class="hint">${history}</ul></details>`:''}<div class="dossier-actions"><button type="button" class="ghost mini" data-source-inspect="${esc(row.id)}">Inspectează impactul și datele</button>${tracker}${workbench}<button type="button" class="ghost mini" data-source-queue="${esc(row.id)}" ${canQueue?'':'disabled'}>Pune în coadă</button>${sync}${evidence}${note}${review}</div></article>`;
 }
 async function inspectSourceRegistryRow(id){
   const status=$('#source-registry-status'),detail=$('#source-registry-detail');
@@ -8282,7 +8309,7 @@ async function projectWatchToggle(project){
   return projectWatchList();
 }
 function lifecycleStateLabel(project){
-  if(['changed','failed','needs_review','rate_limited'].includes(project.registry_source_state)) return 'Sursă urmărită: '+(SOURCE_STATE_LABELS[project.registry_source_state]||project.registry_source_state);
+  if(['changed','failed','needs_review','rate_limited'].includes(project.registry_source_state)) return 'Sursă urmărită: '+sourceStatusInline(project.registry_source_state,project.registry_source_state,SOURCE_STATE_LABELS);
   if(project.source_state==='stale') return 'Date vechi';
   if(project.source_state==='unknown') return 'Etapă necunoscută';
   if(project.source_state==='unavailable') return 'Sursă indisponibilă';
@@ -8353,7 +8380,8 @@ function lifecycleFreshnessBadgeHtml(project){
   const last=source.last_attempt_at||project.last_updated||project.last_seen||'';
   const attention=['changed','failed','needs_review','rate_limited','unavailable','stale'].includes(state);
   const next=source.sync_status?.next_action||project.uncertainty?.message||'Fără alertă de prospețime în datele locale.';
-  return `<p class="hint source-freshness-${attention?'attention':'ok'}"><strong>Prospețime sursă: ${esc(label)}</strong> · ultima verificare ${esc(dossierTime(last)||'necunoscută')}<br>${esc(next)}</p>`;
+  const statusCopy=sourceStatusInline(state,next,SOURCE_STATE_LABELS);
+  return `<p class="hint source-freshness-${attention?'attention':'ok'}"><strong>Prospețime sursă: ${esc(label)}</strong> · ${esc(statusCopy)} · ultima verificare ${esc(dossierTime(last)||'necunoscută')}<br>${esc(next)}</p>`;
 }
 function lifecycleTimelineHtml(project){
   const key=project.stage?.key||project.latest_event?.stage_key||'', current=LIFECYCLE_STEPS.findIndex(([k])=>k===key);
@@ -8952,7 +8980,7 @@ function projectCockpitSourceHtml(info={}){
     info.needs_attention?'Verifică manual sau importă sursa publică.':
     'Continuă redactarea cu sursa locală curentă.'
   );
-  return `<section class="lifecycle-overview-card"><span class="hint">Surse</span><strong>${esc(label)}</strong><span class="hint">${esc(source)} · ${esc(attention)} · ${esc(info.registry_can_sync?'sync disponibil':'sync manual/indisponibil')}</span><br><span class="hint">Următorul pas: ${esc(action)}</span><br><span class="hint">Incertitudine: ${esc(uncertainty.level||'necunoscută')} · ${esc(reasons)}</span></section>`;
+  return `<section class="lifecycle-overview-card"><span class="hint">Surse</span><strong>${esc(label)}</strong><span class="hint">${esc(source)} · ${esc(attention)} · ${esc(info.registry_can_sync?'sync disponibil':'sync manual/indisponibil')}</span><br><span class="hint">Stare sursă: ${esc(sourceStatusInline(state,action,SOURCE_STATE_LABELS))}</span><br><span class="hint">Următorul pas: ${esc(action)}</span><br><span class="hint">Incertitudine: ${esc(uncertainty.level||'necunoscută')} · ${esc(reasons)}</span></section>`;
 }
 function projectCockpitTrackerHtml(tracker={}){
   const latest=tracker.latest_event||{};
@@ -9847,6 +9875,7 @@ function mEvidenceHandoffPreviewHtml(row){
   const hasSource=!!(row.source_url||row.source_hash);
   const target=[row.act_id,row.locator?locRo(row.locator):""].filter(Boolean).join(" · ")||"țintă neprecizată";
   const state=hasQuote&&hasSource?"gata pentru notă":"incompletă";
+  const sourceCopy=sourceStatusInline(hasSource?"fetched":"missing");
   const missing=[
     hasQuote?"":"citat exact",
     hasSource?"":"URL sau SHA-256",
@@ -9855,6 +9884,7 @@ function mEvidenceHandoffPreviewHtml(row){
     +`<h4>Se preia în dosar · ${esc(state)}</h4>`
     +`<p><strong>Țintă:</strong> ${esc(target)}</p>`
     +`<p><strong>Dovadă:</strong> ${hasQuote?"citat disponibil":"citat lipsă"} · ${hasSource?"sursă identificată":"sursă lipsă"}</p>`
+    +`<p class="hint">Stare sursă: ${esc(sourceCopy)}</p>`
     +(missing.length?`<p class="hint">Completează înainte de concluzie: ${esc(missing.join(", "))}.</p>`:`<p class="hint">Poți crea notă, redactare sau ciornă AI; rezultatul rămâne ciornă nerevizuită.</p>`)
     +`</div>`;
 }

@@ -277,6 +277,10 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
     assert "data-econsultare-review" in html
     assert "Revizuită din feed-ul e-consultare." in html
     assert "o singură pagină" in html
+    helper = (
+        "const WATCHLIST_STATES={};const SOURCE_STATUS_ACTIONS="
+        + html.split("const SOURCE_STATUS_ACTIONS=", 1)[1].split("function watchlistItemHtml", 1)[0]
+    )
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split(
         "async function inspectSourceRegistryRow", 1
     )[0]
@@ -286,7 +290,10 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "const esc=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')"
         ".replaceAll('>','&gt;');"
         "const dossierTime=s=>s;"
-        "const SOURCE_REGISTRY=" + source + "const row={id:'src_1',family:'consultare_econsultare',"
+        + helper
+        + "const SOURCE_REGISTRY="
+        + source
+        + "const row={id:'src_1',family:'consultare_econsultare',"
         "identifier:'https://e-consultare.gov.ro/consultare/123',"
         "url:'https://e-consultare.gov.ro/consultare/123',"
         "label:'Consultare <script>',state:'changed',last_hash:'a'.repeat(64),"
@@ -314,6 +321,7 @@ def test_source_registry_renderer_shows_econsultare_snapshot_and_registration_co
         "assert.ok(h.includes('2 atașamente'));"
         "assert.ok(h.includes('Schimbare detectată: Termen schimbat'));"
         "assert.ok(h.includes('Sincronizează sursa'));"
+        "assert.ok(h.includes('reverifică dosarele și propunerile dependente'));"
         "assert.ok(h.includes('Inspectează impactul și datele'));"
         "assert.ok(h.includes('data-source-tracker=\"0\"'));"
         "assert.ok(!h.includes('<script>')&&!h.includes('<img>'));"
@@ -509,6 +517,13 @@ def test_tracker_timeline_renderer_exposes_review_and_note_actions():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_filters_and_opens_project_sources():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    helper = (
+        "const WATCHLIST_STATES={};const SOURCE_STATUS_ACTIONS="
+        + html.split("const SOURCE_STATUS_ACTIONS=", 1)[1].split("function watchlistItemHtml", 1)[0]
+    )
+    store_js = (
+        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
+    )
     source = html.split("const PROJECT_WATCH_KEY=", 1)[1].split("const ACQUISITION=", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
@@ -516,8 +531,9 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
         ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
         "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
         "const SOURCE_STATE_LABELS={changed:'Schimbată',needs_review:'Necesită revizie'};"
-        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
-        "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
+        + helper
+        + store_js
+        + "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
         + source
         + "const base={project_id:'PL-x 1',title:'<script>',source_name:'Camera',"
         "source_state:'ok',needs_attention:false,last_seen:'2026-09-10',"
@@ -774,6 +790,13 @@ def test_lifecycle_renderer_filters_and_opens_project_sources():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_lifecycle_renderer_exposes_phase_b_work_buckets():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    helper = (
+        "const WATCHLIST_STATES={};const SOURCE_STATUS_ACTIONS="
+        + html.split("const SOURCE_STATUS_ACTIONS=", 1)[1].split("function watchlistItemHtml", 1)[0]
+    )
+    store_js = (
+        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
+    )
     assert '<option value="evidence">Dovezi tracker lipsă</option>' in html
     assert "function setSelectValue(select,value)" in html
     assert "event_type:(stage.required_any||[])[0]||''" in html
@@ -789,8 +812,9 @@ def test_lifecycle_renderer_exposes_phase_b_work_buckets():
         ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
         "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
         "const SOURCE_STATE_LABELS={};"
-        "let store={};const localStorage={getItem:k=>store[k]||null,setItem:(k,v)=>{store[k]=v;}};"
-        "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
+        + helper
+        + store_js
+        + "const dossierTime=s=>s;const PROJECT_WATCH_KEY="
         + source
         + "const base={project_id:'PL-x 0',title:'Control',source_name:'Camera',"
         "source_state:'ok',needs_attention:false,last_seen:'2026-09-10',"
@@ -878,6 +902,10 @@ def test_matrix_drilldown_renderer_exposes_sources_and_authoring_actions():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     assert "matrice-drilldown-v1" in html
     assert "matrix-drilldown-btn" in html
+    helper = (
+        "const WATCHLIST_STATES={};const SOURCE_STATUS_ACTIONS="
+        + html.split("const SOURCE_STATUS_ACTIONS=", 1)[1].split("function watchlistItemHtml", 1)[0]
+    )
     source = html.split("function mActiuni", 1)[1].split("async function mArataActe", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
@@ -891,7 +919,8 @@ def test_matrix_drilldown_renderer_exposes_sources_and_authoring_actions():
         "'<section data-workflow-empty-state><h4>'+esc(title)+'</h4><p>'+esc(message)+"
         "'</p><p>'+esc(nextAction)+'</p></section>';}"
         "const mSourceQualityLabel=q=>q.loaded+' încărcate · '+q.missing+' lipsă';"
-        "function mActiuni"
+        + helper
+        + "function mActiuni"
         + source
         + "const d={gasit:true,emitent:'Parlamentul <x>',rand:{exemple:{viduri:[{act_id:'lege-1',"
         "locator:'art1',text:'Guvernul aprobă <b>',instrument:'hg',actiuni:[{fel:'prevedere',"
@@ -1071,6 +1100,10 @@ def test_matrix_workspace_queue_renders_daily_items_and_routes_actions():
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_source_registry_renderer_escapes_and_labels_states():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    helper = (
+        "const WATCHLIST_STATES={};const SOURCE_STATUS_ACTIONS="
+        + html.split("const SOURCE_STATUS_ACTIONS=", 1)[1].split("function watchlistItemHtml", 1)[0]
+    )
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split("const PROJECT_WATCH_KEY=", 1)[0]
     program = (
         "const assert=require('node:assert/strict');"
@@ -1078,7 +1111,9 @@ def test_source_registry_renderer_escapes_and_labels_states():
         ".replaceAll('>','&gt;');const dossierTime=s=>s;const nf=String;"
         "const select={innerHTML:''};const node={innerHTML:'',querySelector:()=>select,"
         "querySelectorAll:()=>[],reset:()=>{},value:''};"
-        "const $=()=>node;const SOURCE_REGISTRY="
+        "const $=()=>node;"
+        + helper
+        + "const SOURCE_REGISTRY="
         + source
         + "const h=sourceRegistryRowHtml({id:'src_1',family:'ue_cellar',"
         "identifier:'32014L0024',url:'https://example.test/?q=<x>',label:'<script>',"
@@ -1107,6 +1142,8 @@ def test_source_registry_renderer_escapes_and_labels_states():
         "assert.ok(h.includes('Revizie umană'));"
         "assert.ok(h.includes('Citită local &lt;x&gt;'));"
         "assert.ok(h.includes('Revizuiește impactul'));"
+        "assert.ok(h.includes('Stare sursă'));"
+        "assert.ok(h.includes('reverifică dosarele și propunerile dependente'));"
         "assert.ok(h.includes('Impact local: 1 dosare'));"
         "assert.ok(h.includes('Schimbare detectată: Vot nou'));"
         "assert.ok(h.includes('2 note'));"
