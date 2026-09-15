@@ -645,6 +645,7 @@ assert.ok(html.includes('data-watch-note'));
 assert.ok(html.includes('data-watch-rerun'));
 assert.ok(html.includes('data-watch-review'));
 assert.ok(html.includes('data-watch-delete'));
+assert.ok(html.includes('reverifică dosarele și propunerile dependente'));
 assert.ok(!/<(script|img|x|b)>/.test(html));
 const prefill=watchlistPrefill(item);
 assert.equal(prefill.type,'risc_ue');
