@@ -9792,6 +9792,22 @@ function mWorkspaceHtml(workspace){
     +(workspace.not_legal_verdict?`<p class="hint">Spațiu de lucru pentru analiză; nu verdict juridic.</p>`:"")
     +`</div>`;
 }
+function mEvidenceHandoffPreviewHtml(row){
+  const hasQuote=!!String(row.quote||"").trim();
+  const hasSource=!!(row.source_url||row.source_hash);
+  const target=[row.act_id,row.locator?locRo(row.locator):""].filter(Boolean).join(" · ")||"țintă neprecizată";
+  const state=hasQuote&&hasSource?"gata pentru notă":"incompletă";
+  const missing=[
+    hasQuote?"":"citat exact",
+    hasSource?"":"URL sau SHA-256",
+  ].filter(Boolean);
+  return `<div class="gap-workflow" data-matrix-evidence-preview>`
+    +`<h4>Se preia în dosar · ${esc(state)}</h4>`
+    +`<p><strong>Țintă:</strong> ${esc(target)}</p>`
+    +`<p><strong>Dovadă:</strong> ${hasQuote?"citat disponibil":"citat lipsă"} · ${hasSource?"sursă identificată":"sursă lipsă"}</p>`
+    +(missing.length?`<p class="hint">Completează înainte de concluzie: ${esc(missing.join(", "))}.</p>`:`<p class="hint">Poți crea notă, redactare sau ciornă AI; rezultatul rămâne ciornă nerevizuită.</p>`)
+    +`</div>`;
+}
 function mEvidenceRecordHtml(row){
   const href=urlSigur(row.source_url);
   const loc=row.locator?` · ${esc(locRo(row.locator))}`:"";
@@ -9802,6 +9818,7 @@ function mEvidenceRecordHtml(row){
     +`<div class="matrix-graph-meta">${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">sursă oficială</a> · `:""}${hash}${parser} · ${esc(row.uncertainty||"incertitudine neprecizată")}</div>`
     +(row.quote?`<blockquote class="source-text">${esc(row.quote)}</blockquote>`:`<p class="hint">Citatul exact lipsește din dovada locală.</p>`)
     +(row.not_legal_verdict?`<p class="hint">Dovadă pentru analiză; nu verdict juridic.</p>`:"")
+    +mEvidenceHandoffPreviewHtml(row)
     +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-write-evidence="${esc(row.id||"")}">Redactare</button><button type="button" class="ghost mini" data-matrix-rule-evidence="${esc(row.id||"")}">Propune regulă</button><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
     +`</article>`;
 }
