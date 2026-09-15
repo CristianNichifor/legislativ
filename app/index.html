@@ -8111,12 +8111,13 @@ function acceptanceDashboardHtml(data){
       const status=c.state==='ready'?'ok':'attention';
       const failed=(c.failed_checks||[]).length?`<p class="hint">Verificări eșuate: ${c.failed_checks.map(esc).join(' · ')}</p>`:'';
       const blockers=(c.blockers||[]).length?`<p class="hint">Blocaje: ${c.blockers.map(esc).join(' · ')}</p>`:'';
-      return `<article class="coverage-card coverage-${status}"><h4>${esc(c.label)} · ${esc(stateLabel[c.state]||c.state)}</h4><p>${esc(c.evidence||'')}</p>${failed}${blockers}</article>`;
+      const next=c.next_action?`<p class="hint">Următorul pas: ${esc(c.next_action)}</p>`:'';
+      return `<article class="coverage-card coverage-${status}"><h4>${esc(c.label)} · ${esc(stateLabel[c.state]||c.state)}</h4><p>${esc(c.evidence||'')}</p>${failed}${blockers}${next}</article>`;
     }).join('');
     const blocking=(data.blocking_capabilities||[]).map(item=>`<li><strong>${esc(item.key)}</strong> · ${esc(item.state)}<br><span class="hint">${esc((item.blockers||[]).join(' · ')||'fără dovadă suficientă')}${item.next_action?` ${esc(item.next_action)}`:''}</span></li>`).join('');
     const failed=(data.failed_checks||[]).map(item=>`<li>${esc(item.capability)}.${esc(item.check)}</li>`).join('');
     const sourceAction=acceptanceSourceActionHtml(data);
-    return `<section class="source-inventory"><h4>Gate produs final</h4><p><strong>${esc(data.status)}</strong> · ${data.completion_claim_allowed?'poate fi declarat complet':'nu poate fi declarat complet'} · ${data.summary?.ready||0} gata · ${data.summary?.partial||0} parțial · ${data.summary?.missing||0} lipsă.</p>${sourceAction}<div class="coverage-grid">${cards}</div>${blocking?`<details open><summary>Blocaje care opresc acceptarea finală</summary><ul>${blocking}</ul></details>`:''}${failed?`<details open><summary>Verificări eșuate</summary><ul>${failed}</ul></details>`:''}<p class="hint">CLI: ${esc(data.visible_in?.cli||'python -m scripts.app_completeness --require-complete')}</p><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
+    return `<section class="source-inventory"><h4>Gate produs final</h4><p><strong>${esc(data.status)}</strong> · ${data.completion_claim_allowed?'poate fi declarat complet':'nu poate fi declarat complet'} · ${data.summary?.ready||0} gata · ${data.summary?.partial||0} parțial · ${data.summary?.missing||0} lipsă.</p>${sourceAction}${completionActionCenterHtml(data)}<div class="coverage-grid">${cards}</div>${blocking?`<details open><summary>Blocaje care opresc acceptarea finală</summary><ul>${blocking}</ul></details>`:''}${failed?`<details open><summary>Verificări eșuate</summary><ul>${failed}</ul></details>`:''}<p class="hint">CLI: ${esc(data.visible_in?.cli||'python -m scripts.app_completeness --require-complete')}</p><p class="hint">${(data.limitari||[]).map(esc).join(' ')}</p></section>`;
   }
   const capabilityLabels={ready:'gata',partial:'parțial',missing:'lipsește'};
   const cards=(data.sections||[]).map(s=>{
@@ -8137,6 +8138,37 @@ function acceptanceSourceActionHtml(data){
     ?'GitHub Pages nu poate rula sincronizarea surselor oficiale; deschide aplicația locală pentru această verificare.'
     :`${source.missing_required||0} familii lipsă · ${source.unsynced_required||0} familii nesincronizate.`;
   return `<section class="source-review"><h5>Blocaj surse oficiale</h5><p>${esc(details)}</p><div class="dossier-actions"><button type="button" class="ghost mini" id="acceptance-source-sync"${disabled}>${esc(label)}</button><button type="button" class="ghost mini" id="acceptance-open-source-registry">Deschide registrul surselor</button></div><p class="hint">Rulează doar verificarea ancorelor oficiale deja definite; nu importă în masă Monitorul Oficial și nu trimite date private.</p></section>`;
+}
+function completionActionCenterHtml(data){
+  const source=data.source_status||{}, caps=data.capabilities||[];
+  const blocked=caps.filter(c=>c.state!=='ready');
+  if(data.completion_claim_allowed||!blocked.length)return '<section class="source-review" data-completion-action-center><h5>Acțiuni finalizare</h5><p class="hint">Toate capabilitățile obligatorii sunt gata conform gate-ului curent.</p></section>';
+  const items=new Map();
+  const add=(key,label,action,detail)=>items.set(key,{label,action,detail});
+  if(Number(source.missing_required||0)>0||Number(source.unsynced_required||0)>0){
+    add('sync_sources','Verifică sursele oficiale','sync-sources',`${source.missing_required||0} familii lipsă · ${source.unsynced_required||0} nesincronizate`);
+  }
+  for(const cap of blocked){
+    if(cap.key==='public_source_data_availability'){
+      add('registry','Registru surse','open-registry','Adaugă, sincronizează sau revizuiește familiile oficiale.');
+      add('workbench','Workbench surse','open-workbench','Inspectează surse, tracker și lifecycle în aceeași vedere.');
+      add('attention','Ce necesită atenție','open-attention','Vezi schimbări, erori și rânduri nerevizuite.');
+    }else if(cap.key==='lifecycle_tracking'){
+      add('lifecycle','Stadii proiecte','open-lifecycle','Verifică proiectele vechi, necunoscute sau fără dovezi.');
+      add('tracker','Revizie tracker','open-tracker-review','Închide evenimentele legislative nerevizuite.');
+    }else if(cap.key==='dossier_workflow'||cap.key==='export_backup_restore'){
+      add('dossiers','Dosare locale','open-dossiers','Verifică notele, ciornele, exportul și backupul.');
+    }else if(cap.key==='matrix_to_dossier'){
+      add('matrix','Matrice','open-matrix','Pornește dintr-o dovadă verificabilă și trimite în dosar.');
+    }else if(cap.key==='eu_issue_note'){
+      add('eu','Drept UE','open-eu','Creează nota UE numai din citate și surse păstrate.');
+    }else if(cap.key==='ai_mcp_bounded_draft'){
+      add('ai','AI/MCP bounded','open-dossiers','Deschide dosarul și folosește AI/MCP doar din dovezi selectate.');
+    }
+  }
+  const rows=[...items.values()].map(item=>`<button type="button" class="ghost mini" data-completion-action="${esc(item.action)}">${esc(item.label)}<br><small>${esc(item.detail)}</small></button>`).join('');
+  const labels=blocked.map(c=>`${c.label||c.key}: ${c.state}`).join(' · ');
+  return `<section class="source-review" data-completion-action-center><h5>Acțiuni finalizare</h5><p class="hint">${esc(labels)}</p><div class="manual-note-summary">${rows}</div></section>`;
 }
 function sourceCoverageHtml(data){
   const blockers=(data.blockers||[]).map(b=>`<li>${esc(b.message||b.kind)}</li>`).join('');
@@ -8186,20 +8218,47 @@ async function loadAcceptanceDashboard(){
     status.textContent=data.completion_claim_allowed?'Gate produs: complet conform dovezilor curente.':'Gate produs: blocat de capabilități parțiale sau lipsă.';
   }catch(err){status.textContent=err.message;}
 }
+async function runAcceptanceSourceSync(button){
+  if(button)button.disabled=true;
+  const status=$('#source-coverage-status');
+  status.textContent='Verific sursele oficiale de bază pentru gate-ul final…';
+  try{
+    const data=await sourceRegistryApi({action:'sync_bootstrap'});
+    status.textContent=`Verificare surse: ${data.total||0} încercări · ${Object.entries(data.counts||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără rezultat'}.`;
+    await loadSourceCoverage();
+    await loadAcceptanceDashboard();
+  }catch(err){status.textContent=err.message;if(button)button.disabled=false;}
+}
+function openCompletionTarget(action){
+  selectTab('matrice');
+  if(action==='open-registry'){
+    $('#source-registry').open=true;loadSourceRegistry(0);
+  }else if(action==='open-workbench'){
+    $('#source-coverage').open=true;loadSourceWorkbench();
+  }else if(action==='open-attention'){
+    $('#source-coverage').open=true;loadNeedsAttention();
+  }else if(action==='open-lifecycle'){
+    $('#lifecycle-tracker').open=true;loadLifecycleList();
+  }else if(action==='open-tracker-review'){
+    $('#lifecycle-tracker').open=true;$('#tracker-review-queue').open=true;loadTrackerReviewQueue();
+    $('#tracker-review-queue').scrollIntoView({block:'nearest'});
+  }else if(action==='open-dossiers'){
+    selectTab('dosare');$('#dossier-library')?.scrollIntoView({block:'start'});
+  }else if(action==='open-matrix'){
+    $('#m-q')?.focus();
+  }else if(action==='open-eu'){
+    selectTab('ue');$('#eu-text')?.focus();
+  }
+}
 function bindAcceptanceDashboardActions(out){
   const sync=out.querySelector('#acceptance-source-sync');
   const open=out.querySelector('#acceptance-open-source-registry');
   if(open)open.onclick=()=>{$('#source-registry').open=true;loadSourceRegistry(0);};
-  if(sync)sync.onclick=async()=>{
-    sync.disabled=true;const status=$('#source-coverage-status');
-    status.textContent='Verific sursele oficiale de bază pentru gate-ul final…';
-    try{
-      const data=await sourceRegistryApi({action:'sync_bootstrap'});
-      status.textContent=`Verificare surse: ${data.total||0} încercări · ${Object.entries(data.counts||{}).map(([k,v])=>`${SOURCE_STATE_LABELS[k]||k}: ${v}`).join(' · ')||'fără rezultat'}.`;
-      await loadSourceCoverage();
-      await loadAcceptanceDashboard();
-    }catch(err){status.textContent=err.message;sync.disabled=false;}
-  };
+  if(sync)sync.onclick=()=>runAcceptanceSourceSync(sync);
+  out.querySelectorAll('[data-completion-action]').forEach(button=>button.onclick=()=>{
+    if(button.dataset.completionAction==='sync-sources')runAcceptanceSourceSync(button);
+    else openCompletionTarget(button.dataset.completionAction);
+  });
 }
 function monitorReconciliationHtml(data){
   const counts=Object.entries(data.counts||{}).map(([k,v])=>`<li>${esc(k)}: ${esc(v)}</li>`).join('');

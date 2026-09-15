@@ -855,6 +855,49 @@ def test_ai_guardrail_summary_renders_ok_review_blocked_and_failure_states():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_completion_gate_renders_action_center_for_blocked_capabilities():
+    source = (
+        APP.read_text()
+        .split("function acceptanceDashboardHtml", 1)[1]
+        .split("function sourceCoverageHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;')"
+        ".replaceAll('\"','&quot;');"
+        "function acceptanceDashboardHtml"
+        + source
+        + "const data={contract:'app-completeness-gate-v1',status:'blocked',"
+        "completion_claim_allowed:false,summary:{ready:7,partial:2,missing:0},"
+        "source_status:{missing_required:1,unsynced_required:2},"
+        "capabilities:[{key:'public_source_data_availability',"
+        "label:'Public sources',state:'partial',evidence:'needs data',"
+        "failed_checks:['no_required_family_unsynced'],blockers:['missing <x>'],"
+        "next_action:'sync sources'},"
+        "{key:'lifecycle_tracking',label:'Lifecycle',state:'partial',"
+        "evidence:'needs tracker',failed_checks:[],blockers:['stale']}],"
+        "blocking_capabilities:[],failed_checks:[],visible_in:{cli:'python -m gate'},"
+        "limitari:['nu verdict juridic']};"
+        "const html=acceptanceDashboardHtml(data);"
+        "assert.ok(html.includes('data-completion-action-center'));"
+        "assert.ok(html.includes('Acțiuni finalizare'));"
+        "assert.ok(html.includes('data-completion-action=\"sync-sources\"'));"
+        "assert.ok(html.includes('data-completion-action=\"open-registry\"'));"
+        "assert.ok(html.includes('data-completion-action=\"open-workbench\"'));"
+        "assert.ok(html.includes('data-completion-action=\"open-attention\"'));"
+        "assert.ok(html.includes('data-completion-action=\"open-lifecycle\"'));"
+        "assert.ok(html.includes('data-completion-action=\"open-tracker-review\"'));"
+        "assert.ok(html.includes('Următorul pas: sync sources'));"
+        "assert.ok(!html.includes('<x>'));"
+        "const ready=completionActionCenterHtml({completion_claim_allowed:true,"
+        "capabilities:[{state:'ready'}]});"
+        "assert.ok(ready.includes('Toate capabilitățile obligatorii sunt gata'));"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
     source = (
         APP.read_text()

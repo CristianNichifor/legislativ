@@ -171,3 +171,5 @@ def test_app_completeness_is_visible_in_ui():
     assert "Verifică sursele oficiale de bază" in html
     assert "sync_bootstrap" in html
     assert "bindAcceptanceDashboardActions" in html
+    assert "data-completion-action-center" in html
+    assert "data-completion-action" in html
