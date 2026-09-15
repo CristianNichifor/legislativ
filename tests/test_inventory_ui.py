@@ -989,6 +989,70 @@ def test_matrix_drilldown_renderer_exposes_sources_and_authoring_actions():
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_matrix_workspace_queue_renders_daily_items_and_routes_actions():
+    html = (Path(__file__).parents[1] / "app/index.html").read_text()
+    source = html.split("function mWorkspaceKindLabel", 1)[1].split("function mActeHtml", 1)[0]
+    program = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s).replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const nf=n=>String(n||0),fold=s=>String(s||'').toLowerCase(),locRo=s=>'Loc '+s;"
+        "const urlSigur=s=>String(s||'').startsWith('https://')?s:null;"
+        "function mWorkspaceKindLabel"
+        + source
+        + "const workspace={contract:'law-matrix-workspace-v1',status:'work_ready',"
+        "active_filters:{review_state:'ready_for_review',source_family:'camera',lifecycle_state:'parliament'},"
+        "summary:{ready_rows:2,missing_source_rows:1,manual_notes:1,rule_candidates:1,"
+        "tracker_unreviewed:1,source_attention:1},actions:[{kind:'open_first_row',"
+        "label:'Deschide primul rând',enabled:true}],next_actions:['Deschide rândul <x>'],"
+        "payload:{contract:'law-matrix-workspace-v2',counts:{total:3,by_state:{"
+        "'evidence-backed':1,'missing-source':1,'needs-review':1}},items:[{id:'det:1',"
+        "kind:'deterministic_candidate',state:'missing-source',title:'Lacună <bad>',"
+        "scope:'Ministerul Test',count:2,not_legal_verdict:true},{id:'note:1',kind:'manual_note',"
+        "state:'needs-review',title:'Notă salvată',scope:'lege-1',locator:'art1',"
+        "dossier_id:'d1',source_url:'https://legislatie.just.ro/x',source_hash:'a'.repeat(64),"
+        "review_state:'ready_for_review',not_legal_verdict:true},{id:'eu:1',kind:'eu_risk',"
+        "state:'evidence-backed',title:'Directivă',scope:'achiziții',celex:'32014L0024'}]}};"
+        "const h=mWorkspacePanelHtml(workspace);"
+        "assert.ok(h.includes('Coadă zilnică de lucru'));"
+        "assert.ok(h.includes('law-matrix-workspace-v2'));"
+        "assert.ok(h.includes('coadă totală'));"
+        "assert.ok(h.includes('de completat'));"
+        "assert.ok(h.includes('Lacună'));"
+        "assert.ok(h.includes('semnal matrice · sursă lipsă · Ministerul Test · 2 semnale'));"
+        "assert.ok(h.includes('notă locală · revizie umană · lege-1 · Loc art1'));"
+        "assert.ok(h.includes('Dosar local'));"
+        "assert.ok(h.includes('Sursă oficială'));"
+        "assert.ok(h.includes('32014L0024'));"
+        "assert.ok(!h.includes('<bad>')&&!h.includes('<x>'));"
+        "const calls=[];"
+        "const row={dataset:{i:'0'},click:()=>calls.push(['click','row']),"
+        "scrollIntoView:o=>calls.push(['scroll','row',o.block])};"
+        "const rowButtons=[{dataset:{matrixWorkspaceOpenRow:'Ministerul Test'},onclick:null}];"
+        "const dossierButtons=[{dataset:{matrixWorkspaceOpenDossier:'d1'},onclick:null}];"
+        "const host={querySelectorAll:sel=>sel==='[data-matrix-workspace-action]'?[]:"
+        "sel==='[data-matrix-workspace-open-row]'?rowButtons:"
+        "sel==='[data-matrix-workspace-open-dossier]'?dossierButtons:[]};"
+        "const library={open:false,scrollIntoView:o=>calls.push(['scroll','dossier',o.block])};"
+        "const status={textContent:''};"
+        "const nodes={'#m-workspace':host,'#dossier-library':library,'#dossier-status':status};"
+        "function $(sel){return nodes[sel]||null;}"
+        "const document={querySelectorAll:sel=>sel==='#m-lista .matrix-row'?[row]:[]};"
+        "let MATRIX_ROWS=[{emitent:'Ministerul Test'}];"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "bindMatrixWorkspacePanel();"
+        "rowButtons[0].onclick();"
+        "assert.deepEqual(calls.slice(0,2),[['click','row'],['scroll','row','nearest']]);"
+        "dossierButtons[0].onclick();"
+        "assert.equal(library.open,true);"
+        "assert.ok(status.textContent.includes('d1'));"
+        "assert.deepEqual(calls.slice(-2),[['tab','dosare'],['scroll','dossier','start']]);"
+    )
+    result = subprocess.run(["node", "-e", program], capture_output=True, timeout=10)
+    assert result.returncode == 0, result.stderr.decode()
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_source_registry_renderer_escapes_and_labels_states():
     html = (Path(__file__).parents[1] / "app/index.html").read_text()
     source = html.split("const SOURCE_REGISTRY=", 1)[1].split("const PROJECT_WATCH_KEY=", 1)[0]
