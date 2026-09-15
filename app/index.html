@@ -5836,7 +5836,7 @@ function ruleCandidateControlsHtml(seed={}){
   const v=name=>esc(seed[name]||'');
   const title=seed.editing?'Editează candidatul':'Propune regulă';
   return '<details data-rule-candidate><summary>'+title+'</summary>'
-    +'<p class="hint">Previzualizarea verifică sursa și câmpurile. Salvarea pune candidatul în coada locală a dosarului; nu produce verdict juridic.</p>'
+    +'<p class="hint">Previzualizarea verifică sursa și câmpurile. Salvarea pune candidatul în coada locală a dosarului; editarea salvează o copie auditată, nu schimbă rândul vechi. Nu produce verdict juridic.</p>'
     +`<label>ID prevedere<input name="rule_provision_id" maxlength="240" value="${v('provision_id')}" placeholder="ro:lege-98-2016#art7.alin2"></label>`
     +`<label>Act<input name="rule_act_id" maxlength="200" value="${v('act_id')}"></label>`
     +`<label>Locator<input name="rule_locator" maxlength="120" value="${v('locator')}"></label>`
@@ -5855,6 +5855,7 @@ function ruleCandidateControlsHtml(seed={}){
     +`<label>Încredere<select name="rule_confidence">${ruleCandidateOptions(RULE_CANDIDATE_CONFIDENCE,seed.confidence||'unknown')}</select></label>`
     +`<label>Metodă extragere<select name="rule_extraction_method">${ruleCandidateOptions(RULE_CANDIDATE_EXTRACTION_METHODS,seed.extraction_method||'manual')}</select></label>`
     +`<input type="hidden" name="rule_origin_kind" value="${v('origin_kind')}"><input type="hidden" name="rule_origin_id" value="${v('origin_id')}">`
+    +`<input type="hidden" name="rule_supersedes_candidate_id" value="${v('supersedes_candidate_id')}"><input type="hidden" name="rule_supersedes_queue_id" value="${v('supersedes_queue_id')}">`
     +'<label>Reviewer<input name="rule_reviewer" maxlength="160" value="'+v('reviewer')+'"></label>'
     +'<div class="dossier-actions"><button type="button" class="ghost mini" data-rule-preview>Previzualizează candidatul</button><button type="button" class="ghost mini" data-rule-save disabled>Salvează în coadă</button><p class="hint" role="status" data-rule-status></p></div>'
     +'<pre data-rule-result></pre></details>';
@@ -5881,7 +5882,9 @@ function ruleCandidatePayload(root,source={}){
     extraction_method:field('rule_extraction_method')||source.extraction_method||'manual',
     origin_kind:field('rule_origin_kind')||source.origin_kind||'',
     origin_id:field('rule_origin_id')||source.origin_id||'',
-    reviewer:field('rule_reviewer')
+    reviewer:field('rule_reviewer'),
+    supersedes_candidate_id:field('rule_supersedes_candidate_id')||source.supersedes_candidate_id||'',
+    supersedes_queue_id:field('rule_supersedes_queue_id')||source.supersedes_queue_id||''
   };
 }
 function bindRuleCandidateControls(root,sourceReader=()=>({})){
@@ -6682,13 +6685,17 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
         ...(item.candidate||{}),
         editing:true,
         origin_kind:'rule_candidate_queue',
-        origin_id:item.id
+        origin_id:item.id,
+        supersedes_candidate_id:item.candidate?.candidate_id||item.candidate_id||'',
+        supersedes_queue_id:item.id
       });
       const box=target.querySelector('[data-rule-candidate]');if(box)box.open=true;
       bindRuleCandidateControls(target,()=>({
         ...(item.candidate||{}),
         origin_kind:'rule_candidate_queue',
-        origin_id:item.id
+        origin_id:item.id,
+        supersedes_candidate_id:item.candidate?.candidate_id||item.candidate_id||'',
+        supersedes_queue_id:item.id
       }));
     });
     host.querySelectorAll('[data-rule-promote] form').forEach(form=>{

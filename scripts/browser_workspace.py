@@ -132,6 +132,7 @@ def route(stare, route, qs, body, method="GET"):
             "/rule-drafts": lambda: law_rule_drafts.executa(path, body),
             "/rule-drafts/execute-draft": lambda: law_rule_execution.draft_text(path, body),
             "/rule-candidates/preview": lambda: rule_candidates.validate(body),
+            "/rule-candidates/entry": lambda: rule_candidates.from_entry(body),
             "/propuneri": lambda: propuneri.salveaza(path, body, stare),
             "/propuneri/previzualizare": lambda: propuneri.previzualizeaza(stare, body),
             "/propuneri/analize": lambda: analize_propuneri.salveaza(stare, body),
