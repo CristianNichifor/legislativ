@@ -231,6 +231,59 @@ def test_first_run_navigation_is_top_level_and_stateful():
     assert "data-ai-open-mcp-runtime" in source
     assert "function bindAiProductFlow" in source
     assert "function explainDisabledControls" in source
+    assert 'id="main-flow-strip"' in source
+    assert "Flux principal" in source
+    assert 'data-flow-target="matrix"' in source
+    assert 'data-flow-target="evidence"' in source
+    assert 'data-flow-target="dossier"' in source
+    assert 'data-flow-target="writing"' in source
+    assert 'data-flow-target="proposal"' in source
+    assert 'data-flow-target="export"' in source
+    assert "Matrice -> dovezi -> dosar -> redactare -> propunere -> export" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_main_flow_strip_routes_existing_workspaces_and_context():
+    source = (
+        APP.read_text()
+        .split("const MAIN_FLOW_LABELS", 1)[1]
+        .split("document.querySelectorAll('[data-main-nav]')", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "const buttons=['matrix','evidence','dossier','writing','proposal','export'].map(target=>({"
+        "dataset:{flowTarget:target},onclick:null,state:'',current:'',"
+        "setAttribute(k,v){if(k==='aria-current')this.current=v;}}));"
+        "const root={querySelectorAll:s=>s==='[data-flow-target]'?buttons:[]};"
+        "const status={textContent:''};"
+        "const panels={'#main-flow-context':status,'#m-q':{focus:()=>calls.push(['focus','m-q'])},"
+        "'#m-detalii':{scrollIntoView:o=>calls.push(['scroll','m-detalii',o.block])},"
+        "'#dossier-writing':{scrollIntoView:o=>calls.push(['scroll','writing',o.block])},"
+        "'#dossier-saved':{textContent:'',scrollIntoView:o=>calls.push(['scroll','saved',o.block])},"
+        "'#dossier-proposals':{scrollIntoView:o=>calls.push(['scroll','proposals',o.block])}};"
+        "function $(sel){return panels[sel]||null;}"
+        "const document={getElementById:id=>id==='main-flow-strip'?root:null};"
+        "let DOSARE_UI={selected:null,runId:''};"
+        "function currentProposalFindingId(){return DOSARE_UI.finding||'';}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "function openWorkflowTarget(target){calls.push(['workflow',target]);}"
+        "const MAIN_FLOW_LABELS" + source + "bindMainFlowStrip();"
+        "assert.equal(buttons.find(b=>b.dataset.flowTarget==='matrix').current,'true');"
+        "assert.equal(buttons.find(b=>b.dataset.flowTarget==='writing').dataset.state,'pending');"
+        "buttons.find(b=>b.dataset.flowTarget==='evidence').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['tab','matrice'],['scroll','m-detalii','start']]);"
+        "buttons.find(b=>b.dataset.flowTarget==='writing').onclick();"
+        "assert.ok(status.textContent.includes('Alege sau creează'));"
+        "DOSARE_UI={selected:{id:'d1',titlu:'Dosar X'},runId:'r1',finding:'f1'};"
+        "panels['#dossier-saved'].textContent='saved';"
+        "buttons.find(b=>b.dataset.flowTarget==='proposal').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['workflow','dossiers'],['scroll','saved','start']]);"
+        "assert.ok(status.textContent.includes('Editorul de propuneri'));"
+        "buttons.find(b=>b.dataset.flowTarget==='export').onclick();"
+        "assert.deepEqual(calls.slice(-2),[['workflow','dossiers'],['scroll','saved','start']]);"
+    )
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
