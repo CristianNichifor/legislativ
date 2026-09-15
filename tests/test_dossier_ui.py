@@ -80,6 +80,11 @@ def test_mcp_runtime_surface_is_visible_in_ai_panel():
     assert "data-mcp-test" in source
     assert "data-mcp-consent-state" in source
     assert "data-mcp-export-consent-state" in source
+    assert "data-mcp-save-note" in source
+    assert "Salvează ciorna MCP în dosar" in source
+    assert "mcpExecutedDraftNotePayload" in source
+    assert "dossierApi('/api/dosare/note',mcpExecutedDraftNotePayload" in source
+    assert "await loadManualNotes(DOSARE_UI.selected.id,0)" in source
     assert "api('/api/mcp/runtime')" in source
     assert "dossierApi('/api/mcp/test'" in source
     assert "data-mcp-execute" in source
@@ -819,6 +824,19 @@ def test_mcp_ai_draft_handoff_renderer_and_insert_metadata():
         "const executed={insert_header:'[Ciornă MCP]',output_status:'draft_unreviewed',"
         "draft_text:'text local',audit_event:{created_at:'2026-09-12',payload_hash:'def'}};"
         "assert.ok(mcpExecutedDraftInsertText(executed).includes('status=draft_unreviewed'));"
+        "class FormData{*[Symbol.iterator](){yield ['title','Notă <x>'];"
+        "yield ['type','lacuna'];yield ['act_id','lege-1'];yield ['locator','art1'];"
+        "yield ['source_url','https://example.test'];yield ['source_hash','a'.repeat(64)];"
+        "yield ['evidence_quote','citat'];}}"
+        "const payload=mcpExecutedDraftNotePayload(executed,{},'d1');"
+        "assert.match(payload.id,/^[a-f0-9]{32}$/);"
+        "assert.equal(payload.dosar_id,'d1');"
+        "assert.equal(payload.status,'draft');"
+        "assert.equal(payload.title,'Ciornă MCP · Notă <x>');"
+        "assert.equal(payload.source_hash,'a'.repeat(64));"
+        "assert.ok(payload.reasoning.includes('MCP audit: 2026-09-12 · def'));"
+        "assert.ok(payload.reasoning.includes('ciornă nerevizuită'));"
+        "assert.ok(payload.reasoning.includes('Nu verdict juridic.'));"
         "const MANUAL_NOTE_TYPES={lacuna:'Lacună'};"
         "const MANUAL_NOTE_STATUS={draft:'Ciornă'};"
         "function ruleCandidateControlsHtml(){return '<details data-rule-candidate></details>';}"
