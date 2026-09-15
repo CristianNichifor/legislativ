@@ -47,6 +47,26 @@ class of blocker, but the gate still reports `blocked` while those families are
 only `unsynced`. A registered source family is not the same as current legal
 data.
 
+## Sync capability classes
+
+"Unsynced" covered three different situations, which made the blocker list read
+as one reachable task. Each required family is now classified from the registry's
+own constants, and the class says what local proof is possible at all:
+
+| Class | Families | What a green row means |
+| --- | --- | --- |
+| `automated` | `parlament`, `camera`, `senat`, `consultare_econsultare`, `ue_cellar` | fetched and parsed locally, with per-source state and freshness |
+| `manual_metadata` | `consultare_guvern`, `consultare_minister`, `avize`, `monitorul_oficial_pi` | an operator entered metadata rows; there is no automatic freshness |
+| `anchor_only` | `legislatie_ro`, `monitorul_oficial`, `ccr` | the official entrypoint answered. Nothing more — these families are carried by `scripts.colector`, `scripts.monitor_tracker` and `scripts.decizii`, outside the registry |
+
+Only `automated` families can be moved by syncing from the UI. `anchor_only`
+families are reported under the `source_anchor_only` blocker kind rather than
+`source_unsynced`, so the blocker list names work that someone can actually do.
+`sync_capability_counts` in the report carries the per-class totals.
+
+A verified anchor proves the entrypoint responds. It does not prove a single
+document was ingested, and the gate now states that among its limitations.
+
 The report is also exposed in the UI through **Gate produs** and over HTTP at:
 
 ```text

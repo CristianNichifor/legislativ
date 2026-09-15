@@ -29,6 +29,17 @@ OPTIONAL_CONTROL_FAMILIES = (
     "monitorul_oficial_local",
     "monitorul_oficial_other_parts",
 )
+CAPABILITY_LIMITATIONS = [
+    "O ancoră oficială verificată dovedește că entrypointul răspunde, nu că există documente "
+    "ingerate local.",
+    "Familiile cu metadate manuale sunt acoperite doar cât a introdus un operator; nu au "
+    "prospețime automată.",
+]
+ANCHOR_ONLY_PIPELINES = {
+    "legislatie_ro": "scripts.colector (API SOAP legislatie.just.ro)",
+    "monitorul_oficial": "scripts.monitor_tracker (metadate)",
+    "ccr": "scripts.colector plus scripts.decizii (dispozitivul deciziilor din corpus)",
+}
 CONTROL_FAMILIES = REQUIRED_FAMILIES + OPTIONAL_CONTROL_FAMILIES
 ATTENTION = source_registry.ATTENTION_STATES
 READY_STATES = frozenset({"unchanged"})
@@ -142,6 +153,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             "label": labels.get(family, family),
             "required": family in REQUIRED_FAMILIES,
             "support": _family_support(family),
+            "sync_capability": _sync_capability(family),
             "total": total,
             "attention": attention,
             "ready": ready,
@@ -173,6 +185,7 @@ def _source_family_summary(stare) -> tuple[list[dict], list[str]]:
             "label": labels.get(family, family),
             "required": False,
             "support": _family_support(family),
+            "sync_capability": _sync_capability(family),
             "total": total_by_family[family],
             "attention": sum(counts[(family, state)] for state in BLOCKING_STATES),
             "ready": sum(counts[(family, state)] for state in READY_STATES),
@@ -309,6 +322,44 @@ def _parliamentary_evidence_by_family(stare) -> dict[str, dict]:
     return out
 
 
+def _sync_capability(family: str) -> dict:
+    """What kind of proof the local registry can ever produce for this family.
+
+    The registry syncs three different things under one word. Reporting them as one
+    number lets an unreachable target ("sync every required family") block a release,
+    and lets a verified homepage hash read as ingested law.
+    """
+    if family in source_registry.MANUAL_METADATA_FAMILIES:
+        return {
+            "class": "manual_metadata",
+            "label": "Metadate introduse manual",
+            "proof": "local_records",
+            "evidence": "Rânduri de metadate introduse de un operator, cu hash și URL.",
+            "pipeline": "",
+            "counts_as_automated_coverage": False,
+        }
+    if family in source_registry.SYNC_FAMILIES:
+        return {
+            "class": "automated",
+            "label": "Sincronizare automată",
+            "proof": "local_records",
+            "evidence": "Preluare și parsare automată, cu stare și prospețime per sursă.",
+            "pipeline": "",
+            "counts_as_automated_coverage": True,
+        }
+    return {
+        "class": "anchor_only",
+        "label": "Doar ancoră oficială",
+        "proof": "entrypoint_reachability",
+        "evidence": (
+            "Registrul poate verifica doar că entrypointul oficial răspunde; "
+            "documentele vin prin altă conductă."
+        ),
+        "pipeline": ANCHOR_ONLY_PIPELINES.get(family, ""),
+        "counts_as_automated_coverage": False,
+    }
+
+
 def _family_support(family: str) -> dict:
     if family == "monitorul_oficial_other_parts":
         return {
@@ -390,6 +441,22 @@ def _family_actions(row: dict) -> list[dict]:
             }
         )
     return actions
+
+
+def _capability_counts(families: list[dict]) -> dict:
+    """Required families per sync-capability class, with how many are locally covered."""
+    out: dict[str, dict] = {}
+    for row in families:
+        if not row["required"]:
+            continue
+        bucket = out.setdefault(
+            row["sync_capability"]["class"],
+            {"total": 0, "ok": 0, "families": []},
+        )
+        bucket["total"] += 1
+        bucket["ok"] += 1 if row["status"] == "ok" else 0
+        bucket["families"].append(row["family"])
+    return out
 
 
 def _family_next_action(
@@ -489,7 +556,15 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
     projects, project_limitations = _project_stage_summary(stare, now=now, stale_days=stale_days)
     missing = [row for row in families if row["required"] and row["status"] == "missing"]
     attention = [row for row in families if row["attention"]]
-    unsynced = [row for row in families if row["required"] and row["status"] == "unsynced"]
+    incomplete_required = [
+        row for row in families if row["required"] and row["status"] == "unsynced"
+    ]
+    anchor_only = [
+        row for row in incomplete_required if row["sync_capability"]["class"] == "anchor_only"
+    ]
+    unsynced = [
+        row for row in incomplete_required if row["sync_capability"]["class"] != "anchor_only"
+    ]
     blockers = []
     blockers.extend(
         {
@@ -514,9 +589,30 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
             "kind": "source_unsynced",
             "family": row["family"],
             "label": row["label"],
-            "message": f"{row['incomplete']} surse nu au încă sync reușit în {row['label']}.",
+            "capability": row["sync_capability"]["class"],
+            "message": (
+                f"{row['incomplete']} surse nu au încă sync reușit în {row['label']} "
+                f"({row['sync_capability']['label'].lower()})."
+            ),
         }
         for row in unsynced
+    )
+    blockers.extend(
+        {
+            "kind": "source_anchor_only",
+            "family": row["family"],
+            "label": row["label"],
+            "capability": "anchor_only",
+            "message": (
+                f"{row['label']}: registrul verifică doar entrypointul oficial. "
+                + (
+                    f"Datele vin prin {row['sync_capability']['pipeline']}."
+                    if row["sync_capability"]["pipeline"]
+                    else "Nu există încă o conductă locală pentru documentele acestei familii."
+                )
+            ),
+        }
+        for row in anchor_only
     )
     if projects["unknown"]:
         blockers.append(
@@ -538,8 +634,10 @@ def raport(stare, *, stale_days: int = DEFAULT_STALE_DAYS, now: datetime | None 
         "attention_sources": sum(row["attention"] for row in families),
         "unsynced_required": len(unsynced),
         "unsynced_sources": sum(row["incomplete"] for row in unsynced),
+        "anchor_only_required": len(anchor_only),
+        "sync_capability_counts": _capability_counts(families),
         "blockers": blockers,
         "portfolio": _portfolio_summary(families),
         "status": "blocked" if missing or blockers else "ok",
-        "limitari": limitations + project_limitations,
+        "limitari": limitations + project_limitations + CAPABILITY_LIMITATIONS,
     }
