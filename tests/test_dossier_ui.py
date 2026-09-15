@@ -1192,10 +1192,51 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "assert.ok(html.includes('data-writing-notes'));"
         "assert.ok(html.includes('data-writing-insert-evidence'));"
         "assert.ok(html.includes('data-writing-run-rules'));"
+        "assert.ok(html.includes('data-writing-open-proposal'));"
         "assert.ok(html.includes('data-writing-ai-form'));"
         "assert.ok(html.includes('data-unified-ai-draft'));"
         "assert.ok(html.includes('Trimite în Verifică'));"
         "assert.ok(!html.includes('<x>'));"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_writing_workspace_routes_to_verified_proposal_editor():
+    html = APP.read_text()
+    assert "WRITING_PROPOSAL_HANDOFFS.get(key)" in html
+    assert "WRITING_PROPOSAL_HANDOFFS.delete(key)" in html
+    source = html.split("function currentProposalFindingId", 1)[1].split(
+        "function aiEvidenceFromPack", 1
+    )[0]
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "let DOSARE_UI={selected:{id:'d1',titlu:'Dosar X'},runId:'r1'};"
+        "const DOSSIER_VIEWS=new Map([['d1:r1',{selected:'f1'}]]);"
+        "const WRITING_PROPOSAL_HANDOFFS=new Map();"
+        "const status={textContent:''};"
+        "const saved={scrollIntoView:o=>calls.push(['scroll',o.block])};"
+        "function $(sel){return {'#dossier-status':status,"
+        "'#dossier-writing':{querySelector:()=>status},'#dossier-saved':saved}[sel]||null;}"
+        "async function selectDossier(id,runId,checkId,findingId){"
+        "calls.push(['select',id,runId,checkId,findingId]);}"
+        "function currentProposalFindingId"
+        + source
+        + "assert.equal(currentProposalFindingId(),'f1');"
+        "const payload=writingProposalHandoffPayload({titlu:'Dosar <x>'},"
+        "{value:'Text propus'},{value:'Motivare'});"
+        "assert.deepEqual(payload,{title:'Propunere · Dosar <x>',"
+        "text:'Text propus',motiv:'Motivare'});"
+        "(async()=>{await openWritingProposalEditor(payload);"
+        "assert.deepEqual(calls,[['select','d1','r1',null,'f1'],['scroll','start']]);"
+        "assert.deepEqual(WRITING_PROPOSAL_HANDOFFS.get('proposal:f1'),payload);"
+        "assert.ok(status.textContent.includes('editorul propunerii verificate'));"
+        "calls.length=0;DOSARE_UI={selected:{id:'d1'},runId:''};"
+        "await openWritingProposalEditor(payload);"
+        "assert.deepEqual(calls,[['scroll','start']]);"
+        "assert.ok(status.textContent.includes('Alege o analiză salvată'));"
+        "})().catch(err=>{console.error(err);process.exit(1);});"
     )
     run_node(code)
 
