@@ -5242,6 +5242,7 @@ function reviewFindingHtml(f){
     +`<details><summary>Istoric · revizia ${f.revizie}</summary><div data-event-list>${f.istoric.map(reviewEventHtml).join('')||'<p>Nicio decizie înregistrată.</p>'}</div>${f.istoric_trunchiat?'<button type="button" class="ghost mini" data-older-events>Evenimente mai vechi</button><p class="hint">Exportul include ultimele 20 de evenimente; baza păstrează toate reviziile.</p>':''}</details></section>`;
 }
 let proposalListSequence=0;
+const WRITING_PROPOSAL_HANDOFFS=new Map();
 const MANUAL_NOTE_TYPES={
   lacuna:'Lacună',loophole:'Loophole',contradictie:'Contradicție',necorelare:'Necorelare',
   risc_ue:'Risc UE',constitutionalitate:'Constituționalitate'
@@ -6769,7 +6770,16 @@ function bindFindingProposal(section,panel,f,dossierId,runId,valid,render){
       const values=()=>Object.fromEntries(new FormData(form));
       const controls=[...form.elements];
       for(const [k,v] of Object.entries(previous?.values||initial))form.elements.namedItem(k).value=v;
-      message.textContent=previous?.error||(previous?.saving?'Salvare în curs…':previous?'Modificări nesalvate · baza: revizia '+revision:saved?'Salvată · revizia '+revision:'Propunere nouă');
+      const handoff=typeof WRITING_PROPOSAL_HANDOFFS==='undefined'?null:WRITING_PROPOSAL_HANDOFFS.get(key);
+      if(handoff){
+        if(handoff.title&&!form.elements.titlu.value)form.elements.titlu.value=handoff.title;
+        if(handoff.text)form.elements.text.value=(form.elements.text.value?form.elements.text.value.trim()+'\n\n':'')+handoff.text;
+        if(handoff.motiv)form.elements.motiv.value=(form.elements.motiv.value?form.elements.motiv.value.trim()+'\n\n':'')+handoff.motiv;
+        drafts.set(key,{values:values(),initial,revision,interventie:saved?.interventie?.cerere||null});
+        WRITING_PROPOSAL_HANDOFFS.delete(key);
+      }
+      const currentDraft=drafts.get(key);
+      message.textContent=currentDraft?.error||(currentDraft?.saving?'Salvare în curs…':currentDraft?'Modificări nesalvate · baza: revizia '+revision:saved?'Salvată · revizia '+revision:'Propunere nouă');
       if(previous?.saving)controls.forEach(c=>c.disabled=true);
       form.oninput=()=>{
         const current=values(),old=drafts.get(key);
@@ -9012,7 +9022,34 @@ function writingWorkspaceHtml(dossier){
   return `<details class="leg-writing" open><summary>Spațiu de redactare legislativă</summary>`
     +'<p class="hint">Lucrează cu textul proiectului, pachetul de dovezi și verificări deterministe în același loc. Rezultatele sunt semnale de lucru, nu verdict juridic.</p>'
     +`<form data-writing-project-form class="dossier-actions"><label>Project ID<input name="project_id" maxlength="200" value="${esc(dossier.project_id||'')}"></label><button type="submit" class="ghost mini">Încarcă context proiect</button><button type="button" class="ghost mini" data-writing-open-workbench>Workbench</button><p class="hint" role="status" data-writing-status></p></form>`
-    +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><form data-writing-ai-form>'+aiUnifiedDraftPanelHtml('pachetul dosarului')+'</form><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
+    +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button><button type="button" class="ghost mini" data-writing-open-proposal>Propunere din redactare</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><form data-writing-ai-form>'+aiUnifiedDraftPanelHtml('pachetul dosarului')+'</form><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
+}
+function currentProposalFindingId(){
+  const key=DOSARE_UI.selected?.id&&DOSARE_UI.runId?`${DOSARE_UI.selected.id}:${DOSARE_UI.runId}`:'';
+  return key ? DOSSIER_VIEWS.get(key)?.selected||'' : '';
+}
+function writingProposalHandoffPayload(dossier,draftBox,notesBox){
+  return {
+    title:`Propunere · ${dossier.titlu||dossier.id||'dosar'}`.slice(0,200),
+    text:(draftBox.value||'').trim(),
+    motiv:(notesBox.value||'').trim(),
+  };
+}
+async function openWritingProposalEditor(payload){
+  const status=$('#dossier-writing')?.querySelector('[data-writing-status]')||$('#dossier-status');
+  const dossierId=DOSARE_UI.selected?.id||'',runId=DOSARE_UI.runId||'',findingId=currentProposalFindingId();
+  if(!dossierId||!runId||!findingId){
+    if(status)status.textContent='Alege o analiză salvată și o constatare înainte de propunerea verificabilă.';
+    $('#dossier-saved')?.scrollIntoView({block:'start'});
+    return;
+  }
+  const key='proposal:'+findingId;
+  WRITING_PROPOSAL_HANDOFFS.set(key,payload);
+  await selectDossier(dossierId,runId,null,findingId);
+  const panel=$('#dossier-saved');
+  panel?.scrollIntoView({block:'start'});
+  const freshStatus=$('#dossier-status')||status;
+  if(freshStatus)freshStatus.textContent='Textul din redactare a fost trimis în editorul propunerii verificate.';
 }
 function aiEvidenceFromPack(pack){
   return (pack?.evidence||[]).slice(0,8).map((item,index)=>{
@@ -9054,6 +9091,7 @@ function bindWritingWorkspace(dossier){
   host.querySelector('[data-writing-open-workbench]').onclick=()=>openProjectWorkbench(project);
   host.querySelector('[data-writing-from-draft]').onclick=()=>{draftBox.value=$('#draft')?.value||'';status.textContent='Textul din fila Verifică a fost adus în spațiul de redactare.';};
   host.querySelector('[data-writing-to-draft]').onclick=()=>{const draft=$('#draft');if(draft){draft.value=draftBox.value;draft.dispatchEvent(new Event('input',{bubbles:true}));selectTab('lint');status.textContent='Textul a fost trimis în Verifică.';}};
+  host.querySelector('[data-writing-open-proposal]').onclick=()=>openWritingProposalEditor(writingProposalHandoffPayload(dossier,draftBox,notesBox));
   insert.onclick=()=>{notesBox.value=(notesBox.value?notesBox.value.trim()+'\n\n':'')+markdown;status.textContent='Pachetul Markdown a fost adăugat în notele de lucru.';};
   copy.onclick=async()=>{try{await navigator.clipboard.writeText(markdown);status.textContent='Pachetul Markdown a fost copiat.';}catch{status.textContent='Copierea pachetului nu a reușit.';}};
   host.querySelector('[data-writing-run-rules]').onclick=async()=>{
