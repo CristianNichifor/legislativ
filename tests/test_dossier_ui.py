@@ -388,6 +388,21 @@ def test_dossier_creation_surfaces_source_freshness_warning():
     assert "sourceFreshnessStatus" in source
 
 
+def test_workflow_empty_states_point_to_next_action():
+    source = APP.read_text()
+    assert "function workflowEmptyState" in source
+    assert "data-workflow-empty-state" in source
+    assert "Niciun rând în matrice" in source
+    assert "Șterge căutarea, schimbă aria/rangul" in source
+    assert "Nicio analiză salvată" in source
+    assert "Rulează analiza pe dosar" in source
+    assert "Pachet de dovezi neîncărcat" in source
+    assert "Încarcă context proiect" in source
+    assert "Nicio sursă urmărită" in source
+    assert "Adaugă sursele oficiale de bază" in source
+    assert "Nicio inițiativă locală" in source
+
+
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
 def test_saved_run_provenance_is_escaped_and_labeled_historical():
     source = (
@@ -1254,6 +1269,9 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "const ruleDraftTextExecutionHtml=()=>'<p>rule draft placeholder</p>';"
         "function aiUnifiedDraftPanelHtml(label){return "
         "'<details data-unified-ai-draft>'+label+'</details>';}"
+        "function workflowEmptyState(title,message,nextAction){return "
+        "'<section data-workflow-empty-state><h4>'+esc(title)+'</h4><p>'+esc(message)+"
+        "'</p><p>'+esc(nextAction)+'</p></section>';}"
         "function projectWorkbenchMarkdown"
         + source
         + "const pack={project_id:'PL-x-1',source_status:'current',"
@@ -1276,6 +1294,10 @@ def test_legislative_writing_workspace_renders_context_and_actions():
         "assert.ok(context.includes('Contradicție'));"
         "assert.ok(context.includes('nu este verdict juridic'));"
         "assert.ok(!context.includes('<script>')&&!context.includes('<bad>'));"
+        "const emptyContext=writingWorkspaceContextHtml(null);"
+        "assert.ok(emptyContext.includes('data-workflow-empty-state'));"
+        "assert.ok(emptyContext.includes('Pachet de dovezi neîncărcat'));"
+        "assert.ok(emptyContext.includes('Încarcă context proiect'));"
         "const missing=writingReadinessHtml({id:'d1',titlu:'Dosar <x>'});"
         "assert.ok(missing.includes('Pregătire redactare · 1/6'));"
         "assert.ok(missing.includes('Pachet dovezi'));"
