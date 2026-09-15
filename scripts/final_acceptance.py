@@ -53,9 +53,42 @@ def _runtime_completeness(data_home: str | None, data_channel: str | None, sync_
         return app_completeness.report(runtime.manager.current_state), anchor_sync
 
 
+EVIDENCE_BASIS = {
+    "runtime_verified": (
+        "Raport generat împotriva unui runtime real, cu ancorele oficiale verificate în "
+        "această rulare."
+    ),
+    "runtime_no_anchors": (
+        "Raport generat împotriva unui runtime real, dar fără verificarea ancorelor "
+        "oficiale în această rulare."
+    ),
+    "static_only": (
+        "Raport generat fără runtime: starea surselor este cea a unui director gol, nu a "
+        "unei instalări reale."
+    ),
+}
+
+
+def _evidence_basis(data_home: str | None, sync_anchors: bool) -> str:
+    if not data_home:
+        return "static_only"
+    return "runtime_verified" if sync_anchors else "runtime_no_anchors"
+
+
 def _table(rows: list[tuple[str, str, str]]) -> str:
     body = ["| Gate | Status | Evidence |", "| --- | --- | --- |"]
     body.extend(f"| {gate} | {status} | {evidence} |" for gate, status, evidence in rows)
+    return "\n".join(body)
+
+
+def _capability_table(counts: dict) -> str:
+    if not counts:
+        return "- Not available in this report."
+    body = ["| Capability | Covered | Required | Families |", "| --- | --- | --- | --- |"]
+    for key in sorted(counts):
+        item = counts[key] or {}
+        families = ", ".join(item.get("families") or []) or "-"
+        body.append(f"| `{key}` | {item.get('ok', 0)} | {item.get('total', 0)} | {families} |")
     return "\n".join(body)
 
 
@@ -74,7 +107,9 @@ def build(
     ai_eval_schema = _read_json(AI_EVAL_SCHEMA)
     source_status = completeness.get("source_status") or {}
     vertical = completeness.get("vertical_acceptance") or {}
-    status = "passed" if completeness.get("completion_claim_allowed") else "blocked"
+    evidence_basis = _evidence_basis(data_home, sync_source_anchors)
+    claim_allowed = bool(completeness.get("completion_claim_allowed"))
+    status = "passed" if claim_allowed and evidence_basis == "runtime_verified" else "blocked"
     capabilities = completeness.get("capabilities") or []
     capability_rows = [
         (
@@ -120,6 +155,19 @@ Status: **{status}**
 This file is generated from the current product gates. It is not a legal
 accuracy claim and it does not replace human domain review.
 
+## Report Provenance
+
+The status above describes the runtime this report was generated against, not the
+repository alone. A run without a real `--data-home` and without verified official
+anchors can never report `passed`.
+
+- Evidence basis: `{evidence_basis}`.
+- Meaning: {EVIDENCE_BASIS[evidence_basis]}
+- Data home: `{data_home or "not used"}`.
+- Data channel: `{data_channel or "default"}`.
+- Official anchors verified in this run: `{str(bool(sync_source_anchors)).lower()}`.
+- Completion claim allowed by the gate: `{str(claim_allowed).lower()}`.
+
 ## Completeness Gate
 
 - Contract: `{completeness.get("contract")}`.
@@ -128,7 +176,16 @@ accuracy claim and it does not replace human domain review.
 - Source status: `{source_status.get("status")}`.
 - Missing required source families: `{source_status.get("missing_required", 0)}`.
 - Unsynced required source families: `{source_status.get("unsynced_required", 0)}`.
+- Anchor-only required source families: `{source_status.get("anchor_only_required", 0)}`.
 - Source attention rows: `{source_status.get("attention_sources", 0)}`.
+
+### Coverage By Sync Capability
+
+Required families, grouped by what the local registry can prove about them. Only
+`automated` families can reach coverage by syncing; `manual_metadata` depends on an
+operator entering rows, and `anchor_only` families are carried by a separate pipeline.
+
+{_capability_table(source_status.get("sync_capability_counts") or {})}
 
 {_table(capability_rows)}
 
@@ -174,7 +231,10 @@ uv run python -m scripts.v1_rehearsal
 """
     summary = {
         "status": status,
-        "completion_claim_allowed": bool(completeness.get("completion_claim_allowed")),
+        "completion_claim_allowed": claim_allowed,
+        "evidence_basis": evidence_basis,
+        "data_home_used": bool(data_home),
+        "anchors_verified": bool(sync_source_anchors),
         "blocking_capabilities": [item.get("key") for item in blockers],
         "source_status": source_status,
         "anchor_sync": anchor_sync,
@@ -202,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(report, encoding="utf-8")
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True))
-    if args.require_complete and not summary["completion_claim_allowed"]:
+    if args.require_complete and summary["status"] != "passed":
         return 2
     return 0
 

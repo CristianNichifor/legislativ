@@ -125,10 +125,17 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
 
     out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
 
+    anchor_only = [
+        family
+        for family in acoperire_surse.REQUIRED_FAMILIES
+        if acoperire_surse._sync_capability(family)["class"] == "anchor_only"
+    ]
+
     assert boot["created"] == 14
     assert out["missing_required"] == 0
-    assert out["unsynced_required"] == len(acoperire_surse.REQUIRED_FAMILIES)
-    assert out["unsynced_sources"] == len(acoperire_surse.REQUIRED_FAMILIES)
+    assert out["unsynced_required"] == len(acoperire_surse.REQUIRED_FAMILIES) - len(anchor_only)
+    assert out["unsynced_sources"] == len(acoperire_surse.REQUIRED_FAMILIES) - len(anchor_only)
+    assert out["anchor_only_required"] == len(anchor_only)
     assert out["attention_sources"] == 0
     assert out["status"] == "blocked"
     assert {row["status"] for row in out["families"] if row["required"]} == {"unsynced"}
@@ -136,7 +143,10 @@ def test_source_coverage_bootstrap_turns_missing_into_unsynced(tmp_path):
     assert {row["next_action"] for row in out["families"] if row["required"]} == {
         "Sincronizează rânduri selectate până au stare locală verificată."
     }
-    assert {blocker["kind"] for blocker in out["blockers"]} == {"source_unsynced"}
+    assert {blocker["kind"] for blocker in out["blockers"]} == {
+        "source_unsynced",
+        "source_anchor_only",
+    }
 
 
 def test_source_coverage_accepts_verified_official_anchors(monkeypatch, tmp_path):
@@ -207,3 +217,58 @@ def test_source_coverage_handles_missing_stores_and_validates_stale_days(tmp_pat
 
     with pytest.raises(ValueError, match="actualitate"):
         acoperire_surse.raport(stare, stale_days=0)
+
+
+def test_sync_capability_classes_follow_the_registry_not_a_hand_list():
+    classes = {
+        family: acoperire_surse._sync_capability(family)["class"]
+        for family in acoperire_surse.REQUIRED_FAMILIES
+    }
+
+    assert classes["camera"] == "automated"
+    assert classes["consultare_econsultare"] == "automated"
+    assert classes["ue_cellar"] == "automated"
+    assert classes["avize"] == "manual_metadata"
+    assert classes["consultare_guvern"] == "manual_metadata"
+    assert classes["legislatie_ro"] == "anchor_only"
+    assert classes["monitorul_oficial"] == "anchor_only"
+    assert classes["ccr"] == "anchor_only"
+    for family, klass in classes.items():
+        expected = family in source_registry.SYNC_FAMILIES
+        assert (klass != "anchor_only") is expected
+    assert acoperire_surse._sync_capability("legislatie_ro")["pipeline"].startswith(
+        "scripts.colector"
+    )
+
+
+def test_anchor_only_families_are_not_reported_as_needing_sync(tmp_path):
+    stare = state(tmp_path)
+    source_registry.executa(stare, {"action": "bootstrap"})
+
+    out = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))
+    kinds = {blocker["family"]: blocker["kind"] for blocker in out["blockers"]}
+    anchor_blocker = next(
+        blocker for blocker in out["blockers"] if blocker["family"] == "legislatie_ro"
+    )
+
+    assert kinds["legislatie_ro"] == "source_anchor_only"
+    assert kinds["ccr"] == "source_anchor_only"
+    assert kinds["camera"] == "source_unsynced"
+    assert "entrypointul oficial" in anchor_blocker["message"]
+    assert "scripts.colector" in anchor_blocker["message"]
+    assert any("nu că există documente" in item for item in out["limitari"])
+
+
+def test_capability_counts_separate_automated_coverage_from_the_rest(tmp_path):
+    stare = state(tmp_path)
+    source_registry.executa(stare, {"action": "bootstrap"})
+
+    counts = acoperire_surse.raport(stare, now=datetime(2026, 9, 12, tzinfo=UTC))[
+        "sync_capability_counts"
+    ]
+
+    assert set(counts) == {"automated", "manual_metadata", "anchor_only"}
+    assert sum(item["total"] for item in counts.values()) == len(acoperire_surse.REQUIRED_FAMILIES)
+    assert counts["anchor_only"]["total"] == 3
+    assert counts["anchor_only"]["ok"] == 0
+    assert "ccr" in counts["anchor_only"]["families"]

@@ -339,6 +339,8 @@ def report(stare=None) -> dict:
             "missing_required": missing_required,
             "unsynced_required": unsynced_required,
             "unsynced_sources": source_coverage.get("unsynced_sources", 0),
+            "anchor_only_required": source_coverage.get("anchor_only_required", 0),
+            "sync_capability_counts": source_coverage.get("sync_capability_counts", {}),
             "attention_sources": attention_sources,
             "blockers": source_coverage.get("blockers", []),
         },

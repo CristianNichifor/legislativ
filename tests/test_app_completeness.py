@@ -79,7 +79,8 @@ def test_app_completeness_require_complete_cli_exits_nonzero():
     assert out["blocking_capabilities"]
     assert out["completion_claim_allowed"] is False
     assert out["source_status"]["missing_required"] == 0
-    assert out["source_status"]["unsynced_required"] == 12
+    assert out["source_status"]["unsynced_required"] == 9
+    assert out["source_status"]["anchor_only_required"] == 3
 
 
 def test_app_completeness_data_home_without_sync_reports_missing_sources(tmp_path, capsys):
@@ -129,8 +130,12 @@ def test_app_completeness_default_report_bootstraps_official_source_anchors():
     out = app_completeness.report()
 
     assert out["source_status"]["missing_required"] == 0
-    assert out["source_status"]["unsynced_required"] == 12
+    assert out["source_status"]["unsynced_required"] == 9
+    assert out["source_status"]["anchor_only_required"] == 3
     assert any(blocker["kind"] == "source_unsynced" for blocker in out["source_status"]["blockers"])
+    assert any(
+        blocker["kind"] == "source_anchor_only" for blocker in out["source_status"]["blockers"]
+    )
 
 
 def test_app_completeness_http_endpoint(state):
@@ -149,7 +154,9 @@ def test_app_completeness_reports_unsynced_bootstrapped_sources(state):
 
     source_status = out["source_status"]
     assert source_status["missing_required"] == 0
-    assert source_status["unsynced_required"] == 12
+    assert source_status["unsynced_required"] == 9
+    assert source_status["anchor_only_required"] == 3
+    assert source_status["sync_capability_counts"]["anchor_only"]["total"] == 3
     assert source_status["attention_sources"] == 0
     source_capability = next(
         item for item in out["capabilities"] if item["key"] == "public_source_data_availability"
