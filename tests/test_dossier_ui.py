@@ -1006,11 +1006,64 @@ def test_rule_candidate_authoring_paths_are_visible():
     source = APP.read_text()
 
     assert "data-matrix-rule-evidence" in source
+    assert "data-matrix-write-evidence" in source
     assert "extraction_method:'matrix'" in source
     assert "form.elements.rule_extraction_method.value='ai_draft'" in source
     assert "form.elements.rule_extraction_method.value='mcp_draft'" in source
     assert "origin_kind:'rule_candidate_queue'" in source
     assert "data-rule-edit-host" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_matrix_evidence_opens_dossier_writing_workspace():
+    source = (
+        APP.read_text()
+        .split("function matrixEvidenceWritingText", 1)[1]
+        .split("function projectWritingSourceContext", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "class Event{constructor(type,opts={}){this.type=type;this.opts=opts;}}"
+        "const esc=s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const locRo=s=>'Loc '+s,manualNoteText=s=>String(s??'');"
+        "function matrixWorkspaceNoteContext(workspace){return 'Context: '+workspace.stage;}"
+        "const notesBox={value:'',dispatchEvent:e=>calls.push(['input',e.type])};"
+        "const writingStatus={textContent:''};"
+        "const writing={querySelector:sel=>({'[data-writing-notes]':notesBox,"
+        "'[data-writing-status]':writingStatus}[sel]||null),"
+        "closest:()=>({open:false}),scrollIntoView:o=>calls.push(['scroll',o.block])};"
+        "const library={open:false};"
+        "const dossierStatus={textContent:''};"
+        "const nodes={'#dossier-library':library,'#dossier-status':dossierStatus,"
+        "'#dossier-writing':writing};"
+        "function $(sel){return nodes[sel]||null;}"
+        "function selectTab(tab){calls.push(['tab',tab]);}"
+        "function bindWritingWorkspace(){calls.push(['bind-writing']);}"
+        "let DOSARE_UI={selected:null};"
+        "function matrixEvidenceWritingText"
+        + source
+        + "const row={id:'ev-1',label:'Lacună <x>',kind:'lacuna',act_id:'lege-1',"
+        "locator:'art1',source_url:'https://legislatie.just.ro/x',source_hash:'a'.repeat(64),"
+        "uncertainty:'revizie manuală',quote:'Text <b>'};"
+        "const context={drilldown:{workspace:{stage:'gata de lucru'}}};"
+        "openMatrixEvidenceWritingWorkspace(row,context);"
+        "assert.equal(library.open,true);"
+        "assert.ok(dossierStatus.textContent.includes('Alege sau creează'));"
+        "assert.deepEqual(calls,[['tab','dosare']]);"
+        "calls.length=0;DOSARE_UI={selected:{id:'d1',titlu:'Dosar'}};"
+        "openMatrixEvidenceWritingWorkspace(row,context);"
+        "assert.ok(notesBox.value.includes('Redactare din matrice: Lacună <x>'));"
+        "assert.ok(notesBox.value.includes('Act: lege-1 · Loc art1'));"
+        "assert.ok(notesBox.value.includes('SHA-256: '+ 'a'.repeat(64)));"
+        "assert.ok(notesBox.value.includes('> Text <b>'));"
+        "assert.ok(notesBox.value.includes('Context: gata de lucru'));"
+        "assert.ok(notesBox.value.includes('Nu este verdict juridic.'));"
+        "assert.equal(writingStatus.textContent,"
+        "'Dovada din matrice a fost adăugată în spațiul de redactare al dosarului.');"
+        "assert.deepEqual(calls,[['tab','dosare'],['input','input'],['scroll','start']]);"
+    )
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
