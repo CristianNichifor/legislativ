@@ -9810,6 +9810,7 @@ function mWorkspaceDailyBucketsHtml(workspace){
     `<button type="button" class="ghost mini matrix-stat" data-matrix-daily-bucket="${esc(key)}"><b>${nf(count)}</b><span>${esc(label)}</span><small>${esc(next)}</small></button>`
   ).join("")}</div>`;
 }
+let MATRIX_WORKSPACE_ITEMS=[];
 function mWorkspaceItemMeta(item){
   const parts=[
     mWorkspaceKindLabel(item.kind),
@@ -9833,6 +9834,41 @@ function mWorkspaceItemIntent(item){
   if(item.state==="needs-review") return "Revizuiește nota locală și păstrează limita de incertitudine.";
   return "Poți salva în dosar și începe redactarea din dovezi.";
 }
+function mWorkspaceItemNote(item,mode="note"){
+  const isEu=item.kind==="eu_risk"||item.celex;
+  const isRule=mode==="rule"||item.kind==="rule_candidate";
+  const title=[
+    isRule?"Regulă candidată matrice":(mode==="draft"?"Redactare matrice":"Notă matrice"),
+    item.title||item.scope||item.id
+  ].filter(Boolean).join(" · ").slice(0,200);
+  const evidence=[
+    `Intrare matrice: ${item.title||item.id||"necunoscută"}`,
+    `Tip: ${mWorkspaceKindLabel(item.kind)}`,
+    `Stare: ${mWorkspaceStateLabel(item.state)}`,
+    item.celex?`CELEX: ${item.celex}`:"",
+    item.source_hash?`SHA-256: ${item.source_hash}`:"",
+    item.source_url?`URL: ${item.source_url}`:""
+  ].filter(Boolean).join("\n");
+  return {
+    title,
+    type:isEu?"risc_ue":(isRule?"lacuna":"necorelare"),
+    act_id:item.act_id||item.scope||item.celex||"",
+    locator:item.locator||"",
+    evidence_quote:evidence,
+    source_url:item.source_url||"",
+    source_hash:item.source_hash||"",
+    reasoning:[
+      mWorkspaceItemIntent(item),
+      "Handoff pornit din coada zilnică a matricei.",
+      "Nu verdict juridic."
+    ].join("\n"),
+    status:item.source_url||item.source_hash||item.state==="evidence-backed"?"ready_for_review":"needs_evidence",
+    extraction_method:"matrix_workspace",
+    origin_kind:item.kind||"matrix_workspace",
+    origin_id:item.id||item.scope||"",
+    revizie:0
+  };
+}
 function mWorkspaceItemHtml(item,index){
   const href=urlSigur(item.source_url);
   const rowAction=item.scope
@@ -9840,8 +9876,8 @@ function mWorkspaceItemHtml(item,index){
   const dossierAction=item.dossier_id
     ? `<button type="button" class="ghost mini" data-matrix-workspace-open-dossier="${esc(item.dossier_id)}">Dosar local</button>`
     : `<button type="button" class="ghost mini" data-matrix-workspace-open-dossier="">Alege dosar</button>`;
-  const draftAction=`<button type="button" class="ghost mini" data-matrix-workspace-draft="${esc(item.scope||item.id||String(index))}">Redactare</button>`;
-  const ruleAction=`<button type="button" class="ghost mini" data-matrix-workspace-rule="${esc(item.scope||item.id||String(index))}">Regulă candidată</button>`;
+  const draftAction=`<button type="button" class="ghost mini" data-matrix-workspace-draft="${esc(item.scope||item.id||String(index))}" data-matrix-workspace-index="${esc(index)}">Redactare</button>`;
+  const ruleAction=`<button type="button" class="ghost mini" data-matrix-workspace-rule="${esc(item.scope||item.id||String(index))}" data-matrix-workspace-index="${esc(index)}">Regulă candidată</button>`;
   const sourceAction=item.source_family||href
     ? `<button type="button" class="ghost mini" data-matrix-workspace-source="${esc(item.source_family||item.source_url||"")}">Sursă/parcurs</button>`:"";
   return `<article class="matrix-workspace-item" data-matrix-workspace-item="${esc(item.id||String(index))}" data-workspace-kind="${esc(item.kind||"")}" data-workspace-state="${esc(item.state||"")}">`
@@ -9857,6 +9893,7 @@ function mWorkspacePanelHtml(workspace){
   const s=workspace.summary||{}, filters=workspace.active_filters||{};
   const payload=workspace.payload||{}, counts=payload.counts||{}, byState=counts.by_state||{};
   const items=(payload.items||[]).slice(0,8);
+  MATRIX_WORKSPACE_ITEMS=items;
   const stat=(label,value)=>`<div class="matrix-stat"><b>${nf(value||0)}</b><span>${esc(label)}</span></div>`;
   const filterBits=[
     filters.review_state?`revizie: ${filters.review_state}`:"",
@@ -9925,18 +9962,20 @@ function bindMatrixWorkspacePanel(){
       : "Alege sau creează un dosar înainte de a salva constatarea din matrice.";
   });
   host.querySelectorAll("[data-matrix-workspace-draft]").forEach(button=>button.onclick=()=>{
+    const item=MATRIX_WORKSPACE_ITEMS[Number(button.dataset.matrixWorkspaceIndex)]||{};
     const scope=button.dataset.matrixWorkspaceDraft||"";
     const wanted=fold(scope), rows=[...document.querySelectorAll("#m-lista .matrix-row")];
     const match=rows.find(row=>fold((MATRIX_ROWS[Number(row.dataset.i)]||{}).emitent||"").includes(wanted));
     if(match){match.click();match.scrollIntoView({block:"nearest"});}
-    reveal("#ai-product-flow","Redactarea pornește numai din dovezi selectate și rămâne ciornă nerevizuită.");
+    startManualNote(mWorkspaceItemNote(item,"draft"),{draft:true});
   });
   host.querySelectorAll("[data-matrix-workspace-rule]").forEach(button=>button.onclick=()=>{
+    const item=MATRIX_WORKSPACE_ITEMS[Number(button.dataset.matrixWorkspaceIndex)]||{};
     const scope=button.dataset.matrixWorkspaceRule||"";
     const wanted=fold(scope), rows=[...document.querySelectorAll("#m-lista .matrix-row")];
     const match=rows.find(row=>fold((MATRIX_ROWS[Number(row.dataset.i)]||{}).emitent||"").includes(wanted));
     if(match){match.click();match.scrollIntoView({block:"nearest"});}
-    reveal("#dossier-library","Creează regula candidată doar după citat, locator, URL și hash.");
+    startManualNote(mWorkspaceItemNote(item,"rule"),{rule:true});
   });
   host.querySelectorAll("[data-matrix-workspace-source]").forEach(button=>button.onclick=()=>{
     const family=button.dataset.matrixWorkspaceSource||"";
