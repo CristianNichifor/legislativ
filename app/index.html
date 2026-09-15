@@ -5160,7 +5160,18 @@ function dossierSnapshotHtml(run){
   const reportHtml=run.raport?.tip_dosar==='fisa-act'?fisaActHtml(run.raport):mDosarHtml(run.raport);
   return `<h4>Analiză salvată</h4><p class="hint">Salvată: ${esc(run.creat_la)} · Motor: ${esc(run.engine_version)}<br>SHA-256 raport: ${esc(run.sha256)}</p>`
     +'<p class="hint">Raport istoric, nu recalculare. Legăturile și butoanele „Text curent” consultă sursa actuală, nu o versiune arhivată.</p>'
-    +reportHtml+dossierEuSnapshotsHtml(run);
+    +savedRunExportReadinessHtml(run)+reportHtml+dossierEuSnapshotsHtml(run);
+}
+function savedRunExportReadinessHtml(run){
+  const report=run.raport||{}, evidence=run.dovezi||{};
+  const limitations=[...(report.limitari||[]),...(run.limitari||[])].filter(Boolean);
+  const eu=evidence.surse_ue?.instantanee||evidence.referinte_ue||[];
+  const hasReport=!!String(report.markdown||report.titlu||'').trim();
+  const hasHash=!!run.sha256;
+  const ready=hasReport&&hasHash;
+  return `<section class="gap-workflow" data-saved-run-export-readiness><h4>Pregătire export raport · ${ready?'gata':'incompletă'}</h4>`
+    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Raport<br><b>${hasReport?'gata':'lipsește'}</b></button><button type="button" class="ghost mini" disabled>SHA-256<br><b>${hasHash?'gata':'lipsește'}</b></button><button type="button" class="ghost mini" disabled>Surse UE<br><b>${esc(eu.length||0)}</b></button><button type="button" class="ghost mini" disabled>Limitări<br><b>${esc(limitations.length||0)}</b></button></div>`
+    +`<p class="hint">${ready?'Poți copia sau tipări raportul salvat.':'Exportul are nevoie de raport salvat și hash.'} Include limitările și sursele păstrate; nu este anonimizat.</p></section>`;
 }
 function dossierEuSnapshotsHtml(run){
   const evidence=run.dovezi||{}, saved=evidence.surse_ue;
@@ -6578,7 +6589,7 @@ async function loadProposalList(dossierId,offset=0){
   host.innerHTML='<h4>Propuneri salvate</h4><p role="status">Încarc propunerile…</p>';
   try{
     const data=await dossierApi('/api/dosare/propuneri?'+new URLSearchParams({mod:'lista',id:dossierId,offset:String(offset)}));if(!valid())return;
-    host.innerHTML='<h4>Propuneri salvate</h4><div data-proposal-rows>'+data.propuneri.map((p,i)=>`<div class="proposal-row"><button type="button" class="ghost mini" data-open-proposal="${i}">${esc(p.titlu)}</button><span>Revizia ${p.revizie}</span><small>Salvată: ${esc(dossierTime(p.creat_la))} · Analiză: ${esc(dossierTime(p.rulare_creata_la))}<br>Constatare: ${esc(p.constatare_id)}</small></div>`).join('')+'</div><p class="hint" data-proposal-list-status role="status">'+(data.total?`${offset+1}–${Math.min(offset+data.propuneri.length,data.total)} din ${data.total}`:'Nicio propunere salvată.')+'</p><div class="dossier-actions"><button type="button" class="ghost mini" data-proposals-prev title="Propuneri mai noi">←</button><button type="button" class="ghost mini" data-proposals-next title="Propuneri mai vechi">→</button><button type="button" class="ghost mini" data-proposals-refresh title="Reîncarcă propunerile">↻</button></div>';
+    host.innerHTML='<h4>Propuneri salvate</h4>'+proposalListExportReadinessHtml(data,offset)+'<div data-proposal-rows>'+data.propuneri.map((p,i)=>`<div class="proposal-row"><button type="button" class="ghost mini" data-open-proposal="${i}">${esc(p.titlu)}</button><span>Revizia ${p.revizie}</span><small>Salvată: ${esc(dossierTime(p.creat_la))} · Analiză: ${esc(dossierTime(p.rulare_creata_la))}<br>Constatare: ${esc(p.constatare_id)}</small></div>`).join('')+'</div><p class="hint" data-proposal-list-status role="status">'+(data.total?`${offset+1}–${Math.min(offset+data.propuneri.length,data.total)} din ${data.total}`:'Nicio propunere salvată.')+'</p><div class="dossier-actions"><button type="button" class="ghost mini" data-proposals-prev title="Propuneri mai noi">←</button><button type="button" class="ghost mini" data-proposals-next title="Propuneri mai vechi">→</button><button type="button" class="ghost mini" data-proposals-refresh title="Reîncarcă propunerile">↻</button></div>';
     host.querySelector('[data-proposals-prev]').disabled=offset===0;host.querySelector('[data-proposals-next]').disabled=offset+data.propuneri.length>=data.total;
     host.querySelector('[data-proposals-prev]').onclick=()=>loadProposalList(dossierId,Math.max(0,offset-50));
     host.querySelector('[data-proposals-next]').onclick=()=>loadProposalList(dossierId,offset+50);
@@ -6590,6 +6601,17 @@ async function loadProposalList(dossierId,offset=0){
       if(DOSARE_UI.selected?.id===dossierId&&DOSARE_UI.runId===p.rulare_id)$('#dossier-saved').scrollIntoView({block:'start'});
     });
   }catch(err){if(valid()){host.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă propunerile';retry.onclick=()=>loadProposalList(dossierId,offset);host.append(retry);}}
+}
+function proposalListExportReadinessHtml(data,offset=0){
+  const proposals=data.propuneri||[];
+  const first=proposals[0]||{};
+  const hasProposal=proposals.length>0;
+  const hasRun=!!first.rulare_id||!!first.rulare_creata_la;
+  const hasFinding=!!first.constatare_id;
+  const ready=hasProposal&&hasRun&&hasFinding;
+  return `<section class="gap-workflow" data-proposal-export-readiness><h4>Pregătire export propunere · ${ready?'gata':'incompletă'}</h4>`
+    +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Propuneri<br><b>${esc(data.total||0)}</b></button><button type="button" class="ghost mini" disabled>Pagina<br><b>${esc(hasProposal?offset+1:0)}</b></button><button type="button" class="ghost mini" disabled>Analiză<br><b>${hasRun?'legată':'lipsește'}</b></button><button type="button" class="ghost mini" disabled>Constatare<br><b>${hasFinding?'legată':'lipsește'}</b></button></div>`
+    +`<p class="hint">${ready?'Deschide o propunere ca să alegi revizia și formatul exportului.':'Salvează o propunere dintr-o constatare verificabilă înainte de export.'} Exportul nu include ciorne nesalvate.</p></section>`;
 }
 const WATCHLIST_KINDS={act:'Act normativ',project:'Proiect legislativ',celex:'CELEX',domain:'Domeniu',keyword:'Cuvânt cheie'};
 const WATCHLIST_STATES={not_registered:'neurmărit în registrul de surse',changed:'sursă schimbată',failed:'sincronizare eșuată',needs_review:'necesită revizie',rate_limited:'limitată de sursă',queued:'în coadă',fetched:'citită',unchanged:'neschimbată',discovered:'descoperită',unavailable:'indisponibilă'};
