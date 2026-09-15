@@ -864,6 +864,9 @@ def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
         "const assert=require('node:assert/strict');"
         "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
         "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
+        "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
+        "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
         "function aiDraftBoundaryHtml"
         + source
         + "const html=aiDraftBoundaryHtml({evidence_count:1,input_sha256:'i'.repeat(64),"
@@ -874,11 +877,60 @@ def test_ai_draft_boundary_summary_shows_cost_approval_and_manifest():
         "evidence_manifest:[{index:1,label:'<Act>',act_id:'lege',locator:'art1',source_hash:'h'.repeat(64)}]},'online_byok');"
         "assert.ok(html.includes('online BYOK'));"
         "assert.ok(html.includes('cost server: none'));"
+        "assert.ok(html.includes('Previzualizare payload AI/BYOK'));"
+        "assert.ok(html.includes('data-ai-run-state=\"preview_ready_external_approval_required\"'));"
+        "assert.ok(html.includes('selected_evidence_only'));"
+        "assert.ok(html.includes('proză încrezătoare fără dovezi: blocată'));"
         "assert.ok(html.includes('ai-external-send-approval-v1'));"
         "assert.ok(html.includes('Aprobare externă: obligatorie'));"
         "assert.ok(html.includes('serverul cheamă model: nu'));"
         "assert.ok(html.includes('&lt;Act&gt;'));"
         "assert.ok(html.includes('PROMPT'));"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_ai_payload_preview_and_missing_evidence_refusal_are_secret_free():
+    source = (
+        APP.read_text()
+        .split("function aiDraftBoundaryHtml", 1)[1]
+        .split("function ruleCandidateOptions", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function aiSettings(){return {online_byok:{provider:'openai',provider_label:'OpenAI',"
+        "model:'gpt-test',endpoint:'https://api.openai.test/v1/chat/completions'},"
+        "local_provider:{model:'Qwen-test'},key_storage:'sessionStorage_only'};}"
+        "function aiDraftBoundaryHtml"
+        + source
+        + "const plan={task:'draft_amendment',evidence_count:1,input_sha256:'i'.repeat(64),"
+        "evidence_sha256:'e'.repeat(64),status:'draft_unreviewed',estimated_tokens:50,"
+        "cost_estimate:{estimated_total_tokens:950,server_cost:'none',"
+        "cost_owner:'user_if_byok_or_mcp'},approval:{output_status:'draft_unreviewed'},"
+        "external_approval_payload:{contract:'ai-external-send-approval-v1'},"
+        "limitari:['nu verdict']};"
+        "const preview=aiDraftPayloadPreview(plan,'online_byok');"
+        "assert.equal(preview.contract,'ai-byok-payload-preview-v1');"
+        "assert.equal(preview.task,'ciornă amendament');"
+        "assert.equal(preview.provider_label,'OpenAI');"
+        "assert.equal(preview.run_state,'preview_ready_external_approval_required');"
+        "assert.equal(preview.prompt_scope,'selected_evidence_only');"
+        "assert.equal(preview.estimated_total_tokens,950);"
+        "assert.equal(preview.no_hidden_calls,true);"
+        "assert.equal(preview.missing_evidence_blocks_confident_prose,true);"
+        "assert.ok(!JSON.stringify(preview).includes('SECRET'));"
+        "const refusal=aiDraftRefusalState({evidence:[{quote:'',source_url:'',source_hash:''}]});"
+        "assert.equal(refusal.status,'blocked_missing_evidence');"
+        "assert.equal(refusal.output_status,'no_confident_prose');"
+        "assert.equal(refusal.server_calls_model,false);"
+        "const html=aiDraftRefusalHtml(refusal);"
+        "assert.ok(html.includes('AI blocată înainte de prompt'));"
+        "assert.ok(html.includes('data-ai-run-state=\"blocked_before_preview\"'));"
+        "assert.ok(html.includes('server_calls_model=false'));"
+        "assert.ok(!html.includes('SECRET'));"
     )
     run_node(code)
 

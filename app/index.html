@@ -5528,13 +5528,105 @@ function aiDraftBoundaryHtml(plan,boundary){
   const approval=plan.approval||{};
   const external=plan.external_approval_payload||{};
   const mode={local_ai:'AI local în browser',online_byok:'online BYOK',mcp_handoff:'MCP cu aprobare'}[boundary]||boundary;
+  const preview=aiDraftPayloadPreview(plan,boundary);
   const manifest=(plan.evidence_manifest||[]).map(e=>`<li>${esc(e.index)}. ${esc(e.label)} · ${esc([e.act_id,e.locator].filter(Boolean).join(' / ')||'fără act')} · ${esc(e.source_hash||e.source_url||'sursă')}</li>`).join('');
   return `<details open data-ai-boundary-card><summary>Limită AI pregătită · ${esc(mode)}</summary>`
+    +aiDraftPayloadPreviewHtml(preview)
     +`<p class="hint">Dovezi: ${esc(plan.evidence_count)} · tokeni estimați: ${esc(cost.estimated_total_tokens||plan.estimated_tokens||'necunoscut')} · cost server: ${esc(cost.server_cost||'none')} · cost extern: ${esc(cost.cost_owner||'utilizator')}</p>`
     +`<p class="hint">Aprobare externă: ${approval.required_for_external_ai?'obligatorie':'nu'} · contract: ${esc(external.contract||'ai-external-send-approval-v1')} · serverul cheamă model: ${approval.server_calls_model?'da':'nu'} · output: ${esc(approval.output_status||plan.status||'draft_unreviewed')}</p>`
     +`<p class="hint">Prompt SHA-256: ${esc(plan.input_sha256||'')} · dovezi SHA-256: ${esc(plan.evidence_sha256||'')}</p>`
     +(manifest?`<ul>${manifest}</ul>`:'')
     +`<details><summary>Prompt complet</summary><pre>${esc(plan.prompt||'')}</pre></details></details>`;
+}
+function aiDraftRefusalState(draftPayload){
+  const evidence=Array.isArray(draftPayload?.evidence)?draftPayload.evidence:[];
+  const missing=evidence.map((item,i)=>({index:i+1,quote:!!String(item?.quote||'').trim(),source:!!(String(item?.source_url||'').trim()||String(item?.source_hash||'').trim())}))
+    .filter(item=>!item.quote||!item.source);
+  if(!evidence.length||missing.length){
+    return {
+      contract:'ai-draft-refusal-state-v1',
+      status:'blocked_missing_evidence',
+      output_status:'no_confident_prose',
+      run_state:'blocked_before_preview',
+      selected_evidence_only:true,
+      server_calls_model:false,
+      app_paid_provider:false,
+      stores_api_key:false,
+      message:'AI blocată: selectează citat și URL sau SHA-256 pentru fiecare dovadă înainte de ciornă.',
+      limitations:['Fără dovezi complete aplicația nu produce proză încrezătoare.','Nu se apelează backendul de prompt și nu se trimite nimic la furnizor.'],
+      missing
+    };
+  }
+  return null;
+}
+function aiDraftRefusalHtml(refusal){
+  if(!refusal)return '';
+  const missing=(refusal.missing||[]).map(item=>`<li>Dovada ${esc(item.index)} · citat: ${item.quote?'da':'nu'} · sursă: ${item.source?'da':'nu'}</li>`).join('');
+  return `<section data-ai-payload-preview data-ai-run-state="${esc(refusal.run_state)}"><h5>AI blocată înainte de prompt</h5>`
+    +`<p class="hint">${esc(refusal.message)} Status: ${esc(refusal.output_status)} · doar dovezi selectate: da · server_calls_model=false.</p>`
+    +(missing?`<ul>${missing}</ul>`:'')
+    +`<details><summary>Limitări</summary><ul>${(refusal.limitations||[]).map(item=>`<li>${esc(item)}</li>`).join('')}</ul></details></section>`;
+}
+function aiDraftPayloadPreview(plan,boundary){
+  const settings=aiSettings();
+  const cost=plan.cost_estimate||{};
+  const taskLabels={
+    explain_issue:'explică problema',
+    issue_note:'notă de constatare',
+    draft_amendment:'ciornă amendament',
+    review_checklist:'listă de verificare reviewer',
+    summarize_source_change:'rezumă schimbare sursă',
+    compare_provisions:'compară două prevederi',
+    extract_rule_candidate:'extrage candidat law-as-code'
+  };
+  const taskKey=plan.task||plan.draft_request?.task||'issue_note';
+  const task=taskLabels[taskKey]||taskKey;
+  const provider=boundary==='online_byok'
+    ?settings.online_byok
+    :boundary==='mcp_handoff'
+      ?{provider:'mcp_handoff',provider_label:'MCP aprobat',model:'unealta aleasă de utilizator',endpoint:'server MCP local/extern'}
+      :{provider:'browser_webllm',provider_label:'AI local în browser',model:settings.local_provider?.model||'',endpoint:''};
+  const runState=boundary==='mcp_handoff'?'preview_only_mcp_approval_required':boundary==='online_byok'?'preview_ready_external_approval_required':'preview_ready_explicit_local_run';
+  return {
+    contract:'ai-byok-payload-preview-v1',
+    run_state:runState,
+    boundary,
+    task,
+    provider:provider.provider,
+    provider_label:provider.provider_label,
+    model:provider.model,
+    endpoint:provider.endpoint,
+    prompt_scope:'selected_evidence_only',
+    evidence_count:plan.evidence_count,
+    estimated_total_tokens:cost.estimated_total_tokens||plan.estimated_tokens||null,
+    server_cost:cost.server_cost||'none',
+    external_cost_owner:cost.cost_owner||'user_if_byok_or_mcp',
+    limitations:plan.limitari||[],
+    output_status:plan.approval?.output_status||plan.status||'draft_unreviewed',
+    requires_explicit_user_action:true,
+    server_calls_model:false,
+    app_paid_provider:false,
+    stores_api_key:false,
+    missing_evidence_blocks_confident_prose:true,
+    no_hidden_calls:true
+  };
+}
+function aiDraftPayloadPreviewHtml(preview){
+  const rows=[
+    ['Sarcină',preview.task],
+    ['Furnizor',preview.provider_label||preview.provider],
+    ['Model',preview.model||'necompletat'],
+    ['Run state',preview.run_state],
+    ['Payload',preview.prompt_scope],
+    ['Tokeni',preview.estimated_total_tokens||'necunoscut'],
+    ['Cost',`${preview.server_cost} server · ${preview.external_cost_owner} extern`],
+    ['Output',preview.output_status]
+  ];
+  return `<section data-ai-payload-preview data-ai-run-state="${esc(preview.run_state)}"><h5>Previzualizare payload AI/BYOK</h5>`
+    +`<dl class="hint">${rows.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`
+    +`<p class="hint">Aprobare explicită: da · apeluri ascunse: nu · chei salvate: nu · proză încrezătoare fără dovezi: blocată.</p>`
+    +(preview.limitations?.length?`<details><summary>Limitări</summary><ul>${preview.limitations.map(item=>`<li>${esc(item)}</li>`).join('')}</ul></details>`:'')
+    +`<details><summary>Contract preview</summary><pre>${esc(JSON.stringify(preview,null,2))}</pre></details></section>`;
 }
 function aiExternalApproval(plan,boundary){
   const settings=aiSettings();
@@ -5847,6 +5939,12 @@ function bindManualNoteAiDraft(form){
     draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi…';result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';
     try{
       const draftPayload=manualNoteAiEvidence(form);
+      const refusal=aiDraftRefusalState(draftPayload);
+      if(refusal){
+        summary.innerHTML=aiDraftRefusalHtml(refusal);
+        status.textContent=refusal.message;
+        return;
+      }
       plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
       plan.draft_request=draftPayload;
       const boundary=form.elements.ai_boundary.value;
@@ -6016,6 +6114,12 @@ function bindUnifiedAiDraft(root,draftPayloadBuilder,insertDraft){
     draft='';plan=null;send.disabled=true;copy.disabled=true;insert.disabled=true;run.disabled=true;status.textContent='Pregătesc promptul din dovezi selectate…';result.textContent='';summary.innerHTML='';if(guardrail)guardrail.innerHTML='';
     try{
       const draftPayload=draftPayloadBuilder();
+      const refusal=aiDraftRefusalState(draftPayload);
+      if(refusal){
+        summary.innerHTML=aiDraftRefusalHtml(refusal);
+        status.textContent=refusal.message;
+        return;
+      }
       plan=await dossierApi('/api/dosare/ai-draft',draftPayload);
       plan.draft_request=draftPayload;
       const boundary=root.elements.ai_boundary.value,total=plan.cost_estimate?.estimated_total_tokens||plan.estimated_tokens;
