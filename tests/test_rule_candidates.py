@@ -71,6 +71,78 @@ def test_candidate_id_changes_for_reviewable_authoring_edits():
     assert first["candidate_id"] != second["candidate_id"]
 
 
+def test_rule_candidate_entry_from_manual_note_builds_queue_payload():
+    out = rule_candidates.from_entry(
+        {
+            "contract": "rule-candidate-entry-v1",
+            "id": "1" * 32,
+            "dosar_id": "2" * 32,
+            "origin": {
+                "kind": "manual_note",
+                "id": "3" * 32,
+                "act_id": "lege-98-2016",
+                "locator": "art7.alin2",
+                "evidence_quote": "Autoritatea publică anunțul.",
+                "source_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+                "source_hash": "b" * 64,
+            },
+            "candidate": {
+                "actor": "autoritatea contractantă",
+                "action": "publică anunțul",
+                "confidence": "medium",
+            },
+        }
+    )
+
+    assert out["contract"] == "rule-candidate-entry-preview-v1"
+    assert out["candidate"]["contract"] == "rule-candidate-v1"
+    assert out["candidate"]["provision_id"] == "lege-98-2016#art7.alin2"
+    assert out["candidate"]["origin_kind"] == "manual_note"
+    assert out["candidate"]["origin_id"] == "3" * 32
+    assert out["candidate"]["source_hash"] == "b" * 64
+    assert out["queue_payload"]["action"] == "save"
+    assert out["queue_payload"]["candidate"] == out["candidate"]
+    assert out["edit_mode"] is False
+
+
+def test_rule_candidate_entry_from_selected_provision_and_edit_ancestry():
+    out = rule_candidates.from_entry(
+        {
+            "contract": "rule-candidate-entry-v1",
+            "origin": {
+                "kind": "provision",
+                "provision_id": "ro:lege-98-2016#art7.alin2",
+                "act_id": "lege-98-2016",
+                "locator": "art7.alin2",
+                "text": "Autoritatea contractantă publică anunțul în SEAP.",
+                "sursa_url": "https://legislatie.just.ro/Public/DetaliiDocument/178667",
+                "sursa_sha256": "c" * 64,
+            },
+            "candidate": {
+                "modality": "deadline",
+                "review_state": "human_reviewed",
+                "actor": "autoritatea contractantă",
+                "action": "publică anunțul în SEAP",
+                "deadline": "10 zile",
+                "reviewer": "jurist",
+            },
+            "edit": {
+                "supersedes_candidate_id": "d" * 32,
+                "supersedes_queue_id": "e" * 32,
+            },
+        }
+    )
+
+    candidate = out["candidate"]
+    assert out["edit_mode"] is True
+    assert out["queue_payload"] is None
+    assert candidate["extraction_method"] == "provision"
+    assert candidate["origin_kind"] == "provision"
+    assert candidate["supersedes_candidate_id"] == "d" * 32
+    assert candidate["supersedes_queue_id"] == "e" * 32
+    assert any("editare auditată" in item for item in candidate["limitations"])
+
+
 @pytest.mark.parametrize(
     ("modality", "status"),
     [
@@ -138,6 +210,37 @@ def test_rule_candidate_preview_http_is_local_only(tmp_path):
     assert data["status"] == "reviewable"
 
 
+def test_rule_candidate_entry_http_is_local_only(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db", date_dir=None)
+    body = {
+        "contract": "rule-candidate-entry-v1",
+        "origin": {
+            "kind": "provision",
+            "act_id": "lege-98-2016",
+            "locator": "art7.alin2",
+            "text": "Autoritatea publică anunțul.",
+            "source_hash": "b" * 64,
+        },
+        "candidate": {"actor": "autoritatea", "action": "anunță"},
+    }
+
+    assert (
+        request(
+            state,
+            "POST",
+            "/api/dosare/rule-candidates/entry",
+            body,
+            origin="https://evil.test",
+        )[0]
+        == 403
+    )
+    code, data = request(state, "POST", "/api/dosare/rule-candidates/entry", body)
+
+    assert code == 200
+    assert data["contract"] == "rule-candidate-entry-preview-v1"
+    assert data["candidate"]["provision_id"] == "lege-98-2016#art7.alin2"
+
+
 def test_browser_workspace_routes_rule_candidate_preview(tmp_path):
     state = SimpleNamespace(initiative=tmp_path / "initiative.db")
 
@@ -151,3 +254,29 @@ def test_browser_workspace_routes_rule_candidate_preview(tmp_path):
 
     assert out["contract"] == "rule-candidate-v1"
     assert out["modality"] == "deadline"
+
+
+def test_browser_workspace_routes_rule_candidate_entry(tmp_path):
+    state = SimpleNamespace(initiative=tmp_path / "initiative.db")
+
+    out = route(
+        state,
+        "/api/dosare/rule-candidates/entry",
+        {},
+        {
+            "contract": "rule-candidate-entry-v1",
+            "origin": {
+                "kind": "manual_note",
+                "id": "1" * 32,
+                "act_id": "lege-98-2016",
+                "locator": "art7.alin2",
+                "citat_dovada": "Autoritatea publică anunță.",
+                "source_sha256": "c" * 64,
+            },
+            "candidate": {"actor": "autoritatea", "action": "anunță"},
+        },
+        method="POST",
+    )
+
+    assert out["contract"] == "rule-candidate-entry-preview-v1"
+    assert out["candidate"]["origin_kind"] == "manual_note"

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from scripts import dosare, rule_candidate_queue
+from scripts import dosare, rule_candidate_queue, rule_candidates
 from scripts.server import face_handler
 
 DOSAR_ID = "b" * 32
@@ -161,6 +161,59 @@ def test_rule_candidate_queue_survives_backup_with_authoring_metadata(state):
     assert restored["items"][0]["candidate"]["confidence"] == "medium"
     assert restored["items"][0]["candidate"]["extraction_method"] == "manual_note"
     assert restored["items"][0]["candidate"]["origin_id"] == "6" * 32
+
+
+def test_edited_rule_candidate_copy_survives_backup_with_ancestry(state):
+    create_dossier(state)
+    path = dosare.cale(state)
+    first = rule_candidate_queue.salveaza(
+        path,
+        {
+            "id": "6" * 32,
+            "dosar_id": DOSAR_ID,
+            "candidate": candidate(action="publică anunțul inițial", confidence="low"),
+        },
+    )
+    entry = rule_candidates.from_entry(
+        {
+            "contract": "rule-candidate-entry-v1",
+            "id": "7" * 32,
+            "dosar_id": DOSAR_ID,
+            "origin": {
+                "kind": "manual_note",
+                "id": "8" * 32,
+                "act_id": "lege-98-2016",
+                "locator": "art7.alin2",
+                "evidence_quote": "Autoritatea contractantă publică anunțul în SEAP.",
+                "source_hash": "a" * 64,
+            },
+            "candidate": {
+                "actor": "autoritatea contractantă",
+                "action": "publică anunțul corectat",
+                "confidence": "medium",
+            },
+            "edit": {
+                "supersedes_candidate_id": first["candidate_id"],
+                "supersedes_queue_id": first["id"],
+            },
+        }
+    )
+
+    saved = rule_candidate_queue.executa(path, entry["queue_payload"])
+    backup = path.with_name("rules-edited-backup.db")
+    dosare.backup(path, backup)
+    restored = rule_candidate_queue.lista(backup, DOSAR_ID)
+
+    assert saved["candidate_id"] != first["candidate_id"]
+    assert restored["total"] == 2
+    edited = next(
+        item
+        for item in restored["items"]
+        if item["candidate"]["supersedes_candidate_id"] == first["candidate_id"]
+    )
+    assert edited["candidate"]["action"] == "publică anunțul corectat"
+    assert edited["candidate"]["supersedes_queue_id"] == first["id"]
+    assert edited["candidate"]["origin_kind"] == "manual_note"
 
 
 def test_rule_candidate_queue_http_is_local_only(state):

@@ -55,6 +55,8 @@ to a separate `initiative.documente.db` beside the initiative database.
 - `GET /api/fisa-act?act=` — one law workbench: local gap/CCR/project/EU signals and next actions.
 - `POST /api/dosare/rule-candidates/preview` — validate an unsaved source-bound rule candidate
   for later law-as-code review.
+- `POST /api/dosare/rule-candidates/entry` — build a validated candidate from one selected
+  provision/manual note, including audited edit ancestry when present.
 - `GET/POST /api/dosare/rule-drafts` — promote reviewed candidates into immutable draft rules.
 - `POST /api/ue` — candidate EU provisions from the local CELEX database (`eu.db`), with source
   links and an explicit retrieval-not-verdict limitation.
@@ -846,6 +848,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/mcp-export-preview",
                 "/api/dosare/mcp-export-execute",
                 "/api/dosare/rule-candidates/preview",
+                "/api/dosare/rule-candidates/entry",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -1023,6 +1026,7 @@ def face_handler(stare: Stare, *, runtime=None):
                 "/api/dosare/mcp-export-preview",
                 "/api/dosare/mcp-export-execute",
                 "/api/dosare/rule-candidates/preview",
+                "/api/dosare/rule-candidates/entry",
                 "/api/dosare/propuneri",
                 "/api/dosare/propuneri/previzualizare",
                 "/api/dosare/propuneri/analize",
@@ -1129,6 +1133,10 @@ def face_handler(stare: Stare, *, runtime=None):
                         from scripts.rule_candidates import validate
 
                         out = validate(cerere)
+                    elif ruta == "/api/dosare/rule-candidates/entry":
+                        from scripts.rule_candidates import from_entry
+
+                        out = from_entry(cerere)
                     elif ruta == "/api/dosare/verificari":
                         from scripts.verificari_dovezi import salveaza
 
