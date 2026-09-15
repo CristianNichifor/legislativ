@@ -3689,7 +3689,38 @@ function aiNoteSettingsSummaryHtml(s){
 function mcpRuntimePanelHtml(){
   return '<div data-mcp-runtime-surface><p class="hint">Suprafață MCP: listare servere, test conexiune, previzualizare payload și aprobare explicită. Nu există transfer ascuns.</p>'
     +'<div class="dossier-actions"><button type="button" class="ghost mini" data-mcp-discover>Listează servere</button><button type="button" class="ghost mini" data-mcp-test>Testează conexiunea</button></div>'
-    +'<p class="hint" role="status" data-mcp-runtime-status>Executor MCP netestat.</p><pre data-mcp-runtime-result></pre></div>';
+    +'<p class="hint" role="status" data-mcp-runtime-status>Executor MCP netestat.</p><div data-mcp-runtime-summary></div><pre data-mcp-runtime-result></pre></div>';
+}
+function mcpRuntimeToolHtml(server,tool){
+  const states=(tool.approval_states||[]).slice(0,6).map(esc).join(' → ');
+  return '<article class="matrix-drilldown-item" data-mcp-runtime-tool>'
+    +`<h4>${esc(tool.label||tool.id)} <span class="hint">· ${esc(tool.id||'unealtă')}</span></h4>`
+    +`<p class="hint">Server: ${esc(server.id||'necunoscut')} · capabilitate: ${esc(tool.capability||'necunoscută')} · rezultat: ${esc(tool.result_status||'nerevizuit')}.</p>`
+    +`<p class="hint">Previzualizare: ${tool.requires_preview?'obligatorie':'neprecizată'} · aprobare utilizator: ${tool.requires_user_approval?'obligatorie':'neprecizată'} · apel extern ascuns: nu.</p>`
+    +`<p class="hint">Stări: ${states||'neprecizate'}.</p></article>`;
+}
+function mcpRuntimeDiscoveryHtml(data){
+  const discovery=data?.discovery||{}, approval=data?.approval||{}, schema=approval.audit_log_schema||{};
+  const servers=data?.servers||[], failures=data?.failure_states||[];
+  const audit=(schema.required_fields||[]).map(esc).join(' · ')||'server · tool · timestamp · payload_hash · selected_evidence_ids · result_hash · user_action';
+  return '<div data-mcp-runtime-discovery>'
+    +`<p class="hint">Runtime: ${esc(data?.status||'necunoscut')} · servere: ${nf(discovery.server_count||servers.length)} · unelte: ${nf(discovery.tool_count||0)} · transport extern configurat: ${discovery.external_transport_configured?'da':'nu'}.</p>`
+    +`<p class="hint">Audit append-only: ${esc(audit)}. Chei stocate: nu. Cost platformă: zero.</p>`
+    +servers.map(server=>'<section class="matrix-workspace-group" data-mcp-runtime-server>'
+      +`<h4>${esc(server.label||server.id)} <span class="hint">· ${esc(server.transport||'transport necunoscut')}</span></h4>`
+      +`<p class="hint">Disponibil: ${server.available?'da':'nu'} · credentiale stocate: ${server.credentials_stored?'da':'nu'} · AI plătit de aplicație: ${server.app_paid_ai?'da':'nu'}.</p>`
+      +(server.tools||[]).map(tool=>mcpRuntimeToolHtml(server,tool)).join('')
+      +'</section>').join('')
+    +`<details data-mcp-runtime-failures><summary>Stări de eșec și retry</summary>${failures.length?failures.map(f=>`<p class="hint">${esc(f.code)} · ${esc(f.message)} · retry: ${f.retryable?'da':'nu'}</p>`).join(''):'<p class="hint">Nicio stare de eșec publicată.</p>'}</details>`
+    +'</div>';
+}
+function mcpRuntimeTestHtml(data){
+  const failure=data?.failure;
+  return '<div data-mcp-runtime-test-result>'
+    +`<p class="hint">Test: ${esc(data?.server||'server')} / ${esc(data?.tool||'unealtă')} · ${data?.available?'disponibil':'indisponibil'} · mod: ${esc(data?.mode||'necunoscut')}.</p>`
+    +`<p class="hint">Aprobare explicită: ${data?.requires_user_approval?'obligatorie':'neprecizată'} · preview înainte de execuție: ${data?.preview_required_before_execute?'obligatoriu':'neprecizat'} · apel extern ascuns: nu.</p>`
+    +(failure?`<p class="hint">Eșec: ${esc(failure.code)} · ${esc(failure.message)} · retry: ${failure.retryable?'da':'nu'}.</p>`:'')
+    +'</div>';
 }
 function mcpConsentAuditPreviewHtml(plan,label='apel MCP'){
   const mcp=plan?.mcp||plan||{}, approval=mcp.approval||{}, audit=mcp.audit_event||plan?.audit_event||{};
@@ -6023,7 +6054,7 @@ function manualNoteMcpExport(form){
 function bindManualNoteMcpDraft(form,section){
   const box=section.querySelector('[data-mcp-ai-draft]');if(!box)return;
   const preview=box.querySelector('[data-mcp-preview]'),copy=box.querySelector('[data-mcp-copy]'),execute=box.querySelector('[data-mcp-execute]'),insert=box.querySelector('[data-mcp-insert]'),status=box.querySelector('[data-mcp-status]'),consent=box.querySelector('[data-mcp-consent-state]'),out=box.querySelector('[data-mcp-preview-result]');
-  const discover=box.querySelector('[data-mcp-discover]'),test=box.querySelector('[data-mcp-test]'),runtimeStatus=box.querySelector('[data-mcp-runtime-status]'),runtimeOut=box.querySelector('[data-mcp-runtime-result]');
+  const discover=box.querySelector('[data-mcp-discover]'),test=box.querySelector('[data-mcp-test]'),runtimeStatus=box.querySelector('[data-mcp-runtime-status]'),runtimeSummary=box.querySelector('[data-mcp-runtime-summary]'),runtimeOut=box.querySelector('[data-mcp-runtime-result]');
   const exportPreview=box.querySelector('[data-mcp-export-preview]'),exportCopy=box.querySelector('[data-mcp-export-copy]'),exportExecute=box.querySelector('[data-mcp-export-execute]'),exportStatus=box.querySelector('[data-mcp-export-status]'),exportConsent=box.querySelector('[data-mcp-export-consent-state]'),exportOut=box.querySelector('[data-mcp-export-result]');
   let plan=null,executedDraft=null,exportPlan=null;
   async function showMcpRuntime(){
@@ -6032,18 +6063,20 @@ function bindManualNoteMcpDraft(form,section){
       const data=await api('/api/mcp/runtime');
       const server=data.servers?.[0],tool=server?.tools?.[0];
       if(server&&tool&&!form.elements.mcp_server.value&&!form.elements.mcp_tool.value){form.elements.mcp_server.value=server.id;form.elements.mcp_tool.value=tool.id;}
+      if(runtimeSummary)runtimeSummary.innerHTML=mcpRuntimeDiscoveryHtml(data);
       runtimeOut.textContent=JSON.stringify({contract:data.contract,status:data.status,servers:data.servers,approval:data.approval,failure_states:data.failure_states},null,2);
       runtimeStatus.textContent='MCP listat: payload preview obligatoriu, aprobare explicită pentru fiecare apel.';
-    }catch(err){runtimeStatus.textContent='MCP indisponibil în acest mod; aplicația rămâne utilizabilă fără MCP. '+err.message;}
+    }catch(err){if(runtimeSummary)runtimeSummary.innerHTML='';runtimeStatus.textContent='MCP indisponibil în acest mod; aplicația rămâne utilizabilă fără MCP. '+err.message;}
   }
   if(discover)discover.onclick=showMcpRuntime;
   if(test)test.onclick=async()=>{
     runtimeStatus.textContent='Testez conexiunea MCP…';runtimeOut.textContent='';
     try{
       const data=await dossierApi('/api/mcp/test',{server:form.elements.mcp_server.value,tool:form.elements.mcp_tool.value});
+      if(runtimeSummary)runtimeSummary.innerHTML=mcpRuntimeTestHtml(data);
       runtimeOut.textContent=JSON.stringify(data,null,2);
       runtimeStatus.textContent=data.available?'Conexiune locală disponibilă. Urmează previzualizarea și aprobarea payloadului.':'MCP indisponibil: '+(data.failure?.message||data.status);
-    }catch(err){runtimeStatus.textContent='Test MCP eșuat: '+err.message;}
+    }catch(err){if(runtimeSummary)runtimeSummary.innerHTML='';runtimeStatus.textContent='Test MCP eșuat: '+err.message;}
   };
   const resetDraft=()=>{plan=null;executedDraft=null;copy.disabled=true;execute.disabled=true;insert.disabled=true;if(consent)consent.innerHTML='';out.textContent='';};
   const resetExport=()=>{exportPlan=null;if(exportCopy)exportCopy.disabled=true;if(exportExecute)exportExecute.disabled=true;if(exportConsent)exportConsent.innerHTML='';if(exportOut)exportOut.textContent='';};

@@ -68,8 +68,14 @@ def test_saved_finding_review_exposes_manual_note_action():
 def test_mcp_runtime_surface_is_visible_in_ai_panel():
     source = APP.read_text()
     assert "function mcpRuntimePanelHtml" in source
+    assert "function mcpRuntimeDiscoveryHtml" in source
+    assert "function mcpRuntimeTestHtml" in source
     assert "function mcpConsentAuditPreviewHtml" in source
     assert "data-mcp-runtime-surface" in source
+    assert "data-mcp-runtime-summary" in source
+    assert "data-mcp-runtime-discovery" in source
+    assert "data-mcp-runtime-tool" in source
+    assert "data-mcp-runtime-failures" in source
     assert "data-mcp-discover" in source
     assert "data-mcp-test" in source
     assert "data-mcp-consent-state" in source
@@ -83,6 +89,51 @@ def test_mcp_runtime_surface_is_visible_in_ai_panel():
     assert "payload preview obligatoriu" in source
     assert "aplicația rămâne utilizabilă fără MCP" in source
     assert "Nu există transfer ascuns" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_mcp_runtime_discovery_renderer_shows_audit_tools_and_failures():
+    source = (
+        APP.read_text()
+        .split("function mcpRuntimePanelHtml", 1)[1]
+        .split("function mcpConsentAuditPreviewHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const nf=x=>String(x??0);"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function mcpRuntimePanelHtml" + source + "const data={status:'available_local_mock_only',"
+        "discovery:{server_count:1,tool_count:2,external_transport_configured:false},"
+        "approval:{audit_log_schema:{required_fields:['server','tool','payload_hash',"
+        "'selected_evidence_ids','result_hash','user_action']}},"
+        "servers:[{id:'local-mock',label:'Adaptor <local>',transport:'local-module',"
+        "available:true,credentials_stored:false,app_paid_ai:false,tools:["
+        "{id:'ai.draft',label:'Ciornă <AI>',capability:'ai_draft',"
+        "requires_preview:true,requires_user_approval:true,result_status:'draft_unreviewed',"
+        "approval_states:['not_previewed','preview_created','approved_and_executed']}]}],"
+        "failure_states:[{code:'approval_required',message:'Aprobarea lipsește <x>',"
+        "retryable:false}]};"
+        "const html=mcpRuntimeDiscoveryHtml(data);"
+        "assert.ok(html.includes('data-mcp-runtime-discovery'));"
+        "assert.ok(html.includes('data-mcp-runtime-server'));"
+        "assert.ok(html.includes('data-mcp-runtime-tool'));"
+        "assert.ok(html.includes('payload_hash'));"
+        "assert.ok(html.includes('selected_evidence_ids'));"
+        "assert.ok(html.includes('AI plătit de aplicație: nu'));"
+        "assert.ok(html.includes('Previzualizare: obligatorie'));"
+        "assert.ok(html.includes('approval_required'));"
+        "assert.ok(!html.includes('<local>'));"
+        "assert.ok(html.includes('&lt;local&gt;'));"
+        "const testHtml=mcpRuntimeTestHtml({server:'desktop-claude',tool:'claude.chat',"
+        "available:false,mode:'unsupported',requires_user_approval:true,"
+        "preview_required_before_execute:true,failure:{code:'unknown_server',"
+        "message:'Server <bad>',retryable:false}});"
+        "assert.ok(testHtml.includes('data-mcp-runtime-test-result'));"
+        "assert.ok(testHtml.includes('unknown_server'));"
+        "assert.ok(!testHtml.includes('<bad>'));"
+    )
+    run_node(code)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
