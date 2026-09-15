@@ -9121,9 +9121,27 @@ function writingWorkspaceContextHtml(pack=null){
     +(gaps.length?`<h5>Lacune / contradicții / riscuri</h5>${gaps.slice(0,8).map(note=>`<article class="manual-note"><h5>${esc(MANUAL_NOTE_TYPES[note.type]||note.type)} · ${esc(note.title||'notă')}</h5><p class="hint">${esc(note.status||'')} · ${esc(note.act_id||'')} ${esc(note.locator||'')}</p><p>${esc(note.reasoning||note.evidence_quote||'Fără raționament salvat.')}</p></article>`).join('')}`:'<p>Nicio notă de lacună/contradicție legată de acest proiect.</p>')
     +(events.length?`<details><summary>Evenimente tracker</summary>${projectWorkbenchEventsHtml(events.slice(0,8))}</details>`:'');
 }
+function writingReadinessHtml(dossier,pack=null,runId='',findingId=''){
+  const notes=pack?.dossier_notes||[];
+  const evidence=pack?.evidence||[];
+  const sourcedEvidence=evidence.filter(item=>item.source_url||item.source_hash||item.content_hash||item.sha256);
+  const checks=[
+    ['Dosar local',!!dossier?.id,dossier?.titlu||dossier?.id||'alege dosarul'],
+    ['Project ID',!!(pack?.project_id||dossier?.project_id),pack?.project_id||dossier?.project_id||'completează proiectul'],
+    ['Pachet dovezi',!!pack,pack?`${evidence.length} dovezi normalizate`:'încarcă context proiect'],
+    ['Note gap',notes.some(note=>['lacuna','contradictie','necorelare','risc_ue','constitutionalitate'].includes(note.type)),`${notes.length} note în dosar`],
+    ['Surse verificabile',sourcedEvidence.length>0,sourcedEvidence.length?`${sourcedEvidence.length} cu URL/hash`:'lipsește URL sau SHA-256'],
+    ['Propunere verificabilă',!!(runId&&findingId),runId&&findingId?'analiză și constatare alese':'alege analiză salvată + constatare'],
+  ];
+  const ready=checks.filter(item=>item[1]).length;
+  return `<section class="gap-workflow" data-writing-readiness-checklist><h4>Pregătire redactare · ${ready}/${checks.length}</h4>`
+    +`<div class="manual-note-summary">${checks.map(([label,ok,detail])=>`<button type="button" class="ghost mini" disabled data-ready="${ok?'true':'false'}">${esc(label)}<br><b>${ok?'gata':'lipsește'}</b><br><small>${esc(detail)}</small></button>`).join('')}</div>`
+    +`<p class="hint">${ready===checks.length?'Poți salva propunerea verificabilă și exporta cu limitările păstrate.':'Completează elementele lipsă înainte de concluzie sau export final.'} Rezultatele sunt ciorne de lucru, nu verdict juridic.</p></section>`;
+}
 function writingWorkspaceHtml(dossier){
   return `<details class="leg-writing" open><summary>Spațiu de redactare legislativă</summary>`
     +'<p class="hint">Lucrează cu textul proiectului, pachetul de dovezi și verificări deterministe în același loc. Rezultatele sunt semnale de lucru, nu verdict juridic.</p>'
+    +`<div data-writing-readiness>${writingReadinessHtml(dossier)}</div>`
     +`<form data-writing-project-form class="dossier-actions"><label>Project ID<input name="project_id" maxlength="200" value="${esc(dossier.project_id||'')}"></label><button type="submit" class="ghost mini">Încarcă context proiect</button><button type="button" class="ghost mini" data-writing-open-workbench>Workbench</button><p class="hint" role="status" data-writing-status></p></form>`
     +'<div class="leg-writing-grid"><section><label>Text proiect / amendament<textarea data-writing-draft maxlength="120000" placeholder="Lipește textul proiectului sau adu textul din fila Verifică."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-from-draft>Adu din Verifică</button><button type="button" class="ghost mini" data-writing-to-draft>Trimite în Verifică</button><button type="button" class="ghost mini" data-writing-run-rules>Rulează reguli</button><button type="button" class="ghost mini" data-writing-open-proposal>Propunere din redactare</button></div><label>Note de lucru<textarea data-writing-notes maxlength="120000" placeholder="Păstrează aici raționamentul, întrebările și fragmentele din pachetul de dovezi."></textarea></label><div class="dossier-actions"><button type="button" class="ghost mini" data-writing-insert-evidence disabled>Adaugă pachet în note</button><button type="button" class="ghost mini" data-writing-copy-evidence disabled>Copie pachet Markdown</button></div><form data-writing-ai-form>'+aiUnifiedDraftPanelHtml('pachetul dosarului')+'</form><div data-writing-rule-output>'+ruleDraftTextExecutionHtml(null)+'</div></section><aside class="leg-writing-context" data-writing-context>'+writingWorkspaceContextHtml(null)+'</aside></div></details>';
 }
@@ -9175,13 +9193,17 @@ function bindWritingWorkspace(dossier){
   host.innerHTML=writingWorkspaceHtml(dossier);
   const form=host.querySelector('[data-writing-project-form]'),status=host.querySelector('[data-writing-status]');
   const draftBox=host.querySelector('[data-writing-draft]'),notesBox=host.querySelector('[data-writing-notes]');
-  const context=host.querySelector('[data-writing-context]'),ruleOut=host.querySelector('[data-writing-rule-output]');
+  const context=host.querySelector('[data-writing-context]'),readiness=host.querySelector('[data-writing-readiness]'),ruleOut=host.querySelector('[data-writing-rule-output]');
   const insert=host.querySelector('[data-writing-insert-evidence]'),copy=host.querySelector('[data-writing-copy-evidence]');
   let project={project_id:form.elements.project_id.value,title:dossier.titlu||''},pack=null,markdown='';
+  const refreshReadiness=()=>{
+    if(readiness)readiness.innerHTML=writingReadinessHtml(dossier,pack,DOSARE_UI.runId||'',currentProposalFindingId());
+  };
   const setPack=next=>{
     pack=next;markdown=pack?projectWorkbenchMarkdown(project,pack):'';
     context.innerHTML=writingWorkspaceContextHtml(pack);
     insert.disabled=copy.disabled=!pack;
+    refreshReadiness();
   };
   const loadPack=async()=>{
     const projectId=form.elements.project_id.value.trim();
