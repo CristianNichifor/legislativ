@@ -401,9 +401,15 @@ def test_saved_run_provenance_is_escaped_and_labeled_historical():
         "const mDosarHtml=d=>d.markdown;function dossierSnapshotHtml"
         + source
         + "const h=dossierSnapshotHtml({creat_la:'<img>',engine_version:'<script>',"
-        "sha256:'abc123',raport:{markdown:'saved report'}});"
+        "sha256:'abc123',raport:{markdown:'saved report',limitari:['limit <x>']},"
+        "dovezi:{surse_ue:{instantanee:[{stare:'capturat',celex:'32014L0024',sursa:{limba:'RON',titlu:'T',citit_la:'now',data_document:'2026',text_sha256:'h',text:'text'}}]}}});"
         "assert.ok(h.includes('SHA-256 raport: abc123'));"
         "assert.ok(h.includes('Raport istoric, nu recalculare'));"
+        "assert.ok(h.includes('data-saved-run-export-readiness'));"
+        "assert.ok(h.includes('Pregătire export raport · gata'));"
+        "assert.ok(h.includes('Surse UE<br><b>1</b>'));"
+        "assert.ok(h.includes('Limitări<br><b>1</b>'));"
+        "assert.ok(h.includes('Poți copia sau tipări raportul salvat.'));"
         "assert.ok(h.includes('sursa actuală'));"
         "assert.ok(h.includes('saved report'));"
         "assert.ok(!h.includes('<img>')&&!h.includes('<script>'));"
@@ -1115,6 +1121,37 @@ def test_matrix_evidence_opens_dossier_writing_workspace():
         "assert.equal(writingStatus.textContent,"
         "'Dovada din matrice a fost adăugată în spațiul de redactare al dosarului.');"
         "assert.deepEqual(calls,[['tab','dosare'],['input','input'],['scroll','start']]);"
+    )
+    run_node(code)
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_proposal_list_export_readiness_summarizes_final_handoff():
+    source = (
+        APP.read_text()
+        .split("function proposalListExportReadinessHtml", 1)[1]
+        .split("const WATCHLIST_KINDS=", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;')"
+        ".replaceAll('\"','&quot;');"
+        "function proposalListExportReadinessHtml"
+        + source
+        + "const ready=proposalListExportReadinessHtml({total:2,propuneri:["
+        "{titlu:'<script>',rulare_id:'run-1',constatare_id:'finding-1'}]},0);"
+        "assert.ok(ready.includes('data-proposal-export-readiness'));"
+        "assert.ok(ready.includes('Pregătire export propunere · gata'));"
+        "assert.ok(ready.includes('Propuneri<br><b>2</b>'));"
+        "assert.ok(ready.includes('Analiză<br><b>legată</b>'));"
+        "assert.ok(ready.includes('Constatare<br><b>legată</b>'));"
+        "assert.ok(ready.includes('Deschide o propunere ca să alegi revizia'));"
+        "assert.ok(!ready.includes('<script>'));"
+        "const empty=proposalListExportReadinessHtml({total:0,propuneri:[]},50);"
+        "assert.ok(empty.includes('Pregătire export propunere · incompletă'));"
+        "assert.ok(empty.includes('Salvează o propunere dintr-o constatare verificabilă'));"
+        "assert.ok(empty.includes('Exportul nu include ciorne nesalvate'));"
     )
     run_node(code)
 
