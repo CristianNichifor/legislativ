@@ -9667,6 +9667,23 @@ function mWorkspaceStateLabel(state){
     unsupported:"nesuportat local"
   })[state]||state||"stare necunoscută";
 }
+function mWorkspaceDailyBuckets(workspace){
+  const s=workspace?.summary||{}, payload=workspace?.payload||{}, byState=payload.counts?.by_state||{};
+  return [
+    ["ready","gata de revizie",(byState["evidence-backed"]||s.ready_rows||0),"deschide dovezile și salvează în dosar"],
+    ["missing","dovezi lipsă",(byState["missing-source"]||s.missing_source_rows||0),"completează citat, URL sau SHA-256"],
+    ["source","surse schimbate",s.source_attention||0,"verifică impactul înainte de redactare"],
+    ["eu","risc UE",s.eu_risks||0,"compară cu CELEX/Cellar importat"],
+    ["draft","gata de redactare",s.manual_notes||0,"pornește notă sau propunere din dovezi"],
+    ["rules","reguli candidate",s.rule_candidates||0,"structurează law-as-code pentru revizie"]
+  ];
+}
+function mWorkspaceDailyBucketsHtml(workspace){
+  const buckets=mWorkspaceDailyBuckets(workspace);
+  return `<div class="matrix-stats" data-matrix-daily-buckets>${buckets.map(([key,label,count,next])=>
+    `<button type="button" class="ghost mini matrix-stat" data-matrix-daily-bucket="${esc(key)}"><b>${nf(count)}</b><span>${esc(label)}</span><small>${esc(next)}</small></button>`
+  ).join("")}</div>`;
+}
 function mWorkspaceItemMeta(item){
   const parts=[
     mWorkspaceKindLabel(item.kind),
@@ -9682,17 +9699,31 @@ function mWorkspaceItemMeta(item){
   ].filter(Boolean);
   return parts.map(esc).join(" · ");
 }
+function mWorkspaceItemIntent(item){
+  if(item.state==="missing-source") return "Completează dovada înainte de concluzie.";
+  if(item.kind==="eu_risk") return "Compară cu prevederea UE citabilă înainte de propunere.";
+  if(item.kind==="rule_candidate") return "Deschide regula candidată și păstrează revizia umană.";
+  if(item.kind==="lifecycle_source") return "Verifică stadiul procedural și sursa oficială.";
+  if(item.state==="needs-review") return "Revizuiește nota locală și păstrează limita de incertitudine.";
+  return "Poți salva în dosar și începe redactarea din dovezi.";
+}
 function mWorkspaceItemHtml(item,index){
   const href=urlSigur(item.source_url);
   const rowAction=item.scope
-    ? `<button type="button" class="ghost mini" data-matrix-workspace-open-row="${esc(item.scope)}">Deschide rând</button>`:"";
+    ? `<button type="button" class="ghost mini" data-matrix-workspace-open-row="${esc(item.scope)}">Dovezi rând</button>`:"";
   const dossierAction=item.dossier_id
-    ? `<button type="button" class="ghost mini" data-matrix-workspace-open-dossier="${esc(item.dossier_id)}">Dosar local</button>`:"";
+    ? `<button type="button" class="ghost mini" data-matrix-workspace-open-dossier="${esc(item.dossier_id)}">Dosar local</button>`
+    : `<button type="button" class="ghost mini" data-matrix-workspace-open-dossier="">Alege dosar</button>`;
+  const draftAction=`<button type="button" class="ghost mini" data-matrix-workspace-draft="${esc(item.scope||item.id||String(index))}">Redactare</button>`;
+  const ruleAction=`<button type="button" class="ghost mini" data-matrix-workspace-rule="${esc(item.scope||item.id||String(index))}">Regulă candidată</button>`;
+  const sourceAction=item.source_family||href
+    ? `<button type="button" class="ghost mini" data-matrix-workspace-source="${esc(item.source_family||item.source_url||"")}">Sursă/parcurs</button>`:"";
   return `<article class="matrix-workspace-item" data-matrix-workspace-item="${esc(item.id||String(index))}" data-workspace-kind="${esc(item.kind||"")}" data-workspace-state="${esc(item.state||"")}">`
     +`<h4>${esc(item.title||"Intrare de lucru")}</h4>`
     +`<div class="matrix-workspace-meta">${mWorkspaceItemMeta(item)}</div>`
+    +`<p class="hint">${esc(mWorkspaceItemIntent(item))}</p>`
     +(item.not_legal_verdict?`<p class="hint">Candidat de lucru, nu verdict juridic.</p>`:"")
-    +`<div class="dossier-actions">${rowAction}${dossierAction}${href?`<a class="ghost mini" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Sursă oficială</a>`:""}</div>`
+    +`<div class="dossier-actions">${rowAction}${dossierAction}${draftAction}${ruleAction}${sourceAction}${href?`<a class="ghost mini" href="${esc(href)}" target="_blank" rel="noopener noreferrer">Sursă oficială</a>`:""}</div>`
     +`</article>`;
 }
 function mWorkspacePanelHtml(workspace){
@@ -9710,9 +9741,11 @@ function mWorkspacePanelHtml(workspace){
     `<button type="button" class="ghost mini" data-matrix-workspace-action="${esc(a.kind||"")}" ${a.enabled?"":"disabled"}>${esc(a.label||a.kind||"acțiune")}</button>`
   ).join("");
   return `<div class="matrix-workspace" data-law-matrix-workspace-v1>`
-    +`<div class="matrix-workspace-head"><div><div class="parc-h">Spațiu de lucru matrice</div>`
+    +`<div class="matrix-workspace-head"><div><div class="parc-h">Matrice zilnică de lucru</div>`
     +`<p class="hint">${esc(workspace.contract||"law-matrix-workspace-v1")} · ${esc(payload.contract||"law-matrix-workspace-v2")} · ${esc(workspace.status||"needs_sources")} · ${esc(filterBits)}</p></div>`
     +`<span class="matrix-workspace-badge">candidați, nu verdict juridic</span></div>`
+    +`<p class="hint">Pornește de aici: alege un candidat, verifică dovezile, salvează în dosar, apoi redactează sau creează o regulă candidată.</p>`
+    +mWorkspaceDailyBucketsHtml(workspace)
     +`<div class="matrix-stats">${stat("rânduri de lucru",s.ready_rows||s.rows)}${stat("surse lipsă",s.missing_source_rows)}${stat("note manuale",s.manual_notes)}${stat("candidați reguli",s.rule_candidates)}${stat("tracker nerevizuit",s.tracker_unreviewed)}${stat("surse cu atenție",s.source_attention)}</div>`
     +`<div class="matrix-stats">${stat("coadă totală",counts.total)}${stat("cu dovezi",byState["evidence-backed"])}${stat("de completat",byState["missing-source"])}${stat("de revizuit",byState["needs-review"])}</div>`
     +`<div class="matrix-drilldown-actions">${actions}</div>`
@@ -9723,6 +9756,15 @@ function mWorkspacePanelHtml(workspace){
 }
 function bindMatrixWorkspacePanel(){
   const host=$("#m-workspace"); if(!host) return;
+  host.querySelectorAll("[data-matrix-daily-bucket]").forEach(button=>button.onclick=()=>{
+    const bucket=button.dataset.matrixDailyBucket;
+    if(bucket==="missing"){$("#m-source-quality").value="missing";MATRICE=null;loadMatrice(true);}
+    else if(bucket==="source"){reveal("#source-registry","Deschide sursele schimbate sau indisponibile înainte de redactare.");}
+    else if(bucket==="eu"){selectTab("ue");$("#ue-text")?.focus();}
+    else if(bucket==="draft"){reveal("#dossier-library","Alege dosarul și pornește redactarea din dovada selectată.");}
+    else if(bucket==="rules"){reveal("#dossier-library","Deschide regulile candidate din dosar sau creează una din dovada selectată.");}
+    else {const first=$("#m-lista .matrix-row");if(first){first.click();first.scrollIntoView({block:"nearest"});}}
+  });
   host.querySelectorAll("[data-matrix-workspace-action]").forEach(button=>button.onclick=()=>{
     const action=button.dataset.matrixWorkspaceAction;
     if(action==="open_first_row"){
@@ -9752,7 +9794,31 @@ function bindMatrixWorkspacePanel(){
     const library=$("#dossier-library");
     if(library){library.open=true;library.scrollIntoView({block:"start"});}
     const status=$("#dossier-status");
-    if(status) status.textContent=`Deschide dosarul ${button.dataset.matrixWorkspaceOpenDossier} pentru intrarea selectată din matrice.`;
+    if(status) status.textContent=button.dataset.matrixWorkspaceOpenDossier
+      ? `Deschide dosarul ${button.dataset.matrixWorkspaceOpenDossier} pentru intrarea selectată din matrice.`
+      : "Alege sau creează un dosar înainte de a salva constatarea din matrice.";
+  });
+  host.querySelectorAll("[data-matrix-workspace-draft]").forEach(button=>button.onclick=()=>{
+    const scope=button.dataset.matrixWorkspaceDraft||"";
+    const wanted=fold(scope), rows=[...document.querySelectorAll("#m-lista .matrix-row")];
+    const match=rows.find(row=>fold((MATRIX_ROWS[Number(row.dataset.i)]||{}).emitent||"").includes(wanted));
+    if(match){match.click();match.scrollIntoView({block:"nearest"});}
+    reveal("#ai-product-flow","Redactarea pornește numai din dovezi selectate și rămâne ciornă nerevizuită.");
+  });
+  host.querySelectorAll("[data-matrix-workspace-rule]").forEach(button=>button.onclick=()=>{
+    const scope=button.dataset.matrixWorkspaceRule||"";
+    const wanted=fold(scope), rows=[...document.querySelectorAll("#m-lista .matrix-row")];
+    const match=rows.find(row=>fold((MATRIX_ROWS[Number(row.dataset.i)]||{}).emitent||"").includes(wanted));
+    if(match){match.click();match.scrollIntoView({block:"nearest"});}
+    reveal("#dossier-library","Creează regula candidată doar după citat, locator, URL și hash.");
+  });
+  host.querySelectorAll("[data-matrix-workspace-source]").forEach(button=>button.onclick=()=>{
+    const family=button.dataset.matrixWorkspaceSource||"";
+    if(["camera","senat","parlament","consultare_guvern","consultare_econsultare","monitorul_oficial_pi"].includes(family)){
+      reveal("#lifecycle-tracker","Verifică parcursul, comisiile, voturile, avizele și sursa oficială.");
+    }else{
+      reveal("#source-registry","Verifică sursa oficială, actualitatea și impactul local.");
+    }
   });
 }
 function mActeHtml(d){

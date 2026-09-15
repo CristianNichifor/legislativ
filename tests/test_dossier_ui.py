@@ -133,7 +133,8 @@ def test_matrix_tab_exposes_daily_legislative_workflow():
     assert 'id="m-review-state"' in source
     assert 'id="m-source-family"' in source
     assert 'id="m-lifecycle-state"' in source
-    assert "Spațiu de lucru matrice" in source
+    assert "Matrice zilnică de lucru" in source
+    assert "Pornește de aici" in source
     assert "candidați, nu verdict juridic" in source
 
 
