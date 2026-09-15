@@ -35,6 +35,7 @@ CONTRACT = "final-v1-vertical-acceptance-flow-v1"
 PROJECT_ID = "PL-x acceptance-procurement-001"
 DOSSIER_ID = "f" * 32
 NOTE_ID = "e" * 32
+MCP_NOTE_ID = "b" * 32
 RULE_QUEUE_ID = "c" * 32
 RULE_DRAFT_ID = "d" * 32
 MCP_AUDIT_ID = "a" * 32
@@ -293,6 +294,35 @@ def run(root: Path) -> dict:
             "approved_data_sha256": mcp_plan["mcp"]["approval"]["data_sha256"],
         },
     )
+    mcp_saved_note = note_manuale.salveaza(
+        dosare.cale(stare),
+        {
+            "id": MCP_NOTE_ID,
+            "dosar_id": DOSSIER_ID,
+            "revizie": 0,
+            "title": "Ciornă MCP acceptanță v1",
+            "type": "lacuna",
+            "act_id": PROJECT_ID,
+            "locator": "art7",
+            "evidence_quote": selected["quote"],
+            "source_url": law.get("official_url") or "",
+            "source_hash": law["sha256"],
+            "reasoning": (
+                f"{mcp_execution['insert_header']}\n"
+                f"MCP audit: {mcp_execution['audit_event']['timestamp']} · "
+                f"{mcp_execution['audit_event']['payload_hash']} · "
+                f"status={mcp_execution['output_status']}\n\n"
+                f"{mcp_execution['draft_text']}\n\n"
+                f"Act suport: {law['identifier']} · locator art7.\n"
+                "Stare: ciornă nerevizuită salvată dintr-un apel MCP aprobat explicit.\n"
+                "Nu verdict juridic."
+            ),
+            "status": "draft",
+        },
+    )
+    evidence = project_evidence_pack.build(
+        stare, {"project_id": [PROJECT_ID], "dossier_id": [DOSSIER_ID], "event_limit": ["10"]}
+    )
     queued_rule = rule_candidate_queue.salveaza(
         dosare.cale(stare),
         {
@@ -336,6 +366,7 @@ def run(root: Path) -> dict:
     dosare.backup(dosare.cale(stare), backup)
     restored_queue = rule_candidate_queue.lista(backup, DOSSIER_ID)
     restored_rules = law_rule_drafts.lista(backup, DOSSIER_ID)
+    restored_notes = note_manuale.lista(backup, DOSSIER_ID)
     restored_audit = mcp_executor.read(backup, DOSSIER_ID, MCP_AUDIT_ID)
     mcp_timeline = mcp_tools.call_tool(stare, "get_project_timeline", {"project_id": PROJECT_ID})
     mcp_bundle = mcp_tools.call_tool(
@@ -364,7 +395,7 @@ def run(root: Path) -> dict:
         "matrix_has_drilldown": bool(matrix.get("gasit"))
         and matrix.get("drilldown", {}).get("contract") == "matrice-drilldown-v1",
         "evidence_pack_has_note_and_events": evidence["summary"]["events"] >= 2
-        and evidence["summary"]["notes"] == 1,
+        and evidence["summary"]["notes"] == 2,
         "draft_is_evidence_bound": draft["contract"] == "ai-evidence-draft-v1"
         and draft["approval"]["server_calls_model"] is False
         and draft["evidence_count"] == 1,
@@ -373,6 +404,10 @@ def run(root: Path) -> dict:
         and mcp_execution["audit_event"]["approved"] is True
         and mcp_execution["output_status"] == "draft_unreviewed"
         and mcp_execution["selected_evidence_ids"] == [f"{law['identifier']}:art7"],
+        "mcp_draft_saved_as_unreviewed_note": mcp_saved_note["id"] == MCP_NOTE_ID
+        and mcp_saved_note["status"] == "draft"
+        and "MCP audit:" in mcp_saved_note["reasoning"]
+        and "Nu verdict juridic." in mcp_saved_note["reasoning"],
         "rule_candidate_is_source_bound": queued_rule["candidate"]["contract"]
         == "rule-candidate-v1"
         and queued_rule["bucket"] == "human_reviewed"
@@ -383,9 +418,10 @@ def run(root: Path) -> dict:
         and rule_draft["queue_id"] == RULE_QUEUE_ID,
         "private_backup_restores_ai_rules_and_audit": restored_queue["total"] == 1
         and restored_rules["total"] == 1
+        and restored_notes["total"] == 2
         and restored_audit["approved_data_sha256"] == mcp_execution["approved_data_sha256"],
         "mcp_uses_same_project": mcp_timeline["project_id"] == PROJECT_ID
-        and mcp_bundle["summary"]["notes"] == 1
+        and mcp_bundle["summary"]["notes"] == 2
         and mcp_draft["approval"]["server_calls_model"] is False,
     }
     failed = [key for key, value in checks.items() if not value]
@@ -409,6 +445,7 @@ def run(root: Path) -> dict:
             "matrix_entries": matrix.get("drilldown", {}).get("summary", {}),
             "evidence_events": evidence["summary"]["events"],
             "evidence_notes": evidence["summary"]["notes"],
+            "mcp_saved_draft_notes": 1,
             "draft_tokens": draft["estimated_tokens"],
             "mcp_audit_events": 1,
             "rule_candidates": restored_queue["total"],
