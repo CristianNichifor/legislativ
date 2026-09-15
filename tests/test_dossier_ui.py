@@ -170,6 +170,62 @@ def test_matrix_tab_exposes_daily_legislative_workflow():
     assert "candidați, nu verdict juridic" in source
 
 
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_matrix_workspace_groups_items_and_exposes_evidence_first_actions():
+    source = (
+        APP.read_text()
+        .split("function mWorkspaceKindLabel", 1)[1]
+        .split("function mActeHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "const calls=[];"
+        "const esc=s=>String(s??'').replaceAll('&','&amp;')"
+        ".replaceAll('<','&lt;').replaceAll('>','&gt;');"
+        "const nf=x=>String(x??0),locRo=s=>'Loc '+s,urlSigur=s=>s||'';"
+        "function startManualNote(note,opts){calls.push(['note',note,opts||null]);}"
+        "function mWorkspaceKindLabel" + source + "const buttons=[];"
+        "const host={querySelectorAll(sel){"
+        "return sel==='[data-matrix-workspace-note]'?buttons:[];}};"
+        "function $(sel){return sel==='#m-workspace'?host:null;}"
+        "const workspace={contract:'law-matrix-workspace-v1',status:'ready',"
+        "summary:{ready_rows:1,missing_source_rows:1,manual_notes:0,rule_candidates:1},"
+        "payload:{contract:'law-matrix-workspace-v2',counts:{total:2,"
+        "by_state:{'evidence-backed':1,'missing-source':1}},items:["
+        "{id:'i1',kind:'deterministic_candidate',state:'evidence-backed',"
+        "title:'Conflict procedură',domain_label:'Achiziții publice',"
+        "scope:'minister',locator:'art. 4',review_state:'ready_for_review',"
+        "source_url:'https://legislatie.just.ro/test',source_hash:'a'.repeat(64),"
+        "quote:'Text citabil',"
+        "uncertainty:'necesită revizie umană',not_legal_verdict:true},"
+        "{id:'i2',kind:'eu_risk',state:'missing-source',title:'Risc UE',celex:'32024R0001'}"
+        "]}};"
+        "const html=mWorkspacePanelHtml(workspace);"
+        "assert.ok(html.includes('data-matrix-workspace-path'));"
+        "assert.ok(html.includes("
+        "'Dovezi → notă în dosar → redactare/propunere → regulă candidată'));"
+        "assert.ok(html.includes('data-matrix-workspace-group=\"Achiziții publice\"'));"
+        "assert.ok(html.includes('data-matrix-workspace-group=\"Domeniu neprecizat\"'));"
+        "assert.ok(html.includes('data-matrix-item-evidence'));"
+        "assert.ok(html.includes('URL oficial'));"
+        "assert.ok(html.includes('SHA-256'));"
+        "assert.ok(html.includes('Citat'));"
+        "assert.ok(html.includes('Incertitudine'));"
+        "assert.ok(html.includes('Stare revizie'));"
+        "assert.ok(html.includes('data-matrix-workspace-note'));"
+        "assert.ok(!html.includes('<script>'));"
+        "buttons.push({dataset:{matrixWorkspaceIndex:'0'},onclick:null});"
+        "bindMatrixWorkspacePanel();"
+        "buttons[0].onclick();"
+        "assert.equal(calls.length,1);"
+        "assert.equal(calls[0][0],'note');"
+        "assert.ok(calls[0][1].title.includes('Conflict procedură'));"
+        "assert.equal(calls[0][1].status,'ready_for_review');"
+        "assert.ok(calls[0][1].evidence_quote.includes('SHA-256: '+ 'a'.repeat(64)));"
+    )
+    run_node(code)
+
+
 def test_matrix_is_default_product_workspace():
     source = APP.read_text()
     assert 'id="tab-start" role="tab" aria-selected="false"' in source
