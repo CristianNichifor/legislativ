@@ -17,6 +17,7 @@ MAX_TEXT = 4000
 MAX_PREVIEW = 1200
 SERVER = re.compile(r"^[a-zA-Z0-9_.:-]{1,120}$")
 TOOL = re.compile(r"^[a-zA-Z0-9_.:-]{1,160}$")
+EVIDENCE_ID = re.compile(r"^[a-zA-Z0-9_.:/#-]{1,180}$")
 
 CAPABILITIES = {
     "ai_draft": {
@@ -68,6 +69,21 @@ def _capability(value) -> str:
     return key
 
 
+def _selected_evidence_ids(value) -> list[str]:
+    if value in (None, ""):
+        return []
+    if not isinstance(value, list) or len(value) > 50:
+        raise ValueError("Dovezi MCP invalide.")
+    ids: list[str] = []
+    for item in value:
+        evidence_id = _text(item, 180, required=True)
+        if not EVIDENCE_ID.fullmatch(evidence_id):
+            raise ValueError("Identificator dovadă MCP invalid.")
+        if evidence_id not in ids:
+            ids.append(evidence_id)
+    return ids
+
+
 def capabilities() -> dict:
     return {
         "contract": "mcp-boundary-v1",
@@ -116,18 +132,22 @@ def capabilities() -> dict:
 
 
 def preview(request: dict) -> dict:
-    if not isinstance(request, dict) or set(request) != {
+    allowed = {
         "server",
         "tool",
         "capability",
         "purpose",
         "data",
-    }:
+        "selected_evidence_ids",
+    }
+    required = {"server", "tool", "capability", "purpose", "data"}
+    if not isinstance(request, dict) or not required <= set(request) or set(request) - allowed:
         raise ValueError("Cerere MCP invalidă.")
     server = _token(request["server"], SERVER, "Server")
     tool = _token(request["tool"], TOOL, "Unealtă")
     capability = _capability(request["capability"])
     purpose = _text(request["purpose"], 500, required=True)
+    selected_evidence_ids = _selected_evidence_ids(request.get("selected_evidence_ids"))
     data = _text(
         request["data"], MAX_TEXT, required=CAPABILITIES[capability]["requires_external_text"]
     )
@@ -179,7 +199,7 @@ def preview(request: dict) -> dict:
             "event": "mcp_preview_created",
             "timestamp": created_at,
             "payload_hash": data_sha256,
-            "selected_evidence_ids": [],
+            "selected_evidence_ids": selected_evidence_ids,
             "result_hash": None,
             "user_action": "previewed",
             "approval_state": "preview_created",

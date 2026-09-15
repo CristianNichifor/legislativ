@@ -74,6 +74,26 @@ def audit_schema() -> dict:
 def registry() -> dict:
     capabilities = mcp_boundary.capabilities()
     schema = audit_schema()
+    connected_tools = [
+        {
+            "server": mcp_executor.SUPPORTED_SERVER,
+            "tool": mcp_executor.SUPPORTED_TOOL,
+            "capability": "ai_draft",
+            "available": True,
+            "requires_preview": True,
+            "requires_user_approval": True,
+            "external_calls": False,
+        },
+        {
+            "server": mcp_executor.SUPPORTED_SERVER,
+            "tool": mcp_executor.SUPPORTED_EXPORT_TOOL,
+            "capability": "document_export",
+            "available": True,
+            "requires_preview": True,
+            "requires_user_approval": True,
+            "external_calls": False,
+        },
+    ]
     return {
         "contract": CONTRACT,
         "status": "available_local_mock_only",
@@ -84,6 +104,8 @@ def registry() -> dict:
             "runtime_available": True,
             "runtime_mode": "local_mock_only",
             "external_transport_configured": False,
+            "connected_tools": connected_tools,
+            "connected_tool_count": len(connected_tools),
             "hidden_external_calls": False,
             "credentials_required": False,
             "refresh_action": "retry_runtime_discovery",

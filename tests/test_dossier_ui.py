@@ -68,9 +68,12 @@ def test_saved_finding_review_exposes_manual_note_action():
 def test_mcp_runtime_surface_is_visible_in_ai_panel():
     source = APP.read_text()
     assert "function mcpRuntimePanelHtml" in source
+    assert "function mcpConsentAuditPreviewHtml" in source
     assert "data-mcp-runtime-surface" in source
     assert "data-mcp-discover" in source
     assert "data-mcp-test" in source
+    assert "data-mcp-consent-state" in source
+    assert "data-mcp-export-consent-state" in source
     assert "api('/api/mcp/runtime')" in source
     assert "dossierApi('/api/mcp/test'" in source
     assert "data-mcp-execute" in source
@@ -80,6 +83,35 @@ def test_mcp_runtime_surface_is_visible_in_ai_panel():
     assert "payload preview obligatoriu" in source
     assert "aplicația rămâne utilizabilă fără MCP" in source
     assert "Nu există transfer ascuns" in source
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="Node unavailable")
+def test_mcp_consent_audit_preview_renders_safe_per_call_state():
+    source = (
+        APP.read_text()
+        .split("function mcpConsentAuditPreviewHtml", 1)[1]
+        .split("function aiUnifiedDraftPanelHtml", 1)[0]
+    )
+    code = (
+        "const assert=require('node:assert/strict');"
+        "function esc(s){return String(s).replace(/[&<>\"']/g,c=>"
+        "({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));}"
+        "function mcpConsentAuditPreviewHtml"
+        + source
+        + "const html=mcpConsentAuditPreviewHtml({approval_state:'preview_created',"
+        "mcp:{approval:{server:'desktop-claude',tool:'claude.chat',data_sha256:'a'.repeat(64)},"
+        "audit_event:{user_action:'previewed',approved:false,"
+        "selected_evidence_ids:['lege-1-2026:art3','<script>'],result_hash:null}}},"
+        "'Ciornă <MCP>');"
+        "assert.ok(html.includes('consimțământ per apel'));"
+        "assert.ok(html.includes('preview_created'));"
+        "assert.ok(html.includes('desktop-claude / claude.chat'));"
+        "assert.ok(html.includes('nu trimite text către MCP extern'));"
+        "assert.ok(html.includes('nu execută fără bifă explicită'));"
+        "assert.ok(!html.includes('<script>'));"
+        "assert.ok(html.includes('&lt;MCP&gt;'));"
+    )
+    run_node(code)
 
 
 def test_provision_detail_panels_expose_identity_metadata():
