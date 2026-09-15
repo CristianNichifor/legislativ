@@ -6622,12 +6622,25 @@ function ruleDraftTextExecutionHtml(result){
     +((result.issue_candidates||[]).length?`<section><h5>Semnale pe textul proiectului</h5>${(result.issue_candidates||[]).map(issueHtml).join('')}</section>`:'')
     +`<div data-rule-draft-text-results>${rows.map(rowHtml).join('')||'<p>Nicio ciornă eligibilă pentru textul furnizat.</p>'}</div>`;
 }
+function lawCodeLoopStatusHtml(queue,drafts,checks){
+  const counts=queue.counts||{},reviewable=(counts.reviewable||0)+(counts.human_reviewed||0),promoted=drafts.total||0,signals=checks?.candidate_issues||0;
+  const stages=[
+    {label:'1. Revizuire candidat',state:reviewable?'gata':'de completat',hint:reviewable?'Există candidați revizuibili pentru promovare.':'Creează sau completează un candidat cu actor, acțiune, sursă și hash.'},
+    {label:'2. Promovare regulă',state:promoted?'gata':'de făcut',hint:promoted?'Există ciorne law-rule-draft-v1.':'Promovează explicit un candidat acceptat uman.'},
+    {label:'3. Verificare deterministă',state:promoted?'disponibil':'blocată',hint:promoted?`${signals} semnale candidate din verificarea curentă.`:'Verificarea pornește numai după promovarea unei ciorne.'},
+    {label:'4. Notă de lucru',state:signals?'necesară':'opțională',hint:signals?'Transformă semnalul într-o notă manuală cu citate.':'Fără semnal local nu înseamnă conformitate.'}
+  ];
+  return '<section class="manual-note" data-law-code-loop><h4>Flux law-as-code</h4>'
+    +'<p class="hint">Bucla este: revizuiește candidatul, promovează ciorna, rulează verificarea, apoi scrie nota. Totul rămâne candidat de lucru, nu verdict juridic.</p>'
+    +`<div class="manual-note-summary">${stages.map(stage=>`<button type="button" class="ghost mini" disabled>${esc(stage.label)}<br><b>${esc(stage.state)}</b><br><small>${esc(stage.hint)}</small></button>`).join('')}</div></section>`;
+}
 function ruleDraftsPanelHtml(queue,drafts,checks,bucket,filters){
   const counts=Object.entries(RULE_QUEUE_BUCKETS).filter(([key])=>key!=='all').map(([key,label])=>`${esc(label)}: ${esc(queue.counts?.[key]||0)}`).join(' · ');
   const bucketOptions=Object.entries(RULE_QUEUE_BUCKETS).map(([key,label])=>`<option value="${key}" ${key===bucket?'selected':''}>${label}</option>`).join('');
   return '<details class="manual-notes" open><summary>Reguli law-as-code · candidați și ciorne</summary>'
     +'<p class="hint">Flux local: candidat validat → revizie umană → ciornă law-rule-draft-v1 → verificare deterministă limitată. Rezultatele sunt candidate de lucru, nu verdict juridic.</p>'
     +`<div class="manual-note-summary"><button type="button" class="ghost mini" disabled>Candidați<br><b>${esc(queue.total||0)}</b></button><button type="button" class="ghost mini" disabled>Ciorne promovate<br><b>${esc(drafts.total||0)}</b></button><button type="button" class="ghost mini" disabled>Semnale reguli<br><b>${esc(checks?.candidate_issues||0)}</b></button></div>`
+    +lawCodeLoopStatusHtml(queue,drafts,checks)
     +`<p class="hint">${counts||'Nicio coadă de candidați.'}</p>`
     +`<form data-rule-draft-filters class="dossier-actions"><label>Coada<select name="bucket">${bucketOptions}</select></label><label>Act<input name="act" maxlength="200" value="${esc(filters.act||'')}"></label><label>ID prevedere<input name="provision_id" maxlength="240" value="${esc(filters.provision_id||'')}"></label><button type="submit" class="ghost mini">Filtrează</button><button type="button" class="ghost mini" data-rules-refresh title="Reîncarcă regulile">↻</button></form>`
     +`<section><h4>Verificări deterministe</h4>${ruleChecksHtml(checks)}</section>`
@@ -6706,7 +6719,7 @@ async function loadRuleDrafts(dossierId,offset=0,options={}){
         formStatus.textContent='Promovez ciorna…';
         try{
           await dossierApi('/api/dosare/rule-drafts',{action:'promote',id:crypto.randomUUID().replaceAll('-',''),dosar_id:dossierId,queue_id:item.id,accepted_by:form.elements.accepted_by.value,acceptance_note:form.elements.acceptance_note.value});
-          status.textContent='Candidatul a fost promovat în law-rule-draft-v1.';
+          status.textContent='Candidatul a fost promovat în law-rule-draft-v1. Următorul pas: rulează verificarea deterministă sau lipește textul proiectului.';
           await loadRuleDrafts(dossierId,0,{bucket, ...filters});
         }catch(err){formStatus.textContent=err.message;}
       };
