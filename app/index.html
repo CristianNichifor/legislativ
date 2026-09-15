@@ -9075,6 +9075,46 @@ function bindWritingWorkspace(dossier){
   }),draft=>{notesBox.value=(notesBox.value?notesBox.value.trim()+'\n\n':'')+draft;});
   if(form.elements.project_id.value)loadPack();
 }
+function matrixEvidenceWritingText(row,context={}){
+  const drill=context.drilldown||{};
+  const workspace=drill.workspace||{};
+  const problem=workspace.primary_problem?.eticheta||row.label||row.kind||'semnal matrice';
+  return [
+    `# Redactare din matrice: ${problem}`,
+    '',
+    `Act: ${row.act_id||'neprecizat'}${row.locator?' · '+locRo(row.locator):''}`,
+    row.source_url?`Sursă oficială: ${row.source_url}`:'',
+    row.source_hash?`SHA-256: ${row.source_hash}`:'',
+    row.uncertainty?`Incertitudine: ${row.uncertainty}`:'',
+    row.quote?`Citat:\n> ${manualNoteText(row.quote)}`:'Citatul exact lipsește din dovada locală.',
+    '',
+    matrixWorkspaceNoteContext(workspace),
+    'Nu este verdict juridic.'
+  ].filter(Boolean).join('\n');
+}
+function openMatrixEvidenceWritingWorkspace(row,context={}){
+  if(!DOSARE_UI.selected?.id){
+    $('#dossier-library').open=true;
+    $('#dossier-status').textContent='Alege sau creează un dosar înainte de redactarea din matrice.';
+    selectTab('dosare');
+    return;
+  }
+  selectTab('dosare');
+  const library=$('#dossier-library');if(library)library.open=true;
+  const host=$('#dossier-writing');
+  if(!host)return;
+  if(!host.querySelector('[data-writing-notes]'))bindWritingWorkspace(DOSARE_UI.selected);
+  const notesBox=host.querySelector('[data-writing-notes]');
+  const status=host.querySelector('[data-writing-status]')||$('#dossier-status');
+  const insert=matrixEvidenceWritingText(row,context);
+  if(notesBox){
+    notesBox.value=(notesBox.value?notesBox.value.trim()+'\n\n':'')+insert;
+    notesBox.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+  const details=host.closest('details');if(details)details.open=true;
+  host.scrollIntoView({block:'start'});
+  if(status)status.textContent='Dovada din matrice a fost adăugată în spațiul de redactare al dosarului.';
+}
 function projectWritingSourceContext(project={},cockpit=null,seed=null){
   const source=cockpit?.source_attention||project.registry_source||{};
   const tracker=cockpit?.tracker||{};
@@ -9620,7 +9660,7 @@ function mEvidenceRecordHtml(row){
     +`<div class="matrix-graph-meta">${href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">sursă oficială</a> · `:""}${hash}${parser} · ${esc(row.uncertainty||"incertitudine neprecizată")}</div>`
     +(row.quote?`<blockquote class="source-text">${esc(row.quote)}</blockquote>`:`<p class="hint">Citatul exact lipsește din dovada locală.</p>`)
     +(row.not_legal_verdict?`<p class="hint">Dovadă pentru analiză; nu verdict juridic.</p>`:"")
-    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-rule-evidence="${esc(row.id||"")}">Propune regulă</button><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
+    +`<div class="dossier-actions"><button type="button" class="ghost mini" data-matrix-write-evidence="${esc(row.id||"")}">Redactare</button><button type="button" class="ghost mini" data-matrix-rule-evidence="${esc(row.id||"")}">Propune regulă</button><button type="button" class="ghost mini" data-matrix-ai-evidence="${esc(row.id||"")}">AI din această dovadă</button></div>`
     +`</article>`;
 }
 function mRelatedItemsHtml(related){
@@ -10038,8 +10078,14 @@ function mDosarHtml(d){
 }
 
 function bindMatrixNoteButtons(host,d){
+  const evidenceRows=()=>d.drilldown?.evidence_records||[];
+  host.querySelectorAll('[data-matrix-write-evidence]').forEach(button=>button.onclick=()=>{
+    const row=evidenceRows().find(item=>item.id===button.dataset.matrixWriteEvidence);
+    if(!row)return;
+    openMatrixEvidenceWritingWorkspace(row,d);
+  });
   host.querySelectorAll('[data-matrix-rule-evidence]').forEach(button=>button.onclick=()=>{
-    const row=(d.drilldown?.evidence_records||[]).find(item=>item.id===button.dataset.matrixRuleEvidence);
+    const row=evidenceRows().find(item=>item.id===button.dataset.matrixRuleEvidence);
     if(!row)return;
     startManualNote({
       title:`Regulă din matrice · ${row.label||row.kind||'dovadă'}`,
@@ -10058,7 +10104,7 @@ function bindMatrixNoteButtons(host,d){
     },{rule:true});
   });
   host.querySelectorAll('[data-matrix-ai-evidence]').forEach(button=>button.onclick=()=>{
-    const row=(d.drilldown?.evidence_records||[]).find(item=>item.id===button.dataset.matrixAiEvidence);
+    const row=evidenceRows().find(item=>item.id===button.dataset.matrixAiEvidence);
     if(!row)return;
     startManualNote({
       title:`AI matrice · ${row.label||row.kind||'dovadă'}`,
