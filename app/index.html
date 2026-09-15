@@ -446,6 +446,15 @@
   .daily-flow-steps span{display:block;font-family:var(--sans);font-size:.74rem;color:var(--ink-mute);margin-top:.2rem}
   .daily-flow-steps code{font-family:var(--mono);font-size:.7rem;color:var(--ink-mid)}
   .daily-flow-output{display:block;margin-top:.25rem}
+  .main-flow-strip{border-block:1px solid var(--rule);padding:.65rem 0;margin:.25rem 0 .95rem}
+  .main-flow-strip ol{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.4rem;margin:.45rem 0 0;padding:0;list-style:none}
+  .main-flow-strip button{width:100%;height:100%;border:0;border-top:2px solid var(--rule-soft);background:transparent;color:var(--ink);padding:.45rem 0;text-align:left;font:inherit;cursor:pointer;white-space:normal;overflow-wrap:anywhere}
+  .main-flow-strip button:hover,.main-flow-strip button:focus-visible{border-color:var(--accent);background:var(--surface)}
+  .main-flow-strip button[aria-current=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .main-flow-strip button[data-state=ready]{border-color:var(--material)}
+  .main-flow-strip b{display:block;font-size:.82rem}
+  .main-flow-strip small{display:block;font-family:var(--sans);font-size:.72rem;color:var(--ink-mute);margin-top:.18rem}
+  .main-flow-context{border-left:3px solid var(--material);padding:.35rem .55rem;background:var(--surface);font-size:.78rem;margin:.25rem 0 0}
   .gap-workflow{border:1px solid var(--rule-soft);border-left:3px solid var(--accent);padding:.55rem .65rem;margin:.35rem 0 .7rem;background:var(--surface);overflow-wrap:anywhere}
   .gap-workflow h4{font-size:.9rem;margin:.05rem 0 .25rem}
   .gap-workflow p{margin:.25rem 0}
@@ -1285,6 +1294,20 @@
     <span><b>Revizie umană</b>AI/MCP este explicit: BYOK sau handoff aprobat; confirmare explicită necesară.</span>
     <span><b>Chei private</b>Cheile API rămân doar în sesiunea browserului; ciornele rămân nerevizuite.</span>
   </section>
+  <section class="main-flow-strip" id="main-flow-strip" aria-labelledby="main-flow-title">
+    <h2 id="main-flow-title">Flux principal</h2>
+    <p class="main-flow-context" id="main-flow-context" role="status">
+      Matrice -> dovezi -> dosar -> redactare -> propunere -> export. Alege un pas ca să ajungi direct la panoul existent.
+    </p>
+    <ol>
+      <li><button type="button" data-flow-target="matrix" aria-current="true"><b>1. Matrice</b><small>Lacune, contradicții, riscuri UE</small></button></li>
+      <li><button type="button" data-flow-target="evidence"><b>2. Dovezi</b><small>Citat, locator, URL, hash</small></button></li>
+      <li><button type="button" data-flow-target="dossier"><b>3. Dosar</b><small>Lucru privat local</small></button></li>
+      <li><button type="button" data-flow-target="writing"><b>4. Redactare</b><small>Ciornă din dovezi selectate</small></button></li>
+      <li><button type="button" data-flow-target="proposal"><b>5. Propunere</b><small>Editor verificabil</small></button></li>
+      <li><button type="button" data-flow-target="export"><b>6. Export</b><small>Raport cu limitări păstrate</small></button></li>
+    </ol>
+  </section>
 
   <div class="app">
     <div class="main">
@@ -2081,6 +2104,7 @@ function selectTab(which){
   if(which==="matrice") loadMatrice();
   if(which==="supraveghere") renderSupraveghere();
   updateMainNav(which);
+  refreshMainFlowContext(which==='matrice'?'matrix':which==='lint'?'writing':'matrix');
 }
 PANES.forEach(p=>{ $("#tab-"+p).onclick=()=>selectTab(p); });
 PANES.forEach((p,index)=>{
@@ -2150,6 +2174,82 @@ function openWorkflowTarget(target){
     setFirstRunStatus('Redactare asistată pornește din dovezi selectate: local, BYOK sau MCP aprobat; rezultatele sunt ciorne nerevizuite.');
     return;
   }
+}
+const MAIN_FLOW_LABELS={matrix:'Matrice',evidence:'Dovezi',dossier:'Dosar',writing:'Redactare',proposal:'Propunere',export:'Export'};
+function mainFlowRoot(){
+  return document.getElementById ? document.getElementById('main-flow-strip') : null;
+}
+function mainFlowScroll(selector,message){
+  const node=$(selector);
+  if(!node)return false;
+  if('open' in node)node.open=true;
+  node.scrollIntoView({block:'start'});
+  const status=$('#main-flow-context');
+  if(status&&message)status.textContent=message;
+  return true;
+}
+function mainFlowSelectedFinding(){
+  try{return typeof currentProposalFindingId==='function' ? currentProposalFindingId() : '';}catch{return '';}
+}
+function refreshMainFlowContext(active='matrix'){
+  const root=mainFlowRoot(), status=$('#main-flow-context');
+  if(root?.querySelectorAll){
+    root.querySelectorAll('[data-flow-target]').forEach(button=>{
+      const target=button.dataset.flowTarget;
+      const ready=target==='matrix'||target==='evidence'||!!DOSARE_UI.selected?.id;
+      button.dataset.state=ready?'ready':'pending';
+      button.setAttribute('aria-current',String(target===active));
+    });
+  }
+  if(!status)return;
+  const dossier=DOSARE_UI.selected?.titlu||DOSARE_UI.selected?.id||'niciun dosar ales';
+  const run=DOSARE_UI.runId?'analiză salvată aleasă':'fără analiză salvată';
+  const finding=mainFlowSelectedFinding()?'constatare aleasă':'fără constatare aleasă';
+  status.textContent=`Pas curent: ${MAIN_FLOW_LABELS[active]||'Matrice'} · dosar: ${dossier} · ${run} · ${finding}.`;
+}
+function openMainFlowTarget(target){
+  const status=$('#main-flow-context');
+  if(target==='matrix'){selectTab('matrice');$('#m-q')?.focus();refreshMainFlowContext(target);return;}
+  if(target==='evidence'){
+    selectTab('matrice');
+    mainFlowScroll('#m-detalii','Deschide un rând din matrice și verifică citatul, locatorul, URL-ul și hash-ul dovezii.');
+    refreshMainFlowContext(target);
+    return;
+  }
+  if(target==='dossier'){
+    openWorkflowTarget('dossiers');
+    refreshMainFlowContext(target);
+    return;
+  }
+  if(target==='writing'){
+    openWorkflowTarget('dossiers');
+    refreshMainFlowContext(target);
+    if(DOSARE_UI.selected?.id)mainFlowScroll('#dossier-writing','Redactarea folosește dosarul ales și pachetul de dovezi.');
+    else if(status)status.textContent='Alege sau creează un dosar înainte de redactare.';
+    return;
+  }
+  if(target==='proposal'){
+    openWorkflowTarget('dossiers');
+    refreshMainFlowContext(target);
+    if(DOSARE_UI.selected?.id&&DOSARE_UI.runId&&mainFlowSelectedFinding())mainFlowScroll('#dossier-saved','Editorul de propuneri pornește din constatarea aleasă.');
+    else mainFlowScroll('#dossier-saved','Alege o analiză salvată și o constatare înainte de propunerea verificabilă.');
+    return;
+  }
+  if(target==='export'){
+    openWorkflowTarget('dossiers');
+    refreshMainFlowContext(target);
+    const saved=$('#dossier-saved');
+    if(saved?.textContent)mainFlowScroll('#dossier-saved','Exportul păstrează raportul, sursele și limitările analizei.');
+    else mainFlowScroll('#dossier-proposals','Exportul devine util după raport sau propunere salvată.');
+  }
+}
+function bindMainFlowStrip(){
+  const root=mainFlowRoot();
+  if(!root?.querySelectorAll)return;
+  root.querySelectorAll('[data-flow-target]').forEach(button=>{
+    button.onclick=()=>openMainFlowTarget(button.dataset.flowTarget);
+  });
+  refreshMainFlowContext('matrix');
 }
 document.querySelectorAll('[data-main-nav]').forEach(button=>{
   button.onclick=()=>openWorkflowTarget(button.dataset.mainNav);
@@ -4866,6 +4966,7 @@ function mTextCautare(r){
   return fold(`${r.emitent} ${(r.tipuri||[]).map(t=>t.tip).join(" ")} ${problema} ${ranguri} ${surse} ${det} ${dom} ${vid} ${nec}`);
 }
 const DOSARE_UI={offset:0,selected:null,sequence:0,listSequence:0,request:null,supported:false};
+bindMainFlowStrip();
 const DOSSIER_VIEWS=new Map();
 function dossierMayNavigate(){
   if(!dossierHasDrafts()) return true;
@@ -5104,6 +5205,7 @@ async function openDossierRun(id,runId,token,checkId=null,findingId=null){
     const copy=out.querySelector('.matrix-copy-dosar');
     if(copy) copy.onclick=async()=>{try{await navigator.clipboard.writeText(`Analiză salvată: ${run.creat_la}\nSHA-256 raport: ${run.sha256}\n\n${run.raport.markdown||''}`);$('#dossier-status').textContent='Raport copiat.';}catch{$('#dossier-status').textContent='Copierea nu a reușit.';}};
     const print=out.querySelector('.matrix-print-dosar');if(print) print.onclick=()=>window.print();
+    if(typeof refreshMainFlowContext==='function')refreshMainFlowContext('proposal');
   }catch(err){if(token===DOSARE_UI.sequence){out.textContent=err.message;const retry=document.createElement('button');retry.type='button';retry.className='ghost mini';retry.textContent='Reîncearcă încărcarea analizei';retry.onclick=()=>openDossierRun(id,runId,token,checkId);out.append(retry);}}
 }
 const REVIEW_STATES={unreviewed:'Neanalizat',needs_evidence:'Necesită dovezi',confirmed_by_reviewer:'Confirmat de evaluator',dismissed:'Respins de evaluator'};
@@ -7083,6 +7185,7 @@ async function selectDossier(id,runId,checkId=null,findingId=null){
     if(token!==DOSARE_UI.sequence) return;
     DOSARE_UI.selected=meta;
     bindWritingWorkspace(meta);
+    if(typeof refreshMainFlowContext==='function')refreshMainFlowContext('dossier');
     loadDossierWatchlist(id);
     loadManualNotes(id);
     loadRuleDrafts(id);
@@ -9050,6 +9153,7 @@ async function openWritingProposalEditor(payload){
   panel?.scrollIntoView({block:'start'});
   const freshStatus=$('#dossier-status')||status;
   if(freshStatus)freshStatus.textContent='Textul din redactare a fost trimis în editorul propunerii verificate.';
+  if(typeof refreshMainFlowContext==='function')refreshMainFlowContext('proposal');
 }
 function aiEvidenceFromPack(pack){
   return (pack?.evidence||[]).slice(0,8).map((item,index)=>{
